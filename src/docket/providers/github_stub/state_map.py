@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from docket.core.model import ItemState, TransitionIntent
 
-
 # GitHub native state → canonical ItemState.
 # "closed+completed" → RESOLVED, "closed+not_planned" → CLOSED, everything
 # else collapses to ACTIVE because GitHub has no explicit "blocked" etc.

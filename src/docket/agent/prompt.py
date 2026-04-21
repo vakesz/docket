@@ -25,7 +25,6 @@ from threading import Lock
 from docket.agent.types import ChatMessage
 from docket.core.model import Comment, Item
 
-
 DEFAULT_SYSTEM_BASE = """You are a work-item triage assistant embedded in a developer's terminal.
 You help the user understand, update, and triage tickets across their backlog.
 

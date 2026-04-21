@@ -19,8 +19,8 @@ user never has to type values they could click. Any discovery failure transparen
 falls back to free-form prompts — helpful for restricted networks."""
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 from urllib.parse import urlparse
 
 from pydantic import HttpUrl, ValidationError
@@ -35,8 +35,7 @@ from docket.config.paths import Paths, resolve_paths
 from docket.config.prompt_templates import scaffold as scaffold_prompts
 from docket.core.model import ScopeFilters
 from docket.core.services import sync_service
-from docket.providers.azure_devops import AzureDevOpsProvider
-from docket.providers.azure_devops import discover
+from docket.providers.azure_devops import AzureDevOpsProvider, discover
 from docket.providers.azure_devops.auth import ensure_logged_in
 from docket.providers.azure_devops.discover import DiscoveryError
 from docket.providers.base import ProviderAuthError, ProviderError
@@ -141,7 +140,7 @@ def _step_az_login(state: WizardState) -> None:
         except ProviderAuthError as e:
             console.print(f"[yellow]{e}[/yellow]")
             if not Confirm.ask("Retry now?", default=True):
-                raise SystemExit(1)
+                raise SystemExit(1) from e
             continue
         console.print(f"[green]✓ signed in as[/green] {account}")
         state.signed_in_email = discover.signed_in_email()
@@ -163,7 +162,7 @@ def _step_ado_connection(state: WizardState) -> None:
         except ProviderError as e:
             console.print(f"[red]Connection failed:[/red] {e}")
             if not Confirm.ask("Try different values?", default=True):
-                raise SystemExit(1)
+                raise SystemExit(1) from e
             state.ado_organization = org
             state.ado_project = project
             continue

@@ -19,10 +19,8 @@ import pytest
 from docket.config import setup_wizard
 from docket.config.loader import load_config
 from docket.config.paths import Paths
-from docket.core.model import ScopeFilters
 from docket.core.model import SyncSummary
 from docket.providers.azure_devops.discover import OrgRef, ProjectRef
-
 
 # ---------- scripted IO ----------
 

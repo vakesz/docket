@@ -64,7 +64,7 @@ def env(tmp_path: Path):
 
 
 def test_attach_transcript_produces_versioned_proposal(env) -> None:
-    conn, _, store, reg, item, _ = env
+    _conn, _, store, reg, item, _ = env
     out = reg.dispatch("attach_transcript", {"id": item.id})
     payload = json.loads(out)
     assert payload["status"] == "pending_confirmation"

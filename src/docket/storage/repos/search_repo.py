@@ -13,6 +13,10 @@ import sqlite3
 _WORD = re.compile(r"\w+", flags=re.UNICODE)
 
 
+def _terms(raw: str) -> list[str]:
+    return [f"{m.group(0)}*" for m in _WORD.finditer(raw)]
+
+
 def _build_fts_query(raw: str) -> str:
     """Turn free-text user input into a safe FTS5 MATCH expression.
 
@@ -23,8 +27,7 @@ def _build_fts_query(raw: str) -> str:
     than whitespace means inputs like `AUTH-42` become two matchable terms
     (`AUTH*`, `42*`) that line up with how the content was tokenized.
     """
-    terms = [f"{m.group(0)}*" for m in _WORD.finditer(raw)]
-    return " ".join(terms)
+    return " ".join(_terms(raw))
 
 
 def search(conn: sqlite3.Connection, query: str) -> list[str]:
@@ -57,4 +60,30 @@ def search(conn: sqlite3.Connection, query: str) -> list[str]:
         """,
         (like, like, like),
     ).fetchall()
+    return [r[0] for r in rows]
+
+
+def search_similar(conn: sqlite3.Connection, title: str) -> list[str]:
+    """Return item ids whose indexed content matches *any* word in `title`.
+
+    Use this for duplicate detection during create — the AND semantics of
+    `search()` are too strict ("Login redesign" AND'd won't hit an existing
+    "Login" item). OR semantics catch near-matches the agent or user should
+    reconsider. bm25 still ranks tight matches higher so candidates surface
+    in a sensible order."""
+    stripped = title.strip()
+    if not stripped:
+        return []
+    terms = _terms(stripped)
+    if not terms:
+        return []
+    # FTS5 OR: `a* OR b* OR c*`
+    fts_query = " OR ".join(terms)
+    try:
+        rows = conn.execute(
+            "SELECT item_id FROM items_fts WHERE items_fts MATCH ? ORDER BY rank",
+            (fts_query,),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return []
     return [r[0] for r in rows]

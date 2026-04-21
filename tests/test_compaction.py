@@ -72,7 +72,7 @@ def test_above_threshold_compacts_old_turns(env) -> None:
         for i in range(10)
     ]
     summary_reply = text_turn("earlier: discussed scope and priorities.", usage=Usage())
-    client = FakeLlmClient(script=turn_script + [summary_reply, text_turn("next")])
+    client = FakeLlmClient(script=[*turn_script, summary_reply, text_turn("next")])
     loop = AgentLoop(client=client, tools=reg)
 
     # Accumulate history without triggering compaction yet (threshold huge).

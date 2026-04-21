@@ -13,8 +13,20 @@ from typing import TYPE_CHECKING
 
 from textual.command import DiscoveryHit, Hit, Hits, Provider
 
+from docket.core.model import TransitionIntent
+
 if TYPE_CHECKING:
     from docket.cli.tui.app import ItvApp
+
+_INTENT_LABELS: dict[TransitionIntent, str] = {
+    TransitionIntent.START_WORK: "Start work",
+    TransitionIntent.PAUSE: "Pause",
+    TransitionIntent.BLOCK: "Block",
+    TransitionIntent.NEEDS_INFO: "Needs info",
+    TransitionIntent.CLOSE_DONE: "Close (done)",
+    TransitionIntent.CLOSE_WONTFIX: "Close (won't fix)",
+    TransitionIntent.REOPEN: "Reopen",
+}
 
 
 class DocketCommands(Provider):
@@ -38,7 +50,7 @@ class DocketCommands(Provider):
 
     def _commands(self) -> list[tuple[str, str, Callable[[], None]]]:
         app: ItvApp = self.app  # type: ignore[assignment]
-        return [
+        commands: list[tuple[str, str, Callable[[], None]]] = [
             ("Sync now", "Pull the latest items from the active provider.", app.action_refresh),
             ("Pick theme", "Switch the TUI theme with live preview.", app.action_pick_theme),
             (
@@ -57,6 +69,11 @@ class DocketCommands(Provider):
                 app.action_new_thread,
             ),
             (
+                "New work item",
+                "Open the create-ticket form with duplicate check.",
+                app.action_new_item,
+            ),
+            (
                 "Review pending proposals",
                 "Show the next pending mutation diff.",
                 app.action_review_pending,
@@ -72,3 +89,22 @@ class DocketCommands(Provider):
                 app.action_open_in_browser,
             ),
         ]
+        # One palette entry per TransitionIntent, scoped to the current item.
+        # Hidden when nothing is selected — the action itself would just toast,
+        # but the palette is cleaner if the option isn't there to tempt you.
+        if getattr(app, "_selected_item_id", None) is not None:
+            for intent, label in _INTENT_LABELS.items():
+                commands.append(
+                    (
+                        f"Transition → {label}",
+                        f"Stage a '{intent.value}' transition for the selected item.",
+                        _make_transition_callback(app, intent),
+                    )
+                )
+        return commands
+
+
+def _make_transition_callback(app: ItvApp, intent: TransitionIntent) -> Callable[[], None]:
+    """Bind the intent into a zero-arg closure so the palette's command slot
+    (which only accepts `Callable[[], None]`) can still reach the right one."""
+    return lambda: app.action_transition(intent.value)

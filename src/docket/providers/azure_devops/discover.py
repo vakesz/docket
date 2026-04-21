@@ -17,11 +17,10 @@ from __future__ import annotations
 
 import json
 import subprocess
-from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
-import requests
+import requests  # type: ignore[import-untyped]
 
 from docket.providers.azure_devops.auth import _az_path, get_ado_bearer_token
 from docket.providers.base import ProviderError
@@ -160,9 +159,10 @@ def _get_json(url: str, *, params: dict[str, str] | None = None) -> dict[str, An
     if resp.status_code >= 400:
         raise DiscoveryError(f"{url} returned {resp.status_code}: {resp.text[:200]}")
     try:
-        return resp.json()
+        payload: dict[str, Any] = resp.json()
     except ValueError as e:
         raise DiscoveryError(f"{url} returned non-JSON body") from e
+    return payload
 
 
 __all__ = [

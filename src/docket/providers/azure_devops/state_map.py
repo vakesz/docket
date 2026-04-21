@@ -63,7 +63,7 @@ def is_removed(ado_state: str) -> bool:
 
 # ---- reverse map: canonical intent → ADO write plan -------------------------
 
-from dataclasses import dataclass, field  # noqa: E402
+from dataclasses import dataclass  # noqa: E402
 
 from docket.core.model import TransitionIntent  # noqa: E402
 

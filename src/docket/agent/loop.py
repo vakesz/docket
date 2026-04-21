@@ -12,10 +12,10 @@ the loop returns.
 """
 from __future__ import annotations
 
+import contextlib
 import json
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
-
-from collections.abc import Callable
 
 from docket.agent.foundry_client import LlmClient, accumulate_stream
 from docket.agent.tools import ToolRegistry
@@ -124,14 +124,15 @@ class AgentLoop:
         )
 
 
-def _tap(stream, callback):
+def _tap(
+    stream: Iterable[StreamDelta],
+    callback: Callable[[StreamDelta], None],
+) -> Iterator[StreamDelta]:
     """Yield deltas while invoking a callback on each. Callback failures
     must not break the stream — they're UI-side concerns."""
     for delta in stream:
-        try:
+        with contextlib.suppress(Exception):  # nosec - UI callback errors are non-fatal
             callback(delta)
-        except Exception:  # nosec - UI callback errors are non-fatal
-            pass
         yield delta
 
 

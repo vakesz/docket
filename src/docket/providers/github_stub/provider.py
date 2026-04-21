@@ -39,7 +39,7 @@ class GitHubStubProvider:
     issues: list[Item] = field(default_factory=list)
     comments: dict[str, list[Comment]] = field(default_factory=dict)
     attachments: list[tuple[str, str, bytes]] = field(default_factory=list)
-    _id_seq: itertools.count = field(default_factory=lambda: itertools.count(1))
+    _id_seq: itertools.count[int] = field(default_factory=lambda: itertools.count(1))
 
     # -- reads ---------------------------------------------------------------
 

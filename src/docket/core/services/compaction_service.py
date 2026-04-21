@@ -146,9 +146,9 @@ def _render_for_summary(messages: list[ChatMessage]) -> str:
 _ = ToolSchema
 
 __all__ = [
-    "CompactionResult",
     "SUMMARY_MARKER",
     "TAIL_KEEP_MESSAGES",
+    "CompactionResult",
     "compact_now",
     "maybe_compact",
 ]

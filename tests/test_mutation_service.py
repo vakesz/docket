@@ -7,7 +7,7 @@ import pytest
 
 from docket.core import Item, ItemKind, ItemState, ScopeFilters, TransitionIntent
 from docket.core.model import CreateFields
-from docket.core.mutation import DescriptionPatch, StateChange, render_diff
+from docket.core.mutation import render_diff
 from docket.core.services import mutation_service, sync_service
 from docket.storage import init_db
 from docket.storage.repos import item_repo

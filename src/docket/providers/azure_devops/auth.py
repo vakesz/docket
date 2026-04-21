@@ -53,7 +53,7 @@ def get_ado_bearer_token() -> str:
     token = payload.get("accessToken")
     if not token:
         raise ProviderAuthError("`az` token response did not include `accessToken`")
-    return token
+    return str(token)
 
 
 def ensure_logged_in() -> str:
@@ -71,7 +71,7 @@ def ensure_logged_in() -> str:
             "No active Azure CLI session. Run `az login` in another terminal, then retry."
         ) from e
     account = json.loads(result.stdout)
-    return account.get("user", {}).get("name", "<unknown>")
+    return str(account.get("user", {}).get("name", "<unknown>"))
 
 
 def token_expires_at(token: str) -> datetime | None:

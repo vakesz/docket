@@ -11,7 +11,6 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
-
 from azure.devops.v7_0.work_item_tracking.models import TeamContext
 
 from docket.core.model import ScopeFilters

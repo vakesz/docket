@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Iterable, Iterator
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol, cast
 from urllib.parse import parse_qs, urlparse
 
 from docket.agent.types import (
@@ -159,7 +159,8 @@ def _parse_azure_endpoint(endpoint: str) -> tuple[str, str | None, str | None]:
     match = _DEPLOYMENT_PATH_RE.search(parsed.path or "")
     deployment = match.group("name") if match else None
     query = parse_qs(parsed.query or "")
-    api_version = (query.get("api-version") or [None])[0]
+    api_version_values = query.get("api-version") or []
+    api_version = api_version_values[0] if api_version_values else None
     return base, deployment, api_version
 
 
@@ -195,7 +196,9 @@ def _to_openai_tool(t: ToolSchema) -> dict[str, Any]:
 
 
 def _from_openai_message(msg: Any) -> ChatMessage:
-    role = msg.role or "assistant"
+    # OpenAI-compatible servers always return one of these four roles for a
+    # chat-completion choice; narrow to the Literal so ChatMessage accepts it.
+    role = cast(Literal["system", "user", "assistant", "tool"], msg.role or "assistant")
     content = msg.content or ""
     tool_calls: list[ToolCall] = []
     for tc in (msg.tool_calls or []):
@@ -293,13 +296,13 @@ def accumulate_stream(stream: Iterable[StreamDelta]) -> CompletionResult:
 
 
 __all__ = [
-    "FoundryClient",
-    "LlmClient",
-    "accumulate_stream",
     "ChatMessage",
     "CompletionResult",
+    "FoundryClient",
+    "LlmClient",
     "StreamDelta",
     "ToolCall",
     "ToolSchema",
     "Usage",
+    "accumulate_stream",
 ]

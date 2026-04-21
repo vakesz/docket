@@ -10,12 +10,12 @@ from docket.core.services import mutation_service
 
 console = Console()
 
+_INTENT_HELP = f"Transition intent: {', '.join(i.value for i in TransitionIntent)}"
+
 
 def transition_command(
     id: str = typer.Argument(..., help="Work item ID."),
-    intent: str = typer.Argument(
-        ..., help=f"Transition intent: {', '.join(i.value for i in TransitionIntent)}"
-    ),
+    intent: str = typer.Argument(..., help=_INTENT_HELP),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show diff, do not write."),
 ) -> None:
     """Move a work item to a new state using a named intent."""

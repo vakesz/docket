@@ -21,6 +21,7 @@ from datetime import UTC, datetime
 
 from docket.agent.types import ChatMessage
 from docket.core.model import Item
+from docket.providers.base import WorkItemProvider
 from docket.storage.db import transaction
 from docket.storage.repos import conversation_repo, item_repo, message_repo
 
@@ -38,7 +39,7 @@ class ExternalUpdateResult:
 
 def check_and_inject(
     conn: sqlite3.Connection,
-    provider,
+    provider: WorkItemProvider,
     item_id: str,
 ) -> ExternalUpdateResult:
     """Re-fetch `item_id` from the provider; if it moved since our cache, persist

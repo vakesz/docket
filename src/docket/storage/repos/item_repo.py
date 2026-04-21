@@ -50,7 +50,7 @@ ON CONFLICT(id) DO UPDATE SET
 """
 
 
-def _upsert_row(item: Item, now_iso: str) -> tuple:
+def _upsert_row(item: Item, now_iso: str) -> tuple[object, ...]:
     return (
         item.id,
         item.kind.value,

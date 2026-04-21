@@ -18,7 +18,6 @@ from typing import Any
 
 from docket.agent.types import ToolSchema
 
-
 ToolHandler = Callable[[dict[str, Any]], str]
 
 

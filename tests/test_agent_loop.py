@@ -112,6 +112,6 @@ def test_unknown_tool_returns_structured_error() -> None:
         history=[],
         user_message=ChatMessage(role="user", content="q"),
     )
-    tool_msg = [m for m in turn.new_messages if m.role == "tool"][0]
+    tool_msg = next(m for m in turn.new_messages if m.role == "tool")
     payload = json.loads(tool_msg.content)
     assert "unknown tool" in payload["error"]

@@ -152,6 +152,61 @@ async def test_description_patch_confirm_applies_via_provider(modal_env) -> None
         assert cached.description_md == "Rewritten body."
 
 
+async def test_edit_action_rewrites_description_before_confirm(modal_env) -> None:
+    """Pressing `e` swaps the diff for a TextArea; Ctrl+S rebuilds the
+    proposal with the edited text. Confirm then applies the edited version
+    to the provider — not the original the agent proposed."""
+    ctx, client, provider, _ = modal_env
+    client.script = [
+        tool_turn(
+            "tc-1",
+            "propose_description_patch",
+            '{"id":"S-1","new_description_md":"Agent draft."}',
+        ),
+        text_turn("Staged."),
+    ]
+    app = ItvApp(ctx)
+    async with app.run_test() as pilot:
+        await _select_story(app, pilot)
+        await _drive_agent_turn(app, pilot, "rewrite the description")
+
+        assert isinstance(app.screen, DiffModal)
+        await pilot.press("e")
+        await pilot.pause()
+
+        from textual.widgets import TextArea
+        editor = app.screen.query_one("#editor", TextArea)
+        assert editor.text == "Agent draft."
+        editor.text = "Human override."
+        await pilot.press("ctrl+s")
+        await pilot.pause()
+        await pilot.press("y")
+        await pilot.pause()
+
+        assert provider.items[0].description_md == "Human override."
+
+
+async def test_edit_unsupported_for_transition(modal_env) -> None:
+    """`e` on a state-change proposal is a no-op warning — the modal stays
+    open on the diff view so the user can still y/n the transition."""
+    ctx, client, _provider, _ = modal_env
+    client.script = [
+        tool_turn("tc-1", "propose_transition", '{"id":"S-1","intent":"start_work"}'),
+        text_turn("Staged."),
+    ]
+    app = ItvApp(ctx)
+    async with app.run_test() as pilot:
+        await _select_story(app, pilot)
+        await _drive_agent_turn(app, pilot, "start work")
+
+        assert isinstance(app.screen, DiffModal)
+        await pilot.press("e")
+        await pilot.pause()
+        # Still on the modal; no editor mounted.
+        assert isinstance(app.screen, DiffModal)
+        assert app.screen._editor is None
+
+
 async def test_agent_tool_call_alone_does_not_mutate(modal_env) -> None:
     """Before any user decision, the agent tool must have left the provider untouched."""
     ctx, client, provider, _ = modal_env

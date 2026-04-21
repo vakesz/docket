@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import typer
 from rich.console import Console
 
@@ -10,6 +12,10 @@ from docket.config.env import (
     get_foundry_deployment,
     get_foundry_endpoint,
 )
+
+if TYPE_CHECKING:
+    from docket.agent.foundry_client import FoundryClient
+    from docket.config.models import FoundryConfig
 
 console = Console()
 
@@ -47,20 +53,20 @@ def open_command(
         ctx.close()
 
 
-def _build_llm_client(foundry_cfg):
+def _build_llm_client(foundry_cfg: FoundryConfig) -> FoundryClient | None:
     """Build the LLM client. `.env` wins over config.toml so users can keep all
     Foundry settings in one place alongside the API key."""
     api_key = get_foundry_api_key()
     endpoint = get_foundry_endpoint() or (str(foundry_cfg.endpoint) if foundry_cfg.endpoint else None)
     deployment = get_foundry_deployment() or foundry_cfg.deployment
     api_version = get_foundry_api_version()
-    missing = [
-        label for label, value in (
-            ("AZURE_OPENAI_API_KEY", api_key),
-            ("AZURE_OPENAI_ENDPOINT", endpoint),
-        ) if not value
-    ]
-    if missing:
+    if not api_key or not endpoint:
+        missing = [
+            label for label, value in (
+                ("AZURE_OPENAI_API_KEY", api_key),
+                ("AZURE_OPENAI_ENDPOINT", endpoint),
+            ) if not value
+        ]
         console.print(
             f"[yellow]Chat disabled[/yellow]: set {', '.join(missing)} in "
             "your .env (repo-local or ~/.config/docket/.env)."

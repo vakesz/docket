@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from typing import ClassVar
+
 from textual.app import ComposeResult
-from textual.binding import Binding
+from textual.binding import Binding, BindingType
 from textual.containers import Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Static
@@ -15,7 +17,7 @@ class SuggestionModal(ModalScreen[bool]):
     Dismisses with `True` if the user accepts (caller stages proposals),
     `False` on reject, `None` on escape (treated as reject)."""
 
-    BINDINGS = [
+    BINDINGS: ClassVar[list[BindingType]] = [
         Binding("y", "confirm", "Accept", priority=True),
         Binding("n", "reject", "Reject", priority=True),
         Binding("escape", "reject", "Reject", priority=True),

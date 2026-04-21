@@ -11,7 +11,7 @@ from __future__ import annotations
 import difflib
 import uuid
 from dataclasses import dataclass, field
-from typing import Literal, Union
+from typing import Literal
 
 from docket.core.model import CreateFields, Item, ItemKind, TransitionIntent
 
@@ -50,7 +50,7 @@ class ItemCreate:
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
 
-Proposal = Union[StateChange, DescriptionPatch, AttachmentUpload, ItemCreate]
+Proposal = StateChange | DescriptionPatch | AttachmentUpload | ItemCreate
 
 
 def render_diff(proposal: Proposal) -> str:

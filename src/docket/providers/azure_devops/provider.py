@@ -11,8 +11,8 @@ from collections.abc import Iterable
 from datetime import datetime
 from typing import Any
 
-from azure.devops.connection import Connection
-from azure.devops.v7_0.work_item_tracking.models import TeamContext
+from azure.devops.connection import Connection  # type: ignore[import-untyped]
+from azure.devops.v7_0.work_item_tracking.models import TeamContext  # type: ignore[import-untyped]
 from msrest.authentication import BasicAuthentication
 
 from docket.core.model import (
@@ -213,7 +213,7 @@ class AzureDevOpsProvider:
             }
         ]
         wit.update_work_item(document=patch, id=int(id))
-        return upload.url
+        return str(upload.url)
 
     def create_item(self, kind: ItemKind, fields: CreateFields) -> Item:
         from docket.providers.azure_devops.state_map import WIT_BY_KIND
@@ -255,7 +255,7 @@ class AzureDevOpsProvider:
         raw = client.create_work_item(document=patch, project=self._project, type=wit_type)
         built = to_item(raw, url=self._web_url(raw.id))
         if built is None:
-            raise ProviderUnreachableError(f"Created work item is not a tracked type")
+            raise ProviderUnreachableError("Created work item is not a tracked type")
         return built
 
     # -- helpers -------------------------------------------------------------

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import typer
 from rich.console import Console
 
@@ -10,6 +12,9 @@ from docket.config.env import (
     get_foundry_deployment,
     get_foundry_endpoint,
 )
+
+if TYPE_CHECKING:
+    from docket.agent.foundry_client import FoundryClient
 
 console = Console()
 
@@ -62,7 +67,7 @@ def serve_command(
         ctx.close()
 
 
-def _build_llm_client():
+def _build_llm_client() -> FoundryClient | None:
     from docket.agent.foundry_client import FoundryClient
 
     api_key = get_foundry_api_key()

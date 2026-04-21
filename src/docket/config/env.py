@@ -44,3 +44,24 @@ def get_foundry_deployment() -> str | None:
 
 def get_foundry_api_version() -> str | None:
     return os.environ.get("AZURE_OPENAI_API_VERSION") or None
+
+
+# Per-1M-token pricing is user-supplied — no hardcoded fallback, since rates
+# vary by deployment (GPT-5 vs mini vs nano vs Pro), region, and enterprise
+# contract. When either env var is unset the TUI ledger just omits the price.
+def _float_env(key: str) -> float | None:
+    raw = os.environ.get(key)
+    if raw is None or raw.strip() == "":
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        return None
+
+
+def get_price_input_per_1m() -> float | None:
+    return _float_env("DOCKET_PRICE_INPUT_PER_1M")
+
+
+def get_price_output_per_1m() -> float | None:
+    return _float_env("DOCKET_PRICE_OUTPUT_PER_1M")

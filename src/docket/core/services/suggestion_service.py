@@ -24,6 +24,7 @@ import json
 import logging
 import sqlite3
 from dataclasses import dataclass, field
+from typing import Any
 
 from docket.agent.foundry_client import LlmClient
 from docket.agent.prompt import build_prefix
@@ -133,7 +134,7 @@ def _parse(item_id: str, raw: str) -> Suggestion:
     )
 
 
-def _extract_json(raw: str) -> dict:
+def _extract_json(raw: str) -> dict[str, Any]:
     """Be lenient about stray fencing / leading prose. The prompt forbids it,
     but models still slip up — one fallback attempt is cheap and keeps the
     happy path smooth."""

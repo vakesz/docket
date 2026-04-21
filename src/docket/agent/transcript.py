@@ -14,7 +14,6 @@ from textwrap import dedent
 
 from docket.agent.types import ChatMessage
 
-
 _FILENAME_RE = re.compile(r"^convo-(\d{3,})\.md$")
 
 

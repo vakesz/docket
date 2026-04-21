@@ -146,6 +146,52 @@ async def test_t_starts_new_thread(chat_env) -> None:
     assert len(active) == 1
 
 
+async def test_acceptance_checklist_mounts_from_description(tmp_path: Path) -> None:
+    """Selecting an item whose description has task-list items should populate
+    the criteria panel with one Checkbox per criterion, preserving check state."""
+    from textual.widgets import Checkbox
+
+    conn = init_db(tmp_path / "docket.db")
+    item = Item(
+        id="S-2",
+        kind=ItemKind.STORY,
+        title="Ship login",
+        description_md="- [ ] write the spec\n- [x] ship the migration\n",
+        state=ItemState.NEW,
+        assignee=None,
+        parent_id=None,
+        updated_at=datetime.now(UTC),
+    )
+    item_repo.upsert_item(conn, item)
+    provider = FakeProvider(items=[item])
+    ctx = TuiContext(conn=conn, provider=provider, scope=ScopeFilters(), scope_key="default")
+
+    app = ItvApp(ctx)
+    async with app.run_test() as pilot:
+        tree = app.query_one(ItemTree)
+        node = _find_node(tree.root, "S-2")
+        assert node is not None
+        tree.select_node(node)
+        await pilot.pause()
+
+        chat = app.query_one(ChatPane)
+        boxes = list(chat.query(Checkbox).results())
+        assert [str(b.label) for b in boxes] == ["write the spec", "ship the migration"]
+        assert [bool(b.value) for b in boxes] == [False, True]
+
+    conn.close()
+
+
+async def test_acceptance_panel_hidden_when_no_criteria(chat_env) -> None:
+    ctx, _, _ = chat_env
+    app = ItvApp(ctx)
+    async with app.run_test() as pilot:
+        await _select_story(app, pilot)
+        chat = app.query_one(ChatPane)
+        container = chat.query_one("#criteria")
+        assert "has-items" not in container.classes
+
+
 async def test_chat_disabled_without_llm(chat_env) -> None:
     ctx, _, _ = chat_env
     ctx.llm = None  # simulate --no-chat

@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections.abc import Callable
+from typing import Any
 
 from docket.agent.tools import ToolRegistry
 from docket.agent.transcript import filename_for, next_version, render_markdown
@@ -22,18 +23,36 @@ from docket.core.model import CreateFields, ItemKind, TransitionIntent
 from docket.core.mutation import Proposal, render_diff
 from docket.core.services import mutation_service
 from docket.core.services.proposal_store import ProposalStore
-from docket.storage.repos import conversation_repo, item_repo, message_repo
+from docket.storage.repos import conversation_repo, item_repo, message_repo, search_repo
+
+_DUPLICATE_LIMIT = 5
 
 
-def _payload(proposal: Proposal) -> str:
-    return json.dumps(
-        {
-            "status": "pending_confirmation",
-            "proposal_id": proposal.id,
-            "kind": proposal.kind,
-            "diff": render_diff(proposal),
-        }
-    )
+def _payload(proposal: Proposal, *, extra: dict[str, Any] | None = None) -> str:
+    body: dict[str, Any] = {
+        "status": "pending_confirmation",
+        "proposal_id": proposal.id,
+        "kind": proposal.kind,
+        "diff": render_diff(proposal),
+    }
+    if extra:
+        body.update(extra)
+    return json.dumps(body)
+
+
+def _find_duplicates(conn: sqlite3.Connection, title: str) -> list[dict[str, str]]:
+    """Return up to _DUPLICATE_LIMIT cached items whose title/description/comments
+    match *any* word in `title`, best-match first. Empty list if nothing
+    plausible exists. Uses OR-matching so "Login redesign" catches an existing
+    "Login" item that the tight AND-match would miss."""
+    ids = search_repo.search_similar(conn, title)[:_DUPLICATE_LIMIT]
+    out: list[dict[str, str]] = []
+    for iid in ids:
+        item = item_repo.get_item(conn, iid)
+        if item is None:
+            continue
+        out.append({"id": item.id, "title": item.title, "state": item.state.value})
+    return out
 
 
 def register_mutating_tools(
@@ -49,7 +68,7 @@ def register_mutating_tools(
     `attach_transcript` so the model doesn't need to pass it.
     """
 
-    def propose_transition(args: dict) -> str:
+    def propose_transition(args: dict[str, Any]) -> str:
         item_id = str(args.get("id", "")).strip()
         intent_raw = str(args.get("intent", "")).strip()
         if not item_id or not intent_raw:
@@ -66,7 +85,7 @@ def register_mutating_tools(
         store.add(proposal)
         return _payload(proposal)
 
-    def propose_description_patch(args: dict) -> str:
+    def propose_description_patch(args: dict[str, Any]) -> str:
         item_id = str(args.get("id", "")).strip()
         new_md = args.get("new_description_md")
         if not item_id or not isinstance(new_md, str):
@@ -78,7 +97,7 @@ def register_mutating_tools(
         store.add(proposal)
         return _payload(proposal)
 
-    def propose_new_item(args: dict) -> str:
+    def propose_new_item(args: dict[str, Any]) -> str:
         kind_raw = str(args.get("kind", "")).strip()
         title = str(args.get("title", "")).strip()
         if not kind_raw or not title:
@@ -97,9 +116,13 @@ def register_mutating_tools(
         )
         proposal = mutation_service.propose_create(kind, fields)
         store.add(proposal)
-        return _payload(proposal)
+        # Surface potential duplicates so the agent can reconsider — still
+        # stage the proposal so the human has final say in the diff modal.
+        similar = _find_duplicates(conn, title)
+        extra = {"similar": similar} if similar else None
+        return _payload(proposal, extra=extra)
 
-    def attach_transcript(args: dict) -> str:
+    def attach_transcript(args: dict[str, Any]) -> str:
         item_id = str(args.get("id") or active_item() or "").strip()
         if not item_id:
             return json.dumps({"error": "no item in focus and none provided"})

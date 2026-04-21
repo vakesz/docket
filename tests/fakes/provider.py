@@ -37,7 +37,7 @@ class FakeProvider:
     comments: dict[str, list[Comment]] = field(default_factory=dict)
     uploaded: list[tuple[str, str, bytes]] = field(default_factory=list)
     list_calls: list[datetime | None] = field(default_factory=list)
-    _id_seq: itertools.count = field(default_factory=lambda: itertools.count(1000))
+    _id_seq: itertools.count[int] = field(default_factory=lambda: itertools.count(1000))
 
     # -- reads ---------------------------------------------------------------
 

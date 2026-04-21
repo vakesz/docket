@@ -45,7 +45,7 @@ def env(tmp_path: Path):
 
 
 def test_propose_transition_stages_but_does_not_execute(env) -> None:
-    conn, provider, store, reg, item = env
+    _conn, provider, store, reg, item = env
     out = reg.dispatch("propose_transition", {"id": item.id, "intent": "start_work"})
     payload = json.loads(out)
     assert payload["status"] == "pending_confirmation"
@@ -86,6 +86,34 @@ def test_propose_new_item_without_parent(env) -> None:
     pending = store.list()[0]
     assert isinstance(pending.proposal, ItemCreate)
     assert pending.proposal.fields.title == "Write docs"
+
+
+def test_propose_new_item_surfaces_duplicates(env) -> None:
+    """When the title matches an existing cached item, the tool payload must
+    carry a `similar` list so the agent can reconsider before the human sees
+    the diff modal. The proposal still stages — the user has final say."""
+    _conn, _provider, store, reg, item = env  # cached item has title "Login"
+    out = reg.dispatch(
+        "propose_new_item",
+        {"kind": "task", "title": "Login redesign", "description_md": ""},
+    )
+    payload = json.loads(out)
+    assert payload["status"] == "pending_confirmation"
+    assert payload.get("similar"), "duplicate-check should surface cached matches"
+    assert any(s["id"] == item.id for s in payload["similar"])
+    assert len(store) == 1
+
+
+def test_propose_new_item_no_duplicates_omits_key(env) -> None:
+    """No match → no `similar` key, to keep the payload tight."""
+    _, _, _, reg, _ = env
+    out = reg.dispatch(
+        "propose_new_item",
+        {"kind": "task", "title": "Zzz unrelated widget", "description_md": ""},
+    )
+    payload = json.loads(out)
+    assert payload["status"] == "pending_confirmation"
+    assert "similar" not in payload
 
 
 def test_unknown_item_returns_error(env) -> None:

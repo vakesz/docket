@@ -48,15 +48,15 @@ def get_item(
 ) -> ItemDTO:
     if refresh:
         try:
-            item = provider.get_item(item_id)
+            fresh = provider.get_item(item_id)
         except Exception as e:
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Provider lookup failed: {e}") from e
-        item_repo.upsert_item(conn, item)
-        return ItemDTO.from_core(item)
-    item = item_repo.get_item(conn, item_id)
-    if item is None:
+        item_repo.upsert_item(conn, fresh)
+        return ItemDTO.from_core(fresh)
+    cached = item_repo.get_item(conn, item_id)
+    if cached is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown item '{item_id}'")
-    return ItemDTO.from_core(item)
+    return ItemDTO.from_core(cached)
 
 
 @router.get("/{item_id}/comments", response_model=list[CommentDTO])

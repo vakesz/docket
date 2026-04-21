@@ -157,6 +157,86 @@ async def test_docket_commands_expose_core_actions(ctx) -> None:
         assert {"Sync now", "Pick theme", "Fullscreen pane", "Quick-open by id"} <= set(labels)
 
 
+async def test_transition_commands_hidden_without_selection(ctx) -> None:
+    """No selected item → no transition entries in the palette. Keeps the
+    palette tidy and prevents actions that would just warn."""
+    app = ItvApp(ctx)
+    async with app.run_test():
+        provider = DocketCommands(screen=app.screen, match_style=None)
+        labels = [label for label, _h, _cb in provider._commands()]
+        assert not any(label.startswith("Transition →") for label in labels)
+
+
+async def test_transition_commands_appear_after_selection(ctx) -> None:
+    """When an item is selected, one palette command per TransitionIntent
+    appears so the user can trigger any transition by name."""
+    from docket.cli.tui.widgets.item_tree import ItemSelected
+
+    app = ItvApp(ctx)
+    async with app.run_test() as pilot:
+        app.post_message(ItemSelected("S-1"))
+        await pilot.pause()
+
+        provider = DocketCommands(screen=app.screen, match_style=None)
+        labels = [label for label, _h, _cb in provider._commands()]
+        assert "Transition → Start work" in labels
+        assert "Transition → Close (done)" in labels
+        assert "Transition → Reopen" in labels
+
+
+async def test_new_item_form_surfaces_duplicates_and_stages_proposal(ctx) -> None:
+    """Typing a title that overlaps a cached item should list it as a
+    possible duplicate. Submitting (ctrl+s) stages the create proposal and
+    opens the diff modal — nothing hits the provider."""
+    from docket.cli.tui.widgets.diff_modal import DiffModal
+    from docket.cli.tui.widgets.new_item_modal import NewItemModal
+    from docket.core.mutation import ItemCreate
+
+    app = ItvApp(ctx)
+    async with app.run_test() as pilot:
+        await app.run_action("new_item")
+        await pilot.pause()
+        assert isinstance(app.screen, NewItemModal)
+
+        form = app.screen
+        form.query_one("#title").value = "Add login flow"
+        await pilot.pause()
+        # Cached "Add login" should show up as a possible duplicate.
+        duplicates = form.query_one("#duplicates")
+        rendered = " ".join(str(getattr(child, "render", lambda: "")()) for child in duplicates.children)
+        assert "S-1" in rendered, f"expected S-1 in duplicate list, got: {rendered!r}"
+
+        form.query_one("#desc").text = "Body."
+        await pilot.press("ctrl+s")
+        await pilot.pause()
+
+        # Form dismissed → diff modal open, proposal staged, provider untouched.
+        assert isinstance(app.screen, DiffModal)
+        assert len(app._proposals) == 1
+        pending = app._proposals.peek_next()
+        assert pending is not None
+        assert isinstance(pending.proposal, ItemCreate)
+        assert pending.proposal.fields.title == "Add login flow"
+
+
+async def test_transition_command_stages_proposal_and_opens_modal(ctx) -> None:
+    """Invoking a transition palette command must stage a proposal and open
+    the diff modal — same pipeline as an agent tool-call."""
+    from docket.cli.tui.widgets.diff_modal import DiffModal
+    from docket.cli.tui.widgets.item_tree import ItemSelected
+
+    app = ItvApp(ctx)
+    async with app.run_test() as pilot:
+        app.post_message(ItemSelected("S-1"))
+        await pilot.pause()
+
+        await app.run_action("transition('start_work')")
+        await pilot.pause()
+
+        assert isinstance(app.screen, DiffModal)
+        assert len(app._proposals) == 1
+
+
 async def test_fullscreen_toggle_maximizes_then_restores(ctx) -> None:
     app = ItvApp(ctx)
     async with app.run_test() as pilot:

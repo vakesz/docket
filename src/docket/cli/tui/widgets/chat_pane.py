@@ -3,9 +3,11 @@ from __future__ import annotations
 from textual.app import ComposeResult
 from textual.containers import Vertical, VerticalScroll
 from textual.message import Message
-from textual.widgets import Input, Static
+from textual.widgets import Checkbox, Input, Static
 
 from docket.agent.types import ChatMessage, StreamDelta, Usage
+from docket.config.env import get_price_input_per_1m, get_price_output_per_1m
+from docket.core.acceptance import AcceptanceCriterion, extract_acceptance_criteria
 from docket.core.model import Item
 
 
@@ -22,6 +24,18 @@ class NewThreadRequest(Message):
     pass
 
 
+class TurnFinished(Message):
+    """Posted after a chat turn's usage/cost have been computed.
+
+    The app listens so it can roll the per-turn cost into the status-bar
+    conversation-total counter. `cost_cents` is 0 when no pricing env is set."""
+
+    def __init__(self, usage: Usage, cost_cents: int) -> None:
+        super().__init__()
+        self.usage = usage
+        self.cost_cents = cost_cents
+
+
 class ChatPane(Vertical):
     """Streaming chat for the currently bound item.
 
@@ -36,6 +50,15 @@ class ChatPane(Vertical):
     DEFAULT_CSS = """
     ChatPane { padding: 0; }
     ChatPane #chat-title { padding: 0 1; color: $text-muted; height: 1; }
+    ChatPane #criteria {
+        height: auto;
+        max-height: 8;
+        padding: 0 1;
+        border-bottom: dashed $panel-lighten-2;
+        display: none;
+    }
+    ChatPane #criteria.has-items { display: block; }
+    ChatPane #criteria-title { color: $text-muted; height: 1; }
     ChatPane #ledger { padding: 0 1; color: $text-muted; height: 1; }
     ChatPane #transcript { height: 1fr; padding: 1 1; }
     ChatPane #prompt { dock: bottom; height: 3; border: none; background: $surface; }
@@ -53,8 +76,10 @@ class ChatPane(Vertical):
 
     def compose(self) -> ComposeResult:
         yield Static("Chat — select an item", id="chat-title")
+        with VerticalScroll(id="criteria"):
+            yield Static("[b]acceptance criteria[/b]", id="criteria-title")
         yield VerticalScroll(id="transcript")
-        yield Static("tokens in: 0  out: 0  cached: 0", id="ledger")
+        yield Static("tokens in: 0  out: 0", id="ledger")
         yield Input(placeholder="Ask about this ticket… (enter to send)", id="prompt")
 
     # -- public API used by the app -----------------------------------------
@@ -70,9 +95,27 @@ class ChatPane(Vertical):
         if item is None:
             title.update("Chat — select an item")
             prompt.disabled = True
+            self._render_criteria([])
             return
         title.update(f"Chat · {item.id} — {item.title}")
         prompt.disabled = False
+        self._render_criteria(extract_acceptance_criteria(item.description_md or ""))
+
+    def _render_criteria(self, criteria: list[AcceptanceCriterion]) -> None:
+        """Mount one Checkbox per criterion. State is local UI only — toggling
+        never writes back to the ticket, it just lets the triager mentally
+        tick items off during the conversation."""
+        container = self.query_one("#criteria", VerticalScroll)
+        # Keep the header Static, drop the rest.
+        for child in list(container.children):
+            if child.id != "criteria-title":
+                child.remove()
+        if not criteria:
+            container.remove_class("has-items")
+            return
+        container.add_class("has-items")
+        for c in criteria:
+            container.mount(Checkbox(c.text, value=c.checked))
 
     def show_history(self, messages: list[ChatMessage]) -> None:
         transcript = self.query_one("#transcript", VerticalScroll)
@@ -120,9 +163,19 @@ class ChatPane(Vertical):
     def finish_turn(self, usage: Usage) -> None:
         self._active_assistant = None
         self._active_text = ""
-        self.query_one("#ledger", Static).update(
-            f"tokens in: {usage.tokens_in}  out: {usage.tokens_out}  cached: {usage.cached_tokens_in}"
-        )
+        line = f"tokens in: {usage.tokens_in}  out: {usage.tokens_out}"
+        cost_cents = 0
+        price_in = get_price_input_per_1m()
+        price_out = get_price_output_per_1m()
+        if price_in is not None and price_out is not None:
+            # Cached input bills at a much lower rate than fresh input, so
+            # subtract it from the full `tokens_in` bucket before pricing.
+            fresh_in = max(0, usage.tokens_in - usage.cached_tokens_in)
+            cost = (fresh_in * price_in + usage.tokens_out * price_out) / 1_000_000
+            line = f"{line}  ${cost:.4f}"
+            cost_cents = round(cost * 100)
+        self.query_one("#ledger", Static).update(line)
+        self.post_message(TurnFinished(usage, cost_cents))
 
     def set_status(self, text: str) -> None:
         self.query_one("#ledger", Static).update(text)

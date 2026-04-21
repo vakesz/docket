@@ -15,7 +15,7 @@ from dataclasses import asdict
 from threading import Thread
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sse_starlette.sse import EventSourceResponse, ServerSentEvent
+from sse_starlette.sse import EventSourceResponse, ServerSentEvent  # type: ignore[attr-defined]
 
 from docket.agent.loop import AgentLoop
 from docket.agent.types import ChatMessage, StreamDelta

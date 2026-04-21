@@ -12,9 +12,11 @@ from docket.core.services import mutation_service
 
 console = Console()
 
+_KIND_HELP = f"Kind: {', '.join(k.value for k in ItemKind)}"
+
 
 def new_command(
-    kind: str = typer.Argument(..., help=f"Kind: {', '.join(k.value for k in ItemKind)}"),
+    kind: str = typer.Argument(..., help=_KIND_HELP),
     title: str = typer.Option(..., "--title", help="Item title (required)."),
     description_file: Path | None = typer.Option(
         None, "--description-file", help="Optional path to a Markdown description."

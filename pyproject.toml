@@ -59,6 +59,8 @@ ignore = ["E501"]
 "tests/**" = ["B", "SIM"]
 # FastAPI idiom: `Depends(...)` and `Query(...)` belong in argument defaults.
 "src/docket/api/**" = ["B008"]
+# Typer idiom: `typer.Argument(...)` / `typer.Option(...)` belong in argument defaults.
+"src/docket/cli/commands/**" = ["B008"]
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-markers"

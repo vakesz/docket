@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 from datetime import UTC, datetime
 
-from docket.core.model import Item, ScopeFilters, SyncSummary
+from docket.core.model import ScopeFilters, SyncSummary
 from docket.providers.base import WorkItemProvider
 from docket.storage import transaction
 from docket.storage.repos import item_repo, sync_repo

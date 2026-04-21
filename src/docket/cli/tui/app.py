@@ -4,6 +4,7 @@ import contextlib
 import logging
 import traceback
 import webbrowser
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import ClassVar
 
@@ -20,17 +21,18 @@ from docket.agent.mutating_tools import register_mutating_tools
 from docket.agent.tool_defs import register_readonly_tools
 from docket.agent.tools import ToolRegistry
 from docket.agent.types import ChatMessage, StreamDelta
-from docket.cli.tui.widgets.chat_pane import ChatPane, UserTurnRequest
+from docket.cli.tui.widgets.chat_pane import ChatPane, TurnFinished, UserTurnRequest
 from docket.cli.tui.widgets.diff_modal import DiffModal
 from docket.cli.tui.widgets.item_detail import ItemDetail
 from docket.cli.tui.widgets.item_tree import ItemSelected, ItemTree
+from docket.cli.tui.widgets.new_item_modal import NewItemModal, NewItemRequest
 from docket.cli.tui.widgets.quick_open import QuickOpenModal, QuickOpenResult
 from docket.cli.tui.widgets.status_bar import StatusBar
 from docket.cli.tui.widgets.suggestion_modal import SuggestionModal
 from docket.cli.tui.widgets.theme_picker import ThemePicker
 from docket.config.models import Config
 from docket.config.paths import Paths
-from docket.core.model import ScopeFilters
+from docket.core.model import ScopeFilters, TransitionIntent
 from docket.core.services import (
     conversation_service,
     external_update_service,
@@ -78,7 +80,6 @@ class FullscreenToggle(Static):
 
     DEFAULT_CSS = """
     FullscreenToggle {
-        dock: top;
         height: 1;
         background: transparent;
         color: $text-muted;
@@ -148,10 +149,12 @@ def _docket_commands_provider() -> type[Provider]:
 class ItvApp(App[None]):
     """Three-pane terminal UI for browsing and triaging work items."""
 
-    # Extend the default palette (theme/quit) with Docket actions. `App.COMMANDS`
-    # is a set of provider classes (or callables returning one); we union in ours
-    # so the built-ins stay available.
-    COMMANDS = App.COMMANDS | {_docket_commands_provider}
+    # Replace the default palette providers entirely: Textual's built-in theme
+    # command (a) doesn't live-preview on highlight and (b) bypasses our
+    # config.ui.theme persistence. Users still get quit/help via keybinds.
+    COMMANDS: ClassVar[set[type[Provider] | Callable[[], type[Provider]]]] = {
+        _docket_commands_provider
+    }
 
     CSS = """
     #main { height: 1fr; }
@@ -161,7 +164,7 @@ class ItvApp(App[None]):
     #main > #mid   { width: 40%; }
     #main > #right { width: 25%; }
     Pane.-maximized { width: 100%; height: 100%; }
-    #filter { dock: top; height: 1; border: none; padding: 0 1; background: $surface; }
+    #filter { height: 1; border: none; padding: 0 1; background: $surface; }
     """
 
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
@@ -170,6 +173,7 @@ class ItvApp(App[None]):
         Binding("slash", "focus_filter", "Filter"),
         Binding("question_mark", "show_help", "Help"),
         Binding("t", "new_thread", "New thread"),
+        Binding("n", "new_item", "New item"),
         Binding("d", "review_pending", "Review pending"),
         Binding("o", "open_in_browser", "Open in browser"),
         Binding("s", "suggest_next", "Suggest next action"),
@@ -178,6 +182,11 @@ class ItvApp(App[None]):
         Binding("ctrl+right", "grow_pane", "Grow pane"),
         Binding("colon", "quick_open", "Quick-open by id"),
         Binding("ctrl+t", "pick_theme", "Theme"),
+        # Tab cycles between the three pane focus targets (tree → detail →
+        # chat input). Priority=True so the binding fires even when an Input
+        # owns focus; show=False keeps the footer tidy.
+        Binding("tab", "focus_next_pane", "Next pane", show=False, priority=True),
+        Binding("shift+tab", "focus_prev_pane", "Prev pane", show=False, priority=True),
     ]
 
     # Initial pane widths (percentages). Resize actions mutate these.
@@ -305,6 +314,7 @@ class ItvApp(App[None]):
         chat = self.query_one(ChatPane)
         chat.bind_item(item)
         self._selected_item_id = item.id if item else None
+        self._reset_cost_display()
         if item is not None:
             active = conversation_repo.get_active_for_item(self.tui_ctx.conn, item.id)  # type: ignore[arg-type]
             if active is None:
@@ -458,6 +468,44 @@ class ItvApp(App[None]):
     def action_focus_filter(self) -> None:
         self.query_one("#filter", Input).focus()
 
+    def _pane_focus_targets(self) -> list[Widget]:
+        """Return the widget that Tab should land on for each pane — the
+        item tree on the left, detail scroll in the middle, chat prompt on
+        the right. Missing panes drop out silently."""
+        targets: list[Widget] = []
+        for pid in self._PANE_IDS:
+            target: Widget | None = None
+            with contextlib.suppress(Exception):
+                pane = self.query_one(f"#{pid}", Widget)
+                if pid == "left":
+                    target = pane.query_one("#tree", Widget)
+                elif pid == "mid":
+                    target = pane.query_one("#mid-detail", Widget)
+                else:  # right
+                    target = pane.query_one("#prompt", Widget)
+            if target is not None:
+                targets.append(target)
+        return targets
+
+    def _cycle_pane_focus(self, direction: int) -> None:
+        targets = self._pane_focus_targets()
+        if not targets:
+            return
+        focused = self.focused
+        idx = -1
+        for i, t in enumerate(targets):
+            if focused is t or (focused is not None and t in focused.ancestors):
+                idx = i
+                break
+        next_idx = (idx + direction) % len(targets) if idx >= 0 else 0
+        targets[next_idx].focus()
+
+    def action_focus_next_pane(self) -> None:
+        self._cycle_pane_focus(1)
+
+    def action_focus_prev_pane(self) -> None:
+        self._cycle_pane_focus(-1)
+
     def action_toggle_fullscreen(self) -> None:
         """Maximize the pane that holds the currently-focused widget; if a
         pane is already maximized, minimize back to the three-pane layout."""
@@ -583,7 +631,8 @@ class ItvApp(App[None]):
         self.notify(
             "arrows navigate • Tab pane cycle • Enter open • Esc back • / filter • "
             "Ctrl+P palette • :id quick-open • Ctrl+F fullscreen pane • Ctrl+←/→ resize • "
-            "Ctrl+T theme • o browser • r refresh • t new thread • d review pending • q quit",
+            "Ctrl+T theme • o browser • r refresh • n new item • t new thread • "
+            "d review pending • q quit",
             title="Keys",
         )
 
@@ -605,6 +654,20 @@ class ItvApp(App[None]):
         chat = self.query_one(ChatPane)
         chat.show_history([])
         chat.set_status("new thread started")
+        self._reset_cost_display()
+
+    def _reset_cost_display(self) -> None:
+        """Zero the status-bar conversation-cost counter. Called on item
+        switch and new-thread — each chat thread gets its own running total."""
+        with contextlib.suppress(Exception):
+            self.query_one(StatusBar).cost_cents = 0
+
+    def on_turn_finished(self, event: TurnFinished) -> None:
+        """Roll the per-turn cost into the status bar's cumulative counter
+        so the user sees $ spent on the active conversation at a glance."""
+        with contextlib.suppress(Exception):
+            bar = self.query_one(StatusBar)
+            bar.cost_cents = bar.cost_cents + event.cost_cents
 
     def action_suggest_next(self) -> None:
         if self._selected_item_id is None:
@@ -667,6 +730,45 @@ class ItvApp(App[None]):
 
         self.push_screen(SuggestionModal(suggestion), on_decision)
 
+    def action_new_item(self) -> None:
+        """Open the new-ticket form. Submit routes through propose_create
+        and the diff modal — same confirm gate as every other write."""
+
+        def on_result(result: NewItemRequest | None) -> None:
+            if result is None:
+                return
+            proposal = mutation_service.propose_create(result.kind, result.fields)
+            self._proposals.add(proposal, source="form")
+            self._open_next_pending()
+
+        self.push_screen(NewItemModal(self.tui_ctx.conn), on_result)  # type: ignore[arg-type]
+
+    def action_transition(self, intent_value: str) -> None:
+        """Stage a transition for the selected item and open the diff modal.
+
+        Entry point for the command-palette transition commands. Lands in the
+        same mutation pipeline as an agent tool-call — no shortcut around the
+        confirm gate."""
+        if self._selected_item_id is None:
+            self.notify("Select an item first.", severity="warning")
+            return
+        try:
+            intent = TransitionIntent(intent_value)
+        except ValueError:
+            self.notify(f"Unknown transition intent: {intent_value}", severity="error")
+            return
+        try:
+            proposal = mutation_service.propose_transition(
+                self.tui_ctx.conn,  # type: ignore[arg-type]
+                self._selected_item_id,
+                intent,
+            )
+        except KeyError as e:
+            self.notify(f"Cannot stage: {e}", severity="error")
+            return
+        self._proposals.add(proposal, source="palette")
+        self._open_next_pending()
+
     def action_review_pending(self) -> None:
         if len(self._proposals) == 0:
             self.notify("No pending proposals.", severity="information")
@@ -674,23 +776,27 @@ class ItvApp(App[None]):
         self._open_next_pending()
 
     def _open_next_pending(self) -> None:
+        from docket.core.mutation import Proposal
+
         pending = self._proposals.peek_next()
         if pending is None:
             return
 
-        def on_decision(confirmed: bool | None) -> None:
+        def on_decision(edited: Proposal | None) -> None:
             # peek_next did not remove; we drain here.
             popped = self._proposals.pop(pending.proposal.id)
             if popped is None:
                 return
-            if not confirmed:
+            if edited is None:
                 self.notify("Rejected.", severity="warning")
                 return
+            # The modal returns the (possibly edited) proposal — use that
+            # when confirming so description-patch edits flow through.
             try:
                 result = mutation_service.confirm(
                     self.tui_ctx.conn,  # type: ignore[arg-type]
                     self.tui_ctx.provider,
-                    popped.proposal,
+                    edited,
                 )
             except Exception as e:
                 self.notify(f"Apply failed: {e}", severity="error")
