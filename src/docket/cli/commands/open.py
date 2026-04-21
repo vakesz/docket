@@ -56,6 +56,12 @@ def open_command(
             compaction_threshold_tokens=ctx.config.llm.compaction_threshold_tokens,
             external_watch_interval_seconds=ctx.config.llm.external_watch_interval_seconds,
             read_only=effective_read_only,
+            background_sync_interval_seconds=ctx.config.sync.background_interval_seconds,
+            background_sync_min_interval_by_provider=dict(
+                ctx.config.sync.min_interval_seconds_by_provider
+            ),
+            stale_threshold_days=ctx.config.stale.threshold_days,
+            stale_threshold_by_provider=dict(ctx.config.stale.threshold_days_by_provider),
             paths=ctx.paths,
             config=ctx.config,
         )

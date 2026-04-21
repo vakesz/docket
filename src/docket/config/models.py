@@ -43,6 +43,23 @@ class UiConfig(BaseModel):
     theme: str = "textual-dark"
 
 
+class SyncConfig(BaseModel):
+    """Background sync knobs. Off by default — the TUI still has a manual
+    `Sync now` action via the command palette / keybind. Per-provider floors
+    protect against rate limits when the user sets a short global interval."""
+
+    background_interval_seconds: float = 0.0
+    min_interval_seconds_by_provider: dict[str, float] = Field(default_factory=dict)
+
+
+class StaleConfig(BaseModel):
+    """`STALE - Xd` marker thresholds. Per-provider overrides win over the
+    global default; missing entries fall back to `threshold_days`."""
+
+    threshold_days: int = 7
+    threshold_days_by_provider: dict[str, int] = Field(default_factory=dict)
+
+
 class Config(BaseModel):
     """Top-level config.toml schema."""
 
@@ -54,3 +71,5 @@ class Config(BaseModel):
     telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
     llm: LlmConfig = Field(default_factory=LlmConfig)
     ui: UiConfig = Field(default_factory=UiConfig)
+    sync: SyncConfig = Field(default_factory=SyncConfig)
+    stale: StaleConfig = Field(default_factory=StaleConfig)

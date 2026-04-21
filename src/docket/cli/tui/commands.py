@@ -101,6 +101,22 @@ class DocketCommands(Provider):
                         _make_transition_callback(app, intent),
                     )
                 )
+
+        # Saved views: one "Switch view → <name>" per configured scope, minus
+        # the currently active one. Only surfaces when there's somewhere to go.
+        config = getattr(app.tui_ctx, "config", None)
+        if config is not None:
+            active = app.tui_ctx.scope_key
+            for name in sorted(config.scopes):
+                if name == active:
+                    continue
+                commands.append(
+                    (
+                        f"Switch view → {name}",
+                        f"Load the '{name}' saved view.",
+                        _make_switch_view_callback(app, name),
+                    )
+                )
         return commands
 
 
@@ -108,3 +124,7 @@ def _make_transition_callback(app: ItvApp, intent: TransitionIntent) -> Callable
     """Bind the intent into a zero-arg closure so the palette's command slot
     (which only accepts `Callable[[], None]`) can still reach the right one."""
     return lambda: app.action_transition(intent.value)
+
+
+def _make_switch_view_callback(app: ItvApp, name: str) -> Callable[[], None]:
+    return lambda: app.action_switch_view(name)

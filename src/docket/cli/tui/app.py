@@ -6,6 +6,7 @@ import traceback
 import webbrowser
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import ClassVar
 
 from textual.app import App, ComposeResult
@@ -134,6 +135,16 @@ class TuiContext:
     # Read-only mode: agent mutating tools are not registered, TUI mutation
     # actions toast and bail, status bar shows a visible READ-ONLY badge.
     read_only: bool = False
+    # Background list sync: 0 disables; the palette "Sync now" action still
+    # works regardless. A per-provider floor (seconds) clamps very short
+    # intervals — the resolver below takes the max of the configured global
+    # and the floor for the active provider.
+    background_sync_interval_seconds: float = 0.0
+    background_sync_min_interval_by_provider: dict[str, float] | None = None
+    # Stale marker: append `STALE - Xd` to list rows once `updated_at` is
+    # older than N days. 0/negative disables. Per-provider override wins.
+    stale_threshold_days: int = 0
+    stale_threshold_by_provider: dict[str, int] | None = None
     # Optional handles for features that persist to config (theme picker, etc).
     # Pilot tests can leave these as None; persistence becomes a no-op.
     paths: Paths | None = None
@@ -225,7 +236,7 @@ class ItvApp(App[None]):
             with Pane(id="left"):
                 yield FullscreenToggle()
                 yield Input(placeholder="filter (/) — title, description, comments…", id="filter")
-                yield ItemTree(id="tree")
+                yield ItemTree(id="tree", stale_threshold_days=self._resolved_stale_threshold())
             with Pane(id="mid"):
                 yield FullscreenToggle()
                 yield ItemDetail(id="mid-detail")
@@ -245,6 +256,70 @@ class ItvApp(App[None]):
                 self._tick_external_watch,
                 name="external-watch",
             )
+        sync_interval = self._resolved_sync_interval()
+        if sync_interval > 0:
+            self._schedule_next_sync(sync_interval)
+            self.set_interval(
+                sync_interval,
+                self._tick_background_sync,
+                name="background-sync",
+            )
+
+    def _schedule_next_sync(self, interval: float) -> None:
+        """Publish the next-sync timestamp to the status bar. Called at
+        startup (once `on_mount` resolves the interval) and after each tick
+        so the countdown stays roughly accurate without its own repaint."""
+        target = datetime.now(UTC) + timedelta(seconds=interval)
+        with contextlib.suppress(Exception):
+            self.query_one(StatusBar).next_sync_at = target
+
+    def _tick_background_sync(self) -> None:
+        """Kick off an incremental sync in the background.
+
+        Provider calls block on the network, so we spawn a thread worker —
+        the UI stays responsive while the sync runs. `exclusive=True` means
+        a slow sync never stacks up behind itself."""
+        interval = self._resolved_sync_interval()
+        if interval <= 0:
+            return  # Disabled mid-session — nothing to do.
+        # Push the next target *now* so the countdown keeps moving even if
+        # the worker is still chewing on the last one.
+        self._schedule_next_sync(interval)
+        self.run_worker(
+            self._background_sync_once,
+            group="background-sync",
+            exclusive=True,
+            thread=True,
+        )
+
+    def _background_sync_once(self) -> None:
+        try:
+            summary = sync_service.refresh(
+                self.tui_ctx.conn,  # type: ignore[arg-type]
+                self.tui_ctx.provider,
+                self.tui_ctx.scope_key,
+                self.tui_ctx.scope,
+            )
+        except Exception:
+            # Background sync is best-effort; a provider hiccup shouldn't
+            # interrupt the session. Flip the offline flag so the user has
+            # some signal that their list may be stale.
+            log.exception("background sync failed for scope %s", self.tui_ctx.scope_key)
+            self.call_from_thread(self._set_offline, True)
+            return
+
+        def apply() -> None:
+            self._set_offline(False)
+            self._mark_sync_now()
+            self._reload_tree()
+            if summary.upserted or summary.archived:
+                self.notify(
+                    f"Auto-sync · {summary.upserted} updated, {summary.archived} archived",
+                    severity="information",
+                    timeout=3,
+                )
+
+        self.call_from_thread(apply)
 
     def _tick_external_watch(self) -> None:
         """Runs on the Textual event loop every N seconds. Spawns a worker per
@@ -299,6 +374,34 @@ class ItvApp(App[None]):
         items = item_repo.list_items(self.tui_ctx.conn)  # type: ignore[arg-type]
         self.query_one(ItemTree).load_items(items)
 
+    def _provider_key(self) -> str:
+        """Key used to look up per-provider overrides (stale threshold,
+        sync floor). Mirrors the status-bar rule: prefer `display_name`,
+        fall back to the class name."""
+        prov = self.tui_ctx.provider
+        name = getattr(prov, "display_name", None) or type(prov).__name__
+        return str(name)
+
+    def _resolved_stale_threshold(self) -> int | None:
+        """Global default, unless the active provider has its own override.
+        Returns None when the marker is disabled so ItemTree can short-circuit."""
+        per_provider = self.tui_ctx.stale_threshold_by_provider or {}
+        value = per_provider.get(self._provider_key(), self.tui_ctx.stale_threshold_days)
+        return value if value and value > 0 else None
+
+    def _resolved_sync_interval(self) -> float:
+        """Configured interval, clamped up to the per-provider floor (if any).
+
+        0 means disabled — and we keep it disabled even if a floor is set,
+        because the floor only protects an already-enabled timer from
+        exceeding the provider's rate limit."""
+        base = self.tui_ctx.background_sync_interval_seconds
+        if base <= 0:
+            return 0.0
+        floors = self.tui_ctx.background_sync_min_interval_by_provider or {}
+        floor = floors.get(self._provider_key(), 0.0)
+        return max(base, floor)
+
     def _init_status_bar(self) -> None:
         """Populate the static status-bar segments (provider name, scope key).
 
@@ -313,6 +416,7 @@ class ItvApp(App[None]):
         display = getattr(provider, "display_name", None) or type(provider).__name__
         bar.provider_name = str(display)
         bar.scope_label = self.tui_ctx.scope_key
+        bar.active_view = self.tui_ctx.scope_key
         bar.read_only = self.tui_ctx.read_only
 
     def on_item_selected(self, message: ItemSelected) -> None:
@@ -790,6 +894,36 @@ class ItvApp(App[None]):
             return
         self._proposals.add(proposal, source="palette")
         self._open_next_pending()
+
+    def action_switch_view(self, name: str) -> None:
+        """Switch the active saved view (= named scope filter).
+
+        Only touches in-memory state — we do not persist the change to
+        config.toml because users experiment with views during a session
+        and expect their default back next launch. To make a view sticky,
+        edit `active_scope` in config.toml.
+
+        A switch doesn't force a sync; the next background tick will pick
+        up fresh data for the new scope, or the user can press `r`. This
+        keeps scope-switching feel snappy."""
+        config = self.tui_ctx.config
+        if config is None or name not in config.scopes:
+            self.notify(f"No saved view named '{name}'.", severity="warning")
+            return
+        sf = config.scopes[name]
+        self.tui_ctx.scope_key = name
+        self.tui_ctx.scope = ScopeFilters(
+            team=sf.team,
+            area_path=sf.area_path,
+            iteration_path=sf.iteration_path,
+            assignee=sf.assignee,
+        )
+        with contextlib.suppress(Exception):
+            bar = self.query_one(StatusBar)
+            bar.scope_label = name
+            bar.active_view = name
+        self._reload_tree()
+        self.notify(f"Switched to view '{name}'.", severity="information")
 
     def action_review_pending(self) -> None:
         if len(self._proposals) == 0:
