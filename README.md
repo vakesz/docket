@@ -12,7 +12,7 @@
 [![Tests](https://img.shields.io/badge/tests-327%20passing-brightgreen)](#testing)
 [![Azure DevOps](https://img.shields.io/badge/Azure%20DevOps-ready-0078d7?logo=azuredevops&logoColor=white)](#providers)
 [![GitHub](https://img.shields.io/badge/GitHub-ready-181717?logo=github&logoColor=white)](#providers)
-[![Status: phase-2](https://img.shields.io/badge/status-phase%202%20landed-success)](plan.md)
+[![Status: phase-2 landed](https://img.shields.io/badge/status-phase%202%20landed-success)](#roadmap)
 
 Browse · Filter · Chat · Transition · Patch · Create — without leaving your terminal.
 
@@ -156,7 +156,7 @@ Bare `docket` always runs the TUI — subcommands still work, and a missing conf
 | **GitHub** (`github`) | `gh auth token`, `GITHUB_TOKEN` fallback | assignee | Issues + PRs mapped to the canonical model. `find_related_prs` agent tool scans recent PRs for id/keyword mentions. |
 | **github_stub** (`github_stub`) | — | any | In-memory reference impl for tests and demos. Useful when you want to poke at the TUI without wiring a real backend. |
 
-Adding Jira, Linear, or a custom system is documented in [ADDING_A_PROVIDER.md](ADDING_A_PROVIDER.md). Third-party providers can ship as separate pip packages via the `docket.providers` entry-point group.
+Adding Jira, Linear, or a custom system is a matter of satisfying the `WorkItemProvider` Protocol — see [Adding a provider](#adding-a-provider) below. Third-party providers can ship as separate pip packages via the `docket.providers` entry-point group.
 
 ---
 
@@ -214,7 +214,7 @@ Core rules that hold this together:
 - **Every mutation** — from a keystroke, a CLI flag, an HTTP POST, or an LLM tool call — goes through `mutation_service.propose → render_diff → confirm`. There is no shortcut.
 - **The prompt prefix is cache-stable**: `[system + kind template] → [ticket snapshot] → ---` is byte-identical across turns, so Foundry prompt caching hits on every follow-up.
 
-Deeper design notes live in [plan.md](plan.md) — the source of truth for milestones and architectural decisions.
+These invariants are enforced by tests — `test_import_boundary.py`, `test_state_map_reverse.py`, and the per-provider cross-cutting suites in `tests/test_github_stub_provider.py` — so a refactor that violates one fails loudly.
 
 ---
 
@@ -265,23 +265,76 @@ tests/fixtures/cassettes # pytest-recording cassettes
 
 ---
 
-## Docs
+## Adding a provider
 
-- 📘 **[First-Time Setup Guide](FIRST_TIME_SETUP.md)** — install, wizard walkthrough, provider-specific prerequisites, troubleshooting
-- 🔌 **[Adding a Provider](ADDING_A_PROVIDER.md)** — the `WorkItemProvider` contract, state translation pattern, shared test suite
-- 🏗 **[plan.md](plan.md)** — architecture source of truth, milestone history, locked decisions
-- 🤖 **[CLAUDE.md](CLAUDE.md)** — conventions for AI assistants working in this repo
+Every backend plugs in through one Protocol (`src/docket/providers/base.py`). Start from the in-memory reference — `src/docket/providers/github_stub/` — and copy its shape. The contract is small:
+
+```python
+class WorkItemProvider(Protocol):
+    def health_check(self) -> None: ...
+    def list_changes_since(
+        self, watermark: datetime | None, filters: ScopeFilters
+    ) -> Iterable[Item]: ...
+    def get_item(self, id: str) -> Item: ...
+    def get_comments(self, id: str) -> list[Comment]: ...
+    def get_linked(self, id: str) -> list[Item]: ...
+    def transition(self, id: str, intent: TransitionIntent) -> Item: ...
+    def patch_description(self, id: str, new_md: str) -> Item: ...
+    def upload_attachment(
+        self, id: str, filename: str, content: bytes, content_type: str
+    ) -> str: ...
+    def create_item(self, kind: ItemKind, fields: CreateFields) -> Item: ...
+```
+
+Four rules that keep providers safe to compose:
+
+1. **Translate at the boundary.** Native state strings stay inside the provider — every `Item` you yield has a canonical `ItemState`. Two dicts do most of the work: `NATIVE_TO_CANONICAL: dict[NativeT, ItemState]` and `INTENT_TO_NATIVE: dict[TransitionIntent, NativeT]`. `to_canonical` must total (pick a safe fallback for unknown states), and `to_native` must cover every `TransitionIntent`.
+2. **Raise the shared errors.** `ProviderUnreachableError`, `ProviderAuthError`, and `ProviderError` from `providers/base.py` — so the CLI, TUI, and API render failures uniformly.
+3. **Stay stateless.** The cache, watermarks, and transcripts are core concerns. The provider is a thin adapter between one REST call and one canonical object.
+4. **Opt in to optional capabilities via method presence.** The agent tool for `find_related_prs` is only registered when the active provider exposes the method — no declaration gymnastics, `getattr(provider, "find_related_prs", None)` is the gate.
+
+Checklist for a new provider named `foo`:
+
+- `src/docket/providers/foo/__init__.py` + `provider.py` + `state_map.py` (re-export `FooProvider`)
+- Register in `src/docket/config/` and the setup wizard (`src/docket/cli/setup/`) — ADO is the selection shape to copy
+- Put auth in `providers/foo/auth.py`, raising `ProviderAuthError` on failure so the wizard can re-prompt
+- Satisfy the cross-cutting tests (see [Testing](#testing))
+
+Performance: `sync_service.refresh` calls `item_repo.upsert_items` with `executemany` — don't call `upsert_item` in a loop from the provider. `list_changes_since` should paginate internally and yield items so peak memory stays flat. Keep `provider_raw` small; it's JSON-serialized on every upsert.
+
+---
+
+## Roadmap
+
+Docket is in active phase-2 development. M1–M16 have landed; comment draft queue is carved out of M16 as a follow-up:
+
+| Phase | Status | Highlights |
+| --- | --- | --- |
+| Phase 1 (M1–M8) | ✅ landed | Provider abstraction, canonical model, SQLite cache, TUI shell, service layer, CLI surface, Foundry wiring, diff-preview mutations |
+| Phase 2 (M9–M16) | ✅ landed | Multi-provider config, GitHub provider, setup wizard, prompt library, background sync, read-only mode, draft proposal queue, watchlist + PR discovery |
+| Follow-up | pending | Comment draft queue (M16 carve-out), Jira/Linear providers, richer linked-item graph |
+
+Invariants enforced by tests — don't violate them without updating the tests too:
+
+- `tests/test_import_boundary.py` — `core/`, `storage/`, `agent/`, `api/` must not import concrete providers
+- `tests/test_state_map_reverse.py` — every `TransitionIntent` round-trips through every provider's state map
+- `tests/test_github_stub_provider.py` — the reference cross-cutting suite every provider should pass
 
 ---
 
 ## Contributing
 
-Docket is in active phase-2 development. The [plan.md](plan.md) milestone ledger is the roadmap; M1–M16 are landed (M16 with the comment draft queue carved out as a follow-up). Before opening a PR:
+Before opening a PR:
 
 1. Keep the layered dependency rule intact — `tests/test_import_boundary.py` fails loudly if you break it.
-2. If you add a provider, satisfy the cross-cutting tests documented in [ADDING_A_PROVIDER.md](ADDING_A_PROVIDER.md#6-tests-you-get-for-free).
+2. If you add a provider, copy the cross-cutting tests from `tests/test_github_stub_provider.py` and point them at your provider.
 3. Run `uv run ruff check . && uv run mypy src && uv run pytest` before pushing.
 4. New mutations must flow through `mutation_service.propose` → diff → confirm. No exceptions for "it's just a CLI flag."
+
+## Docs
+
+- 📘 **[First-Time Setup Guide](docs/FIRST_TIME_SETUP.md)** — install, wizard walkthrough, provider-specific prerequisites, troubleshooting
+- 🤖 **[CLAUDE.md](CLAUDE.md)** — conventions for AI assistants working in this repo
 
 ## License
 

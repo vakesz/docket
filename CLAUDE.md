@@ -21,7 +21,7 @@ The entrypoint is `docket.cli.app:main` → Typer app. `docket` with no subcomma
 
 ## Architecture
 
-`plan.md` is the source of truth for architecture and milestones — consult it before making structural changes. Phase-2 milestones M9–M16 are locked; M1–M8 are landed.
+Phase-2 milestones M1–M16 are landed. The comment draft queue is the only M16 carve-out still pending. `README.md` has the user-facing tour and the "Adding a provider" contract; `docs/FIRST_TIME_SETUP.md` covers installation paths. The invariants below are enforced by tests — violating one should fail a test, not silently drift.
 
 **Layered dependency rule (enforced by `tests/test_import_boundary.py`):** `core/`, `storage/`, `agent/`, and `api/` must not import from `providers/azure_devops/` (or any concrete provider) directly. They speak only to `providers.base.WorkItemProvider`. `cli/` is the single allowed exception because it wires concrete providers by name. Breaking this test means provider-specific state strings, field names, or HTML handling have leaked into neutral code.
 

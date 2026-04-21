@@ -200,7 +200,7 @@ uv run docket setup provider remove personal-gh
 
 Inside the TUI, the command palette (`Ctrl+P`) has a **Switch provider** entry — the tree, scope, and status bar all re-bind to the new active provider without restarting.
 
-Third-party providers can ship as separate pip packages via the `docket.providers` entry-point group. See [ADDING_A_PROVIDER.md](ADDING_A_PROVIDER.md) for the Protocol contract and test expectations.
+Third-party providers can ship as separate pip packages via the `docket.providers` entry-point group. The Protocol contract and cross-cutting test expectations are documented in the [README's "Adding a provider" section](../README.md#adding-a-provider).
 
 ---
 
@@ -263,4 +263,4 @@ Either you passed `--read-only` or `DOCKET_READ_ONLY=1` is set in your environme
 - Open the in-app settings with `,` to fix saved values without touching `config.toml` by hand.
 - Logs live next to the cache under the Docket paths above.
 
-Still stuck? Check [plan.md §13 (Risks)](plan.md) and `tests/` for worked examples — the TUI pilot tests are especially useful as "this is how feature X is expected to behave" references.
+Still stuck? `tests/` has worked examples for every feature — the TUI pilot tests (`tests/test_tui_*.py`) double as behavioural documentation for "this is how feature X is expected to behave."
