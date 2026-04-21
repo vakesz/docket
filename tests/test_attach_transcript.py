@@ -100,6 +100,26 @@ def test_attach_transcript_errors_when_no_conversation(env) -> None:
     assert len(store) == 0
 
 
+def test_attach_transcript_redacts_secrets_before_upload(env) -> None:
+    """A token pasted into chat must not leave the machine as cleartext —
+    the transcript runs through redact_secrets before bytes are staged."""
+    conn, _, store, reg, item, convo = env
+    message_repo.append(
+        conn,
+        convo.id,
+        ChatMessage(
+            role="user",
+            content="Use this token: ghp_abcdefghijklmnopqrstuvwxyzABCDEFGHIJ",
+        ),
+    )
+    reg.dispatch("attach_transcript", {"id": item.id})
+    proposal = store.list()[-1].proposal
+    assert isinstance(proposal, AttachmentUpload)
+    body = proposal.content.decode("utf-8")
+    assert "ghp_abcdefghijklmnopqrstuvwxyzABCDEFGHIJ" not in body
+    assert "[REDACTED:github-token]" in body
+
+
 def test_confirm_routes_attachment_through_provider_and_increments_version(env) -> None:
     conn, provider, store, reg, item, _ = env
     reg.dispatch("attach_transcript", {"id": item.id})

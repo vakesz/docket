@@ -7,6 +7,7 @@ from rich.console import Console
 
 from docket.cli.confirm import prompt_confirm
 from docket.cli.context import prepare_or_wizard
+from docket.cli.guard import abort_if_read_only
 from docket.core.model import CreateFields, ItemKind
 from docket.core.services import mutation_service
 
@@ -27,6 +28,7 @@ def new_command(
     dry_run: bool = typer.Option(False, "--dry-run", help="Show preview, do not create."),
 ) -> None:
     """Create a new work item."""
+    abort_if_read_only(console)
     try:
         ik = ItemKind(kind)
     except ValueError as e:

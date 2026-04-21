@@ -131,6 +131,9 @@ class TuiContext:
     llm: LlmClient | None = None  # None disables chat (useful for pre-M4 tests)
     compaction_threshold_tokens: int = 0  # 0 disables — passed to conversation_service
     external_watch_interval_seconds: float = 60.0  # 0 disables external-update watcher
+    # Read-only mode: agent mutating tools are not registered, TUI mutation
+    # actions toast and bail, status bar shows a visible READ-ONLY badge.
+    read_only: bool = False
     # Optional handles for features that persist to config (theme picker, etc).
     # Pilot tests can leave these as None; persistence becomes a no-op.
     paths: Paths | None = None
@@ -205,12 +208,15 @@ class ItvApp(App[None]):
         if tui_ctx.llm is not None:
             registry = ToolRegistry()
             register_readonly_tools(registry, conn=tui_ctx.conn, provider=tui_ctx.provider)  # type: ignore[arg-type]
-            register_mutating_tools(
-                registry,
-                conn=tui_ctx.conn,  # type: ignore[arg-type]
-                store=self._proposals,
-                active_item=lambda: self._selected_item_id,
-            )
+            # Read-only: the agent keeps its read tools so it can still
+            # answer questions, but no propose_* tools exist in its registry.
+            if not tui_ctx.read_only:
+                register_mutating_tools(
+                    registry,
+                    conn=tui_ctx.conn,  # type: ignore[arg-type]
+                    store=self._proposals,
+                    active_item=lambda: self._selected_item_id,
+                )
             self._agent = AgentLoop(client=tui_ctx.llm, tools=registry)
 
     def compose(self) -> ComposeResult:
@@ -307,6 +313,7 @@ class ItvApp(App[None]):
         display = getattr(provider, "display_name", None) or type(provider).__name__
         bar.provider_name = str(display)
         bar.scope_label = self.tui_ctx.scope_key
+        bar.read_only = self.tui_ctx.read_only
 
     def on_item_selected(self, message: ItemSelected) -> None:
         item = item_repo.get_item(self.tui_ctx.conn, message.item_id)  # type: ignore[arg-type]
@@ -711,6 +718,8 @@ class ItvApp(App[None]):
             if not accepted:
                 self.notify("Suggestion dismissed.", severity="information")
                 return
+            if self._blocked_read_only():
+                return
             try:
                 staged = suggestion_service.stage_suggestion(
                     self.tui_ctx.conn,  # type: ignore[arg-type]
@@ -731,9 +740,19 @@ class ItvApp(App[None]):
 
         self.push_screen(SuggestionModal(suggestion), on_decision)
 
+    def _blocked_read_only(self) -> bool:
+        """Toast and return True if the user just tried to stage a mutation
+        while the app is in read-only mode."""
+        if self.tui_ctx.read_only:
+            self.notify("Read-only mode — mutations disabled.", severity="warning")
+            return True
+        return False
+
     def action_new_item(self) -> None:
         """Open the new-ticket form. Submit routes through propose_create
         and the diff modal — same confirm gate as every other write."""
+        if self._blocked_read_only():
+            return
 
         def on_result(result: NewItemRequest | None) -> None:
             if result is None:
@@ -750,6 +769,8 @@ class ItvApp(App[None]):
         Entry point for the command-palette transition commands. Lands in the
         same mutation pipeline as an agent tool-call — no shortcut around the
         confirm gate."""
+        if self._blocked_read_only():
+            return
         if self._selected_item_id is None:
             self.notify("Select an item first.", severity="warning")
             return

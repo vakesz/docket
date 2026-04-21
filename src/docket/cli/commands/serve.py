@@ -11,6 +11,7 @@ from docket.config.env import (
     get_foundry_api_version,
     get_foundry_deployment,
     get_foundry_endpoint,
+    get_read_only,
 )
 
 if TYPE_CHECKING:
@@ -23,12 +24,19 @@ def serve_command(
     host: str | None = typer.Option(None, "--host", help="Override bind address from config.http.bind."),
     port: int | None = typer.Option(None, "--port", help="Override port from config.http.port."),
     no_chat: bool = typer.Option(False, "--no-chat", help="Skip LLM wiring; chat endpoints return 503."),
+    read_only: bool = typer.Option(
+        False,
+        "--read-only",
+        help="Disable every mutation endpoint — reads and chat stay available.",
+    ),
 ) -> None:
     """Run the HTTP surface (FastAPI + SSE) on the configured port."""
     import uvicorn
 
     from docket.agent.foundry_client import LlmClient
     from docket.api.app import create_app
+
+    effective_read_only = read_only or get_read_only()
 
     ctx = prepare_or_wizard()
     try:
@@ -57,10 +65,12 @@ def serve_command(
             bearer_token=ctx.config.http.token,
             llm=llm,
             compaction_threshold_tokens=ctx.config.llm.compaction_threshold_tokens,
+            read_only=effective_read_only,
         )
+        mode = "read-only" if effective_read_only else "read-write"
         console.print(
             f"[green]docket serve[/green] listening on http://{bind}:{listen_port} "
-            f"(bearer required; chat {'disabled' if llm is None else 'enabled'})"
+            f"(bearer required; chat {'disabled' if llm is None else 'enabled'}; {mode})"
         )
         uvicorn.run(app, host=bind, port=listen_port, log_level="info")
     finally:

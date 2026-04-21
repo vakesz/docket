@@ -34,11 +34,16 @@ def create_app(
     proposals: ProposalStore | None = None,
     active_item: Callable[[], str | None] | None = None,
     compaction_threshold_tokens: int = 0,
+    read_only: bool = False,
 ) -> FastAPI:
     """Build a configured FastAPI app.
 
     `bearer_token` must be non-empty; an empty token would silently disable
     auth, which we refuse to do.
+
+    `read_only=True` blocks every POST on the mutation surface (the router
+    attaches `require_not_read_only` as a dependency) and skips registering
+    mutating tools for the agent. Read endpoints keep working unchanged.
     """
     if not bearer_token:
         raise ValueError(
@@ -57,16 +62,18 @@ def create_app(
     app.state.proposals = proposals if proposals is not None else ProposalStore()
     app.state.llm = llm
     app.state.compaction_threshold_tokens = compaction_threshold_tokens
+    app.state.read_only = read_only
 
     if llm is not None:
         registry = ToolRegistry()
         register_readonly_tools(registry, conn=conn, provider=provider)
-        register_mutating_tools(
-            registry,
-            conn=conn,
-            store=app.state.proposals,
-            active_item=active_item or (lambda: None),
-        )
+        if not read_only:
+            register_mutating_tools(
+                registry,
+                conn=conn,
+                store=app.state.proposals,
+                active_item=active_item or (lambda: None),
+            )
         app.state.agent = AgentLoop(client=llm, tools=registry)
     else:
         app.state.agent = None

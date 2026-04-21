@@ -55,4 +55,18 @@ def require_agent(request: Request) -> AgentLoop:
     return agent
 
 
-__all__ = ["get_conn", "get_proposals", "get_provider", "require_agent"]
+def require_not_read_only(request: Request) -> None:
+    if getattr(request.app.state, "read_only", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Read-only mode — mutations disabled.",
+        )
+
+
+__all__ = [
+    "get_conn",
+    "get_proposals",
+    "get_provider",
+    "require_agent",
+    "require_not_read_only",
+]

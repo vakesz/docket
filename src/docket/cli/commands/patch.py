@@ -7,6 +7,7 @@ from rich.console import Console
 
 from docket.cli.confirm import prompt_confirm
 from docket.cli.context import prepare_or_wizard
+from docket.cli.guard import abort_if_read_only
 from docket.core.services import mutation_service
 
 console = Console()
@@ -18,6 +19,7 @@ def patch_command(
     dry_run: bool = typer.Option(False, "--dry-run", help="Show diff, do not write."),
 ) -> None:
     """Replace a work item's description with the contents of a Markdown file."""
+    abort_if_read_only(console)
     if not from_file.exists():
         console.print(f"[red]File not found: {from_file}[/red]")
         raise typer.Exit(2)

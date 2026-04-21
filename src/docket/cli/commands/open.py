@@ -11,6 +11,7 @@ from docket.config.env import (
     get_foundry_api_version,
     get_foundry_deployment,
     get_foundry_endpoint,
+    get_read_only,
 )
 
 if TYPE_CHECKING:
@@ -23,10 +24,19 @@ console = Console()
 def open_command(
     scope: str | None = typer.Option(None, "--scope", help="Named scope to browse (defaults to active scope)."),
     no_chat: bool = typer.Option(False, "--no-chat", help="Skip LLM wiring; useful when Foundry is unreachable."),
+    read_only: bool = typer.Option(
+        False,
+        "--read-only",
+        help="Disable all mutation paths — the agent can browse and chat but never proposes writes.",
+    ),
 ) -> None:
     """Launch the three-pane Textual TUI."""
     from docket.agent.foundry_client import LlmClient
     from docket.cli.tui import ItvApp, TuiContext
+
+    # Either the flag or DOCKET_READ_ONLY=1 enables the mode — whichever
+    # comes first, same outcome.
+    effective_read_only = read_only or get_read_only()
 
     ctx = prepare_or_wizard()
     try:
@@ -45,6 +55,7 @@ def open_command(
             llm=llm,
             compaction_threshold_tokens=ctx.config.llm.compaction_threshold_tokens,
             external_watch_interval_seconds=ctx.config.llm.external_watch_interval_seconds,
+            read_only=effective_read_only,
             paths=ctx.paths,
             config=ctx.config,
         )

@@ -13,7 +13,7 @@ import sqlite3
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from docket.api.auth import require_bearer
-from docket.api.deps import get_conn, get_proposals, get_provider
+from docket.api.deps import get_conn, get_proposals, get_provider, require_not_read_only
 from docket.api.schemas import (
     ItemDTO,
     MutationConfirmedDTO,
@@ -29,7 +29,7 @@ from docket.providers.base import WorkItemProvider
 router = APIRouter(
     prefix="/items/{item_id}/mutations",
     tags=["mutations"],
-    dependencies=[Depends(require_bearer)],
+    dependencies=[Depends(require_bearer), Depends(require_not_read_only)],
 )
 
 

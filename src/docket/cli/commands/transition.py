@@ -5,6 +5,7 @@ from rich.console import Console
 
 from docket.cli.confirm import prompt_confirm
 from docket.cli.context import prepare_or_wizard
+from docket.cli.guard import abort_if_read_only
 from docket.core.model import TransitionIntent
 from docket.core.services import mutation_service
 
@@ -19,6 +20,7 @@ def transition_command(
     dry_run: bool = typer.Option(False, "--dry-run", help="Show diff, do not write."),
 ) -> None:
     """Move a work item to a new state using a named intent."""
+    abort_if_read_only(console)
     try:
         ti = TransitionIntent(intent)
     except ValueError as e:

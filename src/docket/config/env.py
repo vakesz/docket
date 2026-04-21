@@ -65,3 +65,10 @@ def get_price_input_per_1m() -> float | None:
 
 def get_price_output_per_1m() -> float | None:
     return _float_env("DOCKET_PRICE_OUTPUT_PER_1M")
+
+
+def get_read_only() -> bool:
+    """Global read-only switch. CLI `--read-only` flags OR into this so any
+    source (env var, flag, wrapper script) can enable demo-safe mode."""
+    raw = os.environ.get("DOCKET_READ_ONLY", "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}

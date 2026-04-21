@@ -6,7 +6,7 @@ import sqlite3
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from docket.api.auth import require_bearer
-from docket.api.deps import get_conn, get_provider
+from docket.api.deps import get_conn, get_provider, require_not_read_only
 from docket.api.schemas import (
     CommentDTO,
     CreateItemRequest,
@@ -88,7 +88,11 @@ def get_linked(
     return [ItemDTO.from_core(i) for i in linked]
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_not_read_only)],
+)
 def create_item(
     payload: CreateItemRequest,
     conn: sqlite3.Connection = Depends(get_conn),

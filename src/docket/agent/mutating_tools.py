@@ -21,6 +21,7 @@ from docket.agent.tools import ToolRegistry
 from docket.agent.transcript import filename_for, next_version, render_markdown
 from docket.core.model import CreateFields, ItemKind, TransitionIntent
 from docket.core.mutation import Proposal, render_diff
+from docket.core.redaction import redact_secrets
 from docket.core.services import mutation_service
 from docket.core.services.proposal_store import ProposalStore
 from docket.storage.repos import conversation_repo, item_repo, message_repo, search_repo
@@ -143,6 +144,9 @@ def register_mutating_tools(
             messages=messages,
             started_at=convo.started_at,
         )
+        # Strip recognizable secrets before the bytes leave the machine — the
+        # transcript is about to be uploaded to the provider as an attachment.
+        md = redact_secrets(md)
         try:
             proposal = mutation_service.propose_attachment(
                 conn,
