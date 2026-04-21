@@ -33,6 +33,7 @@ from docket.core.model import (
     Item,
     ItemKind,
     ItemState,
+    PRMatch,
     ScopeFilters,
     TransitionIntent,
 )
@@ -250,6 +251,70 @@ class GitHubProvider:
             attachments=list(item.attachments),
             provider_raw=dict(item.provider_raw),
         )
+
+    # -- PR discovery -------------------------------------------------------
+
+    def find_related_prs(
+        self, item_id: str, title_keywords: list[str]
+    ) -> list[PRMatch]:
+        """Best-effort scan of recent PRs for ones that might close this item.
+
+        Strategy, cheapest → most expensive:
+        1. Pull the last ~100 PRs in this repo sorted by `updated` desc.
+        2. A PR is a strong match if its title or body literally mentions the
+           numeric part of `item_id` (`owner/name#NN` → `#NN`) or any of the
+           keyword phrases. Weak match = keyword overlap alone.
+
+        `confidence` is a rough soft-score the agent uses to decide whether
+        to surface a link-back proposal; the UI ultimately decides. Errors
+        (repo not found, rate limit) bubble up as `ProviderUnreachableError`
+        — the agent tool catches and reports so discovery never takes down
+        the chat turn."""
+        _, _, number = _parse_id(item_id)
+        params: dict[str, str] = {
+            "state": "all",
+            "per_page": "100",
+            "sort": "updated",
+            "direction": "desc",
+        }
+        payload = self._get(
+            f"/repos/{self.default_repo}/pulls", params=params
+        )
+        if not isinstance(payload, list):
+            return []
+        kws = [kw.lower().strip() for kw in title_keywords if kw.strip()]
+        id_token = f"#{number}"
+        out: list[PRMatch] = []
+        for entry in payload:
+            if not isinstance(entry, dict):
+                continue
+            title = str(entry.get("title") or "")
+            body = str(entry.get("body") or "")
+            haystack = f"{title}\n{body}".lower()
+            strong = id_token in haystack
+            hits = sum(1 for kw in kws if kw and kw in haystack)
+            if not strong and hits == 0:
+                continue
+            confidence = 0.9 if strong else min(0.3 + 0.1 * hits, 0.8)
+            head = entry.get("head") or {}
+            branch = head.get("ref") if isinstance(head, dict) else ""
+            state = str(entry.get("state") or "")
+            if entry.get("merged_at"):
+                state = "merged"
+            user = entry.get("user") or {}
+            author = user.get("login") if isinstance(user, dict) else ""
+            out.append(
+                PRMatch(
+                    url=str(entry.get("html_url") or ""),
+                    title=title,
+                    branch=str(branch or ""),
+                    state=state,
+                    author=str(author or ""),
+                    confidence=confidence,
+                )
+            )
+        out.sort(key=lambda m: m.confidence, reverse=True)
+        return out
 
     # -- mapping ------------------------------------------------------------
 

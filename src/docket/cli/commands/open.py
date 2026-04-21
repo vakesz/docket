@@ -36,7 +36,32 @@ def open_command(
         help="Provider id to activate on launch (defaults to config.active_provider).",
     ),
 ) -> None:
-    """Launch the three-pane Textual TUI."""
+    """Launch the three-pane Textual TUI.
+
+    Typer invokes this with real primitive defaults. When a sibling
+    (e.g. `cli.app._root`) wants to run the TUI without going through
+    Click, it MUST call `run_open_tui(...)` with explicit primitives —
+    direct `open_command(...)` calls receive the `typer.OptionInfo`
+    objects as defaults, which are truthy and stringify to `<typer.models.OptionInfo ...>`."""
+    run_open_tui(
+        scope=scope,
+        no_chat=no_chat,
+        read_only=read_only,
+        provider=provider,
+    )
+
+
+def run_open_tui(
+    *,
+    scope: str | None,
+    no_chat: bool,
+    read_only: bool,
+    provider: str | None,
+) -> None:
+    """Real TUI launcher. Accepts only primitives; every caller must be
+    explicit about every flag. Keeps the OptionInfo-leak bug from slipping
+    back in as new flags get added — a missing positional here is a
+    compile-time error rather than a runtime truthy sentinel."""
     from docket.agent.foundry_client import LlmClient
     from docket.cli.tui import ItvApp, TuiContext
 

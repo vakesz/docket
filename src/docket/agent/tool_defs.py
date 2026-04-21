@@ -138,5 +138,62 @@ def register_readonly_tools(
         handler=search_items,
     )
 
+    # Optional: only providers that implement `find_related_prs` expose this
+    # tool. We gate with callable() so agent registries stay narrow — hiding
+    # the tool instead of returning errors keeps the model from hallucinating
+    # PR URLs on providers (like github_stub) that can't actually search.
+    find_prs = getattr(provider, "find_related_prs", None)
+    if callable(find_prs):
+        def find_related_prs(args: dict[str, Any]) -> str:
+            id_ = str(args.get("id", "")).strip()
+            if not id_:
+                return json.dumps({"error": "id is required"})
+            kws_raw = args.get("title_keywords") or []
+            if not isinstance(kws_raw, list):
+                return json.dumps({"error": "title_keywords must be an array of strings"})
+            kws = [str(k) for k in kws_raw if isinstance(k, (str, int, float))]
+            try:
+                matches = find_prs(id_, kws)
+            except NotImplementedError:
+                return json.dumps({"error": "provider does not support PR discovery"})
+            except Exception as e:
+                return json.dumps({"error": f"provider lookup failed: {e}"})
+            return json.dumps(
+                [
+                    {
+                        "url": m.url,
+                        "title": m.title,
+                        "branch": m.branch,
+                        "state": m.state,
+                        "author": m.author,
+                        "confidence": round(m.confidence, 2),
+                    }
+                    for m in matches
+                ]
+            )
+
+        registry.register(
+            name="find_related_prs",
+            description=(
+                "Find pull requests that might be related to this work item. "
+                "Scans recent PRs for mentions of the id or the supplied title keywords. "
+                "Returns best-effort matches with a confidence score; nothing is linked until the user confirms."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string", "description": "Work item id."},
+                    "title_keywords": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Short phrases from the item's title that likely appear in a related PR.",
+                        "default": [],
+                    },
+                },
+                "required": ["id"],
+            },
+            handler=find_related_prs,
+        )
+
 
 __all__ = ["_item_summary", "register_readonly_tools"]

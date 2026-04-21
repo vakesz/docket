@@ -6,7 +6,7 @@ from rich.console import Console
 from docket.cli.commands.help_cmd import help_command
 from docket.cli.commands.list_cmd import list_command
 from docket.cli.commands.new import new_command
-from docket.cli.commands.open import open_command
+from docket.cli.commands.open import open_command, run_open_tui
 from docket.cli.commands.patch import patch_command
 from docket.cli.commands.serve import serve_command
 from docket.cli.commands.setup import setup_app
@@ -29,11 +29,14 @@ app = typer.Typer(
 @app.callback()
 def _root(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is None:
-        # Calling open_command() directly would pass typer OptionInfo sentinels
-        # as the defaults — which are truthy objects, so `--read-only` would
-        # silently flip on for every bare `docket` invocation. Fill in every
-        # option explicitly so the command body sees real values.
-        open_command(scope=None, no_chat=False, read_only=False)
+        # Go through the primitive-only entry point. Calling `open_command()`
+        # directly (or via `ctx.invoke`, which Click routes through the raw
+        # Python function) would hand it the `typer.OptionInfo` sentinels as
+        # defaults — truthy objects that silently flip `--read-only` on and
+        # stringify as `--provider <typer.models.OptionInfo ...>`. Every flag
+        # has to be explicit here; a new one missing from this call is a
+        # TypeError, not a silent bug.
+        run_open_tui(scope=None, no_chat=False, read_only=False, provider=None)
 
 
 app.add_typer(setup_app, name="setup")

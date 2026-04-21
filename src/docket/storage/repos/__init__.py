@@ -5,6 +5,7 @@ from docket.storage.repos import (
     message_repo,
     search_repo,
     sync_repo,
+    watchlist_repo,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "message_repo",
     "search_repo",
     "sync_repo",
+    "watchlist_repo",
 ]

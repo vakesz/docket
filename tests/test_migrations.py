@@ -31,6 +31,7 @@ def test_fresh_init_creates_all_tables(tmp_path: Path) -> None:
         "items_fts",
         "messages",
         "sync_state",
+        "watchlist",
     }
     conn.close()
 
@@ -73,6 +74,10 @@ def test_upgrade_from_v1_adds_tool_columns(tmp_path: Path) -> None:
     conn.execute("DROP TRIGGER IF EXISTS comments_fts_au")
     conn.execute("DROP TRIGGER IF EXISTS comments_fts_ad")
     conn.execute("DROP TABLE IF EXISTS items_fts")
+    # v6 adds the watchlist table + index — drop both so the re-migration
+    # from v1 can recreate them cleanly.
+    conn.execute("DROP INDEX IF EXISTS idx_watchlist_pinned_at")
+    conn.execute("DROP TABLE IF EXISTS watchlist")
     conn.execute("PRAGMA user_version = 1")
     conn.close()
 

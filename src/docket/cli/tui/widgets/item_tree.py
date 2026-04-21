@@ -92,9 +92,19 @@ class ItemTree(Tree[str]):
         # None disables the marker (threshold <= 0 also disables — same effect).
         self.stale_threshold_days = stale_threshold_days
         self._rows: dict[str, _ItemRow] = {}
-        self.tooltip = "Browse work items. Use the arrow keys to move and Enter to open the focused item."
+        self._pinned_ids: frozenset[str] = frozenset()
+        self.tooltip = "Browse work items. Use the arrow keys to move and Enter to open the focused item. `w` to pin/unpin."
 
-    def load_items(self, items: Iterable[Item]) -> None:
+    def load_items(
+        self,
+        items: Iterable[Item],
+        *,
+        pinned: Iterable[Item] | None = None,
+    ) -> None:
+        """Render the tree. `pinned` adds a top-level "Pinned" section ordered
+        by pin time (caller is responsible for that ordering) — those rows
+        stay visible across scope switches so they double as a personal
+        shortcut bar."""
         self.clear()
         self._rows = {}
         sorted_items = sorted(
@@ -106,8 +116,27 @@ class ItemTree(Tree[str]):
             ),
         )
         by_id: dict[str, Item] = {i.id: i for i in sorted_items}
+
+        pinned_list = list(pinned or [])
+        self._pinned_ids = frozenset(p.id for p in pinned_list)
+        if pinned_list:
+            pinned_node = self.root.add(f"📌 Pinned {len(pinned_list)}", expand=True)
+            for pin_item in pinned_list:
+                self._rows[pin_item.id] = _ItemRow(
+                    item_id=pin_item.id,
+                    title=pin_item.title,
+                    state=pin_item.state,
+                    updated_at=pin_item.updated_at,
+                )
+                pinned_node.add(
+                    self._plain_row_label(pin_item),
+                    data=pin_item.id,
+                    allow_expand=False,
+                )
+
         if not by_id:
-            self.root.add("[dim]No items[/dim]", expand=True)
+            if not pinned_list:
+                self.root.add("[dim]No items[/dim]", expand=True)
             return
         kind_nodes: dict[ItemKind, TreeNode[str]] = {}
         for kind in _KIND_ORDER:
@@ -129,6 +158,10 @@ class ItemTree(Tree[str]):
             if item.id in placed:
                 continue
             self._add_item_recursive(kind_nodes[item.kind], item, by_id, placed)
+
+    def pinned_ids(self) -> frozenset[str]:
+        """Which ids were last drawn under the Pinned section."""
+        return self._pinned_ids
 
     def _add_item_recursive(
         self,

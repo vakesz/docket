@@ -50,7 +50,13 @@ from docket.core.services import (
 from docket.core.services.proposal_store import ProposalStore
 from docket.core.services.suggestion_service import Suggestion, SuggestionError
 from docket.providers.base import WorkItemProvider
-from docket.storage.repos import comment_repo, conversation_repo, item_repo, search_repo
+from docket.storage.repos import (
+    comment_repo,
+    conversation_repo,
+    item_repo,
+    search_repo,
+    watchlist_repo,
+)
 
 log = logging.getLogger(__name__)
 
@@ -237,6 +243,7 @@ class ItvApp(App[None]):
         Binding("d", "review_pending", "Review pending", show=False),
         Binding("o", "open_in_browser", "Open in browser", show=False),
         Binding("s", "suggest_next", "Suggest next action", show=False),
+        Binding("w", "toggle_pin", "Pin/unpin item", show=False),
         Binding("comma", "open_settings", "Settings"),
         Binding("p", "edit_prompts", "Prompts"),
         Binding("ctrl+f", "toggle_fullscreen", "Fullscreen pane", show=False),
@@ -424,7 +431,8 @@ class ItvApp(App[None]):
 
     def _reload_tree(self) -> None:
         items = item_repo.list_items(self.tui_ctx.conn)
-        self.query_one(ItemTree).load_items(items)
+        pinned = watchlist_repo.list_pinned_items(self.tui_ctx.conn)
+        self.query_one(ItemTree).load_items(items, pinned=pinned)
 
     def _provider_key(self) -> str:
         """Key used to look up per-provider overrides (stale threshold,
@@ -555,15 +563,16 @@ class ItvApp(App[None]):
         match, returning items in bm25 rank order."""
         query = raw.strip()
         tree = self.query_one(ItemTree)
+        pinned = watchlist_repo.list_pinned_items(self.tui_ctx.conn)
         if not query:
-            tree.load_items(item_repo.list_items(self.tui_ctx.conn))
+            tree.load_items(item_repo.list_items(self.tui_ctx.conn), pinned=pinned)
             return
         ids = search_repo.search(self.tui_ctx.conn, query)
         if not ids:
-            tree.load_items([])
+            tree.load_items([], pinned=pinned)
             return
         by_id = {i.id: i for i in item_repo.list_items(self.tui_ctx.conn)}
-        tree.load_items([by_id[iid] for iid in ids if iid in by_id])
+        tree.load_items([by_id[iid] for iid in ids if iid in by_id], pinned=pinned)
 
     def _move_from_filter_to_tree(self) -> None:
         tree = self.query_one(ItemTree)
@@ -869,6 +878,24 @@ class ItvApp(App[None]):
         with contextlib.suppress(Exception):
             bar = self.query_one(StatusBar)
             bar.cost_cents = bar.cost_cents + event.cost_cents
+
+    def action_toggle_pin(self) -> None:
+        """Pin or unpin the focused item. Pins survive scope/view switches —
+        they come from the `watchlist` table, joined on `items.id` at reload
+        time, so archived rows drop out without any bookkeeping here."""
+        if self._selected_item_id is None:
+            self.notify("Select an item first.", severity="warning")
+            return
+        item_id = self._selected_item_id
+        if watchlist_repo.is_pinned(self.tui_ctx.conn, item_id):
+            watchlist_repo.unpin(self.tui_ctx.conn, item_id)
+            self.tui_ctx.conn.commit()
+            self.notify(f"Unpinned {item_id}.", severity="information")
+        else:
+            watchlist_repo.pin(self.tui_ctx.conn, item_id)
+            self.tui_ctx.conn.commit()
+            self.notify(f"Pinned {item_id}.", severity="information")
+        self._reload_tree()
 
     def action_suggest_next(self) -> None:
         if self._selected_item_id is None:

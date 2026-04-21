@@ -112,3 +112,21 @@ class SyncSummary:
     upserted: int
     archived: int
     watermark: datetime | None
+
+
+@dataclass(frozen=True)
+class PRMatch:
+    """A pull request that might be related to a work item.
+
+    Returned by `WorkItemProvider.find_related_prs`. `confidence` is a soft
+    hint (0.0-1.0) the provider attaches based on how strong the signal was
+    — direct id mention in title > mention in body > keyword overlap. The
+    agent uses it to decide whether a match is worth surfacing as a
+    link-back proposal."""
+
+    url: str
+    title: str
+    branch: str = ""
+    state: str = ""  # "open" | "merged" | "closed" — provider-specific labels OK
+    author: str = ""
+    confidence: float = 0.5

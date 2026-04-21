@@ -224,3 +224,81 @@ def test_bad_id_rejected_at_the_boundary() -> None:
     provider = _mk_provider(handler)
     with pytest.raises(ValueError, match="invalid GitHub item id"):
         provider.get_item("not-an-id")
+
+
+def _pr_payload(
+    *,
+    number: int,
+    title: str,
+    body: str = "",
+    state: str = "open",
+    merged_at: str | None = None,
+    branch: str = "feature/x",
+    author: str = "alice",
+    repo: str = "vakesz/docket",
+) -> dict[str, Any]:
+    return {
+        "number": number,
+        "title": title,
+        "body": body,
+        "state": state,
+        "merged_at": merged_at,
+        "head": {"ref": branch},
+        "user": {"login": author},
+        "html_url": f"https://github.com/{repo}/pull/{number}",
+    }
+
+
+def test_find_related_prs_strong_match_on_id_mention() -> None:
+    """A PR whose body literally mentions `#<number>` gets high confidence —
+    this is the clean `closes #42` / `fixes #42` case."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/repos/vakesz/docket/pulls"
+        assert request.url.params.get("state") == "all"
+        return httpx.Response(
+            200,
+            json=[
+                _pr_payload(number=100, title="Unrelated refactor", body="tidy up"),
+                _pr_payload(
+                    number=101,
+                    title="Fix login",
+                    body="closes #42",
+                    merged_at="2024-06-01T00:00:00Z",
+                ),
+            ],
+        )
+
+    provider = _mk_provider(handler)
+    matches = provider.find_related_prs("vakesz/docket#42", ["login"])
+    assert len(matches) == 1  # only PR 101 signals; PR 100 mentions neither
+    top = matches[0]
+    assert top.url.endswith("/pull/101")
+    assert top.state == "merged"  # merged_at overrides "open" state
+    assert top.confidence >= 0.8
+
+
+def test_find_related_prs_keyword_only_match() -> None:
+    """No id mention, but title keyword overlap — weaker confidence."""
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json=[_pr_payload(number=7, title="Tidy up the LOGIN flow", body="")],
+        )
+
+    provider = _mk_provider(handler)
+    matches = provider.find_related_prs("vakesz/docket#42", ["login"])
+    assert len(matches) == 1
+    assert matches[0].confidence < 0.9  # weaker than a direct id mention
+
+
+def test_find_related_prs_skips_when_no_signal() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json=[_pr_payload(number=1, title="Refactor parser", body="unrelated")],
+        )
+
+    provider = _mk_provider(handler)
+    assert provider.find_related_prs("vakesz/docket#42", ["login"]) == []
