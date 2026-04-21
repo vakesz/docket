@@ -222,12 +222,29 @@ def confirm(Proposal, *, dry_run: bool) -> Result
 
 ## 9. TUI (`cli/tui/`)
 
-- Textual app, three panes:
-  - **Left**: tree/list (Epic → Feature → Story → Task/Bug), filterable. Keys: `/` fuzzy find, `r` refresh, `n` new item.
-  - **Center**: item detail — title, metadata, description rendered Markdown, comments.
-  - **Right**: chat pane — streamed tokens, tool-call markers, token/cost footer.
-- Keybinds: `j/k` or arrows to navigate, `enter` to open chat, `t` new thread (archive current), `d` diff preview for pending mutation, `y/n` confirm/reject, `s` suggested-next-action, `?` help.
-- External-update watcher: badge on the current item when remote changed; auto-merge on next send.
+Textual app. Three-pane layout, resizable, with a global status bar and standard (non-vim) keybinds.
+
+**Panes (resizable, `Ctrl+[` / `Ctrl+]` to adjust widths, `Ctrl+M` to fullscreen the focused pane with restore):**
+
+- **Left**: tree/list (Epic → Feature → Story → Task/Bug), filterable. A Textual `Input` above the `DataTable` filters the list live as you type (SQLite FTS5 across title + description + comments, landed in M9). Stale rows render with a `STALE - Xd` prefix/column once `updated_at` exceeds the configured threshold.
+- **Center**: item detail — title, metadata, description rendered Markdown, comments, linked items.
+- **Right**: chat pane — streamed tokens, tool-call markers, acceptance-criteria checklist (extracted by the agent, tickable), token/cost footer.
+
+**Status bar (bottom):** active provider display name · active scope/view · last-sync time (and next-sync when background-sync is on) · offline indicator · streaming indicator · token/cost for the active chat · read-only indicator when `DOCKET_READ_ONLY=1` or `--read-only` is set.
+
+**Keybinds:** arrows to move within panes, `Tab` / `Shift+Tab` to cycle pane focus, `Enter` to activate, `Esc` to back out, `/` to focus the filter input, `Ctrl+P` command palette, `:id` quick-open by ticket id, `n` new item (form, with duplicate-check), `t` new thread (archive current), `d` diff preview for pending mutation, `y`/`n`/`e` confirm / reject / edit in the diff modal, `w` toggle pin on current item (watchlist), `s` suggested-next-action, `?` help.
+
+**Command palette (`Ctrl+P`)** registers commands for: sync now, fullscreen pane, toggle theme, pick theme (with live preview on highlight, commit on Enter, revert on Esc), switch provider, switch saved view, run `find_related_prs` on the current item (M16), toggle read-only, transition intents.
+
+**Theme picker** uses Textual's native theme system. Selecting a theme in the picker applies it live as the user moves through the list; `Enter` persists the choice to config and closes the picker; `Esc` reverts to the previous theme and closes.
+
+**New-ticket form (`n`)** opens a modal that prompts kind + title + description. On submit, runs a FTS5 duplicate-check against the cache and shows candidates above the confirm button. The form funnels into `mutation_service.propose` → confirm → write — same pipeline as any other mutation.
+
+**Watchlist (M16)** lives in a top-of-list section on the left pane that persists across scope/view changes. Single `watchlist(id, pinned_at)` table; `w` pins or unpins the focused item.
+
+**External-update watcher**: badge on the current item when remote changed; auto-merge on next send.
+
+**Notifications**: Textual `notify()` for transient success feedback ("Synced 12 items", "Draft queued", "Transition confirmed", "PR-link proposed").
 
 ## 10. FastAPI (`api/`)
 
@@ -264,6 +281,8 @@ Wizard writes `config.toml` atomically only after all steps complete; partial ru
 
 Recovery: if any component fails later (token revoked, API key expired, ADO access lost), the error handler points the user back to the specific wizard step via `docket setup --step=foundry` etc.
 
+**M14 changes the wizard shape from single-provider to multi-provider.** Steps 1–4 (Azure CLI + ADO connection + scope + WIT/state probing) become provider-scoped and are invoked through `docket setup provider add`, which can run once per provider the user wants. The top-level wizard becomes an orchestrator: discover existing providers, prompt to add/update/remove, pick the default, then continue with the shared steps (Foundry, HTTP, telemetry, prompts, DB init, smoke test). M15 adds the GitHub provider as a target of `provider add`, with its own auth step (`gh auth token` probe, `GITHUB_TOKEN` env fallback) and scope step (`repo:owner/name label:…`).
+
 ## 12. Phased milestones
 
 Each milestone shippable and manually testable end-to-end.
@@ -276,6 +295,17 @@ Each milestone shippable and manually testable end-to-end.
 - **M6 — FastAPI**: REST + SSE, bearer auth, disable toggle. Exit: can drive the whole thing over HTTP.
 - **M7 — External-update merge + compaction**: watcher, summary-role messages, suggested-next-action structured output. Exit: long conversations don't blow the context; external edits surface cleanly.
 - **M8 — Polish**: prompt template hot-reload, second provider stub (just the interface + a fake) to prove abstraction holds, perf pass on sync, docs for adding Jira/GitHub.
+
+> M1–M8 are landed. The milestones below are the phase-2 plan (locked 2026-04-21, extends the original scope to a Textual TUI, multi-provider, and cross-cutting QoL).
+
+- **M9 — TUI foundation (read-only)**: Textual app scaffolding, three-pane layout (list / detail / chat-placeholder), resizable panes (`Ctrl+[` / `Ctrl+]`), fullscreen-pane toggle with restore (`Ctrl+M`), focus chain via `Tab`/`Shift+Tab`, status bar (provider, scope, last-sync, offline, streaming/cost placeholders), live filter on list pane via Textual `Input` above a `DataTable`, theme picker with live preview (apply on highlight, commit on Enter, revert on Esc), command palette scaffold (`Ctrl+P`) with `sync`/`fullscreen`/`theme` registered, quick-open by ID (`:id`), Textual `notify()` plumbing, SQLite FTS5 migration + indexing hooked into the live filter. No chat, no mutations yet. Exit: browse cache through the TUI; panes/theme/palette/search feel right.
+- **M10 — TUI chat + single-mutation + new-ticket form**: streaming chat pane wired to the existing `_tap()` callback on `agent/loop.py`, token/cost footer in chat pane + status bar, mutation diff modal (`y/n/e`), transcript upload on close. New-ticket form (keybind `n`) with duplicate-check against FTS5 before submit; the same duplicate-check runs inside the agent's `propose_new_item` tool. Acceptance-criteria extraction into a live checklist in the chat pane. Command palette gains transition commands. Exit: end-to-end triage of one ticket in the TUI with a single mutation at a time.
+- **M11 — Mutation draft queue**: queued proposal type in `core/`; agent can stash multiple `propose_*` calls per turn; review pane/modal shows them as a batch with `apply-all` / `apply-selected` / `reject-all`; funnels into the existing `mutation_service.propose` pipeline. Exit: agent proposes three writes in one turn → single review pass.
+- **M12 — Read-only mode + secret redaction**: `--read-only` CLI flag and `DOCKET_READ_ONLY=1` env; disables mutation tools in the agent registry and mutation commands in CLI/TUI; visible indicator in the status bar. Secret-redaction pass before transcript upload: regex set for AWS/GCP access keys, GitHub PATs, `Bearer …`, `password=…`, SSH private-key headers. Exit: read-only demo-safe end-to-end; transcript upload scrubs common leaks.
+- **M13 — Background sync + saved views + stale marker**: periodic background list sync while the TUI is open (default 5 min, configurable, disable-able, per-provider minimum to protect rate limits). Saved views — named scope-filter sets in config, switchable via command palette; status bar shows active view + next-sync-time. Stale-ticket column in the list rendered as `STALE - Xd` once `updated_at` exceeds a configurable threshold (global default + per-provider override). Exit: list stays fresh without manual sync; user switches between named views in one keystroke; stale items are visible at a glance.
+- **M14 — Multi-provider foundations**: config schema for multiple providers (list + default + display name); `docket setup` overhaul with add / list / remove subcommands and per-provider validation; provider registry + app-menu switcher in the TUI; per-provider scope config; plugin entry point `docket.providers` registered in `pyproject.toml` so third-party providers can ship as separate packages; status bar reflects the active provider's display name. Exit: two providers configured simultaneously (ADO + `github_stub`), switchable live in the TUI; external providers can register via entry point.
+- **M15 — Real GitHub provider**: `providers/github/` with auth via `gh auth token` (subprocess once at startup, `GITHUB_TOKEN` env fallback, `ProviderAuthError` with a `gh auth login` hint on failure). Direct httpx + GraphQL client for all API calls — no `gh`-CLI per call. State/intent maps (logic shared with `github_stub`, fresh network layer). Test file mirroring `test_github_stub_provider.py`. Setup-wizard integration. Exit: GitHub Issues browsed, chatted with, triaged end-to-end with the same UX as ADO.
+- **M16 — QoL cross-cutting**: PR-link detection — new agent tool `find_related_prs(ticket_id, title_keywords, repo)` queries the GitHub provider for merged PRs whose title/body/branch references the ticket but isn't linked back; results surface as a proposed link-back mutation through the existing pipeline; ticket ↔ repo binding via per-scope config (default), with fallbacks to inferred-from-existing-link and session-scoped agent-asked. Watchlist: pin any cache row to a top-of-list section independent of scope, `w` to pin/unpin, new `watchlist(id, pinned_at)` table. Comment draft queue: compose comments in the TUI, stage them in the same review UI as the mutation draft queue, confirm before send. Exit: "I merged a PR that closed this" is a one-keystroke link-back; pinned tickets survive scope changes; comment drafts batch the same way mutations do.
 
 ## 13. Risks to track
 
@@ -302,7 +332,29 @@ Each milestone shippable and manually testable end-to-end.
 | Conversation threading | Continuous per ticket; "new thread" keybind archives current |
 | Attachment versioning | `convo-001.md`, `convo-002.md`, … |
 | Mutations | Diff-preview-then-confirm for **all** writes (incl. agent tool-calls); dry-run mode available |
-| TUI | Textual, three-pane |
+| TUI | Textual, three-pane, resizable, fullscreen-pane toggle, standard keybinds (arrows + Tab + Enter + Esc + `/` + `Ctrl+P` + `:id`), status bar at bottom |
 | HTTP | FastAPI day 1, REST + SSE, static bearer, can be disabled |
 | Telemetry | On by default, local-only, under `$XDG_CACHE_HOME/docket/` |
 | Provider abstraction | First-class — `WorkItemProvider` interface, canonical model, named intents |
+
+**Locked 2026-04-28 (phase-2 additions):**
+
+| Area | Decision |
+| --- | --- |
+| Multi-provider UX | App-menu switcher (one active provider at a time), not mixed-list |
+| Multi-provider config | List of configured providers + one default + per-provider display name, scope, state map |
+| Provider plugin API | `docket.providers` entry-point group in `pyproject.toml`; third-party providers ship as separate pip packages |
+| GitHub auth (M15) | `gh auth token` subprocess once at startup, `GITHUB_TOKEN` env fallback; direct httpx + GraphQL for all calls (no `gh` CLI per request); not a GitHub App |
+| ORM | None. Stay on raw sqlite3 + per-table repos. Revisit only if a concrete pain appears |
+| TUI theme selection | Live preview on highlight, commit on Enter, revert on Esc |
+| Keyboard baseline | Standard cross-platform keys (arrows, Tab/Shift+Tab, Enter, Esc, `/`, `Ctrl+P`); no vim-style bindings |
+| Pane layout persistence | Not persisted per-workspace; live resize + fullscreen-pane are per-session only |
+| Read-only mode | `--read-only` flag + `DOCKET_READ_ONLY=1` env; disables every mutation path including agent tool-calls; status-bar indicator |
+| Transcript safety | Regex redaction pass before upload for common secret patterns (AWS/GCP keys, GH PATs, `Bearer …`, `password=…`, SSH private keys) |
+| Background list sync | Off-by-default timer, default 5 min when enabled, per-provider minimum interval to protect rate limits |
+| Stale marker | `STALE - Xd` in the list once `updated_at` exceeds the threshold; global default + per-provider override |
+| Search | SQLite FTS5 across title + description + comments, wired into the TUI live filter |
+| Duplicate detection | Runs against FTS5 before `new-ticket` form submit and inside the agent's `propose_new_item` tool |
+| Mutation batching | Draft queue holds multiple agent-proposed writes per turn; batch review via the same modal UI as single mutations; comment drafts follow the same pattern |
+| Watchlist | Local pin table (`watchlist(id, pinned_at)`), survives scope/view changes |
+| PR-link detection (M16) | Agent tool `find_related_prs` queries GitHub for merged PRs matching the ticket ID / title keywords / branch; proposes a link-back mutation through the existing pipeline |
