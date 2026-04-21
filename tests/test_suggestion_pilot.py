@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from docket.cli.tui import ItvApp, TuiContext
-from docket.cli.tui.widgets.diff_modal import DiffModal
+from docket.cli.tui.widgets.batch_diff_modal import BatchDiffModal
 from docket.cli.tui.widgets.item_tree import ItemTree
 from docket.cli.tui.widgets.suggestion_modal import SuggestionModal
 from docket.core.model import Item, ItemKind, ItemState, ScopeFilters
@@ -92,8 +92,8 @@ async def test_suggest_accept_stages_state_and_patch(pilot_env) -> None:
         await pilot.press("y")
         await pilot.pause()
 
-        # After accepting, the first proposal's diff modal opens.
-        assert isinstance(app.screen, DiffModal)
+        # Two proposals staged → batch review modal (M11), not a y/n chain.
+        assert isinstance(app.screen, BatchDiffModal)
         assert len(app._proposals) == 2  # state_change + description_patch
 
         # Provider untouched until the user confirms the actual diff.

@@ -21,6 +21,7 @@ from docket.agent.mutating_tools import register_mutating_tools
 from docket.agent.tool_defs import register_readonly_tools
 from docket.agent.tools import ToolRegistry
 from docket.agent.types import ChatMessage, StreamDelta
+from docket.cli.tui.widgets.batch_diff_modal import BatchDecision, BatchDiffModal
 from docket.cli.tui.widgets.chat_pane import ChatPane, TurnFinished, UserTurnRequest
 from docket.cli.tui.widgets.diff_modal import DiffModal
 from docket.cli.tui.widgets.item_detail import ItemDetail
@@ -778,6 +779,15 @@ class ItvApp(App[None]):
     def _open_next_pending(self) -> None:
         from docket.core.mutation import Proposal
 
+        count = len(self._proposals)
+        if count == 0:
+            return
+        if count >= 2:
+            # Batch review: one modal covers the whole queue so the user can
+            # apply-all / apply-selected / reject-all in a single pass.
+            self._open_batch_review()
+            return
+
         pending = self._proposals.peek_next()
         if pending is None:
             return
@@ -813,3 +823,50 @@ class ItvApp(App[None]):
                 self._open_next_pending()
 
         self.push_screen(DiffModal(pending.proposal, source=pending.source), on_decision)
+
+    def _open_batch_review(self) -> None:
+        """Open the batch modal with a snapshot of every pending proposal.
+
+        Snapshotting up front means new proposals that land while the modal
+        is open stay queued for the next review pass — we don't want the
+        list shifting under the user mid-review."""
+        pendings = self._proposals.list()
+        if not pendings:
+            return
+
+        def on_batch_decision(decision: BatchDecision | None) -> None:
+            if decision is None:
+                # Cancel: queue unchanged, user can come back later.
+                return
+            # Drop rejected ids first — they never touch the provider.
+            rejected = sum(
+                1 for pid in decision.reject if self._proposals.pop(pid) is not None
+            )
+            applied = 0
+            failed = 0
+            for pid in decision.apply:
+                popped = self._proposals.pop(pid)
+                if popped is None:
+                    continue
+                try:
+                    mutation_service.confirm(
+                        self.tui_ctx.conn,  # type: ignore[arg-type]
+                        self.tui_ctx.provider,
+                        popped.proposal,
+                    )
+                    applied += 1
+                except Exception as e:
+                    log.exception("batch apply failed for %s", pid)
+                    self.notify(f"Apply failed for {pid}: {e}", severity="error")
+                    failed += 1
+            if applied or rejected or failed:
+                self._reload_tree()
+                parts = [f"applied {applied}", f"rejected {rejected}"]
+                if failed:
+                    parts.append(f"failed {failed}")
+                self.notify("Batch · " + ", ".join(parts) + ".")
+            # If more proposals trickled in while we were reviewing, chain.
+            if len(self._proposals) > 0:
+                self._open_next_pending()
+
+        self.push_screen(BatchDiffModal(pendings), on_batch_decision)
