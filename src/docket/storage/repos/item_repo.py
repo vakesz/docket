@@ -29,50 +29,59 @@ def _row_to_item(row: sqlite3.Row) -> Item:
     )
 
 
-def upsert_item(conn: sqlite3.Connection, item: Item) -> None:
-    conn.execute(
-        """
-        INSERT INTO items (
-            id, kind, title, description_md, state, assignee, parent_id,
-            tags_json, provider_raw, updated_at, synced_at, archived, url
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
-        ON CONFLICT(id) DO UPDATE SET
-            kind           = excluded.kind,
-            title          = excluded.title,
-            description_md = excluded.description_md,
-            state          = excluded.state,
-            assignee       = excluded.assignee,
-            parent_id      = excluded.parent_id,
-            tags_json      = excluded.tags_json,
-            provider_raw   = excluded.provider_raw,
-            updated_at     = excluded.updated_at,
-            synced_at      = excluded.synced_at,
-            archived       = 0,
-            url            = COALESCE(excluded.url, items.url)
-        """,
-        (
-            item.id,
-            item.kind.value,
-            item.title,
-            item.description_md,
-            item.state.value,
-            item.assignee,
-            item.parent_id,
-            json.dumps(item.tags),
-            json.dumps(item.provider_raw, default=str),
-            item.updated_at.isoformat() if item.updated_at else "",
-            datetime.now(UTC).isoformat(),
-            item.url,
-        ),
+_UPSERT_SQL = """
+INSERT INTO items (
+    id, kind, title, description_md, state, assignee, parent_id,
+    tags_json, provider_raw, updated_at, synced_at, archived, url
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+ON CONFLICT(id) DO UPDATE SET
+    kind           = excluded.kind,
+    title          = excluded.title,
+    description_md = excluded.description_md,
+    state          = excluded.state,
+    assignee       = excluded.assignee,
+    parent_id      = excluded.parent_id,
+    tags_json      = excluded.tags_json,
+    provider_raw   = excluded.provider_raw,
+    updated_at     = excluded.updated_at,
+    synced_at      = excluded.synced_at,
+    archived       = 0,
+    url            = COALESCE(excluded.url, items.url)
+"""
+
+
+def _upsert_row(item: Item, now_iso: str) -> tuple:
+    return (
+        item.id,
+        item.kind.value,
+        item.title,
+        item.description_md,
+        item.state.value,
+        item.assignee,
+        item.parent_id,
+        json.dumps(item.tags),
+        json.dumps(item.provider_raw, default=str),
+        item.updated_at.isoformat() if item.updated_at else "",
+        now_iso,
+        item.url,
     )
 
 
+def upsert_item(conn: sqlite3.Connection, item: Item) -> None:
+    now_iso = datetime.now(UTC).isoformat()
+    conn.execute(_UPSERT_SQL, _upsert_row(item, now_iso))
+
+
 def upsert_items(conn: sqlite3.Connection, items: Iterable[Item]) -> int:
-    n = 0
-    for it in items:
-        upsert_item(conn, it)
-        n += 1
-    return n
+    """Bulk upsert via a single `executemany`. On a fresh sync of ~1k items
+    this collapses 1k individual `execute` round-trips into one call — the
+    per-item Python ↔ sqlite bridging cost is what dominated the old loop."""
+    now_iso = datetime.now(UTC).isoformat()
+    rows = [_upsert_row(it, now_iso) for it in items]
+    if not rows:
+        return 0
+    conn.executemany(_UPSERT_SQL, rows)
+    return len(rows)
 
 
 def get_item(conn: sqlite3.Connection, id: str) -> Item | None:

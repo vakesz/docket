@@ -23,21 +23,17 @@ def refresh(
     watermark = sync_repo.get_watermark(conn, scope_key)
     items = list(provider.list_changes_since(watermark, filters))
 
-    upserted = 0
-    archived_ids: list[str] = []
     max_seen: datetime | None = watermark
+    archived_ids: list[str] = []
+    for item in items:
+        if item.provider_raw.get("archived"):
+            archived_ids.append(item.id)
+        if item.updated_at and (max_seen is None or item.updated_at > max_seen):
+            max_seen = item.updated_at
 
     with transaction(conn):
-        for item in items:
-            item_repo.upsert_item(conn, item)
-            upserted += 1
-            if item.provider_raw.get("archived"):
-                archived_ids.append(item.id)
-            if item.updated_at and (max_seen is None or item.updated_at > max_seen):
-                max_seen = item.updated_at
-
+        upserted = item_repo.upsert_items(conn, items)
         archived = item_repo.mark_archived(conn, archived_ids)
-
         new_watermark = max_seen or datetime.now(UTC)
         sync_repo.set_watermark(conn, scope_key, new_watermark)
 

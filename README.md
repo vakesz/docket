@@ -69,3 +69,4 @@ See [`plan.md`](plan.md#12-phased-milestones) for the milestone plan. Each miles
 
 - [`plan.md`](plan.md) — architecture, data model, interfaces, phased milestones, risks.
 - [`SETUP.md`](SETUP.md) — step-by-step first-time setup guide.
+- [`ADDING_A_PROVIDER.md`](ADDING_A_PROVIDER.md) — walkthrough for adding a new work-item backend (Jira, GitHub Issues, …).

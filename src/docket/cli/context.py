@@ -5,6 +5,7 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 
+from docket.agent.prompt import configure_prompt_loader
 from docket.config import (
     Config,
     ConfigMissingError,
@@ -60,6 +61,7 @@ def prepare() -> Context:
     load_env(paths)
     init_logging(paths)
     config = load_config(paths)
+    configure_prompt_loader(paths.prompts_dir)
     conn = init_db(paths.db_file)
     provider = AzureDevOpsProvider(
         organization_url=str(config.ado.organization),
