@@ -3,6 +3,7 @@ from docket.storage.repos import (
     conversation_repo,
     item_repo,
     message_repo,
+    search_repo,
     sync_repo,
 )
 
@@ -11,5 +12,6 @@ __all__ = [
     "conversation_repo",
     "item_repo",
     "message_repo",
+    "search_repo",
     "sync_repo",
 ]

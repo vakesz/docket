@@ -10,7 +10,7 @@ authors = [{ name = "vakesz" }]
 dependencies = [
     "azure-devops>=7.1.0b4",
     "openai>=1.50",
-    "textual>=0.80",
+    "textual>=0.86",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "sse-starlette>=2.1",

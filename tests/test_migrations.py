@@ -19,12 +19,16 @@ def test_fresh_init_creates_all_tables(tmp_path: Path) -> None:
         for r in conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
         )
+        # FTS5 creates shadow tables (items_fts_data, _idx, _content, _docsize,
+        # _config) we don't want to pin to this assertion.
+        if not r[0].startswith("items_fts_")
     }
     assert tables == {
         "attachments",
         "comments",
         "conversations",
         "items",
+        "items_fts",
         "messages",
         "sync_state",
     }
@@ -60,6 +64,15 @@ def test_upgrade_from_v1_adds_tool_columns(tmp_path: Path) -> None:
     conn.execute("ALTER TABLE messages DROP COLUMN tool_call_id")
     conn.execute("ALTER TABLE messages DROP COLUMN tool_name")
     conn.execute("ALTER TABLE items DROP COLUMN url")
+    # v5 adds FTS5 table + triggers; drop them so the re-migration from v1
+    # recreates everything cleanly.
+    conn.execute("DROP TRIGGER IF EXISTS items_fts_ai")
+    conn.execute("DROP TRIGGER IF EXISTS items_fts_au")
+    conn.execute("DROP TRIGGER IF EXISTS items_fts_ad")
+    conn.execute("DROP TRIGGER IF EXISTS comments_fts_ai")
+    conn.execute("DROP TRIGGER IF EXISTS comments_fts_au")
+    conn.execute("DROP TRIGGER IF EXISTS comments_fts_ad")
+    conn.execute("DROP TABLE IF EXISTS items_fts")
     conn.execute("PRAGMA user_version = 1")
     conn.close()
 

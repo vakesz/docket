@@ -39,6 +39,10 @@ class LlmConfig(BaseModel):
     external_watch_interval_seconds: float = 60.0  # 0 disables the watcher
 
 
+class UiConfig(BaseModel):
+    theme: str = "textual-dark"
+
+
 class Config(BaseModel):
     """Top-level config.toml schema."""
 
@@ -49,3 +53,4 @@ class Config(BaseModel):
     http: HttpConfig = Field(default_factory=HttpConfig)
     telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
     llm: LlmConfig = Field(default_factory=LlmConfig)
+    ui: UiConfig = Field(default_factory=UiConfig)

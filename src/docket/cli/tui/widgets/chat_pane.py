@@ -37,10 +37,9 @@ class ChatPane(Vertical):
     ChatPane { padding: 0; }
     ChatPane #chat-title { padding: 0 1; color: $text-muted; height: 1; }
     ChatPane #ledger { padding: 0 1; color: $text-muted; height: 1; }
-    ChatPane #transcript { height: 1fr; border-top: tall $primary-darken-1;
-                           border-bottom: tall $primary-darken-1; padding: 0 1; }
-    ChatPane #prompt { dock: bottom; height: 3; }
-    ChatPane .msg-user { color: $accent; padding-bottom: 1; }
+    ChatPane #transcript { height: 1fr; padding: 1 1; }
+    ChatPane #prompt { dock: bottom; height: 3; border: none; background: $surface; }
+    ChatPane .msg-user { color: $accent; text-style: bold; padding-bottom: 1; }
     ChatPane .msg-assistant { padding-bottom: 1; }
     ChatPane .msg-tool { color: $warning; padding-bottom: 1; }
     ChatPane .msg-system { color: $text-muted; padding-bottom: 1; }
