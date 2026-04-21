@@ -9,7 +9,7 @@ from docket.cli.commands.new import new_command
 from docket.cli.commands.open import open_command
 from docket.cli.commands.patch import patch_command
 from docket.cli.commands.serve import serve_command
-from docket.cli.commands.setup import setup_command
+from docket.cli.commands.setup import setup_app
 from docket.cli.commands.show import show_command
 from docket.cli.commands.sync import sync_command
 from docket.cli.commands.transition import transition_command
@@ -30,12 +30,13 @@ app = typer.Typer(
 def _root(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is None:
         # Calling open_command() directly would pass typer OptionInfo sentinels
-        # as the defaults. Fill them in explicitly so the command body sees
-        # real values.
-        open_command(scope=None, no_chat=False)
+        # as the defaults — which are truthy objects, so `--read-only` would
+        # silently flip on for every bare `docket` invocation. Fill in every
+        # option explicitly so the command body sees real values.
+        open_command(scope=None, no_chat=False, read_only=False)
 
 
-app.command("setup")(setup_command)
+app.add_typer(setup_app, name="setup")
 app.command("sync")(sync_command)
 app.command("refresh", hidden=True)(sync_command)
 app.command("list")(list_command)

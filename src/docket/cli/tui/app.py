@@ -37,7 +37,7 @@ from docket.cli.tui.widgets.settings_modal import SettingsModal
 from docket.cli.tui.widgets.status_bar import StatusBar
 from docket.cli.tui.widgets.suggestion_modal import SuggestionModal
 from docket.cli.tui.widgets.theme_picker import ThemePicker
-from docket.config.models import Config
+from docket.config.models import Config, ProviderEntry
 from docket.config.paths import Paths
 from docket.core.model import ItemKind, ScopeFilters, TransitionIntent
 from docket.core.services import (
@@ -129,12 +129,19 @@ class FullscreenToggle(Static):
 @dataclass
 class TuiContext:
     """What the TUI needs from the caller to run. Kept small so the app can be mounted
-    from production code (via Context) and from pilot-style tests (via fakes)."""
+    from production code (via Context) and from pilot-style tests (via fakes).
+
+    M14 introduced multi-provider: `providers` is the full set, `provider_key`
+    selects the active one, and `provider` is a convenience alias that always
+    points at `providers[provider_key]`. Legacy callers (tests, etc.) can still
+    pass `provider=...` alone and we'll synthesize a single-entry mapping."""
 
     conn: sqlite3.Connection
     provider: WorkItemProvider
     scope: ScopeFilters
     scope_key: str = "default"
+    providers: dict[str, WorkItemProvider] | None = None
+    provider_key: str = ""
     llm: LlmClient | None = None  # None disables chat (useful for pre-M4 tests)
     compaction_threshold_tokens: int = 0  # 0 disables — passed to conversation_service
     external_watch_interval_seconds: float = 60.0  # 0 disables external-update watcher
@@ -1006,21 +1013,22 @@ class ItvApp(App[None]):
         self._open_next_pending()
 
     def action_switch_view(self, name: str) -> None:
-        """Switch the active saved view (= named scope filter).
+        """Switch the active saved view (= named scope filter) on the active provider.
 
         Only touches in-memory state — we do not persist the change to
         config.toml because users experiment with views during a session
         and expect their default back next launch. To make a view sticky,
-        edit `active_scope` in config.toml.
+        edit the provider's `active_scope` in config.toml.
 
         A switch doesn't force a sync; the next background tick will pick
         up fresh data for the new scope, or the user can press `r`. This
         keeps scope-switching feel snappy."""
         config = self.tui_ctx.config
-        if config is None or name not in config.scopes:
+        entry = self._active_provider_entry()
+        if config is None or entry is None or name not in entry.scopes:
             self.notify(f"No saved view named '{name}'.", severity="warning")
             return
-        sf = config.scopes[name]
+        sf = entry.scopes[name]
         self.tui_ctx.scope_key = name
         self.tui_ctx.scope = ScopeFilters(
             team=sf.team,
@@ -1034,6 +1042,71 @@ class ItvApp(App[None]):
             bar.active_view = name
         self._reload_tree()
         self.notify(f"Switched to view '{name}'.", severity="information")
+
+    def action_switch_provider(self, name: str) -> None:
+        """Swap the active provider mid-session.
+
+        Mirrors `action_switch_view`: in-memory only, doesn't persist. The
+        tree and chat pane reset to the new provider's default scope and
+        no selected item (both are provider-specific).
+
+        If no matching provider was built (e.g. the plugin failed to load),
+        we toast and stay put rather than crashing."""
+        providers = self.tui_ctx.providers or {}
+        if name not in providers:
+            self.notify(
+                f"No provider named '{name}' is configured.", severity="warning"
+            )
+            return
+        config = self.tui_ctx.config
+        entry = config.providers.get(name) if config else None
+        if entry is None:
+            self.notify(
+                f"Provider '{name}' is not in config.toml.", severity="warning"
+            )
+            return
+        self.tui_ctx.provider = providers[name]
+        self.tui_ctx.provider_key = name
+        scope_name = entry.active_scope
+        sf = entry.scopes.get(scope_name) or entry.scopes.get("default")
+        if sf is None:
+            # No scopes at all on this provider — use a wide-open one so the
+            # UI at least renders. The user can add a scope from settings.
+            from docket.config.models import ScopeFilter
+
+            sf = ScopeFilter(assignee="")
+            scope_name = "default"
+        self.tui_ctx.scope_key = scope_name
+        self.tui_ctx.scope = ScopeFilters(
+            team=sf.team,
+            area_path=sf.area_path,
+            iteration_path=sf.iteration_path,
+            assignee=sf.assignee,
+        )
+        self._selected_item_id = None
+        with contextlib.suppress(Exception):
+            bar = self.query_one(StatusBar)
+            bar.provider_name = entry.display_name
+            bar.scope_label = scope_name
+            bar.active_view = scope_name
+        with contextlib.suppress(Exception):
+            self.query_one(ItemTree).stale_threshold_days = self._resolved_stale_threshold()
+        self._reload_tree()
+        self.notify(
+            f"Switched to provider '{entry.display_name}'.",
+            severity="information",
+        )
+
+    def _active_provider_entry(self) -> ProviderEntry | None:
+        """Resolve the ProviderEntry behind the currently-active provider.
+
+        Returns None when the TUI was mounted without a full `config` (pilot
+        tests), which lets the callers short-circuit safely."""
+        config = self.tui_ctx.config
+        if config is None:
+            return None
+        key = self.tui_ctx.provider_key or self.tui_ctx.scope_key
+        return config.providers.get(key) if key else None
 
     def action_review_pending(self) -> None:
         if len(self._proposals) == 0:
@@ -1111,8 +1184,9 @@ class ItvApp(App[None]):
         self.query_one(ChatPane).set_show_acceptance_criteria(
             config.ui.show_acceptance_criteria
         )
-        if config.active_scope in config.scopes:
-            self.action_switch_view(config.active_scope)
+        entry = config.providers.get(self.tui_ctx.provider_key) if self.tui_ctx.provider_key else None
+        if entry is not None and entry.active_scope in entry.scopes:
+            self.action_switch_view(entry.active_scope)
         else:
             self._reload_tree()
         self.notify(

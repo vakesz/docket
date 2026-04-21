@@ -1,17 +1,14 @@
 """First-launch setup wizard.
 
-M1 covers steps 1, 2, 3, 7, 8, 9:
+The wizard walks the user through az login → ADO probe → scope → telemetry →
+prompt scaffold → DB/first sync. In M14 the output schema changed: the single
+legacy `ado` block became an entry under `providers`, with an `active_provider`
+pointing at it. The wizard emits that shape directly and never writes the
+legacy layout.
 
-    1. Azure CLI logged-in check
-    2. Azure DevOps org + project probe
-    3. Scope filter prompts (with live count preview)
-    7. Telemetry opt-in (on by default)
-    8. Prompt template scaffold
-    9. DB init + initial sync
-
-Steps 4 (state-map probe), 5 (Foundry), and 6 (HTTP bearer token) are added in M2+
-where their dependencies land. The wizard is resumable — `docket setup --step=<name>`
-jumps directly to a step and writes config atomically on completion.
+Steps 4 (state-map probe), 5 (Foundry), and 6 (HTTP bearer token) are added in
+later milestones where their dependencies land. `--step=<name>` jumps directly
+to a step and writes config atomically on completion.
 
 Auto-discovery: whenever `az` + the ADO bearer token can list orgs, projects,
 teams, area paths, or iteration paths, the wizard shows a numbered picker so the
@@ -30,7 +27,12 @@ from rich.prompt import Confirm, Prompt
 
 from docket.config.env import load_project_env
 from docket.config.loader import load_config, save_config
-from docket.config.models import AdoConfig, Config, ScopeFilter, TelemetryConfig
+from docket.config.models import (
+    Config,
+    ProviderEntry,
+    ScopeFilter,
+    TelemetryConfig,
+)
 from docket.config.paths import Paths, resolve_paths
 from docket.config.prompt_templates import scaffold as scaffold_prompts
 from docket.core.model import ScopeFilters
@@ -54,6 +56,9 @@ STEP_NAMES: tuple[str, ...] = (
 
 _CUSTOM_SENTINEL = "__custom__"
 _ANY_SENTINEL = "__any__"
+
+_DEFAULT_PROVIDER_KEY = "ado"
+_DEFAULT_PROVIDER_DISPLAY = "Azure DevOps"
 
 
 @dataclass
@@ -102,17 +107,43 @@ def run_wizard(start_at: str | None = None) -> None:
         console.rule(f"[bold]{name}[/bold]")
         fn(state)
 
-    config = Config(
-        ado=AdoConfig(
-            organization=HttpUrl(state.ado_organization),
-            project=state.ado_project,
-        ),
-        scopes={"default": state.scope},
-        active_scope="default",
-        telemetry=TelemetryConfig(enabled=state.telemetry_enabled),
-    )
+    config = _build_config_from_state(state)
     save_config(paths, config)
     console.print(f"[green]✓ config written to[/green] {paths.config_file}")
+
+
+def _build_config_from_state(state: WizardState) -> Config:
+    """Compose the Config object the wizard just assembled in memory.
+
+    Preserves any existing providers (so re-running the wizard doesn't wipe
+    a hand-added github_stub) and upserts the default ADO entry under the
+    canonical `ado` key."""
+    providers: dict[str, ProviderEntry] = {}
+    if state.paths.config_file.exists():
+        try:
+            existing = load_config(state.paths)
+            providers = dict(existing.providers)
+        except (ValidationError, Exception):
+            providers = {}
+
+    ado_entry = providers.get(_DEFAULT_PROVIDER_KEY)
+    scopes = dict(ado_entry.scopes) if ado_entry else {}
+    scopes["default"] = state.scope
+    providers[_DEFAULT_PROVIDER_KEY] = ProviderEntry(
+        type="azure_devops",
+        display_name=_DEFAULT_PROVIDER_DISPLAY,
+        config={
+            "organization": str(HttpUrl(state.ado_organization)),
+            "project": state.ado_project,
+        },
+        scopes=scopes,
+        active_scope="default",
+    )
+    return Config(
+        providers=providers,
+        active_provider=_DEFAULT_PROVIDER_KEY,
+        telemetry=TelemetryConfig(enabled=state.telemetry_enabled),
+    )
 
 
 def _load_existing_state(paths: Paths) -> WizardState:
@@ -122,9 +153,13 @@ def _load_existing_state(paths: Paths) -> WizardState:
             cfg = load_config(paths)
         except (ValidationError, Exception):
             return state
-        state.ado_organization = str(cfg.ado.organization)
-        state.ado_project = cfg.ado.project
-        state.scope = cfg.scopes.get("default", ScopeFilter())
+        entry = cfg.providers.get(_DEFAULT_PROVIDER_KEY) or cfg.providers.get(cfg.active_provider)
+        if entry is not None and entry.type == "azure_devops":
+            state.ado_organization = str(entry.config.get("organization", ""))
+            state.ado_project = str(entry.config.get("project", ""))
+            state.scope = entry.scopes.get(entry.active_scope) or entry.scopes.get(
+                "default", ScopeFilter()
+            )
         state.telemetry_enabled = cfg.telemetry.enabled
     return state
 
@@ -425,3 +460,116 @@ def _step_db_and_sync(state: WizardState) -> None:
         )
     finally:
         conn.close()
+
+
+# ---- provider subcommands ----------------------------------------------------
+
+
+def provider_list() -> None:
+    """Print the currently-configured providers."""
+    paths = resolve_paths()
+    if not paths.config_file.exists():
+        console.print("[yellow]No config.toml yet — run `docket setup` first.[/yellow]")
+        raise SystemExit(1)
+    cfg = load_config(paths)
+    if not cfg.providers:
+        console.print("[yellow]No providers configured yet.[/yellow]")
+        return
+    for key, entry in cfg.providers.items():
+        active = " (active)" if key == cfg.active_provider else ""
+        console.print(
+            f"[cyan]{key}[/cyan] · {entry.display_name} · [dim]{entry.type}[/dim]{active}"
+        )
+        for scope_name, _scope in entry.scopes.items():
+            star = "*" if scope_name == entry.active_scope else " "
+            console.print(f"  {star} {scope_name}")
+
+
+def provider_add(
+    name: str,
+    type_id: str,
+    *,
+    display_name: str | None = None,
+    make_active: bool = False,
+) -> None:
+    """Register a new provider entry. Per-type validation lives here so the
+    registry can stay dumb — this is the single authoritative surface where
+    the wizard-shaped config emerges."""
+    from docket.providers.registry import types as registry_types
+
+    paths = resolve_paths()
+    paths.ensure()
+    known = registry_types()
+    if type_id not in known:
+        console.print(
+            f"[red]Unknown provider type '{type_id}'[/red] (known: {', '.join(known)})."
+        )
+        raise SystemExit(2)
+
+    config: dict[str, object] = {}
+    if type_id == "azure_devops":
+        org = Prompt.ask("Azure DevOps organization URL").strip().rstrip("/")
+        if not _looks_like_http_url(org):
+            console.print("[red]Organization must be a full URL.[/red]")
+            raise SystemExit(2)
+        project = Prompt.ask("Project name").strip()
+        if not project:
+            console.print("[red]Project name is required.[/red]")
+            raise SystemExit(2)
+        config = {"organization": str(HttpUrl(org)), "project": project}
+    elif type_id == "github_stub":
+        default_repo = Prompt.ask(
+            "Default repo (owner/name)", default="example/repo"
+        ).strip()
+        config = {"default_repo": default_repo}
+    else:
+        # Custom provider types (from entry points) self-validate via the
+        # factory on first build; the wizard just records an empty config
+        # so the user can hand-edit config.toml.
+        console.print(
+            f"[dim]No wizard prompts for '{type_id}' — config starts empty. "
+            "Edit config.toml to fill it in.[/dim]"
+        )
+
+    cfg = _load_or_empty(paths)
+    if name in cfg.providers and not Confirm.ask(
+        f"Provider '{name}' already exists. Overwrite?", default=False
+    ):
+        return
+    cfg.providers[name] = ProviderEntry(
+        type=type_id,
+        display_name=display_name or name,
+        config=config,
+        scopes={"default": ScopeFilter()},
+        active_scope="default",
+    )
+    if make_active or not cfg.active_provider:
+        cfg.active_provider = name
+    save_config(paths, cfg)
+    console.print(f"[green]✓ added provider '{name}'[/green]")
+
+
+def provider_remove(name: str) -> None:
+    paths = resolve_paths()
+    if not paths.config_file.exists():
+        console.print("[yellow]No config.toml yet — nothing to remove.[/yellow]")
+        raise SystemExit(1)
+    cfg = load_config(paths)
+    if name not in cfg.providers:
+        console.print(
+            f"[red]Unknown provider '{name}' (have: {', '.join(sorted(cfg.providers))}).[/red]"
+        )
+        raise SystemExit(2)
+    if not Confirm.ask(f"Remove provider '{name}'?", default=False):
+        return
+    del cfg.providers[name]
+    if cfg.active_provider == name:
+        cfg.active_provider = next(iter(cfg.providers), "")
+    save_config(paths, cfg)
+    console.print(f"[green]✓ removed provider '{name}'[/green]")
+
+
+def _load_or_empty(paths: Paths) -> Config:
+    if paths.config_file.exists():
+        return load_config(paths)
+    return Config()

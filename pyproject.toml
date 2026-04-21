@@ -30,6 +30,18 @@ dependencies = [
 [project.scripts]
 docket = "docket.cli.app:main"
 
+# Third-party provider plugins opt in by declaring their own entries under the
+# `docket.providers` group, e.g. in their own pyproject:
+#
+#     [project.entry-points."docket.providers"]
+#     my_provider = "my_pkg.docket_plugin:register"
+#
+# The referenced callable takes no arguments and registers one or more
+# factories via `docket.providers.registry.register(...)`. Docket picks them up
+# the first time `build()`, `types()`, or `load_entry_points()` runs. Built-in
+# providers register themselves on import of `docket.providers.registry` so
+# they don't need an entry here.
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",

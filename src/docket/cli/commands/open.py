@@ -30,6 +30,11 @@ def open_command(
         "--read-only",
         help="Disable all mutation paths — the agent can browse and chat but never proposes writes.",
     ),
+    provider: str | None = typer.Option(
+        None,
+        "--provider",
+        help="Provider id to activate on launch (defaults to config.active_provider).",
+    ),
 ) -> None:
     """Launch the three-pane Textual TUI."""
     from docket.agent.foundry_client import LlmClient
@@ -41,8 +46,23 @@ def open_command(
 
     ctx = prepare_or_wizard()
     try:
-        scope_key = scope or ctx.config.active_scope
-        filters = ctx.scope_filters(scope_key)
+        provider_key = provider or ctx.active_provider
+        if provider_key and provider_key not in ctx.providers:
+            console.print(
+                f"[red]Provider '{provider_key}' is not configured.[/red] "
+                f"Known: {', '.join(sorted(ctx.providers)) or '—'}"
+            )
+            raise typer.Exit(code=2)
+        if not ctx.providers or not provider_key:
+            console.print(
+                "[red]No provider configured[/red]. Run `docket setup` first."
+            )
+            raise typer.Exit(code=2)
+
+        ctx.active_provider = provider_key
+        entry = ctx.provider_entry(provider_key)
+        scope_key = scope or entry.active_scope
+        filters = ctx.scope_filters(scope_key, provider=provider_key)
 
         llm: LlmClient | None = None
         if not no_chat:
@@ -51,6 +71,8 @@ def open_command(
         tui_ctx = TuiContext(
             conn=ctx.conn,
             provider=ctx.provider,
+            providers=dict(ctx.providers),
+            provider_key=provider_key,
             scope=filters,
             scope_key=scope_key,
             llm=llm,

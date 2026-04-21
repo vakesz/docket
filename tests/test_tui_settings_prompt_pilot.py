@@ -3,14 +3,12 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-from pydantic import HttpUrl
-
 from docket.cli.tui import ItvApp, TuiContext
 from docket.cli.tui.widgets.chat_pane import ChatPane
 from docket.cli.tui.widgets.help_modal import HelpModal
 from docket.cli.tui.widgets.prompt_library import PromptLibraryModal
 from docket.cli.tui.widgets.settings_modal import SettingsModal
-from docket.config import AdoConfig, Config, ScopeFilter, load_config, resolve_paths
+from docket.config import Config, ProviderEntry, ScopeFilter, load_config, resolve_paths
 from docket.core.model import Item, ItemKind, ItemState, ScopeFilters
 from docket.storage import init_db
 from docket.storage.repos import item_repo
@@ -47,11 +45,16 @@ async def test_settings_modal_persists_and_updates_runtime(tmp_xdg: Path) -> Non
     paths = resolve_paths()
     paths.ensure()
     cfg = Config(
-        ado=AdoConfig(
-            organization=HttpUrl("https://dev.azure.com/example"),
-            project="Demo",
-        ),
-        scopes={"default": ScopeFilter()},
+        providers={
+            "ado": ProviderEntry(
+                type="azure_devops",
+                display_name="Azure DevOps",
+                config={"organization": "https://dev.azure.com/example", "project": "Demo"},
+                scopes={"default": ScopeFilter()},
+                active_scope="default",
+            ),
+        },
+        active_provider="ado",
     )
     item = _mk_item()
     conn = init_db(paths.db_file)
@@ -59,6 +62,7 @@ async def test_settings_modal_persists_and_updates_runtime(tmp_xdg: Path) -> Non
     ctx = TuiContext(
         conn=conn,
         provider=FakeProvider(items=[item]),
+        provider_key="ado",
         scope=ScopeFilters(),
         scope_key="default",
         paths=paths,
@@ -85,8 +89,9 @@ async def test_settings_modal_persists_and_updates_runtime(tmp_xdg: Path) -> Non
         assert app.query_one(ChatPane)._show_acceptance_criteria is False
 
     reloaded = load_config(paths)
-    assert reloaded.active_scope == "focused"
-    assert reloaded.scopes["focused"].team == "Platform"
+    ado_entry = reloaded.providers["ado"]
+    assert ado_entry.active_scope == "focused"
+    assert ado_entry.scopes["focused"].team == "Platform"
     assert reloaded.ui.default_new_item_kind == "bug"
     assert reloaded.ui.show_acceptance_criteria is False
     assert reloaded.stale.threshold_days == 3

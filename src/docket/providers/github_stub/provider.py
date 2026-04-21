@@ -36,6 +36,7 @@ class GitHubStubProvider:
     """`WorkItemProvider`-compatible in-memory GitHub Issues fake."""
 
     default_repo: str = "example/repo"
+    display_name: str = "GitHub (stub)"
     issues: list[Item] = field(default_factory=list)
     comments: dict[str, list[Comment]] = field(default_factory=dict)
     attachments: list[tuple[str, str, bytes]] = field(default_factory=list)

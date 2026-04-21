@@ -6,7 +6,10 @@ from docket.config.models import (
     FoundryConfig,
     HttpConfig,
     LlmConfig,
+    ProviderEntry,
     ScopeFilter,
+    StaleConfig,
+    SyncConfig,
     TelemetryConfig,
 )
 from docket.config.paths import APP_NAME, Paths, resolve_paths
@@ -20,7 +23,10 @@ __all__ = [
     "HttpConfig",
     "LlmConfig",
     "Paths",
+    "ProviderEntry",
     "ScopeFilter",
+    "StaleConfig",
+    "SyncConfig",
     "TelemetryConfig",
     "get_foundry_api_key",
     "load_config",

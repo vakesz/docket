@@ -109,19 +109,39 @@ class DocketCommands(Provider):
                     )
                 )
 
-        # Saved views: one "Switch view → <name>" per configured scope, minus
-        # the currently active one. Only surfaces when there's somewhere to go.
+        # Saved views: one "Switch view → <name>" per scope on the active
+        # provider, minus the currently active one. Only surfaces when there's
+        # somewhere to go.
         config = getattr(app.tui_ctx, "config", None)
         if config is not None:
-            active = app.tui_ctx.scope_key
-            for name in sorted(config.scopes):
-                if name == active:
+            active_key = app.tui_ctx.provider_key or app.tui_ctx.scope_key
+            entry = config.providers.get(active_key) if active_key else None
+            if entry is not None:
+                active_scope = app.tui_ctx.scope_key
+                for name in sorted(entry.scopes):
+                    if name == active_scope:
+                        continue
+                    commands.append(
+                        (
+                            f"Switch view → {name}",
+                            f"Load the '{name}' saved view.",
+                            _make_switch_view_callback(app, name),
+                        )
+                    )
+            # Providers: one "Switch provider → <display>" per configured
+            # provider except the active one. Hidden if only one configured.
+            providers = app.tui_ctx.providers or {}
+            for key in sorted(config.providers):
+                if key == active_key:
                     continue
+                if key not in providers:
+                    continue  # plugin failed to load; skip it
+                display = config.providers[key].display_name
                 commands.append(
                     (
-                        f"Switch view → {name}",
-                        f"Load the '{name}' saved view.",
-                        _make_switch_view_callback(app, name),
+                        f"Switch provider → {display}",
+                        f"Activate the '{key}' provider for this session.",
+                        _make_switch_provider_callback(app, key),
                     )
                 )
         return commands
@@ -135,3 +155,7 @@ def _make_transition_callback(app: ItvApp, intent: TransitionIntent) -> Callable
 
 def _make_switch_view_callback(app: ItvApp, name: str) -> Callable[[], None]:
     return lambda: app.action_switch_view(name)
+
+
+def _make_switch_provider_callback(app: ItvApp, name: str) -> Callable[[], None]:
+    return lambda: app.action_switch_provider(name)

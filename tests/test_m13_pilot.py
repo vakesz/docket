@@ -13,7 +13,7 @@ import pytest
 from docket.cli.tui import ItvApp, TuiContext
 from docket.cli.tui.widgets.item_tree import ItemTree
 from docket.cli.tui.widgets.status_bar import StatusBar, _format_countdown
-from docket.config.models import AdoConfig, Config, ScopeFilter
+from docket.config.models import Config, ProviderEntry, ScopeFilter
 from docket.core.model import Item, ItemKind, ItemState, ScopeFilters
 from docket.storage import init_db
 from docket.storage.repos import item_repo
@@ -46,6 +46,27 @@ def _find_label(node, target_id: str) -> str | None:
         if found is not None:
             return found
     return None
+
+
+def _single_provider_cfg(
+    *,
+    scopes: dict[str, ScopeFilter],
+    active_scope: str = "default",
+    key: str = "ado",
+) -> Config:
+    """Build a Config whose single provider entry carries the given scopes.
+
+    Centralized because every M13 test used to construct the legacy shape —
+    now we wrap the ProviderEntry boilerplate so each test still reads as
+    one specific scenario."""
+    entry = ProviderEntry(
+        type="azure_devops",
+        display_name="Azure DevOps",
+        config={"organization": "https://dev.azure.com/o", "project": "p"},
+        scopes=scopes,
+        active_scope=active_scope,
+    )
+    return Config(providers={key: entry}, active_provider=key)
 
 
 @pytest.fixture
@@ -124,13 +145,13 @@ async def test_status_bar_shows_active_view_and_next_sync(tmp_path: Path) -> Non
     conn = init_db(tmp_path / "docket.db")
     item = _mk_item("S-1")
     item_repo.upsert_item(conn, item)
-    cfg = Config(
-        ado=AdoConfig(organization="https://dev.azure.com/o", project="p"),
+    cfg = _single_provider_cfg(
         scopes={"default": ScopeFilter(), "my-team": ScopeFilter(team="Team A")},
         active_scope="my-team",
     )
     ctx = TuiContext(
         conn=conn, provider=FakeProvider(items=[item]),
+        provider_key="ado",
         scope=ScopeFilters(team="Team A"), scope_key="my-team",
         background_sync_interval_seconds=300.0,
         config=cfg,
@@ -155,16 +176,15 @@ async def test_switch_view_reloads_tree_with_new_scope(tmp_path: Path) -> None:
     conn = init_db(tmp_path / "docket.db")
     item = _mk_item("S-1")
     item_repo.upsert_item(conn, item)
-    cfg = Config(
-        ado=AdoConfig(organization="https://dev.azure.com/o", project="p"),
+    cfg = _single_provider_cfg(
         scopes={
             "default": ScopeFilter(),
             "blocked": ScopeFilter(area_path="Blocked"),
         },
-        active_scope="default",
     )
     ctx = TuiContext(
         conn=conn, provider=FakeProvider(items=[item]),
+        provider_key="ado",
         scope=ScopeFilters(), scope_key="default",
         config=cfg,
     )
@@ -185,11 +205,10 @@ async def test_switch_view_reloads_tree_with_new_scope(tmp_path: Path) -> None:
 
 async def test_switch_view_rejects_unknown_name(tmp_path: Path) -> None:
     conn = init_db(tmp_path / "docket.db")
-    cfg = Config(
-        ado=AdoConfig(organization="https://dev.azure.com/o", project="p"),
-    )
+    cfg = _single_provider_cfg(scopes={"default": ScopeFilter()})
     ctx = TuiContext(
         conn=conn, provider=FakeProvider(items=[]),
+        provider_key="ado",
         scope=ScopeFilters(), scope_key="default", config=cfg,
     )
     app = ItvApp(ctx)
@@ -210,17 +229,16 @@ async def test_palette_exposes_switch_view_entries(tmp_path: Path) -> None:
     from docket.cli.tui.commands import DocketCommands
 
     conn = init_db(tmp_path / "docket.db")
-    cfg = Config(
-        ado=AdoConfig(organization="https://dev.azure.com/o", project="p"),
+    cfg = _single_provider_cfg(
         scopes={
             "default": ScopeFilter(),
             "blocked": ScopeFilter(),
             "my-team": ScopeFilter(),
         },
-        active_scope="default",
     )
     ctx = TuiContext(
         conn=conn, provider=FakeProvider(items=[]),
+        provider_key="ado",
         scope=ScopeFilters(), scope_key="default", config=cfg,
     )
     app = ItvApp(ctx)

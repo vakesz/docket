@@ -88,6 +88,12 @@ def _stub_infra(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Paths:
     return paths
 
 
+def _ado_entry(cfg):
+    entry = cfg.providers.get("ado") or cfg.providers.get(cfg.active_provider)
+    assert entry is not None, "wizard produced no ADO provider entry"
+    return entry
+
+
 # ---------- tests ----------
 
 
@@ -124,8 +130,6 @@ def test_wizard_uses_discovery_selections_end_to_end(
         lambda *_: ["aicore", "aicore\\Sprint 42"],
     )
 
-    # Prompt order drops the free-form org/project/scope prompts entirely because
-    # discovery fed every picker. The remaining prompts are the pickers themselves.
     _script_prompts(
         monkeypatch,
         prompt_answers=[
@@ -142,9 +146,11 @@ def test_wizard_uses_discovery_selections_end_to_end(
     setup_wizard.run_wizard()
 
     cfg = load_config(paths)
-    assert str(cfg.ado.organization).rstrip("/") == "https://dev.azure.com/sthungary"
-    assert cfg.ado.project == "aicore"
-    scope = cfg.scopes["default"]
+    assert cfg.active_provider == "ado"
+    entry = _ado_entry(cfg)
+    assert str(entry.config["organization"]).rstrip("/") == "https://dev.azure.com/sthungary"
+    assert entry.config["project"] == "aicore"
+    scope = entry.scopes["default"]
     assert scope.team == "Alpha"
     assert scope.area_path == "aicore"
     assert scope.iteration_path == "aicore\\Sprint 42"
@@ -170,9 +176,7 @@ def test_wizard_falls_back_when_discovery_fails(
             "",                                 # team (blank)
             "",                                 # area
             "",                                 # iteration
-            "1",                                # assignee picker → @me (the one picker
-                                                #   that still renders because its
-                                                #   options don't come from discovery)
+            "1",                                # assignee picker → @me
         ],
         confirm_answers=[True, True],  # scope ok; telemetry enabled
     )
@@ -180,9 +184,10 @@ def test_wizard_falls_back_when_discovery_fails(
     setup_wizard.run_wizard()
 
     cfg = load_config(paths)
-    assert str(cfg.ado.organization).rstrip("/") == "https://dev.azure.com/sthungary"
-    assert cfg.ado.project == "aicore"
-    scope = cfg.scopes["default"]
+    entry = _ado_entry(cfg)
+    assert str(entry.config["organization"]).rstrip("/") == "https://dev.azure.com/sthungary"
+    assert entry.config["project"] == "aicore"
+    scope = entry.scopes["default"]
     assert scope.team == ""
     assert scope.area_path == ""
     assert scope.iteration_path == ""
@@ -217,7 +222,8 @@ def test_wizard_rejects_bare_org_name_then_accepts_full_url(
 
     setup_wizard.run_wizard()
     cfg = load_config(paths)
-    assert str(cfg.ado.organization).rstrip("/") == "https://dev.azure.com/sthungary"
+    entry = _ado_entry(cfg)
+    assert str(entry.config["organization"]).rstrip("/") == "https://dev.azure.com/sthungary"
 
 
 def test_pick_returns_sentinels_for_any_and_custom(monkeypatch: pytest.MonkeyPatch) -> None:

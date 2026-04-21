@@ -9,7 +9,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Checkbox, Input, Select, Static
 
 from docket.config.loader import save_config
-from docket.config.models import Config, ScopeFilter
+from docket.config.models import Config, ProviderEntry, ScopeFilter
 from docket.config.paths import Paths
 
 _NEW_SCOPE = "__new__"
@@ -130,31 +130,59 @@ class SettingsModal(ModalScreen[Config | None]):
         super().__init__()
         self._paths = paths
         self._config = config
+        # Edits are scoped to whichever provider is active when the modal
+        # opens — the user can switch providers from the palette first if
+        # they want to edit a different one.
+        self._active_provider_key = (
+            config.active_provider
+            if config.active_provider in config.providers
+            else next(iter(config.providers), "")
+        )
+
+    @property
+    def _active_entry(self) -> ProviderEntry | None:
+        if not self._active_provider_key:
+            return None
+        return self._config.providers.get(self._active_provider_key)
 
     def compose(self) -> ComposeResult:
+        entry = self._active_entry
+        scopes = entry.scopes if entry is not None else {}
+        active_scope_name = entry.active_scope if entry is not None else "default"
         scope_options = [("Create new view…", _NEW_SCOPE)]
-        scope_options.extend((name, name) for name in sorted(self._config.scopes))
-        active_scope = self._config.active_scope if self._config.active_scope in self._config.scopes else _NEW_SCOPE
-        current_scope = self._config.scopes.get(self._config.active_scope, ScopeFilter())
+        scope_options.extend((name, name) for name in sorted(scopes))
+        active_scope_value = active_scope_name if active_scope_name in scopes else _NEW_SCOPE
+        current_scope = scopes.get(active_scope_name, ScopeFilter())
+
+        # Per-type defaults so opening settings on a fresh github_stub entry
+        # doesn't show empty ADO fields.
+        provider_type = entry.type if entry is not None else "azure_devops"
+        ado_org = str(entry.config.get("organization", "")) if entry is not None else ""
+        ado_project = str(entry.config.get("project", "")) if entry is not None else ""
         with Vertical():
             yield Static("Settings", id="title")
             yield Static(
-                "Saved to config.toml. Visual behavior updates in this session; provider connection changes apply on the next launch.",
+                "Saved to config.toml. Visual behavior updates in this session; "
+                "provider connection changes apply on the next launch.",
                 id="subtitle",
             )
             with VerticalScroll():
                 yield Static("Views & scope", classes="section")
+                yield Static(
+                    f"editing saved views for [cyan]{self._active_provider_key or '—'}[/cyan]",
+                    classes="field-label",
+                )
                 yield Static("saved view", classes="field-label")
                 scope_picker = Select(
                     options=scope_options,
-                    value=active_scope,
+                    value=active_scope_value,
                     prompt="pick a saved view",
                     id="scope-select",
                 )
                 scope_picker.tooltip = "Choose a saved view to edit, or create a new one."
                 yield scope_picker
                 yield Static("view name", classes="field-label")
-                yield Input(value=self._config.active_scope, placeholder="view name", id="scope-name")
+                yield Input(value=active_scope_name, placeholder="view name", id="scope-name")
                 default_checkbox = Checkbox(
                     "Make this the default view",
                     value=True,
@@ -184,25 +212,29 @@ class SettingsModal(ModalScreen[Config | None]):
                     id="scope-assignee",
                 )
 
-                yield Static("Provider & model", classes="section")
-                yield Static("organization URL", classes="field-label")
+                yield Static("Active provider", classes="section")
+                yield Static("provider type", classes="field-label")
+                yield Static(
+                    f"[cyan]{provider_type}[/cyan] — edit other provider types "
+                    "via `docket setup provider ...`.",
+                    id="provider-type-note",
+                )
+                yield Static("display name", classes="field-label")
                 yield Input(
-                    value=str(self._config.ado.organization),
-                    placeholder="https://dev.azure.com/your-org",
-                    id="ado-org",
+                    value=entry.display_name if entry is not None else "",
+                    placeholder="Azure DevOps",
+                    id="provider-display",
                 )
-                yield Static("project", classes="field-label")
-                yield Input(value=self._config.ado.project, placeholder="project name", id="ado-project")
-                yield Static("description format", classes="field-label")
-                yield Select(
-                    options=[
-                        ("Markdown", "markdown"),
-                        ("HTML fallback", "html_fallback"),
-                    ],
-                    value=self._config.ado.description_format,
-                    prompt="description format",
-                    id="ado-description-format",
-                )
+                if provider_type == "azure_devops":
+                    yield Static("organization URL", classes="field-label")
+                    yield Input(
+                        value=ado_org,
+                        placeholder="https://dev.azure.com/your-org",
+                        id="ado-org",
+                    )
+                    yield Static("project", classes="field-label")
+                    yield Input(value=ado_project, placeholder="project name", id="ado-project")
+
                 yield Static("Foundry endpoint", classes="field-label")
                 yield Input(
                     value=str(self._config.foundry.endpoint or ""),
@@ -319,7 +351,9 @@ class SettingsModal(ModalScreen[Config | None]):
         if selected is Select.BLANK:
             return
         assert isinstance(selected, str)
-        scope = self._config.scopes.get(selected, ScopeFilter())
+        entry = self._active_entry
+        scopes = entry.scopes if entry is not None else {}
+        scope = scopes.get(selected, ScopeFilter())
         name_input = self.query_one("#scope-name", Input)
         default_checkbox = self.query_one("#scope-default", Checkbox)
         if selected == _NEW_SCOPE:
@@ -328,7 +362,8 @@ class SettingsModal(ModalScreen[Config | None]):
             scope = ScopeFilter()
         else:
             name_input.value = selected
-            default_checkbox.value = self._config.active_scope == selected
+            current_active = entry.active_scope if entry is not None else ""
+            default_checkbox.value = current_active == selected
         self.query_one("#scope-team", Input).value = scope.team
         self.query_one("#scope-area", Input).value = scope.area_path
         self.query_one("#scope-iteration", Input).value = scope.iteration_path
@@ -349,26 +384,39 @@ class SettingsModal(ModalScreen[Config | None]):
     def _build_config(self) -> Config:
         raw = self._config.model_dump(mode="json")
 
+        entry = self._active_entry
+        provider_key = self._active_provider_key
+        if entry is None or not provider_key:
+            raise ValueError("No provider is active — add one via `docket setup provider add`.")
+
         scope_name = self.query_one("#scope-name", Input).value.strip()
         if not scope_name:
             raise ValueError("View name is required.")
-        raw["scopes"][scope_name] = {
+
+        provider_raw = raw["providers"].setdefault(provider_key, {})
+        provider_raw.setdefault("scopes", {})
+        provider_raw["scopes"][scope_name] = {
             "team": self.query_one("#scope-team", Input).value.strip(),
             "area_path": self.query_one("#scope-area", Input).value.strip(),
             "iteration_path": self.query_one("#scope-iteration", Input).value.strip(),
             "assignee": self.query_one("#scope-assignee", Input).value.strip() or "@me",
         }
         if self.query_one("#scope-default", Checkbox).value:
-            raw["active_scope"] = scope_name
+            provider_raw["active_scope"] = scope_name
 
-        description_format = self.query_one("#ado-description-format", Select).value
+        display = self.query_one("#provider-display", Input).value.strip()
+        if display:
+            provider_raw["display_name"] = display
+
+        if entry.type == "azure_devops":
+            provider_raw.setdefault("config", {})
+            provider_raw["config"]["organization"] = self.query_one("#ado-org", Input).value.strip()
+            provider_raw["config"]["project"] = self.query_one("#ado-project", Input).value.strip()
+
         default_kind = self.query_one("#ui-default-kind", Select).value
-        if description_format is Select.BLANK or default_kind is Select.BLANK:
-            raise ValueError("Please choose both the description format and default new-item kind.")
+        if default_kind is Select.BLANK:
+            raise ValueError("Please choose the default new-item kind.")
 
-        raw["ado"]["organization"] = self.query_one("#ado-org", Input).value.strip()
-        raw["ado"]["project"] = self.query_one("#ado-project", Input).value.strip()
-        raw["ado"]["description_format"] = description_format
         raw["foundry"]["endpoint"] = self.query_one("#foundry-endpoint", Input).value.strip() or None
         raw["foundry"]["deployment"] = self.query_one("#foundry-deployment", Input).value.strip()
         raw["http"]["enabled"] = self.query_one("#http-enabled", Checkbox).value

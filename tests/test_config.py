@@ -3,12 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from pydantic import HttpUrl
 
 from docket.config import (
-    AdoConfig,
     Config,
     ConfigMissingError,
+    ProviderEntry,
     ScopeFilter,
     load_config,
     resolve_paths,
@@ -29,20 +28,28 @@ def test_config_roundtrip(tmp_xdg: Path) -> None:
     paths = resolve_paths()
     paths.ensure()
     cfg = Config(
-        ado=AdoConfig(
-            organization=HttpUrl("https://dev.azure.com/example"),
-            project="Demo",
-        ),
-        scopes={
-            "default": ScopeFilter(area_path="Demo\\Team A", assignee="@me"),
-            "alt": ScopeFilter(assignee="alice@example.com"),
+        providers={
+            "ado": ProviderEntry(
+                type="azure_devops",
+                display_name="Azure DevOps",
+                config={"organization": "https://dev.azure.com/example", "project": "Demo"},
+                scopes={
+                    "default": ScopeFilter(area_path="Demo\\Team A", assignee="@me"),
+                    "alt": ScopeFilter(assignee="alice@example.com"),
+                },
+                active_scope="default",
+            ),
         },
+        active_provider="ado",
     )
     save_config(paths, cfg)
     loaded = load_config(paths)
-    assert loaded.ado.project == "Demo"
-    assert loaded.scopes["default"].area_path == "Demo\\Team A"
-    assert loaded.scopes["alt"].assignee == "alice@example.com"
+    assert loaded.active_provider == "ado"
+    entry = loaded.providers["ado"]
+    assert entry.type == "azure_devops"
+    assert entry.config["project"] == "Demo"
+    assert entry.scopes["default"].area_path == "Demo\\Team A"
+    assert entry.scopes["alt"].assignee == "alice@example.com"
     assert loaded.telemetry.enabled is True  # default
 
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, Field, HttpUrl
 
 
@@ -13,9 +15,32 @@ class ScopeFilter(BaseModel):
 
 
 class AdoConfig(BaseModel):
+    """Legacy standalone ADO section. Phase-2 M14 moves this under
+    `providers.<name>.config`; this model stays so factory validation can
+    reuse the same shape."""
+
     organization: HttpUrl
     project: str
     description_format: str = Field(default="markdown", pattern="^(markdown|html_fallback)$")
+
+
+class ProviderEntry(BaseModel):
+    """One configured backend. `type` maps to a registry id (`"azure_devops"`,
+    `"github_stub"`, or anything registered via entry point). `config` is
+    free-form and validated by the factory — the registry itself does not
+    peek inside.
+
+    Each provider owns its own scopes + active_scope: when you switch
+    providers in the TUI, both the work-item pane and the view filter reset
+    to that provider's default."""
+
+    type: str
+    display_name: str
+    config: dict[str, Any] = Field(default_factory=dict)
+    scopes: dict[str, ScopeFilter] = Field(
+        default_factory=lambda: {"default": ScopeFilter()}
+    )
+    active_scope: str = "default"
 
 
 class FoundryConfig(BaseModel):
@@ -66,11 +91,16 @@ class StaleConfig(BaseModel):
 
 
 class Config(BaseModel):
-    """Top-level config.toml schema."""
+    """Top-level config.toml schema.
 
-    ado: AdoConfig
-    scopes: dict[str, ScopeFilter] = Field(default_factory=lambda: {"default": ScopeFilter()})
-    active_scope: str = "default"
+    M14 reshaped the root: there is no longer a singleton `ado` block or a
+    top-level `scopes` / `active_scope`. Instead, every backend lives as a
+    named entry under `providers`, and `active_provider` picks which one the
+    TUI opens by default. Switching providers at runtime is a palette action.
+    """
+
+    providers: dict[str, ProviderEntry] = Field(default_factory=dict)
+    active_provider: str = ""
     foundry: FoundryConfig = Field(default_factory=FoundryConfig)
     http: HttpConfig = Field(default_factory=HttpConfig)
     telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)

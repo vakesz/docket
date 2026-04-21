@@ -49,10 +49,17 @@ _DEFAULT_FIELDS: tuple[str, ...] = (
 class AzureDevOpsProvider:
     """Implements WorkItemProvider against Azure DevOps Boards."""
 
-    def __init__(self, organization_url: str, project: str) -> None:
+    def __init__(
+        self,
+        organization_url: str,
+        project: str,
+        *,
+        display_name: str = "Azure DevOps",
+    ) -> None:
         self._org = organization_url.rstrip("/")
         self._project = project
         self._connection: Connection | None = None
+        self.display_name = display_name
 
     # -- infra ---------------------------------------------------------------
 
