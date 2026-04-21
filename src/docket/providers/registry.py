@@ -83,6 +83,7 @@ def _register_builtins() -> None:
     """Wire the built-in provider factories. Called at module import so the
     registry is populated even without entry-point discovery."""
     from docket.providers.azure_devops.provider import AzureDevOpsProvider
+    from docket.providers.github.provider import GitHubProvider
     from docket.providers.github_stub.provider import GitHubStubProvider
 
     def _ado_factory(config: dict[str, Any], display_name: str) -> WorkItemProvider:
@@ -98,6 +99,16 @@ def _register_builtins() -> None:
             display_name=display_name,
         )
 
+    def _github_factory(config: dict[str, Any], display_name: str) -> WorkItemProvider:
+        default_repo = config.get("default_repo")
+        if not default_repo:
+            raise ValueError("github provider requires 'default_repo' (owner/name)")
+        return GitHubProvider(
+            default_repo=str(default_repo),
+            display_name=display_name,
+            base_url=str(config.get("base_url", "https://api.github.com")),
+        )
+
     def _github_stub_factory(config: dict[str, Any], display_name: str) -> WorkItemProvider:
         return GitHubStubProvider(
             default_repo=str(config.get("default_repo", "example/repo")),
@@ -105,6 +116,7 @@ def _register_builtins() -> None:
         )
 
     register("azure_devops", _ado_factory)
+    register("github", _github_factory)
     register("github_stub", _github_stub_factory)
 
 

@@ -517,6 +517,9 @@ def provider_add(
             console.print("[red]Project name is required.[/red]")
             raise SystemExit(2)
         config = {"organization": str(HttpUrl(org)), "project": project}
+    elif type_id == "github":
+        default_repo = _pick_github_repo()
+        config = {"default_repo": default_repo}
     elif type_id == "github_stub":
         default_repo = Prompt.ask(
             "Default repo (owner/name)", default="example/repo"
@@ -547,6 +550,81 @@ def provider_add(
         cfg.active_provider = name
     save_config(paths, cfg)
     console.print(f"[green]✓ added provider '{name}'[/green]")
+
+
+def _pick_github_repo() -> str:
+    """Offer discovered repos for the active `gh` session, or fall back to typing.
+
+    Composition:
+      1. The authenticated user's own repos (`/user/repos`).
+      2. Every org the user is a member of — via `/orgs/{org}/repos` so
+         private repos they have access to show up too (not just the
+         public ones `/users/{login}/repos` would return).
+
+    We merge into a single de-duplicated picker ordered by discovery so
+    "my repos first, then each org in turn" reads naturally. Any step's
+    failure falls through to the remaining sources, and if nothing comes
+    back we drop to the manual prompt so a user without `gh` (or a user
+    in zero orgs and zero repos, somehow) can still finish."""
+    from docket.providers.github import discover as gh_discover
+
+    seen: set[str] = set()
+    repos: list[str] = []
+
+    def _add(refs: list[gh_discover.RepoRef]) -> None:
+        for ref in refs:
+            if ref.full_name not in seen:
+                seen.add(ref.full_name)
+                repos.append(ref.full_name)
+
+    login = gh_discover.signed_in_login()
+    if login:
+        console.print(f"[dim]Scanning repos for [cyan]{login}[/cyan]...[/dim]")
+
+    # Section 1: the user's own repos.
+    try:
+        _add(gh_discover.list_repos())
+    except gh_discover.DiscoveryError as e:
+        console.print(
+            f"[dim]Couldn't list your personal repos via `gh` ({e}) — "
+            "continuing with org discovery.[/dim]"
+        )
+
+    # Section 2: repos in every org the user belongs to. `gh` silently
+    # returns an empty list when the user is in no orgs, so this is free.
+    try:
+        orgs = gh_discover.list_orgs()
+    except gh_discover.DiscoveryError as e:
+        console.print(f"[dim]Couldn't list orgs via `gh` ({e}).[/dim]")
+        orgs = []
+    for org in orgs:
+        before = len(repos)
+        try:
+            _add(gh_discover.list_org_repos(org.login))
+        except gh_discover.DiscoveryError as e:
+            console.print(f"[dim]Skipping org [cyan]{org.login}[/cyan] ({e}).[/dim]")
+            continue
+        added = len(repos) - before
+        console.print(
+            f"[dim]  · [cyan]{org.login}[/cyan]: {added} repo(s)[/dim]"
+        )
+
+    if not repos:
+        return _prompt_github_repo_manual()
+
+    choice = _pick("GitHub repository", repos, allow_custom=True)
+    if choice is _CUSTOM_SENTINEL:
+        return _prompt_github_repo_manual()
+    assert isinstance(choice, int)
+    return repos[choice]
+
+
+def _prompt_github_repo_manual() -> str:
+    while True:
+        raw = Prompt.ask("Default repo (owner/name)", default="").strip()
+        if "/" in raw and not raw.startswith("/") and not raw.endswith("/"):
+            return raw
+        console.print("[red]Please enter an owner/name pair, e.g. `anthropics/claude-code`.[/red]")
 
 
 def provider_remove(name: str) -> None:
