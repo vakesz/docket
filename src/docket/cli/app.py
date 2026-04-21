@@ -28,7 +28,10 @@ app = typer.Typer(
 @app.callback()
 def _root(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is None:
-        open_command()
+        # Calling open_command() directly would pass typer OptionInfo sentinels
+        # as the defaults. Fill them in explicitly so the command body sees
+        # real values.
+        open_command(scope=None, no_chat=False)
 
 
 app.command("setup")(setup_command)

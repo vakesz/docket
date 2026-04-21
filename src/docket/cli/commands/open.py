@@ -37,6 +37,8 @@ def open_command(
             scope=filters,
             scope_key=scope_key,
             llm=llm,
+            compaction_threshold_tokens=ctx.config.llm.compaction_threshold_tokens,
+            external_watch_interval_seconds=ctx.config.llm.external_watch_interval_seconds,
         )
         ItvApp(tui_ctx).run()
     finally:

@@ -33,6 +33,7 @@ def create_app(
     llm: LlmClient | None = None,
     proposals: ProposalStore | None = None,
     active_item: Callable[[], str | None] | None = None,
+    compaction_threshold_tokens: int = 0,
 ) -> FastAPI:
     """Build a configured FastAPI app.
 
@@ -55,6 +56,7 @@ def create_app(
     app.state.bearer_token = bearer_token
     app.state.proposals = proposals if proposals is not None else ProposalStore()
     app.state.llm = llm
+    app.state.compaction_threshold_tokens = compaction_threshold_tokens
 
     if llm is not None:
         registry = ToolRegistry()

@@ -160,11 +160,14 @@ async def _stream_turn(
                 )
             )
 
+    threshold = getattr(request.app.state, "compaction_threshold_tokens", 0) or None
+
     def run_turn() -> None:
         try:
             result = conversation_service.send_user_message(
                 conn, agent, item_id, text,
                 on_delta=on_delta, on_message=on_message,
+                compaction_threshold_tokens=threshold,
             )
             _put_threadsafe(
                 ServerSentEvent(event="done", data=json.dumps({"usage": asdict(result.usage)}))

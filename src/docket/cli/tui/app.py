@@ -22,9 +22,17 @@ from docket.cli.tui.widgets.chat_pane import ChatPane, UserTurnRequest
 from docket.cli.tui.widgets.diff_modal import DiffModal
 from docket.cli.tui.widgets.item_detail import ItemDetail
 from docket.cli.tui.widgets.item_tree import ItemSelected, ItemTree
+from docket.cli.tui.widgets.suggestion_modal import SuggestionModal
 from docket.core.model import ItemKind, ScopeFilters
-from docket.core.services import conversation_service, mutation_service, sync_service
+from docket.core.services import (
+    conversation_service,
+    external_update_service,
+    mutation_service,
+    suggestion_service,
+    sync_service,
+)
 from docket.core.services.proposal_store import ProposalStore
+from docket.core.services.suggestion_service import Suggestion, SuggestionError
 from docket.providers.base import WorkItemProvider
 from docket.storage.repos import comment_repo, conversation_repo, item_repo
 
@@ -39,6 +47,8 @@ class TuiContext:
     scope: ScopeFilters
     scope_key: str = "default"
     llm: LlmClient | None = None  # None disables chat (useful for pre-M4 tests)
+    compaction_threshold_tokens: int = 0  # 0 disables — passed to conversation_service
+    external_watch_interval_seconds: float = 60.0  # 0 disables external-update watcher
 
 
 class ItvApp(App[None]):
@@ -60,6 +70,7 @@ class ItvApp(App[None]):
         Binding("t", "new_thread", "New thread"),
         Binding("d", "review_pending", "Review pending"),
         Binding("o", "open_in_browser", "Open in browser"),
+        Binding("s", "suggest_next", "Suggest next action"),
     ]
 
     def __init__(self, tui_ctx: TuiContext) -> None:
@@ -92,6 +103,61 @@ class ItvApp(App[None]):
 
     def on_mount(self) -> None:
         self._reload_tree()
+        if self.tui_ctx.external_watch_interval_seconds > 0:
+            self.set_interval(
+                self.tui_ctx.external_watch_interval_seconds,
+                self._tick_external_watch,
+                name="external-watch",
+            )
+
+    def _tick_external_watch(self) -> None:
+        """Runs on the Textual event loop every N seconds. Spawns a worker per
+        tick so the provider call doesn't block the UI. No-op when no item is
+        selected."""
+        item_id = self._selected_item_id
+        if item_id is None:
+            return
+        self.run_worker(
+            lambda iid=item_id: self._external_watch_once(iid),
+            group=f"external-watch-{item_id}",
+            exclusive=True,
+            thread=True,
+        )
+
+    def _external_watch_once(self, item_id: str) -> None:
+        try:
+            result = external_update_service.check_and_inject(
+                self.tui_ctx.conn,  # type: ignore[arg-type]
+                self.tui_ctx.provider,
+                item_id,
+            )
+        except Exception:
+            # External updates are a nice-to-have; a provider hiccup shouldn't
+            # break the session. We log and move on.
+            log.exception("external-update poll failed for %s", item_id)
+            return
+        if not result.changed:
+            return
+
+        def apply() -> None:
+            # Guard: the user may have switched items between the worker
+            # starting and this callback firing.
+            if self._selected_item_id != item_id:
+                return
+            fresh_item = item_repo.get_item(self.tui_ctx.conn, item_id)  # type: ignore[arg-type]
+            fresh_comments = comment_repo.list_comments(self.tui_ctx.conn, item_id)  # type: ignore[arg-type]
+            self.query_one(ItemDetail).show(fresh_item, fresh_comments)
+            chat = self.query_one(ChatPane)
+            chat.note(
+                f"external update · {result.diff.splitlines()[0] if result.diff else 'metadata changed'}",
+                cls="msg-system",
+            )
+            self.notify(
+                f"{item_id} updated externally",
+                severity="information",
+            )
+
+        self.call_from_thread(apply)
 
     def _reload_tree(self) -> None:
         items = item_repo.list_items(self.tui_ctx.conn)  # type: ignore[arg-type]
@@ -186,6 +252,7 @@ class ItvApp(App[None]):
                 text,
                 on_delta=on_delta,
                 on_message=on_message,
+                compaction_threshold_tokens=self.tui_ctx.compaction_threshold_tokens or None,
             )
         except Exception as e:
             log.exception("chat turn failed")
@@ -246,6 +313,67 @@ class ItvApp(App[None]):
         chat = self.query_one(ChatPane)
         chat.show_history([])
         chat.set_status("new thread started")
+
+    def action_suggest_next(self) -> None:
+        if self._selected_item_id is None:
+            self.notify("Select an item first.", severity="warning")
+            return
+        if self.tui_ctx.llm is None:
+            self.notify("Chat/LLM is disabled.", severity="warning")
+            return
+        item_id = self._selected_item_id
+        self.notify("Thinking about the next action…")
+        self.run_worker(
+            lambda iid=item_id: self._run_suggestion(iid),
+            group="suggestion",
+            exclusive=True,
+            thread=True,
+        )
+
+    def _run_suggestion(self, item_id: str) -> None:
+        item = item_repo.get_item(self.tui_ctx.conn, item_id)  # type: ignore[arg-type]
+        if item is None:
+            self.call_from_thread(self.notify, f"Item {item_id} is gone.", severity="error")
+            return
+        try:
+            suggestion = suggestion_service.suggest_next_action(
+                self.tui_ctx.conn,  # type: ignore[arg-type]
+                self.tui_ctx.llm,  # type: ignore[arg-type]
+                item,
+            )
+        except SuggestionError as e:
+            self.call_from_thread(self.notify, f"Suggestion failed: {e}", severity="error")
+            return
+        except Exception as e:
+            log.exception("suggestion failed for %s", item_id)
+            self.call_from_thread(self.notify, f"Suggestion failed: {e}", severity="error")
+            return
+        self.call_from_thread(self._show_suggestion_modal, suggestion)
+
+    def _show_suggestion_modal(self, suggestion: Suggestion) -> None:
+        def on_decision(accepted: bool | None) -> None:
+            if not accepted:
+                self.notify("Suggestion dismissed.", severity="information")
+                return
+            try:
+                staged = suggestion_service.stage_suggestion(
+                    self.tui_ctx.conn,  # type: ignore[arg-type]
+                    suggestion,
+                )
+            except Exception as e:
+                self.notify(f"Failed to stage: {e}", severity="error")
+                return
+            self._proposals.add(staged.state_change, source="suggestion")
+            if staged.description_patch is not None:
+                self._proposals.add(staged.description_patch, source="suggestion")
+            self.notify(
+                f"Staged {1 if staged.description_patch is None else 2} proposal(s); "
+                "press 'd' to review.",
+                severity="information",
+            )
+            self._open_next_pending()
+
+        self.push_screen(SuggestionModal(suggestion), on_decision)
 
     def action_review_pending(self) -> None:
         if len(self._proposals) == 0:

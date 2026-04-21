@@ -55,6 +55,8 @@ def test_upgrade_from_v1_adds_tool_columns(tmp_path: Path) -> None:
     db = tmp_path / "v1.db"
     conn = init_db(db)
     # Simulate a pre-v2 database by dropping everything added after v1.
+    conn.execute("DROP INDEX IF EXISTS idx_messages_live")
+    conn.execute("ALTER TABLE messages DROP COLUMN compacted")
     conn.execute("ALTER TABLE messages DROP COLUMN tool_call_id")
     conn.execute("ALTER TABLE messages DROP COLUMN tool_name")
     conn.execute("ALTER TABLE items DROP COLUMN url")

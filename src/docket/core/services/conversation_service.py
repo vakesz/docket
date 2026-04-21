@@ -18,6 +18,7 @@ from docket.agent.loop import AgentLoop
 from docket.agent.prompt import build_prefix
 from docket.agent.types import ChatMessage, StreamDelta, Usage
 from docket.core.model import Conversation, Item
+from docket.core.services import compaction_service
 from docket.storage.db import transaction
 from docket.storage.repos import comment_repo, conversation_repo, item_repo, message_repo
 
@@ -60,11 +61,22 @@ def send_user_message(
     *,
     on_delta: Callable[[StreamDelta], None] | None = None,
     on_message: Callable[[ChatMessage], None] | None = None,
+    compaction_threshold_tokens: int | None = None,
 ) -> TurnResult:
     item = item_repo.get_item(conn, item_id)
     if item is None:
         raise KeyError(f"unknown item '{item_id}'")
     convo = open_thread(conn, item_id)
+    # Compact BEFORE building the prompt so the history we feed the model is
+    # already trimmed. A just-crossed threshold collapses on this turn, not the
+    # next.
+    if compaction_threshold_tokens:
+        compaction_service.maybe_compact(
+            conn,
+            llm=loop.client,
+            convo_id=convo.id,
+            threshold_tokens=compaction_threshold_tokens,
+        )
     past = history(conn, convo.id)
 
     prefix = _build_prefix(conn, item)

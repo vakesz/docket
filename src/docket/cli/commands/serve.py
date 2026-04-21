@@ -51,6 +51,7 @@ def serve_command(
             provider=ctx.provider,
             bearer_token=ctx.config.http.token,
             llm=llm,
+            compaction_threshold_tokens=ctx.config.llm.compaction_threshold_tokens,
         )
         console.print(
             f"[green]docket serve[/green] listening on http://{bind}:{listen_port} "

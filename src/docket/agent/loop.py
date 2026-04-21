@@ -49,6 +49,12 @@ class AgentLoop:
         self._max_rounds = max_tool_rounds
         self._stream = stream
 
+    @property
+    def client(self) -> LlmClient:
+        """Exposed so services (e.g. compaction) can issue side-channel calls
+        with the same client without plumbing a second handle through."""
+        return self._client
+
     def run_turn(
         self,
         *,

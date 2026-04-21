@@ -47,4 +47,3 @@ Thumbs.db
 
 # Dev override directory (see .env.example)
 .docket-dev/
-.itv-dev/

@@ -36,6 +36,7 @@ class TelemetryConfig(BaseModel):
 
 class LlmConfig(BaseModel):
     compaction_threshold_tokens: int = 60000
+    external_watch_interval_seconds: float = 60.0  # 0 disables the watcher
 
 
 class Config(BaseModel):
