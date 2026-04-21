@@ -61,6 +61,7 @@ class NewItemModal(ModalScreen["NewItemRequest | None"]):
         padding: 1 2;
     }
     NewItemModal #title-label,
+    NewItemModal #kind-label,
     NewItemModal #desc-label,
     NewItemModal #meta-label { color: $text-muted; padding-top: 1; height: 1; }
     NewItemModal #kind-row { height: 3; }
@@ -71,35 +72,47 @@ class NewItemModal(ModalScreen["NewItemRequest | None"]):
         color: $warning;
         padding: 0 1;
     }
-    NewItemModal #hint { color: $text-muted; padding-top: 1; }
+    NewItemModal #hint,
+    NewItemModal #footer-hint { color: $text-muted; padding-top: 1; height: auto; }
     """
 
-    def __init__(self, conn: sqlite3.Connection) -> None:
+    def __init__(self, conn: sqlite3.Connection, *, default_kind: ItemKind = ItemKind.TASK) -> None:
         super().__init__()
         self._conn = conn
+        self._default_kind = default_kind
 
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Static("[b]New work item[/b]", id="source")
+            yield Static(
+                "Create a ticket, check for duplicates, then review the proposal before anything is written.",
+                id="hint",
+            )
             yield Static("kind", id="kind-label")
-            yield Select(
+            kind_picker = Select(
                 options=[(k.value, k) for k in ItemKind],
                 prompt="select a kind",
-                value=ItemKind.TASK,
+                value=self._default_kind,
                 id="kind",
             )
+            kind_picker.tooltip = "Choose the item type that best matches the work."
+            yield kind_picker
             yield Static("title", id="title-label")
-            yield Input(placeholder="short title", id="title")
+            title = Input(placeholder="short title", id="title")
+            title.tooltip = "Keep the title short and specific so duplicate detection stays useful."
+            yield title
             yield VerticalScroll(id="duplicates")
             yield Static("description (markdown)", id="desc-label")
-            yield TextArea("", id="desc")
+            desc = TextArea("", id="desc")
+            desc.tooltip = "Describe the work in Markdown. This is the main body the reviewer will see."
+            yield desc
             yield Static("parent id · assignee · tags (comma-separated)", id="meta-label")
             yield Input(placeholder="parent id (optional)", id="parent")
             yield Input(placeholder="assignee (optional)", id="assignee")
             yield Input(placeholder="tags (optional, comma-separated)", id="tags")
             yield Static(
                 "[b]ctrl+s[/b] create  ·  [b]esc[/b] cancel  ·  tab to advance fields",
-                id="hint",
+                id="footer-hint",
             )
 
     def on_mount(self) -> None:

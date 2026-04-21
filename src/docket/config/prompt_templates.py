@@ -1,9 +1,25 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
-DEFAULT_TEMPLATES: dict[str, str] = {
-    "epic.md": """\
+DEFAULT_SYSTEM_BASE = """\
+You are a work-item triage assistant embedded in a developer's terminal.
+You help the user understand, update, and triage tickets across their backlog.
+
+Principles:
+- Ground every claim in the ticket snapshot or an explicit tool call result. Do not invent fields, ids, or linked work.
+- When the user asks for a change (transition, description edit, new item), state the exact proposal in one line and wait for explicit confirmation — mutations are always user-approved.
+- Prefer brevity. The user is skimming in a TUI pane; bullets and one-line summaries beat paragraphs.
+- If the user's intent is ambiguous, ask one clarifying question rather than guessing.
+
+Tools:
+- Use `get_item`, `get_comments`, `get_linked_items`, and `search_items` whenever the ticket snapshot does not already cover the information you need.
+- You can safely call multiple read tools in a single turn.
+"""
+
+DEFAULT_KIND_GUIDANCE: dict[str, str] = {
+    "epic": """\
 # Epic triage persona
 
 You are helping refine an **Epic** — a large initiative spanning multiple features and
@@ -18,7 +34,7 @@ Ask one sharp question at a time. Don't summarize back what the user just said.
 When you have enough signal, offer a "suggested next action" with a proposed state
 transition, description patch, and remaining open questions.
 """,
-    "feature.md": """\
+    "feature": """\
 # Feature triage persona
 
 You are refining a **Feature** — a coherent slice of an epic that could be shipped
@@ -32,7 +48,7 @@ standalone. Focus on:
 Stay practical — a feature should be shippable. If scope is drifting back toward epic
 territory, say so and propose narrowing.
 """,
-    "story.md": """\
+    "story": """\
 # User story triage persona
 
 You are refining a **User Story**. Drive toward a story that's:
@@ -45,7 +61,7 @@ You are refining a **User Story**. Drive toward a story that's:
 Watch for stories that are really tasks (implementation detail, no user outcome) or
 really features (too big, multiple acceptance criteria).
 """,
-    "task.md": """\
+    "task": """\
 # Task triage persona
 
 You are refining a **Task** — an implementation unit, usually invisible to end users.
@@ -59,7 +75,7 @@ Focus on:
 Tasks don't usually need acceptance criteria, but they do need a clear "this is done"
 line.
 """,
-    "bug.md": """\
+    "bug": """\
 # Bug triage persona
 
 You are refining a **Bug**. Make sure we have:
@@ -75,15 +91,113 @@ concrete list of what to ask the reporter.
 }
 
 
-def scaffold(prompts_dir: Path) -> list[str]:
-    """Write any missing default templates; don't overwrite user-edited ones.
-    Returns the filenames that were created this run."""
-    prompts_dir.mkdir(parents=True, exist_ok=True)
-    created: list[str] = []
-    for filename, body in DEFAULT_TEMPLATES.items():
+@dataclass(frozen=True)
+class PromptTemplate:
+    key: str
+    label: str
+    filename: str
+    default_text: str
+    legacy_filename: str | None = None
+
+
+PROMPT_TEMPLATES: tuple[PromptTemplate, ...] = (
+    PromptTemplate(
+        key="system_base",
+        label="System base",
+        filename="system_base.md",
+        default_text=DEFAULT_SYSTEM_BASE,
+    ),
+    PromptTemplate(
+        key="epic",
+        label="Epic",
+        filename="kind_epic.md",
+        default_text=DEFAULT_KIND_GUIDANCE["epic"],
+        legacy_filename="epic.md",
+    ),
+    PromptTemplate(
+        key="feature",
+        label="Feature",
+        filename="kind_feature.md",
+        default_text=DEFAULT_KIND_GUIDANCE["feature"],
+        legacy_filename="feature.md",
+    ),
+    PromptTemplate(
+        key="story",
+        label="Story",
+        filename="kind_story.md",
+        default_text=DEFAULT_KIND_GUIDANCE["story"],
+        legacy_filename="story.md",
+    ),
+    PromptTemplate(
+        key="task",
+        label="Task",
+        filename="kind_task.md",
+        default_text=DEFAULT_KIND_GUIDANCE["task"],
+        legacy_filename="task.md",
+    ),
+    PromptTemplate(
+        key="bug",
+        label="Bug",
+        filename="kind_bug.md",
+        default_text=DEFAULT_KIND_GUIDANCE["bug"],
+        legacy_filename="bug.md",
+    ),
+)
+
+
+_TEMPLATE_BY_KEY = {template.key: template for template in PROMPT_TEMPLATES}
+
+
+def get_template(key: str) -> PromptTemplate:
+    return _TEMPLATE_BY_KEY[key]
+
+
+def list_templates() -> tuple[PromptTemplate, ...]:
+    return PROMPT_TEMPLATES
+
+
+def read_prompt(prompts_dir: Path, key: str) -> str:
+    template = get_template(key)
+    for filename in (template.filename, template.legacy_filename):
+        if not filename:
+            continue
         target = prompts_dir / filename
         if target.exists():
+            return target.read_text(encoding="utf-8")
+    return template.default_text
+
+
+def write_prompt(prompts_dir: Path, key: str, text: str) -> Path:
+    prompts_dir.mkdir(parents=True, exist_ok=True)
+    template = get_template(key)
+    target = prompts_dir / template.filename
+    target.write_text(text, encoding="utf-8")
+    return target
+
+
+def reset_prompt(prompts_dir: Path, key: str) -> Path:
+    template = get_template(key)
+    return write_prompt(prompts_dir, key, template.default_text)
+
+
+def scaffold(prompts_dir: Path) -> list[str]:
+    """Write any missing prompt templates without overwriting edits.
+
+    Canonical filenames are `system_base.md` and `kind_<kind>.md`. If a legacy
+    `<kind>.md` file exists from an older wizard run, seed the new canonical
+    file from that content so existing customizations keep working.
+    """
+    prompts_dir.mkdir(parents=True, exist_ok=True)
+    created: list[str] = []
+    for template in PROMPT_TEMPLATES:
+        target = prompts_dir / template.filename
+        if target.exists():
             continue
+        body = template.default_text
+        if template.legacy_filename:
+            legacy = prompts_dir / template.legacy_filename
+            if legacy.exists():
+                body = legacy.read_text(encoding="utf-8")
         target.write_text(body, encoding="utf-8")
-        created.append(filename)
+        created.append(template.filename)
     return created

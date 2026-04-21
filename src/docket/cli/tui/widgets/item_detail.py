@@ -11,11 +11,28 @@ class ItemDetail(VerticalScroll):
     """Renders the selected item's metadata, description, and comments."""
 
     DEFAULT_CSS = """
-    ItemDetail { padding: 1 2; }
-    ItemDetail #meta { height: auto; padding-bottom: 1; color: $text-muted; }
-    ItemDetail #attachments-header { height: auto; padding-top: 1; }
-    ItemDetail #comments-header { height: auto; padding-top: 1; }
+    ItemDetail {
+        padding: 1 2;
+        background: transparent;
+    }
+    ItemDetail #meta {
+        height: auto;
+        padding: 0 0 1 0;
+        color: $text-muted;
+        border-bottom: solid $panel-lighten-1;
+    }
+    ItemDetail #attachments-header,
+    ItemDetail #comments-header {
+        height: auto;
+        padding-top: 1;
+        color: $text;
+        text-style: bold;
+    }
     """
+
+    def __init__(self, *, id: str | None = None) -> None:
+        super().__init__(id=id)
+        self.tooltip = "Selected item details: metadata, description, attachments, and comments."
 
     def compose(self) -> ComposeResult:
         yield Static("Select an item to see details.", id="meta")
@@ -27,7 +44,7 @@ class ItemDetail(VerticalScroll):
 
     def show(self, item: Item | None, comments: list[Comment]) -> None:
         if item is None:
-            self.query_one("#meta", Static).update("Select an item to see details.")
+            self.query_one("#meta", Static).update("Select a ticket")
             self.query_one("#body", Markdown).update("")
             self.query_one("#attachments-header", Static).update("")
             self.query_one("#attachments", Markdown).update("")
@@ -71,20 +88,22 @@ def _format_meta(item: Item) -> str:
 
     lines = [
         f"[b]{item.title}[/b]",
-        f"id={item.id}  kind={item.kind.value}  state={item.state.value}",
-        f"assignee={item.assignee or '—'}  tags={', '.join(item.tags) or '—'}",
+        f"[dim]ID[/dim] {item.id}  ·  [dim]Kind[/dim] {item.kind.value}  ·  [dim]State[/dim] {item.state.value}",
+        f"[dim]Assignee[/dim] {item.assignee or '—'}  ·  [dim]Tags[/dim] {', '.join(item.tags) or '—'}",
     ]
     if area:
-        lines.append(f"area={area}")
+        lines.append(f"[dim]Area[/dim] {area}")
     if iteration:
-        lines.append(f"iteration={iteration}")
+        lines.append(f"[dim]Iteration[/dim] {iteration}")
     if item.updated_at:
         updated = item.updated_at.isoformat()
-        lines.append(f"updated={updated}" + (f"  by={changed_by}" if changed_by else ""))
+        lines.append(
+            f"[dim]Updated[/dim] {updated}" + (f"  ·  [dim]By[/dim] {changed_by}" if changed_by else "")
+        )
     if created:
-        lines.append(f"created={created}")
+        lines.append(f"[dim]Created[/dim] {created}")
     if item.parent_id:
-        lines.append(f"parent={item.parent_id}")
+        lines.append(f"[dim]Parent[/dim] {item.parent_id}")
     if item.url:
-        lines.append(f"url={item.url}")
+        lines.append(f"[dim]URL[/dim] {item.url}")
     return "\n".join(lines)

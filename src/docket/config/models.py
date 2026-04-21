@@ -41,6 +41,11 @@ class LlmConfig(BaseModel):
 
 class UiConfig(BaseModel):
     theme: str = "textual-dark"
+    default_new_item_kind: str = Field(
+        default="task",
+        pattern="^(epic|feature|story|task|bug)$",
+    )
+    show_acceptance_criteria: bool = True
 
 
 class SyncConfig(BaseModel):

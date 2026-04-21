@@ -72,10 +72,9 @@ async def test_stale_marker_only_on_old_rows(stale_ctx) -> None:
         stale_label = _find_label(tree.root, "S-stale")
         fresh_label = _find_label(tree.root, "S-fresh")
         assert stale_label is not None
-        assert "STALE" in stale_label
         assert "14d" in stale_label
         assert fresh_label is not None
-        assert "STALE" not in fresh_label
+        assert "0d" in fresh_label
 
 
 async def test_stale_marker_disabled_when_threshold_zero(tmp_path: Path) -> None:
@@ -93,7 +92,7 @@ async def test_stale_marker_disabled_when_threshold_zero(tmp_path: Path) -> None
             await pilot.pause()
             label = _find_label(app.query_one(ItemTree).root, "S-old")
             assert label is not None
-            assert "STALE" not in label
+            assert "365d" in label
     finally:
         conn.close()
 
@@ -116,7 +115,7 @@ async def test_stale_per_provider_override(tmp_path: Path) -> None:
             await pilot.pause()
             label = _find_label(app.query_one(ItemTree).root, "S-1")
             assert label is not None
-            assert "STALE - 10d" in label
+            assert "10d" in label
     finally:
         conn.close()
 

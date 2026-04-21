@@ -61,6 +61,7 @@ class ThemePicker(ModalScreen[None]):
         self._config = config
         # Snapshot the theme on open so Esc can revert after live previews.
         self._original_theme: str = ""
+        self.tooltip = "Preview themes live, then press Enter to save the one you want."
 
     def compose(self) -> ComposeResult:
         with Vertical():

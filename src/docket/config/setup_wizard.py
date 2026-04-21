@@ -377,7 +377,7 @@ def _count_items_for_scope(state: WizardState, scope: ScopeFilter) -> int | None
 def _step_telemetry(state: WizardState) -> None:
     console.print(
         f"Local structured logs and the token/cost ledger land at [cyan]{state.paths.cache_dir}[/cyan].\n"
-        "Nothing is shipped off-device. You can disable this later with `docket config telemetry disable`."
+        "Nothing is shipped off-device. You can change this later from the in-app settings screen or config.toml."
     )
     state.telemetry_enabled = Confirm.ask("Keep local telemetry enabled?", default=True)
 
@@ -393,6 +393,9 @@ def _step_prompt_templates(state: WizardState) -> None:
         )
         for name in created:
             console.print(f"    {name}")
+        console.print(
+            "[dim]You can edit these later from the app with the prompt library (`p`) or by editing the files directly.[/dim]"
+        )
     else:
         console.print(f"Templates already present at {state.paths.prompts_dir} — no changes.")
 

@@ -13,6 +13,7 @@ from docket.config.env import (
     get_foundry_endpoint,
     get_read_only,
 )
+from docket.core.model import ItemKind
 
 if TYPE_CHECKING:
     from docket.agent.foundry_client import FoundryClient
@@ -62,6 +63,8 @@ def open_command(
             ),
             stale_threshold_days=ctx.config.stale.threshold_days,
             stale_threshold_by_provider=dict(ctx.config.stale.threshold_days_by_provider),
+            default_new_item_kind=ItemKind(ctx.config.ui.default_new_item_kind),
+            show_acceptance_criteria=ctx.config.ui.show_acceptance_criteria,
             paths=ctx.paths,
             config=ctx.config,
         )

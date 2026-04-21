@@ -23,30 +23,11 @@ from pathlib import Path
 from threading import Lock
 
 from docket.agent.types import ChatMessage
+from docket.config import prompt_templates
 from docket.core.model import Comment, Item
 
-DEFAULT_SYSTEM_BASE = """You are a work-item triage assistant embedded in a developer's terminal.
-You help the user understand, update, and triage tickets across their backlog.
-
-Principles:
-- Ground every claim in the ticket snapshot or an explicit tool call result. Do not invent fields, ids, or linked work.
-- When the user asks for a change (transition, description edit, new item), state the exact proposal in one line and wait for explicit confirmation — mutations are always user-approved.
-- Prefer brevity. The user is skimming in a TUI pane; bullets and one-line summaries beat paragraphs.
-- If the user's intent is ambiguous, ask one clarifying question rather than guessing.
-
-Tools:
-- Use `get_item`, `get_comments`, `get_linked_items`, and `search_items` whenever the ticket snapshot does not already cover the information you need.
-- You can safely call multiple read tools in a single turn.
-"""
-
-
-DEFAULT_KIND_GUIDANCE: dict[str, str] = {
-    "epic": "This is an Epic. Focus on scope, dependencies, and whether child Features still map to the original outcome.",
-    "feature": "This is a Feature. Focus on acceptance criteria, linked Stories, and whether the Feature is closeable.",
-    "story": "This is a User Story. Focus on acceptance criteria, open questions, and the smallest step that unblocks progress.",
-    "task": "This is a Task. Focus on what's left to finish and whether it can be closed.",
-    "bug": "This is a Bug. Focus on repro, severity, and whether a fix is proposed or in progress.",
-}
+DEFAULT_SYSTEM_BASE = prompt_templates.DEFAULT_SYSTEM_BASE
+DEFAULT_KIND_GUIDANCE = prompt_templates.DEFAULT_KIND_GUIDANCE
 
 
 class PromptLoader:
@@ -69,24 +50,32 @@ class PromptLoader:
             self._cache.clear()
 
     def system_base(self) -> str:
-        return self._load("system_base.md", DEFAULT_SYSTEM_BASE)
+        template = prompt_templates.get_template("system_base")
+        return self._load(template.filename, template.default_text)
 
     def kind_guidance(self, kind: str) -> str:
         default = DEFAULT_KIND_GUIDANCE.get(kind, "")
-        return self._load(f"kind_{kind}.md", default)
+        if not default:
+            return ""
+        template = prompt_templates.get_template(kind)
+        return self._load(template.filename, default, legacy_filename=template.legacy_filename)
 
-    def _load(self, filename: str, default: str) -> str:
+    def _load(self, filename: str, default: str, *, legacy_filename: str | None = None) -> str:
         if self._prompts_dir is None:
             return default
-        path = self._prompts_dir / filename
-        try:
-            mtime_ns = path.stat().st_mtime_ns
-        except FileNotFoundError:
+        path: Path | None = None
+        for candidate_name in (filename, legacy_filename):
+            if not candidate_name:
+                continue
+            candidate = self._prompts_dir / candidate_name
+            if candidate.exists():
+                path = candidate
+                break
+        if path is None:
             with self._lock:
-                # Drop any stale cache entry so deleting the override returns
-                # us cleanly to the default on the next call.
                 self._cache.pop(filename, None)
             return default
+        mtime_ns = path.stat().st_mtime_ns
         with self._lock:
             cached = self._cache.get(filename)
             if cached is not None and cached[0] == mtime_ns:

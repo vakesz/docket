@@ -63,6 +63,7 @@ async def test_theme_picker_opens_previews_and_reverts_on_escape(ctx) -> None:
 
         picker = app.screen
         assert isinstance(picker, ThemePicker)
+        assert picker.styles.background.a < 1.0
 
         # Highlight a theme that isn't the current one to exercise live preview.
         sorted_names = sorted(app.available_themes)
@@ -76,6 +77,16 @@ async def test_theme_picker_opens_previews_and_reverts_on_escape(ctx) -> None:
         await pilot.press("escape")
         await pilot.pause()
         assert app.theme == original
+
+
+async def test_quick_open_modal_uses_translucent_backdrop(ctx) -> None:
+    app = ItvApp(ctx)
+    async with app.run_test() as pilot:
+        await app.run_action("quick_open")
+        await pilot.pause()
+        modal = app.screen
+        assert isinstance(modal, QuickOpenModal)
+        assert modal.styles.background.a < 1.0
 
 
 async def test_theme_picker_persists_selection_to_config(tmp_xdg: Path, ctx) -> None:

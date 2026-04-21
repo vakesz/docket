@@ -51,6 +51,13 @@ class DocketCommands(Provider):
     def _commands(self) -> list[tuple[str, str, Callable[[], None]]]:
         app: ItvApp = self.app  # type: ignore[assignment]
         commands: list[tuple[str, str, Callable[[], None]]] = [
+            ("Show help", "Open the shortcut and workflow guide.", app.action_show_help),
+            ("Open settings", "Edit config.toml from inside the app.", app.action_open_settings),
+            (
+                "Edit prompt library",
+                "Update the assistant's prompt templates without editing files manually.",
+                app.action_edit_prompts,
+            ),
             ("Sync now", "Pull the latest items from the active provider.", app.action_refresh),
             ("Pick theme", "Switch the TUI theme with live preview.", app.action_pick_theme),
             (

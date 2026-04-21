@@ -56,6 +56,7 @@ class QuickOpenModal(ModalScreen[QuickOpenResult]):
     def __init__(self, conn: sqlite3.Connection) -> None:
         super().__init__()
         self._conn = conn
+        self.tooltip = "Jump straight to a cached work item by id."
 
     def compose(self) -> ComposeResult:
         with Vertical():
@@ -64,7 +65,9 @@ class QuickOpenModal(ModalScreen[QuickOpenResult]):
             yield Static("", id="status")
 
     def on_mount(self) -> None:
-        self.query_one("#qo-input", Input).focus()
+        field = self.query_one("#qo-input", Input)
+        field.tooltip = "Enter a cached item id like `S-42` or `AUTH-42`."
+        field.focus()
 
     def on_input_changed(self, event: Input.Changed) -> None:
         """Tell the user up-front whether the id is in cache, before they hit Enter."""

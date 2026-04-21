@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import sqlite3
 import traceback
 import webbrowser
 from collections.abc import Callable
@@ -9,12 +10,13 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import ClassVar
 
+from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.command import Provider
 from textual.containers import Horizontal, Vertical
 from textual.widget import Widget
-from textual.widgets import Footer, Header, Input, Static
+from textual.widgets import Input, Static
 
 from docket.agent.foundry_client import LlmClient
 from docket.agent.loop import AgentLoop
@@ -25,16 +27,19 @@ from docket.agent.types import ChatMessage, StreamDelta
 from docket.cli.tui.widgets.batch_diff_modal import BatchDecision, BatchDiffModal
 from docket.cli.tui.widgets.chat_pane import ChatPane, TurnFinished, UserTurnRequest
 from docket.cli.tui.widgets.diff_modal import DiffModal
+from docket.cli.tui.widgets.help_modal import HelpModal
 from docket.cli.tui.widgets.item_detail import ItemDetail
 from docket.cli.tui.widgets.item_tree import ItemSelected, ItemTree
 from docket.cli.tui.widgets.new_item_modal import NewItemModal, NewItemRequest
+from docket.cli.tui.widgets.prompt_library import PromptLibraryModal
 from docket.cli.tui.widgets.quick_open import QuickOpenModal, QuickOpenResult
+from docket.cli.tui.widgets.settings_modal import SettingsModal
 from docket.cli.tui.widgets.status_bar import StatusBar
 from docket.cli.tui.widgets.suggestion_modal import SuggestionModal
 from docket.cli.tui.widgets.theme_picker import ThemePicker
 from docket.config.models import Config
 from docket.config.paths import Paths
-from docket.core.model import ScopeFilters, TransitionIntent
+from docket.core.model import ItemKind, ScopeFilters, TransitionIntent
 from docket.core.services import (
     conversation_service,
     external_update_service,
@@ -63,7 +68,8 @@ class Pane(Vertical):
 
     DEFAULT_CSS = """
     Pane {
-        border: round $panel-lighten-2;
+        background: $panel;
+        border: round $panel-lighten-1;
         padding: 0;
     }
     Pane:focus-within {
@@ -82,14 +88,14 @@ class FullscreenToggle(Static):
 
     DEFAULT_CSS = """
     FullscreenToggle {
-        height: 1;
+        height: auto;
         background: transparent;
         color: $text-muted;
         content-align-horizontal: right;
-        padding: 0 1;
+        padding: 1 1 0 0;
     }
     FullscreenToggle:hover {
-        color: $accent;
+        color: $text;
         text-style: bold;
     }
     """
@@ -125,7 +131,7 @@ class TuiContext:
     """What the TUI needs from the caller to run. Kept small so the app can be mounted
     from production code (via Context) and from pilot-style tests (via fakes)."""
 
-    conn: object  # sqlite3.Connection (avoid heavy typing imports here)
+    conn: sqlite3.Connection
     provider: WorkItemProvider
     scope: ScopeFilters
     scope_key: str = "default"
@@ -145,6 +151,8 @@ class TuiContext:
     # older than N days. 0/negative disables. Per-provider override wins.
     stale_threshold_days: int = 0
     stale_threshold_by_provider: dict[str, int] | None = None
+    default_new_item_kind: ItemKind = ItemKind.TASK
+    show_acceptance_criteria: bool = True
     # Optional handles for features that persist to config (theme picker, etc).
     # Pilot tests can leave these as None; persistence becomes a no-op.
     paths: Paths | None = None
@@ -172,30 +180,62 @@ class ItvApp(App[None]):
     }
 
     CSS = """
-    #main { height: 1fr; }
+    Screen {
+        background: $panel;
+        color: $text;
+    }
+    ModalScreen {
+        background: $background 60%;
+    }
+    #main {
+        height: 1fr;
+        padding: 0 1 0 1;
+        background: $panel;
+    }
     /* Widths are scoped to the normal three-pane layout so Textual's
        maximize view (which reparents the widget) isn't constrained. */
-    #main > #left  { width: 35%; }
-    #main > #mid   { width: 40%; }
-    #main > #right { width: 25%; }
+    #main > #left  { width: 31%; }
+    #main > #mid   { width: 41%; }
+    #main > #right { width: 28%; }
     Pane.-maximized { width: 100%; height: 100%; }
-    #filter { height: 1; border: none; padding: 0 1; background: $surface; }
+    .pane-heading {
+        height: auto;
+        padding: 1 2 1 2;
+        color: $text;
+        text-style: bold;
+        background: transparent;
+    }
+    #filter {
+        height: 3;
+        border: round $panel-lighten-1;
+        margin: 0 2 1 2;
+        padding: 0 1;
+        background: $boost;
+        color: $text;
+    }
+    #filter:focus {
+        border: round $accent;
+    }
     """
 
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
-        Binding("q", "quit", "Quit", priority=True),
-        Binding("r", "refresh", "Refresh"),
+        Binding("q", "quit", "Quit", priority=True, show=False),
+        Binding("r", "refresh", "Refresh", show=False),
         Binding("slash", "focus_filter", "Filter"),
         Binding("question_mark", "show_help", "Help"),
-        Binding("t", "new_thread", "New thread"),
-        Binding("n", "new_item", "New item"),
-        Binding("d", "review_pending", "Review pending"),
-        Binding("o", "open_in_browser", "Open in browser"),
-        Binding("s", "suggest_next", "Suggest next action"),
-        Binding("ctrl+f", "toggle_fullscreen", "Fullscreen pane"),
-        Binding("ctrl+left", "shrink_pane", "Shrink pane"),
-        Binding("ctrl+right", "grow_pane", "Grow pane"),
-        Binding("colon", "quick_open", "Quick-open by id"),
+        Binding("f1", "show_help", "Help", show=False),
+        Binding("h", "show_help", "Help", show=False),
+        Binding("t", "new_thread", "New thread", show=False),
+        Binding("n", "new_item", "New item", show=False),
+        Binding("d", "review_pending", "Review pending", show=False),
+        Binding("o", "open_in_browser", "Open in browser", show=False),
+        Binding("s", "suggest_next", "Suggest next action", show=False),
+        Binding("comma", "open_settings", "Settings"),
+        Binding("p", "edit_prompts", "Prompts"),
+        Binding("ctrl+f", "toggle_fullscreen", "Fullscreen pane", show=False),
+        Binding("ctrl+left", "shrink_pane", "Shrink pane", show=False),
+        Binding("ctrl+right", "grow_pane", "Grow pane", show=False),
+        Binding("colon", "quick_open", "Quick-open by id", show=False),
         Binding("ctrl+t", "pick_theme", "Theme"),
         # Tab cycles between the three pane focus targets (tree → detail →
         # chat input). Priority=True so the binding fires even when an Input
@@ -218,38 +258,43 @@ class ItvApp(App[None]):
         self._pane_pct: dict[str, int] = dict(self._DEFAULT_PANE_PCT)
         if tui_ctx.llm is not None:
             registry = ToolRegistry()
-            register_readonly_tools(registry, conn=tui_ctx.conn, provider=tui_ctx.provider)  # type: ignore[arg-type]
+            register_readonly_tools(registry, conn=tui_ctx.conn, provider=tui_ctx.provider)
             # Read-only: the agent keeps its read tools so it can still
             # answer questions, but no propose_* tools exist in its registry.
             if not tui_ctx.read_only:
                 register_mutating_tools(
                     registry,
-                    conn=tui_ctx.conn,  # type: ignore[arg-type]
+                    conn=tui_ctx.conn,
                     store=self._proposals,
                     active_item=lambda: self._selected_item_id,
                 )
             self._agent = AgentLoop(client=tui_ctx.llm, tools=registry)
 
     def compose(self) -> ComposeResult:
-        yield Header()
         with Horizontal(id="main"):
             with Pane(id="left"):
                 yield FullscreenToggle()
-                yield Input(placeholder="filter (/) — title, description, comments…", id="filter")
+                yield Static("Backlog", classes="pane-heading")
+                yield Input(placeholder="Search backlog…", id="filter")
                 yield ItemTree(id="tree", stale_threshold_days=self._resolved_stale_threshold())
             with Pane(id="mid"):
                 yield FullscreenToggle()
+                yield Static("Details", classes="pane-heading")
                 yield ItemDetail(id="mid-detail")
             with Pane(id="right"):
                 yield FullscreenToggle()
-                yield ChatPane(id="right-chat")
+                yield Static("Assistant", classes="pane-heading")
+                yield ChatPane(
+                    id="right-chat",
+                    show_acceptance_criteria=self.tui_ctx.show_acceptance_criteria,
+                )
         yield StatusBar(id="status")
-        yield Footer()
 
     def on_mount(self) -> None:
         self._reload_tree()
         self._init_status_bar()
         self._apply_saved_theme()
+        self._apply_tooltips()
         if self.tui_ctx.external_watch_interval_seconds > 0:
             self.set_interval(
                 self.tui_ctx.external_watch_interval_seconds,
@@ -295,7 +340,7 @@ class ItvApp(App[None]):
     def _background_sync_once(self) -> None:
         try:
             summary = sync_service.refresh(
-                self.tui_ctx.conn,  # type: ignore[arg-type]
+                self.tui_ctx.conn,
                 self.tui_ctx.provider,
                 self.tui_ctx.scope_key,
                 self.tui_ctx.scope,
@@ -338,7 +383,7 @@ class ItvApp(App[None]):
     def _external_watch_once(self, item_id: str) -> None:
         try:
             result = external_update_service.check_and_inject(
-                self.tui_ctx.conn,  # type: ignore[arg-type]
+                self.tui_ctx.conn,
                 self.tui_ctx.provider,
                 item_id,
             )
@@ -355,8 +400,8 @@ class ItvApp(App[None]):
             # starting and this callback firing.
             if self._selected_item_id != item_id:
                 return
-            fresh_item = item_repo.get_item(self.tui_ctx.conn, item_id)  # type: ignore[arg-type]
-            fresh_comments = comment_repo.list_comments(self.tui_ctx.conn, item_id)  # type: ignore[arg-type]
+            fresh_item = item_repo.get_item(self.tui_ctx.conn, item_id)
+            fresh_comments = comment_repo.list_comments(self.tui_ctx.conn, item_id)
             self.query_one(ItemDetail).show(fresh_item, fresh_comments)
             chat = self.query_one(ChatPane)
             chat.note(
@@ -371,7 +416,7 @@ class ItvApp(App[None]):
         self.call_from_thread(apply)
 
     def _reload_tree(self) -> None:
-        items = item_repo.list_items(self.tui_ctx.conn)  # type: ignore[arg-type]
+        items = item_repo.list_items(self.tui_ctx.conn)
         self.query_one(ItemTree).load_items(items)
 
     def _provider_key(self) -> str:
@@ -418,21 +463,32 @@ class ItvApp(App[None]):
         bar.scope_label = self.tui_ctx.scope_key
         bar.active_view = self.tui_ctx.scope_key
         bar.read_only = self.tui_ctx.read_only
+        bar.tooltip = (
+            "Session status: provider, active view, sync health, streaming, cost, and read-only mode."
+        )
+
+    def _apply_tooltips(self) -> None:
+        with contextlib.suppress(Exception):
+            self.query_one("#filter", Input).tooltip = (
+                "Filter by title, description, or comments. Press Enter to keep the current results."
+            )
+        for toggle in self.query(FullscreenToggle):
+            toggle.tooltip = "Maximize or restore this pane."
 
     def on_item_selected(self, message: ItemSelected) -> None:
-        item = item_repo.get_item(self.tui_ctx.conn, message.item_id)  # type: ignore[arg-type]
-        comments = comment_repo.list_comments(self.tui_ctx.conn, message.item_id)  # type: ignore[arg-type]
+        item = item_repo.get_item(self.tui_ctx.conn, message.item_id)
+        comments = comment_repo.list_comments(self.tui_ctx.conn, message.item_id)
         self.query_one(ItemDetail).show(item, comments)
         chat = self.query_one(ChatPane)
         chat.bind_item(item)
         self._selected_item_id = item.id if item else None
         self._reset_cost_display()
         if item is not None:
-            active = conversation_repo.get_active_for_item(self.tui_ctx.conn, item.id)  # type: ignore[arg-type]
+            active = conversation_repo.get_active_for_item(self.tui_ctx.conn, item.id)
             if active is None:
                 chat.show_history([])
             else:
-                history = conversation_service.history(self.tui_ctx.conn, active.id)  # type: ignore[arg-type]
+                history = conversation_service.history(self.tui_ctx.conn, active.id)
                 chat.show_history(history)
             # Fetch fresh details (attachments, up-to-date description, comments)
             # from the provider in the background — the WIQL sync batch can't carry
@@ -451,8 +507,8 @@ class ItvApp(App[None]):
         except Exception:
             log.exception("detail hydrate failed for %s", item_id)
             return
-        item_repo.upsert_item(self.tui_ctx.conn, fresh)  # type: ignore[arg-type]
-        comment_repo.replace_comments_for_item(self.tui_ctx.conn, item_id, fresh_comments)  # type: ignore[arg-type]
+        item_repo.upsert_item(self.tui_ctx.conn, fresh)
+        comment_repo.replace_comments_for_item(self.tui_ctx.conn, item_id, fresh_comments)
         # Only repaint if the user hasn't moved on to another item.
         def paint() -> None:
             if self._selected_item_id == item_id:
@@ -472,6 +528,18 @@ class ItvApp(App[None]):
             return
         self._apply_filter(event.value or "")
 
+    def on_key(self, event: events.Key) -> None:
+        filter_input = self.query_one("#filter", Input)
+        tree = self.query_one(ItemTree)
+        if event.key == "down" and self.focused is filter_input:
+            self._move_from_filter_to_tree()
+            event.stop()
+            event.prevent_default()
+            return
+        if event.key == "up" and self.focused is tree and self._move_from_tree_to_filter():
+            event.stop()
+            event.prevent_default()
+
     def _apply_filter(self, raw: str) -> None:
         """Re-render the tree for the given filter query.
 
@@ -481,14 +549,34 @@ class ItvApp(App[None]):
         query = raw.strip()
         tree = self.query_one(ItemTree)
         if not query:
-            tree.load_items(item_repo.list_items(self.tui_ctx.conn))  # type: ignore[arg-type]
+            tree.load_items(item_repo.list_items(self.tui_ctx.conn))
             return
-        ids = search_repo.search(self.tui_ctx.conn, query)  # type: ignore[arg-type]
+        ids = search_repo.search(self.tui_ctx.conn, query)
         if not ids:
             tree.load_items([])
             return
-        by_id = {i.id: i for i in item_repo.list_items(self.tui_ctx.conn)}  # type: ignore[arg-type]
+        by_id = {i.id: i for i in item_repo.list_items(self.tui_ctx.conn)}
         tree.load_items([by_id[iid] for iid in ids if iid in by_id])
+
+    def _move_from_filter_to_tree(self) -> None:
+        tree = self.query_one(ItemTree)
+        tree.focus()
+        if tree.cursor_node is not None and tree.cursor_line >= 0:
+            tree.action_cursor_down()
+            return
+        first_item = tree.first_visible_item_node()
+        if first_item is not None:
+            tree.move_cursor(first_item, animate=False)
+
+    def _move_from_tree_to_filter(self) -> bool:
+        tree = self.query_one(ItemTree)
+        first_item = tree.first_visible_item_node()
+        if first_item is None:
+            return False
+        if tree.cursor_node is not first_item and tree.cursor_line > first_item.line:
+            return False
+        self.query_one("#filter", Input).focus()
+        return True
 
     def on_user_turn_request(self, event: UserTurnRequest) -> None:
         """User submitted text in the chat pane — drive the agent turn."""
@@ -526,7 +614,7 @@ class ItvApp(App[None]):
         self.call_from_thread(chat.begin_assistant)
         try:
             result = conversation_service.send_user_message(
-                self.tui_ctx.conn,  # type: ignore[arg-type]
+                self.tui_ctx.conn,
                 self._agent,
                 item_id,
                 text,
@@ -552,7 +640,7 @@ class ItvApp(App[None]):
         self.notify("Syncing from Azure DevOps…")
         try:
             summary = sync_service.refresh(
-                self.tui_ctx.conn,  # type: ignore[arg-type]
+                self.tui_ctx.conn,
                 self.tui_ctx.provider,
                 self.tui_ctx.scope_key,
                 self.tui_ctx.scope,
@@ -712,14 +800,14 @@ class ItvApp(App[None]):
         def on_result(result: QuickOpenResult | None) -> None:
             if result is None or result.item_id is None:
                 return
-            item = item_repo.get_item(self.tui_ctx.conn, result.item_id)  # type: ignore[arg-type]
+            item = item_repo.get_item(self.tui_ctx.conn, result.item_id)
             if item is None:
                 self.notify(f"No item '{result.item_id}' in cache.", severity="warning")
                 return
             # Reuse the tree's message path so on_item_selected runs unchanged.
             self.post_message(ItemSelected(item.id))
 
-        self.push_screen(QuickOpenModal(conn=self.tui_ctx.conn), on_result)  # type: ignore[arg-type]
+        self.push_screen(QuickOpenModal(conn=self.tui_ctx.conn), on_result)
 
     def action_pick_theme(self) -> None:
         """Open the theme picker modal."""
@@ -740,19 +828,13 @@ class ItvApp(App[None]):
             self.theme = saved
 
     def action_show_help(self) -> None:
-        self.notify(
-            "arrows navigate • Tab pane cycle • Enter open • Esc back • / filter • "
-            "Ctrl+P palette • :id quick-open • Ctrl+F fullscreen pane • Ctrl+←/→ resize • "
-            "Ctrl+T theme • o browser • r refresh • n new item • t new thread • "
-            "d review pending • q quit",
-            title="Keys",
-        )
+        self.push_screen(HelpModal())
 
     def action_open_in_browser(self) -> None:
         if self._selected_item_id is None:
             self.notify("Select an item first.", severity="warning")
             return
-        item = item_repo.get_item(self.tui_ctx.conn, self._selected_item_id)  # type: ignore[arg-type]
+        item = item_repo.get_item(self.tui_ctx.conn, self._selected_item_id)
         if item is None or not item.url:
             self.notify("This item has no URL on file.", severity="warning")
             return
@@ -762,10 +844,10 @@ class ItvApp(App[None]):
     def action_new_thread(self) -> None:
         if self._selected_item_id is None:
             return
-        conversation_service.new_thread(self.tui_ctx.conn, self._selected_item_id)  # type: ignore[arg-type]
+        conversation_service.new_thread(self.tui_ctx.conn, self._selected_item_id)
         chat = self.query_one(ChatPane)
         chat.show_history([])
-        chat.set_status("new thread started")
+        chat.set_status("")
         self._reset_cost_display()
 
     def _reset_cost_display(self) -> None:
@@ -798,14 +880,18 @@ class ItvApp(App[None]):
         )
 
     def _run_suggestion(self, item_id: str) -> None:
-        item = item_repo.get_item(self.tui_ctx.conn, item_id)  # type: ignore[arg-type]
+        item = item_repo.get_item(self.tui_ctx.conn, item_id)
         if item is None:
             self.call_from_thread(self.notify, f"Item {item_id} is gone.", severity="error")
             return
+        llm = self.tui_ctx.llm
+        if llm is None:
+            self.call_from_thread(self.notify, "Chat/LLM is disabled.", severity="warning")
+            return
         try:
             suggestion = suggestion_service.suggest_next_action(
-                self.tui_ctx.conn,  # type: ignore[arg-type]
-                self.tui_ctx.llm,  # type: ignore[arg-type]
+                self.tui_ctx.conn,
+                llm,
                 item,
             )
         except SuggestionError as e:
@@ -826,7 +912,7 @@ class ItvApp(App[None]):
                 return
             try:
                 staged = suggestion_service.stage_suggestion(
-                    self.tui_ctx.conn,  # type: ignore[arg-type]
+                    self.tui_ctx.conn,
                     suggestion,
                 )
             except Exception as e:
@@ -865,7 +951,31 @@ class ItvApp(App[None]):
             self._proposals.add(proposal, source="form")
             self._open_next_pending()
 
-        self.push_screen(NewItemModal(self.tui_ctx.conn), on_result)  # type: ignore[arg-type]
+        self.push_screen(
+            NewItemModal(
+                self.tui_ctx.conn,
+                default_kind=self.tui_ctx.default_new_item_kind,
+            ),
+            on_result,
+        )
+
+    def action_open_settings(self) -> None:
+        if self.tui_ctx.paths is None or self.tui_ctx.config is None:
+            self.notify("Settings are unavailable in this session.", severity="warning")
+            return
+
+        def on_result(result: Config | None) -> None:
+            if result is None:
+                return
+            self._apply_saved_config(result)
+
+        self.push_screen(SettingsModal(self.tui_ctx.paths, self.tui_ctx.config), on_result)
+
+    def action_edit_prompts(self) -> None:
+        if self.tui_ctx.paths is None:
+            self.notify("Prompt library is unavailable in this session.", severity="warning")
+            return
+        self.push_screen(PromptLibraryModal(self.tui_ctx.paths))
 
     def action_transition(self, intent_value: str) -> None:
         """Stage a transition for the selected item and open the diff modal.
@@ -885,7 +995,7 @@ class ItvApp(App[None]):
             return
         try:
             proposal = mutation_service.propose_transition(
-                self.tui_ctx.conn,  # type: ignore[arg-type]
+                self.tui_ctx.conn,
                 self._selected_item_id,
                 intent,
             )
@@ -959,7 +1069,7 @@ class ItvApp(App[None]):
             # when confirming so description-patch edits flow through.
             try:
                 result = mutation_service.confirm(
-                    self.tui_ctx.conn,  # type: ignore[arg-type]
+                    self.tui_ctx.conn,
                     self.tui_ctx.provider,
                     edited,
                 )
@@ -978,6 +1088,37 @@ class ItvApp(App[None]):
                 self._open_next_pending()
 
         self.push_screen(DiffModal(pending.proposal, source=pending.source), on_decision)
+
+    def _apply_saved_config(self, config: Config) -> None:
+        """Update the in-memory settings after the modal persists config.toml.
+
+        Display and form behavior can refresh in-session. Provider wiring and
+        recurring timers are read at startup, so those changes take effect on
+        the next app launch.
+        """
+        self.tui_ctx.config = config
+        self.tui_ctx.compaction_threshold_tokens = config.llm.compaction_threshold_tokens
+        self.tui_ctx.external_watch_interval_seconds = config.llm.external_watch_interval_seconds
+        self.tui_ctx.background_sync_interval_seconds = config.sync.background_interval_seconds
+        self.tui_ctx.background_sync_min_interval_by_provider = dict(
+            config.sync.min_interval_seconds_by_provider
+        )
+        self.tui_ctx.stale_threshold_days = config.stale.threshold_days
+        self.tui_ctx.stale_threshold_by_provider = dict(config.stale.threshold_days_by_provider)
+        self.tui_ctx.default_new_item_kind = ItemKind(config.ui.default_new_item_kind)
+        self.tui_ctx.show_acceptance_criteria = config.ui.show_acceptance_criteria
+        self.query_one(ItemTree).stale_threshold_days = self._resolved_stale_threshold()
+        self.query_one(ChatPane).set_show_acceptance_criteria(
+            config.ui.show_acceptance_criteria
+        )
+        if config.active_scope in config.scopes:
+            self.action_switch_view(config.active_scope)
+        else:
+            self._reload_tree()
+        self.notify(
+            "Settings saved. View and prompt behavior updated now; provider and timer changes apply on the next launch.",
+            severity="information",
+        )
 
     def _open_batch_review(self) -> None:
         """Open the batch modal with a snapshot of every pending proposal.
@@ -1005,7 +1146,7 @@ class ItvApp(App[None]):
                     continue
                 try:
                     mutation_service.confirm(
-                        self.tui_ctx.conn,  # type: ignore[arg-type]
+                        self.tui_ctx.conn,
                         self.tui_ctx.provider,
                         popped.proposal,
                     )

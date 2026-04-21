@@ -10,7 +10,9 @@ the app.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import ClassVar
 
+from rich.text import Text
 from textual.reactive import reactive
 from textual.widgets import Static
 
@@ -57,6 +59,12 @@ def _format_countdown(target: datetime | None) -> str:
 class StatusBar(Static):
     """One-line status bar docked at the bottom of the app."""
 
+    COMPONENT_CLASSES: ClassVar[set[str]] = {
+        "status-bar--warning",
+        "status-bar--error",
+        "status-bar--accent",
+    }
+
     DEFAULT_CSS = """
     StatusBar {
         dock: bottom;
@@ -64,6 +72,18 @@ class StatusBar(Static):
         background: $panel;
         color: $text-muted;
         padding: 0 1;
+    }
+    StatusBar > .status-bar--warning {
+        color: $text-warning;
+        text-style: bold;
+    }
+    StatusBar > .status-bar--error {
+        color: $text-error;
+        text-style: bold;
+    }
+    StatusBar > .status-bar--accent {
+        color: $text-accent;
+        text-style: bold;
     }
     """
 
@@ -77,24 +97,31 @@ class StatusBar(Static):
     cost_cents: reactive[int] = reactive(0)
     read_only: reactive[bool] = reactive(False)
 
-    def render(self) -> str:
-        parts: list[str] = []
-        parts.append(f"provider: {self.provider_name}")
-        parts.append(f"scope: {self.scope_label}")
+    def render(self) -> Text:
+        out = Text()
+
+        def append_part(text: str, component: str | None = None) -> None:
+            if out:
+                out.append(" · ")
+            style = self.get_component_rich_style(component, partial=True) if component else None
+            out.append(text, style=style)
+
+        append_part(self.provider_name)
+        append_part(self.scope_label)
         if self.active_view and self.active_view != self.scope_label:
-            parts.append(f"view: {self.active_view}")
-        parts.append(f"sync: {_format_relative(self.last_sync)}")
+            append_part(self.active_view)
+        append_part(f"synced {_format_relative(self.last_sync)}")
         if self.next_sync_at is not None:
-            parts.append(f"next: {_format_countdown(self.next_sync_at)}")
+            append_part(f"next {_format_countdown(self.next_sync_at)}")
         if self.offline:
-            parts.append("[b red]offline[/]")
+            append_part("offline", "status-bar--error")
         if self.streaming:
-            parts.append("[b yellow]streaming[/]")
+            append_part("streaming", "status-bar--warning")
         if self.cost_cents > 0:
-            parts.append(f"cost: ${self.cost_cents / 100:.2f}")
+            append_part(f"${self.cost_cents / 100:.2f}")
         if self.read_only:
-            parts.append("[b magenta]READ-ONLY[/]")
-        return " · ".join(parts)
+            append_part("READ-ONLY", "status-bar--accent")
+        return out
 
     def set_last_sync_now(self) -> None:
         self.last_sync = datetime.now(UTC)

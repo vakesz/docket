@@ -48,38 +48,86 @@ class ChatPane(Vertical):
     """
 
     DEFAULT_CSS = """
-    ChatPane { padding: 0; }
-    ChatPane #chat-title { padding: 0 1; color: $text-muted; height: 1; }
+    ChatPane {
+        padding: 0;
+        background: transparent;
+    }
+    ChatPane #chat-title {
+        padding: 0 2 0 2;
+        color: $text-muted;
+        height: auto;
+    }
     ChatPane #criteria {
         height: auto;
         max-height: 8;
-        padding: 0 1;
-        border-bottom: dashed $panel-lighten-2;
+        margin: 0 2 1 2;
+        padding: 0 1 1 1;
+        border: round $panel-lighten-1;
+        background: $boost;
         display: none;
     }
     ChatPane #criteria.has-items { display: block; }
-    ChatPane #criteria-title { color: $text-muted; height: 1; }
-    ChatPane #ledger { padding: 0 1; color: $text-muted; height: 1; }
-    ChatPane #transcript { height: 1fr; padding: 1 1; }
-    ChatPane #prompt { dock: bottom; height: 3; border: none; background: $surface; }
-    ChatPane .msg-user { color: $accent; text-style: bold; padding-bottom: 1; }
-    ChatPane .msg-assistant { padding-bottom: 1; }
-    ChatPane .msg-tool { color: $warning; padding-bottom: 1; }
-    ChatPane .msg-system { color: $text-muted; padding-bottom: 1; }
+    ChatPane #criteria-title {
+        color: $text-muted;
+        height: 1;
+    }
+    ChatPane #ledger {
+        padding: 0 2 1 2;
+        color: $text-muted;
+        height: auto;
+    }
+    ChatPane #transcript {
+        height: 1fr;
+        margin: 0 2 1 2;
+        padding: 0 0 1 0;
+        border: none;
+        background: transparent;
+    }
+    ChatPane #prompt {
+        dock: bottom;
+        height: 3;
+        margin: 0 2 1 2;
+        border: round $panel-lighten-1;
+        background: $boost;
+        color: $text;
+    }
+    ChatPane #prompt:focus {
+        border: round $accent;
+    }
+    ChatPane .msg-user {
+        color: $accent;
+        text-style: bold;
+        padding: 0 1 1 0;
+    }
+    ChatPane .msg-assistant {
+        color: $text;
+        padding: 0 1 1 0;
+        background: transparent;
+    }
+    ChatPane .msg-tool {
+        color: $text-muted;
+        padding: 0 1 1 0;
+    }
+    ChatPane .msg-system {
+        color: $text-muted;
+        padding: 0 1 1 0;
+    }
     """
 
-    def __init__(self, *, id: str | None = None) -> None:
+    def __init__(self, *, id: str | None = None, show_acceptance_criteria: bool = True) -> None:
         super().__init__(id=id)
         self._item: Item | None = None
         self._active_assistant: Static | None = None
         self._active_text: str = ""
+        self._show_acceptance_criteria = show_acceptance_criteria
+        self.tooltip = "Chat about the selected item, stage proposals, and review acceptance criteria."
 
     def compose(self) -> ComposeResult:
-        yield Static("Chat — select an item", id="chat-title")
+        yield Static("Select a ticket", id="chat-title")
         with VerticalScroll(id="criteria"):
             yield Static("[b]acceptance criteria[/b]", id="criteria-title")
         yield VerticalScroll(id="transcript")
-        yield Static("tokens in: 0  out: 0", id="ledger")
+        yield Static("", id="ledger")
         yield Input(placeholder="Ask about this ticket… (enter to send)", id="prompt")
 
     # -- public API used by the app -----------------------------------------
@@ -92,13 +140,16 @@ class ChatPane(Vertical):
         transcript.remove_children()
         title = self.query_one("#chat-title", Static)
         prompt = self.query_one("#prompt", Input)
+        prompt.tooltip = "Press Enter to send the current message."
         if item is None:
-            title.update("Chat — select an item")
+            title.update("Select a ticket")
             prompt.disabled = True
+            self.set_status("")
             self._render_criteria([])
             return
-        title.update(f"Chat · {item.id} — {item.title}")
+        title.update(f"{item.id} · {item.kind.value} · {item.state.value}")
         prompt.disabled = False
+        self.set_status("")
         self._render_criteria(extract_acceptance_criteria(item.description_md or ""))
 
     def _render_criteria(self, criteria: list[AcceptanceCriterion]) -> None:
@@ -110,7 +161,7 @@ class ChatPane(Vertical):
         for child in list(container.children):
             if child.id != "criteria-title":
                 child.remove()
-        if not criteria:
+        if not self._show_acceptance_criteria or not criteria:
             container.remove_class("has-items")
             return
         container.add_class("has-items")
@@ -179,6 +230,13 @@ class ChatPane(Vertical):
 
     def set_status(self, text: str) -> None:
         self.query_one("#ledger", Static).update(text)
+
+    def set_show_acceptance_criteria(self, enabled: bool) -> None:
+        self._show_acceptance_criteria = enabled
+        if self._item is None:
+            self._render_criteria([])
+            return
+        self._render_criteria(extract_acceptance_criteria(self._item.description_md or ""))
 
     # -- events --------------------------------------------------------------
 
