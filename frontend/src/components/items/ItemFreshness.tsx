@@ -25,7 +25,7 @@ export function FreshnessStamp({
   className?: string;
 }) {
   if (!updatedAt) {
-    return <span className={cn("text-zinc-400", className)}>—</span>;
+    return <span className={cn("text-fg-faint", className)}>—</span>;
   }
 
   const tone = freshnessTone(updatedAt, thresholdDays);
@@ -49,10 +49,10 @@ export function FreshnessStamp({
 function toneClassName(tone: FreshnessTone): string {
   switch (tone) {
     case "warning":
-      return "bg-amber-100/80 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300";
+      return "bg-warning-bg text-warning-fg";
     case "stale":
-      return "bg-rose-100/80 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300";
+      return "bg-danger-bg text-danger-fg";
     default:
-      return "text-zinc-400";
+      return "text-fg-faint";
   }
 }

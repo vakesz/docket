@@ -46,19 +46,19 @@ export function SetupWizard() {
   });
 
   return (
-    <div className="flex min-h-screen flex-col bg-zinc-50 dark:bg-zinc-950">
-      <header className="border-b border-zinc-200 bg-white px-6 py-4 dark:border-zinc-800 dark:bg-zinc-950">
-        <h1 className="font-mono text-sm font-semibold uppercase tracking-[0.2em] text-zinc-900 dark:text-zinc-100">
+    <div className="flex min-h-screen flex-col bg-bg">
+      <header className="border-b border-border bg-surface px-6 py-4">
+        <h1 className="font-mono text-sm font-semibold uppercase tracking-[0.2em] text-fg">
           Docket · First-time setup
         </h1>
         {status.data?.config_path && (
-          <p className="mt-1 font-mono text-[11px] text-zinc-500">
+          <p className="mt-1 font-mono text-[11px] text-fg-muted">
             config will be written to {status.data.config_path}
           </p>
         )}
       </header>
 
-      <div className="flex items-center gap-2 border-b border-zinc-200 bg-white px-6 py-2 dark:border-zinc-800 dark:bg-zinc-950">
+      <div className="flex items-center gap-2 border-b border-border bg-surface px-6 py-2">
         <StepDot active={step === "welcome"} label="Welcome" />
         <Arrow />
         <StepDot active={step === "provider"} label="Provider" />
@@ -101,7 +101,7 @@ function StepDot({ active, label }: { active: boolean; label: string }) {
     <span
       className={cn(
         "font-mono text-[11px] uppercase tracking-wider",
-        active ? "text-accent" : "text-zinc-500",
+        active ? "text-accent" : "text-fg-muted",
       )}
     >
       {label}
@@ -110,18 +110,18 @@ function StepDot({ active, label }: { active: boolean; label: string }) {
 }
 
 function Arrow() {
-  return <span className="font-mono text-[10px] text-zinc-400">→</span>;
+  return <span className="font-mono text-[10px] text-fg-faint">→</span>;
 }
 
 function WelcomeStep({ onNext }: { onNext: () => void }) {
   return (
-    <div className="flex flex-col gap-4 rounded border border-zinc-200 bg-white p-6 text-sm dark:border-zinc-800 dark:bg-zinc-950">
+    <div className="flex flex-col gap-4 rounded border border-border bg-surface p-6 text-sm text-fg">
       <p>
         Docket is ready to configure. We'll connect a work-item provider (GitHub, Azure DevOps, or a
         demo stub), optionally wire an Azure OpenAI deployment for chat, and then write your{" "}
-        <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-900">config.toml</code>.
+        <code className="rounded bg-surface-alt px-1 text-fg">config.toml</code>.
       </p>
-      <p className="text-zinc-500">
+      <p className="text-fg-muted">
         The backend restarts automatically once setup is complete — the page will reload shortly
         after.
       </p>
@@ -129,7 +129,7 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
         <button
           type="button"
           onClick={onNext}
-          className="rounded bg-accent px-4 py-1.5 text-sm font-semibold text-white hover:bg-accent/90"
+          className="rounded bg-accent px-4 py-1.5 text-sm font-semibold text-accent-fg hover:bg-accent/90"
         >
           Start
         </button>
@@ -164,11 +164,11 @@ function ProviderStep({
   }, [selected, draft.config]);
 
   return (
-    <div className="flex flex-col gap-4 rounded border border-zinc-200 bg-white p-6 text-sm dark:border-zinc-800 dark:bg-zinc-950">
+    <div className="flex flex-col gap-4 rounded border border-border bg-surface p-6 text-sm text-fg">
       <section className="flex flex-col gap-2">
         <Label>Provider type</Label>
         {loading ? (
-          <span className="text-xs text-zinc-500">Loading provider types…</span>
+          <span className="text-xs text-fg-muted">Loading provider types…</span>
         ) : (
           <div className="grid gap-2 sm:grid-cols-2">
             {types.map((t) => (
@@ -180,12 +180,12 @@ function ProviderStep({
                   "rounded border p-3 text-left",
                   draft.type === t.id
                     ? "border-accent bg-accent/5"
-                    : "border-zinc-200 hover:border-zinc-300 dark:border-zinc-800",
+                    : "border-border hover:border-fg-faint",
                 )}
               >
                 <div className="font-medium">{t.display}</div>
                 {(t.requires_cli?.length ?? 0) > 0 && (
-                  <div className="mt-1 font-mono text-[10px] uppercase tracking-wider text-zinc-500">
+                  <div className="mt-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
                     needs: {t.requires_cli?.join(" ")}
                   </div>
                 )}
@@ -228,39 +228,31 @@ function ProviderStep({
       ))}
 
       {selected && (
-        <section className="flex items-center gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+        <section className="flex items-center gap-2 border-t border-border pt-3">
           <button
             type="button"
             disabled={!fieldsValid || test.isPending}
             onClick={() => test.mutate({ type: selected.id, config: draft.config })}
-            className="rounded border border-zinc-200 px-3 py-1 text-xs hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+            className="rounded border border-border px-3 py-1 text-xs text-fg hover:bg-surface-alt"
           >
             {test.isPending ? "Testing…" : "Test connection"}
           </button>
-          {test.data?.ok && (
-            <span className="text-xs text-emerald-600 dark:text-emerald-400">OK</span>
-          )}
+          {test.data?.ok && <span className="text-xs text-success">OK</span>}
           {test.data?.ok === false && (
-            <span className="text-xs text-rose-600 dark:text-rose-400">
-              {test.data.error ?? "Failed"}
-            </span>
+            <span className="text-xs text-danger">{test.data.error ?? "Failed"}</span>
           )}
         </section>
       )}
 
       <div className="flex justify-between">
-        <button
-          type="button"
-          onClick={onBack}
-          className="text-xs text-zinc-500 hover:text-zinc-700"
-        >
+        <button type="button" onClick={onBack} className="text-xs text-fg-muted hover:text-fg">
           ← Back
         </button>
         <button
           type="button"
           disabled={!selected || !fieldsValid}
           onClick={onNext}
-          className="rounded bg-accent px-4 py-1.5 text-sm font-semibold text-white hover:bg-accent/90 disabled:opacity-50"
+          className="rounded bg-accent px-4 py-1.5 text-sm font-semibold text-accent-fg hover:bg-accent/90 disabled:opacity-50"
         >
           Next
         </button>
@@ -284,7 +276,7 @@ function LlmStep({
   const canTest = !!draft.endpoint.trim() && !!draft.api_key.trim() && !!draft.deployment.trim();
 
   return (
-    <div className="flex flex-col gap-4 rounded border border-zinc-200 bg-white p-6 text-sm dark:border-zinc-800 dark:bg-zinc-950">
+    <div className="flex flex-col gap-4 rounded border border-border bg-surface p-6 text-sm text-fg">
       <label className="flex items-center gap-2 text-xs">
         <input
           type="checkbox"
@@ -329,7 +321,7 @@ function LlmStep({
               />
             </div>
           </section>
-          <section className="flex items-center gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+          <section className="flex items-center gap-2 border-t border-border pt-3">
             <button
               type="button"
               disabled={!canTest || test.isPending}
@@ -341,34 +333,26 @@ function LlmStep({
                   api_version: draft.api_version,
                 })
               }
-              className="rounded border border-zinc-200 px-3 py-1 text-xs hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+              className="rounded border border-border px-3 py-1 text-xs text-fg hover:bg-surface-alt"
             >
               {test.isPending ? "Testing…" : "Test LLM"}
             </button>
-            {test.data?.ok && (
-              <span className="text-xs text-emerald-600 dark:text-emerald-400">OK</span>
-            )}
+            {test.data?.ok && <span className="text-xs text-success">OK</span>}
             {test.data?.ok === false && (
-              <span className="text-xs text-rose-600 dark:text-rose-400">
-                {test.data.error ?? "Failed"}
-              </span>
+              <span className="text-xs text-danger">{test.data.error ?? "Failed"}</span>
             )}
           </section>
         </>
       )}
 
       <div className="flex justify-between">
-        <button
-          type="button"
-          onClick={onBack}
-          className="text-xs text-zinc-500 hover:text-zinc-700"
-        >
+        <button type="button" onClick={onBack} className="text-xs text-fg-muted hover:text-fg">
           ← Back
         </button>
         <button
           type="button"
           onClick={onNext}
-          className="rounded bg-accent px-4 py-1.5 text-sm font-semibold text-white hover:bg-accent/90"
+          className="rounded bg-accent px-4 py-1.5 text-sm font-semibold text-accent-fg hover:bg-accent/90"
         >
           Next
         </button>
@@ -417,7 +401,7 @@ function ReviewStep({
 
   if (complete.data) {
     return (
-      <div className="flex flex-col gap-3 rounded border border-emerald-300 bg-emerald-50 p-6 text-sm dark:border-emerald-900 dark:bg-emerald-950/40">
+      <div className="flex flex-col gap-3 rounded border border-success bg-success-bg p-6 text-sm text-success-fg">
         <div className="font-semibold">Configuration written.</div>
         <div className="font-mono text-[11px]">{complete.data.config_path}</div>
         {complete.data.initial_sync && (
@@ -436,40 +420,36 @@ function ReviewStep({
   }
 
   return (
-    <div className="flex flex-col gap-4 rounded border border-zinc-200 bg-white p-6 text-sm dark:border-zinc-800 dark:bg-zinc-950">
-      <section className="rounded border border-zinc-200 p-3 dark:border-zinc-800">
-        <div className="mb-1 font-mono text-[11px] uppercase tracking-wider text-zinc-500">
+    <div className="flex flex-col gap-4 rounded border border-border bg-surface p-6 text-sm text-fg">
+      <section className="rounded border border-border p-3">
+        <div className="mb-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
           Provider
         </div>
         <div>
           {provider.display_name}{" "}
-          <span className="font-mono text-[10px] text-zinc-500">({provider.type})</span>
+          <span className="font-mono text-[10px] text-fg-muted">({provider.type})</span>
         </div>
       </section>
-      <section className="rounded border border-zinc-200 p-3 dark:border-zinc-800">
-        <div className="mb-1 font-mono text-[11px] uppercase tracking-wider text-zinc-500">LLM</div>
+      <section className="rounded border border-border p-3">
+        <div className="mb-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">LLM</div>
         <div>{llm.skip ? "Disabled" : `${llm.deployment} @ ${llm.endpoint}`}</div>
       </section>
 
       {complete.error && (
-        <div className="rounded border border-rose-300 bg-rose-50 p-3 text-xs text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">
+        <div className="rounded border border-danger bg-danger-bg p-3 text-xs text-danger-fg">
           {complete.error.message}
         </div>
       )}
 
       <div className="flex justify-between">
-        <button
-          type="button"
-          onClick={onBack}
-          className="text-xs text-zinc-500 hover:text-zinc-700"
-        >
+        <button type="button" onClick={onBack} className="text-xs text-fg-muted hover:text-fg">
           ← Back
         </button>
         <button
           type="button"
           disabled={complete.isPending}
           onClick={submit}
-          className="rounded bg-accent px-4 py-1.5 text-sm font-semibold text-white hover:bg-accent/90 disabled:opacity-50"
+          className="rounded bg-accent px-4 py-1.5 text-sm font-semibold text-accent-fg hover:bg-accent/90 disabled:opacity-50"
         >
           {complete.isPending ? "Writing config…" : "Finish setup"}
         </button>
@@ -484,22 +464,22 @@ function ReloadTimer() {
     const id = window.setTimeout(() => window.location.reload(), 6000);
     return () => window.clearTimeout(id);
   }, []);
-  return <div className="font-mono text-[11px] text-zinc-500">Reloading in ~6 seconds…</div>;
+  return <div className="font-mono text-[11px] text-fg-muted">Reloading in ~6 seconds…</div>;
 }
 
 function Label({ children, required }: { children: React.ReactNode; required?: boolean }) {
   // Rendered above its TextInput sibling rather than wrapping it; a plain
   // span is sufficient since each field has a single labeled control.
   return (
-    <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">
+    <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
       {children}
-      {required && <span className="ml-1 text-rose-500">*</span>}
+      {required && <span className="ml-1 text-danger">*</span>}
     </span>
   );
 }
 
 function HelpText({ children }: { children: React.ReactNode }) {
-  return <span className="text-xs text-zinc-500">{children}</span>;
+  return <span className="text-xs text-fg-muted">{children}</span>;
 }
 
 function TextInput({
@@ -519,7 +499,7 @@ function TextInput({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className="w-full rounded border border-zinc-200 bg-white px-2 py-1 text-sm focus:border-accent focus:outline-none dark:border-zinc-800 dark:bg-zinc-950"
+      className="w-full rounded border border-border bg-bg px-2 py-1 text-sm text-fg focus:border-accent focus:outline-none"
     />
   );
 }

@@ -9,14 +9,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   if (status.isPending) {
     return (
-      <div className="flex h-screen items-center justify-center text-sm text-zinc-500">
+      <div className="flex h-screen items-center justify-center text-sm text-fg-faint">
         Connecting…
       </div>
     );
   }
   if (status.error) {
     return (
-      <div className="flex h-screen items-center justify-center p-6 text-sm text-rose-600 dark:text-rose-400">
+      <div className="flex h-screen items-center justify-center p-6 text-sm text-danger">
         Failed to reach backend: {status.error.message}
       </div>
     );

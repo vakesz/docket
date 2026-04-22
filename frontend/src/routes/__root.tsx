@@ -16,14 +16,22 @@ interface RouterContext {
   queryClient: QueryClient;
 }
 
-// Applied before React hydrates so the <html> class matches the user's theme
-// on first paint. Reads the same localStorage key as ThemeToggle; when absent
-// (or set to "system"), follows `prefers-color-scheme`.
+// Applied before React hydrates so <html data-theme> and the `dark` class
+// match the user's saved theme on first paint. Mirrors lib/theme.ts logic
+// (kept inline + duplicated because this script runs before any module
+// loads). Keep the THEMES_DARK list in sync with `THEMES` in lib/theme.ts.
 const THEME_BOOTSTRAP = `(() => {
   try {
+    var DARK = ["dark","nord","dracula","gruvbox-dark","tokyo-night","catppuccin-mocha"];
+    var VALID = ["system","light","dark","nord","dracula","gruvbox-dark","gruvbox-light","tokyo-night","catppuccin-mocha","catppuccin-latte","solarized-light"];
     var s = localStorage.getItem("docket.theme");
-    var d = s === "dark" || ((s !== "light") && matchMedia("(prefers-color-scheme: dark)").matches);
-    document.documentElement.classList.toggle("dark", d);
+    var id = (s && VALID.indexOf(s) !== -1) ? s : "system";
+    var resolved = id === "system"
+      ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+      : id;
+    var root = document.documentElement;
+    root.setAttribute("data-theme", resolved);
+    root.classList.toggle("dark", DARK.indexOf(resolved) !== -1);
   } catch (_) {}
 })();`;
 

@@ -112,14 +112,14 @@ export function ItemsList({ selectedId }: Props) {
   });
 
   return (
-    <div className="flex h-full flex-col bg-white dark:bg-zinc-950">
-      <div className="flex flex-col gap-2 border-b border-zinc-200 p-2 dark:border-zinc-800">
+    <div className="flex h-full flex-col bg-bg">
+      <div className="flex flex-col gap-2 border-b border-border p-2">
         <input
           type="search"
           placeholder="Filter by title, id, tag…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          className="w-full rounded border border-zinc-200 bg-white px-2 py-1 text-sm focus:border-accent focus:outline-none dark:border-zinc-800 dark:bg-zinc-950"
+          className="w-full rounded border border-border bg-bg px-2 py-1 text-sm text-fg focus:border-accent focus:outline-none"
         />
         <div className="flex flex-wrap items-center gap-1">
           {visibleKinds.length > 2 &&
@@ -130,9 +130,7 @@ export function ItemsList({ selectedId }: Props) {
                 onClick={() => setKind(k)}
                 className={cn(
                   "rounded px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider",
-                  kind === k
-                    ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                    : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900",
+                  kind === k ? "bg-fg text-bg" : "text-fg-muted hover:bg-surface-alt",
                 )}
               >
                 {k === "all" ? "All" : formatKind(k)}
@@ -140,7 +138,7 @@ export function ItemsList({ selectedId }: Props) {
             ))}
           <label
             className={cn(
-              "flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-zinc-500",
+              "flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-fg-faint",
               visibleKinds.length > 2 && "ml-auto",
             )}
           >
@@ -162,8 +160,8 @@ export function ItemsList({ selectedId }: Props) {
               className={cn(
                 "rounded px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider",
                 stateBucket === b
-                  ? "bg-accent text-white"
-                  : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900",
+                  ? "bg-accent text-accent-fg"
+                  : "text-fg-muted hover:bg-surface-alt",
               )}
               title={
                 b === "open"
@@ -184,9 +182,7 @@ export function ItemsList({ selectedId }: Props) {
               onClick={() => setActiveTag(null)}
               className={cn(
                 "rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition-colors",
-                activeTag === null
-                  ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                  : "text-zinc-500 hover:bg-zinc-100 dark:text-zinc-500 dark:hover:bg-zinc-900",
+                activeTag === null ? "bg-fg text-bg" : "text-fg-faint hover:bg-surface-alt",
               )}
             >
               Any tag
@@ -205,8 +201,8 @@ export function ItemsList({ selectedId }: Props) {
                   className={cn(
                     "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[10px] lowercase tracking-wide transition-colors",
                     selected
-                      ? "bg-accent text-white"
-                      : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800",
+                      ? "bg-accent text-accent-fg"
+                      : "bg-surface-alt text-fg-muted hover:bg-surface",
                   )}
                   title={`${t} — ${n} item${n === 1 ? "" : "s"}`}
                 >
@@ -214,7 +210,7 @@ export function ItemsList({ selectedId }: Props) {
                   <span
                     className={cn(
                       "text-[9px] tabular-nums",
-                      selected ? "text-white/75" : "text-zinc-400 dark:text-zinc-500",
+                      selected ? "text-accent-fg/75" : "text-fg-faint",
                     )}
                   >
                     {n}
@@ -226,7 +222,7 @@ export function ItemsList({ selectedId }: Props) {
               <button
                 type="button"
                 onClick={() => setTagsExpanded((v) => !v)}
-                className="rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                className="rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-faint hover:bg-surface-alt"
               >
                 {tagsExpanded ? "Show less" : `+${tagCounts.length - tagCollapseLimit} more`}
               </button>
@@ -234,6 +230,31 @@ export function ItemsList({ selectedId }: Props) {
           </div>
         )}
       </div>
+
+      {pinned.data && pinned.data.length > 0 && (
+        <div className="border-b border-border bg-surface">
+          <div className="flex items-center gap-2 px-3 pt-2 pb-1 font-mono text-[10px] uppercase tracking-wider text-fg-faint">
+            <span className="text-accent">●</span>
+            <span>Pinned</span>
+            <span className="text-fg-faint">{pinned.data.length}</span>
+          </div>
+          {pinned.data.map((it) => (
+            <ItemRow
+              key={`pinned-${it.id}`}
+              item={it}
+              pinned
+              selected={selectedId === it.id}
+              staleThresholdDays={staleThresholdDays}
+              onClick={() =>
+                navigate({
+                  to: "/items/$itemId",
+                  params: { itemId: it.id },
+                })
+              }
+            />
+          ))}
+        </div>
+      )}
 
       <div ref={parentRef} className="flex-1 overflow-auto">
         {items.isPending ? (
@@ -312,17 +333,15 @@ function ItemRow({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex w-full flex-col gap-1 border-b border-zinc-100 px-3 py-2 text-left transition-colors",
-        "hover:bg-zinc-50 dark:border-zinc-900 dark:hover:bg-zinc-900",
-        selected && "bg-zinc-100 dark:bg-zinc-900",
-        tone === "warning" &&
-          "bg-amber-50/40 hover:bg-amber-50/70 dark:bg-amber-950/10 dark:hover:bg-amber-950/20",
-        tone === "stale" &&
-          "bg-rose-50/40 hover:bg-rose-50/70 dark:bg-rose-950/10 dark:hover:bg-rose-950/20",
+        "flex w-full flex-col gap-1 border-b border-border px-3 py-2 text-left transition-colors",
+        "hover:bg-surface-alt",
+        selected && "bg-surface-alt",
+        tone === "warning" && "bg-warning-bg/40 hover:bg-warning-bg/70",
+        tone === "stale" && "bg-danger-bg/40 hover:bg-danger-bg/70",
       )}
     >
       <div className="flex items-center gap-2 text-xs">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-faint">
           {formatKind(item.kind)}
         </span>
         <StatePill state={item.state} />
@@ -331,32 +350,28 @@ function ItemRow({
             ●
           </span>
         )}
-        <span className="ml-auto flex items-center gap-2 font-mono text-[10px] text-zinc-400">
+        <span className="ml-auto flex items-center gap-2 font-mono text-[10px] text-fg-faint">
           {item.updated_at && (
             <FreshnessStamp updatedAt={item.updated_at} thresholdDays={staleThresholdDays} />
           )}
           <span>#{item.id}</span>
         </span>
       </div>
-      <div className="line-clamp-2 text-sm text-zinc-900 dark:text-zinc-100">{item.title}</div>
+      <div className="line-clamp-2 text-sm text-fg">{item.title}</div>
       {hasMeta && (
-        <div className="flex flex-wrap items-center gap-1.5 font-mono text-[10px] text-zinc-500">
+        <div className="flex flex-wrap items-center gap-1.5 font-mono text-[10px] text-fg-faint">
           {item.assignee && <span className="truncate">{item.assignee}</span>}
           {item.assignee && tags.length > 0 && (
-            <span aria-hidden className="text-zinc-300 dark:text-zinc-700">
+            <span aria-hidden className="text-fg-faint">
               ·
             </span>
           )}
           {shownTags.map((t) => (
-            <span
-              key={t}
-              title={t}
-              className="rounded bg-zinc-100 px-1.5 py-0.5 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400"
-            >
+            <span key={t} title={t} className="rounded bg-surface-alt px-1.5 py-0.5 text-fg-muted">
               {displayTag(t)}
             </span>
           ))}
-          {extraTags > 0 && <span className="text-zinc-400 dark:text-zinc-600">+{extraTags}</span>}
+          {extraTags > 0 && <span className="text-fg-faint">+{extraTags}</span>}
         </div>
       )}
     </button>
@@ -371,21 +386,15 @@ function readTagCollapseLimit(config: Record<string, unknown> | undefined): numb
   return typeof raw === "number" && Number.isFinite(raw) ? Math.max(0, Math.trunc(raw)) : 4;
 }
 
-const STATE_TONE: Record<string, string> = {
-  new: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
-  active: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300",
-  blocked: "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300",
-  needs_info: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
-  resolved: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
-  closed: "bg-zinc-200 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-500",
-};
-
+// Per the chunk-2d spec, all states render with the same accent-tinted pill.
+// The text label remains the only differentiator. If state-specific colors
+// need to come back, reintroduce a per-state token map and per-theme overrides.
 export function StatePill({ state }: { state: string }) {
   return (
     <span
       className={cn(
         "rounded px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider",
-        STATE_TONE[state] ?? STATE_TONE.new,
+        "bg-accent/15 text-accent",
       )}
     >
       {formatState(state)}
@@ -398,7 +407,7 @@ function EmptyMessage({ text, tone }: { text: string; tone?: "error" }) {
     <div
       className={cn(
         "flex h-full items-center justify-center p-6 text-center text-sm",
-        tone === "error" ? "text-rose-600 dark:text-rose-400" : "text-zinc-500",
+        tone === "error" ? "text-danger" : "text-fg-faint",
       )}
     >
       {text}

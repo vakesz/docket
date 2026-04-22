@@ -38,38 +38,37 @@ export function CommandPalette() {
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: dismissive-overlay pattern — the interactive content is the child <Command> dialog; this div is only a backdrop that closes on click. Escape is handled globally.
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-[12vh]"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-fg/40 pt-[12vh]"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) setOpen(false);
       }}
     >
       <Command
         label="Command palette"
-        className="w-[560px] max-w-[92vw] overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-950"
+        className="w-[560px] max-w-[92vw] overflow-hidden rounded-lg border border-border bg-surface text-fg shadow-2xl"
       >
         <Command.Input
           placeholder="Jump to item, run command…"
-          className="w-full border-b border-zinc-200 bg-transparent px-4 py-3 text-sm outline-none dark:border-zinc-800"
+          className="w-full border-b border-border bg-transparent px-4 py-3 text-sm text-fg outline-none"
           autoFocus
         />
         <Command.List className="max-h-[56vh] overflow-auto p-1">
-          <Command.Empty className="px-4 py-6 text-center text-sm text-zinc-500">
+          <Command.Empty className="px-4 py-6 text-center text-sm text-fg-faint">
             No matches.
           </Command.Empty>
 
           <Command.Group
             heading="Navigate"
-            className="px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-zinc-400"
+            className="px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-fg-faint"
           >
             <PaletteItem onSelect={() => go("/items")}>All items</PaletteItem>
-            <PaletteItem onSelect={() => go("/pinned")}>Pinned</PaletteItem>
             <PaletteItem onSelect={() => go("/settings")}>Settings</PaletteItem>
             <PaletteItem onSelect={() => go("/settings")}>Prompts</PaletteItem>
           </Command.Group>
 
           <Command.Group
             heading="Actions"
-            className="px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-zinc-400"
+            className="px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-fg-faint"
           >
             <PaletteItem
               onSelect={() => {
@@ -84,15 +83,15 @@ export function CommandPalette() {
           {pinned.data?.length ? (
             <Command.Group
               heading="Pinned"
-              className="px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-zinc-400"
+              className="px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-fg-faint"
             >
               {pinned.data.map((it) => (
                 <PaletteItem key={it.id} onSelect={() => go("/items/$itemId", { itemId: it.id })}>
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
                     {formatKind(it.kind)}
                   </span>
                   <span className="ml-2 truncate">{it.title}</span>
-                  <span className="ml-auto font-mono text-[10px] text-zinc-400">#{it.id}</span>
+                  <span className="ml-auto font-mono text-[10px] text-fg-faint">#{it.id}</span>
                 </PaletteItem>
               ))}
             </Command.Group>
@@ -101,7 +100,7 @@ export function CommandPalette() {
           {items.data?.length ? (
             <Command.Group
               heading="Items"
-              className="px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-zinc-400"
+              className="px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-fg-faint"
             >
               {items.data.slice(0, 80).map((it) => (
                 <PaletteItem
@@ -109,17 +108,17 @@ export function CommandPalette() {
                   value={`${it.id} ${it.title}`}
                   onSelect={() => go("/items/$itemId", { itemId: it.id })}
                 >
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
                     {formatKind(it.kind)}
                   </span>
                   <span className="ml-2 truncate">{it.title}</span>
-                  <span className="ml-auto font-mono text-[10px] text-zinc-400">#{it.id}</span>
+                  <span className="ml-auto font-mono text-[10px] text-fg-faint">#{it.id}</span>
                 </PaletteItem>
               ))}
             </Command.Group>
           ) : null}
         </Command.List>
-        <div className="border-t border-zinc-200 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-zinc-400 dark:border-zinc-800">
+        <div className="border-t border-border px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-fg-faint">
           {shortcut("K")} · Esc to close
         </div>
       </Command>
@@ -140,7 +139,7 @@ function PaletteItem({
     <Command.Item
       onSelect={onSelect}
       value={value}
-      className="flex cursor-pointer items-center gap-2 rounded px-3 py-2 text-sm data-[selected=true]:bg-zinc-100 dark:data-[selected=true]:bg-zinc-900"
+      className="flex cursor-pointer items-center gap-2 rounded px-3 py-2 text-sm data-[selected=true]:bg-surface-alt"
     >
       {children}
     </Command.Item>

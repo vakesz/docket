@@ -39,11 +39,11 @@ export function ChatPane({ itemId }: { itemId: string }) {
   const disabled = !status.data?.chat_enabled;
 
   return (
-    <div className="flex h-full flex-col bg-white dark:bg-zinc-950">
-      <header className="flex items-center gap-2 border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
-        <h2 className="font-mono text-[11px] uppercase tracking-wider text-zinc-500">Chat</h2>
+    <div className="flex h-full flex-col bg-bg">
+      <header className="flex items-center gap-2 border-b border-border px-3 py-2">
+        <h2 className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Chat</h2>
         {history.data?.conversation && (
-          <span className="font-mono text-[10px] text-zinc-400">
+          <span className="font-mono text-[10px] text-fg-faint">
             tokens {history.data.conversation.tokens_in + history.data.conversation.tokens_out} · $
             {(history.data.conversation.cost_cents / 100).toFixed(3)}
           </span>
@@ -56,7 +56,7 @@ export function ChatPane({ itemId }: { itemId: string }) {
             setProposals([]);
           }}
           disabled={startThread.isPending || disabled}
-          className="ml-auto rounded border border-zinc-200 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-zinc-600 hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-900 disabled:opacity-50"
+          className="ml-auto rounded border border-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:bg-surface-alt disabled:opacity-50"
         >
           New thread
         </button>
@@ -90,7 +90,7 @@ export function ChatPane({ itemId }: { itemId: string }) {
               </div>
             )}
             {error && (
-              <div className="mt-2 rounded border border-rose-300 bg-rose-50 p-2 text-xs text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">
+              <div className="mt-2 rounded border border-danger bg-danger-bg p-2 text-xs text-danger-fg">
                 {error}
               </div>
             )}
@@ -106,7 +106,7 @@ export function ChatPane({ itemId }: { itemId: string }) {
             setDraft("");
           }
         }}
-        className="border-t border-zinc-200 p-2 dark:border-zinc-800"
+        className="border-t border-border p-2"
       >
         <textarea
           value={draft}
@@ -123,9 +123,9 @@ export function ChatPane({ itemId }: { itemId: string }) {
           }}
           rows={3}
           placeholder={disabled ? "Chat disabled" : "Ask the agent… (⏎ to send, ⇧⏎ for newline)"}
-          className="w-full resize-none rounded border border-zinc-200 bg-white p-2 text-sm focus:border-accent focus:outline-none disabled:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:disabled:bg-zinc-900"
+          className="w-full resize-none rounded border border-border bg-bg p-2 text-sm text-fg focus:border-accent focus:outline-none disabled:bg-surface-alt"
         />
-        <div className="mt-1 flex items-center justify-between font-mono text-[10px] uppercase tracking-wider text-zinc-400">
+        <div className="mt-1 flex items-center justify-between font-mono text-[10px] uppercase tracking-wider text-fg-faint">
           <span>{streaming ? "Streaming…" : "Ready"}</span>
         </div>
       </form>
@@ -147,13 +147,13 @@ function PersistedMessage({
       className={cn(
         "mb-3 rounded px-3 py-2 text-sm",
         role === "user"
-          ? "bg-zinc-100 dark:bg-zinc-900"
+          ? "bg-surface-alt text-fg"
           : role === "tool"
-            ? "bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
-            : "bg-white dark:bg-zinc-950",
+            ? "bg-warning-bg text-warning-fg"
+            : "bg-surface text-fg",
       )}
     >
-      <div className="mb-1 font-mono text-[10px] uppercase tracking-wider text-zinc-500">
+      <div className="mb-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
         {role}
         {message.name ? ` · ${message.name}` : ""}
       </div>
@@ -178,13 +178,13 @@ function LiveMessage({
       className={cn(
         "mb-3 rounded px-3 py-2 text-sm",
         message.kind === "user"
-          ? "bg-zinc-100 dark:bg-zinc-900"
+          ? "bg-surface-alt text-fg"
           : message.kind === "tool"
-            ? "bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
-            : "bg-white dark:bg-zinc-950",
+            ? "bg-warning-bg text-warning-fg"
+            : "bg-surface text-fg",
       )}
     >
-      <div className="mb-1 font-mono text-[10px] uppercase tracking-wider text-zinc-500">
+      <div className="mb-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
         {message.kind}
         {message.kind === "tool" ? ` · ${message.name}` : ""}
         {message.kind === "assistant" && message.streaming ? " · streaming" : ""}
@@ -203,7 +203,7 @@ function LiveMessage({
 
 function CenterMessage({ text }: { text: string }) {
   return (
-    <div className="flex h-full items-center justify-center px-4 text-center text-sm text-zinc-500">
+    <div className="flex h-full items-center justify-center px-4 text-center text-sm text-fg-faint">
       {text}
     </div>
   );

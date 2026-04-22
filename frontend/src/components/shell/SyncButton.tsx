@@ -14,8 +14,8 @@ export function SyncButton() {
           : "Refresh from provider"
       }
       className={cn(
-        "rounded border border-zinc-200 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider",
-        "text-zinc-600 hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-900",
+        "rounded border border-border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider",
+        "text-fg-muted hover:bg-surface-alt",
         sync.isPending && "animate-pulse",
       )}
     >

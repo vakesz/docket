@@ -42,6 +42,7 @@ import {
   useSettings,
 } from "~/api/hooks";
 import type { components } from "~/api/schema";
+import { ThemePicker } from "~/components/shell/ThemePicker";
 import { cn } from "~/lib/cn";
 
 type PromptSummary = components["schemas"]["PromptSummaryDTO"];
@@ -317,19 +318,17 @@ function SettingsPage() {
   const formCanSwitchToForm = mode === "raw" && !rawParsed.error && !!rawParsed.value;
 
   return (
-    <div className="flex h-full min-h-0 bg-zinc-50/70 dark:bg-zinc-950">
+    <div className="flex h-full min-h-0 bg-bg">
       <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)]">
         {/* ---- Sidebar ---- */}
-        <aside className="min-h-0 overflow-auto border-b border-zinc-200 bg-white/80 px-3 py-4 dark:border-zinc-800 dark:bg-zinc-950/60 lg:border-b-0 lg:border-r">
+        <aside className="min-h-0 overflow-auto border-b border-border bg-surface/80 px-3 py-4 lg:border-b-0 lg:border-r">
           <div className="mb-4 flex items-center gap-2 px-2">
             <div className="rounded-xl bg-accent/10 p-2 text-accent">
               <Settings2 className="h-4 w-4" />
             </div>
             <div className="min-w-0">
-              <h1 className="truncate text-sm font-semibold text-zinc-950 dark:text-zinc-50">
-                Settings
-              </h1>
-              <p className="truncate text-[11px] text-zinc-500 dark:text-zinc-400">
+              <h1 className="truncate text-sm font-semibold text-fg">Settings</h1>
+              <p className="truncate text-[11px] text-fg-muted">
                 Edit your <code>config.toml</code>
               </p>
             </div>
@@ -348,22 +347,20 @@ function SettingsPage() {
                   onClick={() => setActiveSection(section.key)}
                   className={cn(
                     "flex items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition-colors",
-                    isActive
-                      ? "bg-accent/10 text-accent"
-                      : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900",
+                    isActive ? "bg-accent/10 text-accent" : "text-fg hover:bg-surface-alt",
                   )}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
                   <span className="flex-1 truncate font-medium">{section.label}</span>
                   {isDirty && (
                     <span
-                      className="h-2 w-2 shrink-0 rounded-full bg-amber-500"
+                      className="h-2 w-2 shrink-0 rounded-full bg-warning"
                       title="Unsaved changes"
                     />
                   )}
                   {!isDirty && needsRestart && (
                     <span
-                      className="rounded-full bg-amber-100 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+                      className="rounded-full bg-warning-bg px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-warning-fg"
                       title="Restart required after last save"
                     >
                       restart
@@ -374,11 +371,11 @@ function SettingsPage() {
             })}
           </nav>
 
-          <div className="mt-6 border-t border-zinc-200 pt-4 dark:border-zinc-800">
-            <div className="px-2 text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+          <div className="mt-6 border-t border-border pt-4">
+            <div className="px-2 text-[11px] font-medium uppercase tracking-[0.18em] text-fg-muted">
               Editor mode
             </div>
-            <div className="mt-2 grid grid-cols-2 gap-1 rounded-xl bg-zinc-100 p-1 dark:bg-zinc-900">
+            <div className="mt-2 grid grid-cols-2 gap-1 rounded-xl bg-surface-alt p-1">
               <ModeButton
                 active={mode === "form"}
                 onClick={() => switchMode("form")}
@@ -395,11 +392,9 @@ function SettingsPage() {
               />
             </div>
             {activeSection === "prompts" ? (
-              <p className="mt-2 px-2 text-[11px] text-zinc-500 dark:text-zinc-400">
-                Prompts have their own editor.
-              </p>
+              <p className="mt-2 px-2 text-[11px] text-fg-muted">Prompts have their own editor.</p>
             ) : mode === "raw" && rawParsed.error ? (
-              <p className="mt-2 px-2 text-[11px] text-rose-600 dark:text-rose-400">
+              <p className="mt-2 px-2 text-[11px] text-danger">
                 Fix JSON to switch back to form mode.
               </p>
             ) : null}
@@ -412,10 +407,10 @@ function SettingsPage() {
             <PromptsPanel />
           ) : (
             <>
-              <header className="flex flex-wrap items-center gap-3 border-b border-zinc-200 bg-white/70 px-6 py-4 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/70">
+              <header className="flex flex-wrap items-center gap-3 border-b border-border bg-surface/70 px-6 py-4 backdrop-blur">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">
+                    <h2 className="text-lg font-semibold text-fg">
                       {mode === "form" ? activeMeta.label : "Raw JSON"}
                     </h2>
                     <StatusPill
@@ -429,7 +424,7 @@ function SettingsPage() {
                       />
                     )}
                   </div>
-                  <p className="mt-1 max-w-3xl text-sm text-zinc-500 dark:text-zinc-400">
+                  <p className="mt-1 max-w-3xl text-sm text-fg-muted">
                     {mode === "form"
                       ? activeMeta.description
                       : "Edit the masked config JSON directly. Saves go through the same deep-merge endpoint."}
@@ -441,7 +436,7 @@ function SettingsPage() {
                     type="button"
                     onClick={revertAll}
                     disabled={!dirty}
-                    className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-900"
+                    className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-medium text-fg hover:bg-bg disabled:cursor-not-allowed disabled:opacity-40-muted-alt"
                   >
                     <RotateCcw className="h-4 w-4" />
                     Revert
@@ -450,7 +445,7 @@ function SettingsPage() {
                     type="button"
                     onClick={save}
                     disabled={!canSave}
-                    className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-accent-fg hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Save className="h-4 w-4" />
                     {patch.isPending ? "Saving…" : "Save changes"}
@@ -516,36 +511,34 @@ function FormPanel({
   const value = draft ?? asRecord(initialConfig[section.key]) ?? {};
 
   return (
-    <div className="flex flex-col gap-4 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+    <div className="flex flex-col gap-4 rounded-2xl border border-border bg-surface p-6 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h3 className="text-base font-semibold text-zinc-950 dark:text-zinc-50">
-              {section.label}
-            </h3>
+            <h3 className="text-base font-semibold text-fg">{section.label}</h3>
             {section.requiresRestart && (
               <span
-                className="rounded-full bg-zinc-100 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300"
+                className="rounded-full bg-surface-alt px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted"
                 title="Saving fields here typically requires a restart"
               >
                 restart-sensitive
               </span>
             )}
           </div>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{section.description}</p>
+          <p className="mt-1 text-sm text-fg-muted">{section.description}</p>
         </div>
         {isDirty && (
           <button
             type="button"
             onClick={onResetSection}
-            className="shrink-0 text-xs text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+            className="shrink-0 text-xs text-fg-muted hover:text-fg"
           >
             Reset section
           </button>
         )}
       </div>
 
-      <div className="flex flex-col gap-5 border-t border-zinc-200 pt-5 dark:border-zinc-800">
+      <div className="flex flex-col gap-5 border-t border-border pt-5">
         {section.key === "providers" && (
           <ProvidersForm initialConfig={initialConfig} value={value} onChange={onChange} />
         )}
@@ -598,7 +591,7 @@ function ProvidersForm({
         help="Which configured backend Docket opens with at startup."
       >
         {providerKeys.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-zinc-300 px-3 py-2 text-sm text-zinc-500 dark:border-zinc-700">
+          <p className="rounded-xl border border-dashed border-border px-3 py-2 text-sm text-fg-muted">
             No providers configured. Use the setup wizard to add one.
           </p>
         ) : (
@@ -612,13 +605,13 @@ function ProvidersForm({
 
       <div className="flex flex-col gap-3">
         <Label>Configured providers</Label>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+        <p className="text-xs text-fg-muted">
           Provider configuration lives in <code>config.toml</code>. To add a new provider or change
           credentials, use the setup wizard or the Raw JSON mode.
         </p>
         <div className="grid gap-2 sm:grid-cols-2">
           {providerKeys.length === 0 ? (
-            <div className="text-sm text-zinc-500">None.</div>
+            <div className="text-sm text-fg-muted">None.</div>
           ) : (
             providerKeys.map((k) => {
               const entry = asRecord(providers[k]) ?? {};
@@ -633,23 +626,21 @@ function ProvidersForm({
                   key={k}
                   className={cn(
                     "rounded-xl border p-3 text-sm",
-                    isActive
-                      ? "border-accent/50 bg-accent/5"
-                      : "border-zinc-200 dark:border-zinc-800",
+                    isActive ? "border-accent/50 bg-accent/5" : "border-border",
                   )}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <div className="font-medium text-zinc-900 dark:text-zinc-100">{display}</div>
+                    <div className="font-medium text-fg">{display}</div>
                     {isActive && (
                       <span className="rounded-full bg-accent/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-accent">
                         active
                       </span>
                     )}
                   </div>
-                  <div className="mt-1 font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
+                  <div className="mt-1 font-mono text-[11px] text-fg-muted">
                     {k} · {type}
                   </div>
-                  <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                  <div className="mt-1 text-xs text-fg-muted">
                     {scopeCount} scope{scopeCount === 1 ? "" : "s"} · active “{activeScope}”
                   </div>
                 </div>
@@ -795,8 +786,15 @@ function UiForm({
 
   return (
     <>
+      <FormField
+        label="Web theme"
+        help="Color theme for this web UI. Stored in your browser; does not affect the TUI."
+      >
+        <ThemePicker />
+      </FormField>
+
       <div className="grid gap-4 sm:grid-cols-2">
-        <FormField label="Theme">
+        <FormField label="Theme" help="TUI (terminal) theme. Saved to config.toml.">
           <Select
             value={theme}
             options={THEME_OPTIONS.map((t) => ({ value: t, label: t }))}
@@ -954,11 +952,11 @@ function RawEditor({
   const lineCount = value ? value.split("\n").length : 0;
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-        <div className="flex flex-wrap items-center gap-3 border-b border-zinc-200 px-4 py-2 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+      <div className="flex flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+        <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-2 text-xs text-fg-muted">
           <span>{lineCount} lines</span>
           <span>{value.length.toLocaleString()} chars</span>
-          <span className="ml-auto font-mono text-[11px] text-zinc-400 dark:text-zinc-500">
+          <span className="ml-auto font-mono text-[11px] text-fg-faint">
             JSON view of masked config
           </span>
         </div>
@@ -967,8 +965,8 @@ function RawEditor({
           onChange={(e) => onChange(e.target.value)}
           spellCheck={false}
           className={cn(
-            "min-h-[480px] w-full flex-1 resize-none bg-transparent px-4 py-4 font-mono text-[13px] leading-6 text-zinc-900 outline-none",
-            "placeholder:text-zinc-400 dark:text-zinc-100 dark:placeholder:text-zinc-600",
+            "min-h-[480px] w-full flex-1 resize-none bg-transparent px-4 py-4 font-mono text-[13px] leading-6 text-fg outline-none",
+            "placeholder:text-fg-faint",
           )}
           style={{ tabSize: 2 }}
         />
@@ -1005,8 +1003,8 @@ function ModeButton({
       className={cn(
         "flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors",
         active
-          ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-800 dark:text-zinc-100"
-          : "text-zinc-600 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-40 dark:text-zinc-400 dark:hover:text-zinc-100",
+          ? "bg-surface text-fg shadow-sm-alt"
+          : "text-fg-muted hover:text-fg disabled:cursor-not-allowed disabled:opacity-40-faint",
       )}
     >
       <Icon className="h-3.5 w-3.5" />
@@ -1035,14 +1033,14 @@ function FormField({
 
 function Label({ children }: { children: ReactNode }) {
   return (
-    <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+    <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-fg-muted">
       {children}
     </span>
   );
 }
 
 function HelpText({ children }: { children: ReactNode }) {
-  return <span className="text-xs leading-5 text-zinc-500 dark:text-zinc-400">{children}</span>;
+  return <span className="text-xs leading-5 text-fg-muted">{children}</span>;
 }
 
 function TextInput({
@@ -1062,7 +1060,7 @@ function TextInput({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 transition-colors focus:border-accent focus:outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
+      className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg transition-colors focus:border-accent focus:outline-none"
     />
   );
 }
@@ -1083,7 +1081,7 @@ function NumberInput({
   suffix?: string;
 }) {
   return (
-    <div className="flex w-full items-stretch overflow-hidden rounded-xl border border-zinc-200 bg-white focus-within:border-accent dark:border-zinc-800 dark:bg-zinc-950">
+    <div className="flex w-full items-stretch overflow-hidden rounded-xl border border-border bg-surface focus-within:border-accent">
       <input
         type="number"
         value={value === null ? "" : value}
@@ -1099,10 +1097,10 @@ function NumberInput({
         min={min}
         max={max}
         step={step}
-        className="w-full bg-transparent px-3 py-2 text-sm text-zinc-900 outline-none dark:text-zinc-100"
+        className="w-full bg-transparent px-3 py-2 text-sm text-fg outline-none"
       />
       {suffix && (
-        <span className="flex items-center border-l border-zinc-200 bg-zinc-50 px-2 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+        <span className="flex items-center border-l border-border bg-bg px-2 text-xs text-fg-muted">
           {suffix}
         </span>
       )}
@@ -1137,7 +1135,7 @@ function Select({
             setCustomMode(false);
             onChange(options[0]?.value ?? "");
           }}
-          className="rounded-xl border border-zinc-200 px-3 text-xs text-zinc-600 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
+          className="rounded-xl border border-border px-3 text-xs text-fg-muted hover:bg-surface-alt"
         >
           Preset
         </button>
@@ -1150,7 +1148,7 @@ function Select({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-accent focus:outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
+        className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg focus:border-accent focus:outline-none"
       >
         {value === "" && <option value="">{placeholder ?? "— choose —"}</option>}
         {options.map((opt) => (
@@ -1163,7 +1161,7 @@ function Select({
         <button
           type="button"
           onClick={() => setCustomMode(true)}
-          className="rounded-xl border border-zinc-200 px-3 text-xs text-zinc-600 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
+          className="rounded-xl border border-border px-3 text-xs text-fg-muted hover:bg-surface-alt"
         >
           Custom
         </button>
@@ -1187,17 +1185,17 @@ function Toggle({
       role="switch"
       aria-checked={checked}
       onClick={() => onChange(!checked)}
-      className="inline-flex w-fit items-center gap-3 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-zinc-900"
+      className="inline-flex w-fit items-center gap-3 rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg hover:bg-surface-alt"
     >
       <span
         className={cn(
           "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
-          checked ? "bg-accent" : "bg-zinc-300 dark:bg-zinc-700",
+          checked ? "bg-accent" : "bg-surface-alt",
         )}
       >
         <span
           className={cn(
-            "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
+            "inline-block h-4 w-4 transform rounded-full bg-surface shadow transition-transform",
             checked ? "translate-x-4" : "translate-x-0.5",
           )}
         />
@@ -1270,7 +1268,7 @@ function NumberMapEditor({
 
       <div className="flex flex-col gap-2">
         {rows.length === 0 && (
-          <p className="rounded-xl border border-dashed border-zinc-300 px-3 py-2 text-xs text-zinc-500 dark:border-zinc-700">
+          <p className="rounded-xl border border-dashed border-border px-3 py-2 text-xs text-fg-muted">
             No overrides set.
           </p>
         )}
@@ -1299,7 +1297,7 @@ function NumberMapEditor({
             <button
               type="button"
               onClick={() => commit(rows.filter((_, i) => i !== idx))}
-              className="rounded-xl border border-zinc-200 px-2 text-zinc-500 hover:bg-zinc-50 hover:text-rose-600 dark:border-zinc-800 dark:hover:bg-zinc-900"
+              className="rounded-xl border border-border px-2 text-fg-muted hover:bg-bg hover:text-danger"
               title="Remove"
             >
               <Trash2 className="h-4 w-4" />
@@ -1312,7 +1310,7 @@ function NumberMapEditor({
         <button
           type="button"
           onClick={() => addRow()}
-          className="inline-flex items-center gap-1 rounded-xl border border-zinc-200 px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
+          className="inline-flex items-center gap-1 rounded-xl border border-border px-3 py-1.5 text-xs text-fg-muted hover:bg-surface-alt"
         >
           <Plus className="h-3 w-3" />
           Add override
@@ -1324,7 +1322,7 @@ function NumberMapEditor({
               key={k}
               type="button"
               onClick={() => addRow(k)}
-              className="rounded-full bg-zinc-100 px-2 py-1 font-mono text-[11px] text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              className="rounded-full bg-surface-alt px-2 py-1 font-mono text-[11px] text-fg-muted hover:bg-surface-alt"
             >
               + {k}
             </button>
@@ -1337,12 +1335,12 @@ function NumberMapEditor({
 function StatusPill({ tone, label }: { tone: "ok" | "warn" | "error" | "muted"; label: string }) {
   const cls =
     tone === "ok"
-      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
+      ? "bg-success-bg text-success-fg"
       : tone === "warn"
-        ? "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+        ? "bg-warning-bg text-warning-fg"
         : tone === "error"
-          ? "bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-200"
-          : "bg-zinc-100 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300";
+          ? "bg-danger-bg text-danger-fg"
+          : "bg-surface-alt text-fg-muted";
   return <span className={cn("rounded-full px-2.5 py-1 text-xs font-medium", cls)}>{label}</span>;
 }
 
@@ -1360,8 +1358,8 @@ function Notice({
       className={cn(
         "rounded-2xl border px-4 py-3 text-sm",
         tone === "error"
-          ? "border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200"
-          : "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200",
+          ? "border-danger bg-danger-bg text-danger-fg"
+          : "border-warning bg-warning-bg text-warning-fg",
       )}
     >
       <div className="flex items-start gap-3">
@@ -1390,13 +1388,11 @@ function PageState({
 }) {
   return (
     <div className="flex h-full items-center justify-center p-6">
-      <div className="max-w-md rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+      <div className="max-w-md rounded-2xl border border-border bg-surface p-6 text-center shadow-sm">
         <div
           className={cn(
             "mx-auto flex h-11 w-11 items-center justify-center rounded-2xl",
-            tone === "error"
-              ? "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300"
-              : "bg-zinc-100 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300",
+            tone === "error" ? "bg-danger-bg text-danger-fg" : "bg-surface-alt text-fg-muted",
           )}
         >
           {tone === "error" ? (
@@ -1405,8 +1401,8 @@ function PageState({
             <Settings2 className="h-5 w-5" />
           )}
         </div>
-        <h1 className="mt-4 text-lg font-semibold text-zinc-950 dark:text-zinc-50">{title}</h1>
-        <p className="mt-2 text-sm leading-6 text-zinc-500 dark:text-zinc-400">{description}</p>
+        <h1 className="mt-4 text-lg font-semibold text-fg">{title}</h1>
+        <p className="mt-2 text-sm leading-6 text-fg-muted">{description}</p>
       </div>
     </div>
   );
@@ -1591,7 +1587,7 @@ function PromptsPanel() {
 
   if (prompts.isPending && !prompts.data) {
     return (
-      <div className="flex flex-1 items-center justify-center text-sm text-zinc-500">
+      <div className="flex flex-1 items-center justify-center text-sm text-fg-muted">
         Loading prompts…
       </div>
     );
@@ -1607,7 +1603,7 @@ function PromptsPanel() {
   }
   if (list.length === 0) {
     return (
-      <div className="flex flex-1 items-center justify-center p-6 text-center text-sm text-zinc-500">
+      <div className="flex flex-1 items-center justify-center p-6 text-center text-sm text-fg-muted">
         No prompt templates registered.
       </div>
     );
@@ -1618,28 +1614,28 @@ function PromptsPanel() {
   return (
     <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[280px_minmax(0,1fr)]">
       {/* Prompt list */}
-      <aside className="flex min-h-0 flex-col overflow-hidden border-b border-zinc-200 bg-white/60 dark:border-zinc-800 dark:bg-zinc-950/40 md:border-b-0 md:border-r">
+      <aside className="flex min-h-0 flex-col overflow-hidden border-b border-border bg-surface/60 md:border-b-0 md:border-r">
         <div className="px-3 pb-3 pt-4">
           <div className="mb-2 flex items-center justify-between gap-2 px-1">
-            <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+            <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-fg-muted">
               Templates
             </div>
-            <span className="font-mono text-[10px] text-zinc-400">
+            <span className="font-mono text-[10px] text-fg-faint">
               {list.length}
               {customizedCount > 0 ? ` · ${customizedCount} edited` : ""}
             </span>
           </div>
           <label className="relative block">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-faint" />
             <input
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search prompts…"
-              className="w-full rounded-xl border border-zinc-200 bg-white py-1.5 pl-8 pr-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-accent focus:outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-600"
+              className="w-full rounded-xl border border-border bg-surface py-1.5 pl-8 pr-2 text-sm text-fg placeholder:text-fg-faint focus:border-accent focus:outline-none-muted"
             />
           </label>
-          <div className="mt-2 grid grid-cols-3 gap-1 rounded-xl bg-zinc-100 p-1 dark:bg-zinc-900">
+          <div className="mt-2 grid grid-cols-3 gap-1 rounded-xl bg-surface-alt p-1">
             {PROMPT_FILTERS.map((f) => (
               <button
                 key={f.value}
@@ -1648,8 +1644,8 @@ function PromptsPanel() {
                 className={cn(
                   "rounded-lg px-2 py-1 text-xs font-medium transition-colors",
                   filter === f.value
-                    ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-800 dark:text-zinc-100"
-                    : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100",
+                    ? "bg-surface text-fg shadow-sm-alt"
+                    : "text-fg-muted hover:text-fg-faint",
                 )}
               >
                 {f.label}
@@ -1660,7 +1656,7 @@ function PromptsPanel() {
 
         <nav className="min-h-0 flex-1 overflow-auto px-2 pb-3">
           {filtered.length === 0 ? (
-            <p className="px-3 py-6 text-center text-xs text-zinc-500">
+            <p className="px-3 py-6 text-center text-xs text-fg-muted">
               No prompts match this filter.
             </p>
           ) : (
@@ -1682,7 +1678,7 @@ function PromptsPanel() {
       {selected ? (
         <PromptEditor key={selected} promptKey={selected} />
       ) : (
-        <div className="flex flex-1 items-center justify-center text-sm text-zinc-500">
+        <div className="flex flex-1 items-center justify-center text-sm text-fg-muted">
           Select a prompt to start editing.
         </div>
       )}
@@ -1706,28 +1702,23 @@ function PromptListItem({
         onClick={onSelect}
         className={cn(
           "group flex w-full items-start gap-3 rounded-xl px-3 py-2 text-left transition-colors",
-          active
-            ? "bg-accent/10 text-accent"
-            : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900",
+          active ? "bg-accent/10 text-accent" : "text-fg hover:bg-surface-alt",
         )}
       >
         <FileText
-          className={cn(
-            "mt-0.5 h-4 w-4 shrink-0",
-            active ? "text-accent" : "text-zinc-400 dark:text-zinc-500",
-          )}
+          className={cn("mt-0.5 h-4 w-4 shrink-0", active ? "text-accent" : "text-fg-faint")}
         />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="truncate text-sm font-medium">{prompt.label}</span>
             {prompt.customized && (
-              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" title="Customized" />
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-warning" title="Customized" />
             )}
           </div>
           <div
             className={cn(
               "truncate font-mono text-[10px]",
-              active ? "text-accent/80" : "text-zinc-500 dark:text-zinc-500",
+              active ? "text-accent/80" : "text-fg-muted",
             )}
           >
             {prompt.filename}
@@ -1808,7 +1799,7 @@ function PromptEditor({ promptKey }: { promptKey: string }) {
 
   if (prompt.isPending && !prompt.data) {
     return (
-      <div className="flex flex-1 items-center justify-center text-sm text-zinc-500">
+      <div className="flex flex-1 items-center justify-center text-sm text-fg-muted">
         Loading prompt…
       </div>
     );
@@ -1832,12 +1823,10 @@ function PromptEditor({ promptKey }: { promptKey: string }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex flex-wrap items-start gap-3 border-b border-zinc-200 bg-white/70 px-6 py-4 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/70">
+      <header className="flex flex-wrap items-start gap-3 border-b border-border bg-surface/70 px-6 py-4 backdrop-blur">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="truncate text-lg font-semibold text-zinc-950 dark:text-zinc-50">
-              {label}
-            </h2>
+            <h2 className="truncate text-lg font-semibold text-fg">{label}</h2>
             <StatusPill
               tone={dirty ? "warn" : savedFlash ? "ok" : "muted"}
               label={dirty ? "Unsaved changes" : savedFlash ? "Saved" : "Up to date"}
@@ -1848,7 +1837,7 @@ function PromptEditor({ promptKey }: { promptKey: string }) {
               </span>
             )}
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] text-fg-muted">
             <span className="truncate">{filename}</span>
             <span aria-hidden>·</span>
             <span>
@@ -1859,7 +1848,7 @@ function PromptEditor({ promptKey }: { promptKey: string }) {
             {dirty && delta !== 0 && (
               <>
                 <span aria-hidden>·</span>
-                <span className={delta > 0 ? "text-emerald-600" : "text-rose-600"}>
+                <span className={delta > 0 ? "text-success-fg" : "text-danger-fg"}>
                   {delta > 0 ? `+${delta}` : delta} lines
                 </span>
               </>
@@ -1879,7 +1868,7 @@ function PromptEditor({ promptKey }: { promptKey: string }) {
                   ? "This prompt is already the bundled default"
                   : "Restore the bundled default content"
             }
-            className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-900"
+            className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-medium text-fg hover:bg-bg disabled:cursor-not-allowed disabled:opacity-40-muted-alt"
           >
             <Sparkles className="h-4 w-4" />
             {reset.isPending ? "Resetting…" : "Reset to default"}
@@ -1888,7 +1877,7 @@ function PromptEditor({ promptKey }: { promptKey: string }) {
             type="button"
             onClick={revert}
             disabled={!dirty}
-            className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-900"
+            className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-medium text-fg hover:bg-bg disabled:cursor-not-allowed disabled:opacity-40-muted-alt"
           >
             <RotateCcw className="h-4 w-4" />
             Revert
@@ -1897,7 +1886,7 @@ function PromptEditor({ promptKey }: { promptKey: string }) {
             type="button"
             onClick={save}
             disabled={!canSave}
-            className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-accent-fg hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Save className="h-4 w-4" />
             {put.isPending ? "Saving…" : "Save changes"}
@@ -1907,14 +1896,14 @@ function PromptEditor({ promptKey }: { promptKey: string }) {
       </header>
 
       {(put.error || reset.error) && (
-        <div className="border-b border-zinc-200 bg-zinc-50/60 px-6 py-3 dark:border-zinc-800 dark:bg-zinc-950/60">
+        <div className="border-b border-border bg-bg/60 px-6 py-3">
           <Notice tone="error" title={put.error ? "Save failed" : "Reset failed"}>
             {(put.error ?? reset.error)?.message ?? "Unknown error"}
           </Notice>
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-hidden bg-white dark:bg-zinc-950">
+      <div className="min-h-0 flex-1 overflow-hidden bg-bg">
         <CodeMirror
           value={draft}
           height="100%"

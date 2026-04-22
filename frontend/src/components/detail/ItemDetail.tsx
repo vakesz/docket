@@ -20,7 +20,7 @@ interface Props {
   itemId: string;
 }
 
-const metaLabelClassName = "font-mono text-[10px] uppercase tracking-wider text-zinc-500";
+const metaLabelClassName = "font-mono text-[10px] uppercase tracking-wider text-fg-muted";
 
 export function ItemDetail({ itemId }: Props) {
   const item = useItem(itemId);
@@ -49,16 +49,16 @@ export function ItemDetail({ itemId }: Props) {
   const issueLinks = issueLinkContextFromUrl(it.url);
 
   return (
-    <div className="flex h-full flex-col overflow-auto bg-white dark:bg-zinc-950">
-      <header className="flex flex-col gap-2 border-b border-zinc-200 p-4 dark:border-zinc-800">
+    <div className="flex h-full flex-col overflow-auto bg-bg">
+      <header className="flex flex-col gap-2 border-b border-border p-4">
         <div className="flex items-center gap-2 text-xs">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
             {formatKind(it.kind)}
           </span>
           <StatePill state={it.state} />
-          <span className="font-mono text-[10px] text-zinc-400">#{it.id}</span>
+          <span className="font-mono text-[10px] text-fg-faint">#{it.id}</span>
           <span className="inline-flex items-center gap-1">
-            <span className="font-mono text-[10px] text-zinc-400">Updated</span>
+            <span className="font-mono text-[10px] text-fg-faint">Updated</span>
             <FreshnessStamp updatedAt={it.updated_at} thresholdDays={staleThresholdDays} />
           </span>
           <div className="ml-auto flex items-center gap-2">
@@ -77,7 +77,7 @@ export function ItemDetail({ itemId }: Props) {
               className={cn(
                 "rounded border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider transition-colors",
                 chatController.open
-                  ? "border-accent bg-accent text-white hover:bg-accent/90"
+                  ? "border-accent bg-accent text-accent-fg hover:bg-accent/90"
                   : "border-accent bg-accent/10 text-accent hover:bg-accent/20",
               )}
             >
@@ -88,24 +88,22 @@ export function ItemDetail({ itemId }: Props) {
               type="button"
               disabled={refresh.isPending}
               onClick={() => refresh.mutate(it.id)}
-              className="rounded border border-zinc-200 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-zinc-600 hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-900"
+              className="rounded border border-border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-fg-muted hover:bg-surface-alt"
             >
               {refresh.isPending ? "Refreshing…" : "Refresh"}
             </button>
           </div>
         </div>
-        <h1 className="text-lg font-semibold leading-snug text-zinc-900 dark:text-zinc-100">
-          {it.title}
-        </h1>
-        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs text-zinc-600 dark:text-zinc-400">
+        <h1 className="text-lg font-semibold leading-snug text-fg">{it.title}</h1>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs text-fg-muted">
           {it.author && (
             <>
               <dt className={metaLabelClassName}>Opened by</dt>
-              <dd className="text-zinc-700 dark:text-zinc-300">{it.author}</dd>
+              <dd className="text-fg">{it.author}</dd>
             </>
           )}
           <dt className={metaLabelClassName}>Assignee</dt>
-          <dd className={cn(!it.assignee && "italic text-zinc-400 dark:text-zinc-600")}>
+          <dd className={cn(!it.assignee && "italic text-fg-faint")}>
             {it.assignee ?? "Unassigned"}
           </dd>
           {it.parent_id && (
@@ -124,7 +122,7 @@ export function ItemDetail({ itemId }: Props) {
                   <span
                     key={tag}
                     title={tag}
-                    className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400"
+                    className="rounded bg-surface-alt px-1.5 py-0.5 font-mono text-[10px] text-fg-muted"
                   >
                     {displayTag(tag)}
                   </span>
@@ -156,10 +154,10 @@ export function ItemDetail({ itemId }: Props) {
         </dl>
         <div className="flex flex-col gap-1.5 pt-1">
           <div className="flex items-center gap-2">
-            <h2 className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">
+            <h2 className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
               Actions
             </h2>
-            <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+            <span className="text-[11px] text-fg-muted">
               tap to stage a proposal — nothing is written until you confirm
             </span>
           </div>
@@ -168,7 +166,7 @@ export function ItemDetail({ itemId }: Props) {
       </header>
 
       {proposals.length > 0 && (
-        <div className="flex flex-col gap-2 border-b border-zinc-200 p-3 dark:border-zinc-800">
+        <div className="flex flex-col gap-2 border-b border-border p-3">
           {proposals.map((p) => (
             <ProposalCard key={p.id} proposal={p} onResolved={() => dismissProposal(p.id)} />
           ))}
@@ -177,14 +175,14 @@ export function ItemDetail({ itemId }: Props) {
 
       <section className="flex flex-col gap-3 p-4">
         <div className="flex items-center gap-2">
-          <h2 className="font-mono text-[11px] uppercase tracking-wider text-zinc-500">
+          <h2 className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
             Description
           </h2>
           {!editing && (
             <button
               type="button"
               onClick={() => setEditing(true)}
-              className="ml-auto rounded border border-zinc-200 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-zinc-600 hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-900"
+              className="ml-auto rounded border border-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:bg-surface-alt"
             >
               Edit
             </button>
@@ -202,7 +200,7 @@ export function ItemDetail({ itemId }: Props) {
         )}
       </section>
 
-      <section className="flex flex-col gap-3 border-t border-zinc-200 p-4 dark:border-zinc-800">
+      <section className="flex flex-col gap-3 border-t border-border p-4">
         <SuggestBlock itemId={it.id} onStaged={pushProposals} />
       </section>
 
@@ -237,19 +235,19 @@ function CommentsSection({
   const comments = useComments(itemId);
   const issueLinks = issueLinkContextFromUrl(issueUrl);
   return (
-    <section className="flex flex-col gap-3 border-t border-zinc-200 p-4 dark:border-zinc-800">
-      <h2 className="font-mono text-[11px] uppercase tracking-wider text-zinc-500">
+    <section className="flex flex-col gap-3 border-t border-border p-4">
+      <h2 className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
         Comments ({comments.data?.length ?? 0})
       </h2>
-      {comments.isPending && <div className="text-xs text-zinc-500">Loading…</div>}
+      {comments.isPending && <div className="text-xs text-fg-muted">Loading…</div>}
       {comments.data?.length === 0 && (
-        <div className="text-xs italic text-zinc-400">No comments.</div>
+        <div className="text-xs italic text-fg-faint">No comments.</div>
       )}
       <ul className="flex flex-col gap-3">
         {comments.data?.map((c) => (
-          <li key={c.id} className="rounded border border-zinc-200 p-3 dark:border-zinc-800">
-            <div className="mb-1 flex items-center gap-2 text-xs text-zinc-500">
-              <span className="font-medium text-zinc-700 dark:text-zinc-300">{c.author}</span>
+          <li key={c.id} className="rounded border border-border p-3">
+            <div className="mb-1 flex items-center gap-2 text-xs text-fg-muted">
+              <span className="font-medium text-fg">{c.author}</span>
               <span className="font-mono text-[10px]">{formatRelative(c.created_at)}</span>
             </div>
             <Markdown source={c.body_md} issueLinks={issueLinks} />
@@ -266,9 +264,9 @@ function LinkedSection({ itemId }: { itemId: string }) {
   const navigate = useNavigate();
   if (!linked.data?.length) return null;
   return (
-    <section className="flex flex-col gap-2 border-t border-zinc-200 p-4 dark:border-zinc-800">
-      <h2 className="font-mono text-[11px] uppercase tracking-wider text-zinc-500">Linked items</h2>
-      <ul className="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-900">
+    <section className="flex flex-col gap-2 border-t border-border p-4">
+      <h2 className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Linked items</h2>
+      <ul className="flex flex-col divide-y divide-border">
         {linked.data.map((lk) => (
           <li key={lk.id}>
             <button
@@ -276,12 +274,12 @@ function LinkedSection({ itemId }: { itemId: string }) {
               onClick={() => navigate({ to: "/items/$itemId", params: { itemId: lk.id } })}
               className="flex w-full items-center gap-2 py-1.5 text-left text-sm hover:text-accent"
             >
-              <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">
+              <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
                 {formatKind(lk.kind)}
               </span>
               <StatePill state={lk.state} />
               <span className="truncate">{lk.title}</span>
-              <span className="ml-auto font-mono text-[10px] text-zinc-400">#{lk.id}</span>
+              <span className="ml-auto font-mono text-[10px] text-fg-faint">#{lk.id}</span>
             </button>
           </li>
         ))}
@@ -295,7 +293,7 @@ function CenterText({ text, tone }: { text: string; tone?: "error" }) {
     <div
       className={cn(
         "flex h-full items-center justify-center p-4 text-sm",
-        tone === "error" ? "text-rose-600 dark:text-rose-400" : "text-zinc-500",
+        tone === "error" ? "text-danger" : "text-fg-muted",
       )}
     >
       {text}

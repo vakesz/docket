@@ -2,25 +2,19 @@ import { Link } from "@tanstack/react-router";
 
 import { cn } from "~/lib/cn";
 import { ProviderSwitcher } from "./ProviderSwitcher";
-import { ThemeToggle } from "./ThemeToggle";
 
 export function TopBar() {
   return (
-    <header className="flex h-11 items-center gap-3 border-b border-zinc-200 bg-white px-3 dark:border-zinc-800 dark:bg-zinc-950">
+    <header className="flex h-11 items-center gap-3 border-b border-border bg-bg px-3">
       <Link
         to="/items"
-        className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-zinc-900 dark:text-zinc-100"
+        className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-fg"
       >
         Docket
       </Link>
-      <nav className="flex items-center gap-1 text-xs">
-        <NavLink to="/items">Items</NavLink>
-        <NavLink to="/pinned">Pinned</NavLink>
-        <NavLink to="/settings">Settings</NavLink>
-      </nav>
       <div className="ml-auto flex items-center gap-2">
         <ProviderSwitcher />
-        <ThemeToggle />
+        <NavLink to="/settings">Settings</NavLink>
       </div>
     </header>
   );
@@ -30,12 +24,9 @@ function NavLink({ to, children }: { to: string; children: React.ReactNode }) {
   return (
     <Link
       to={to}
-      className={cn(
-        "rounded px-2 py-1 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900",
-        "dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-100",
-      )}
+      className={cn("rounded px-2 py-1 text-xs text-fg-muted hover:bg-surface-alt hover:text-fg")}
       activeProps={{
-        className: "bg-zinc-100 text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100",
+        className: "bg-surface-alt text-fg",
       }}
     >
       {children}

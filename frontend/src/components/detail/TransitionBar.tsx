@@ -38,10 +38,9 @@ export function TransitionBar({
             )
           }
           className={cn(
-            "cursor-pointer rounded border border-zinc-300 bg-white px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider shadow-sm transition-colors",
-            "text-zinc-700 hover:border-accent hover:bg-accent hover:text-white",
-            "dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-accent dark:hover:bg-accent dark:hover:text-white",
-            "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-zinc-300 disabled:hover:bg-white disabled:hover:text-zinc-700 dark:disabled:hover:border-zinc-700 dark:disabled:hover:bg-zinc-900 dark:disabled:hover:text-zinc-300",
+            "cursor-pointer rounded border border-border bg-surface px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider shadow-sm transition-colors",
+            "text-fg-muted hover:border-accent hover:bg-accent hover:text-accent-fg",
+            "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border disabled:hover:bg-surface disabled:hover:text-fg-muted",
           )}
         >
           {formatIntent(intent)}

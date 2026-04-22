@@ -18,7 +18,7 @@ export function DescriptionEditor({ itemId, initial, onStaged, onClose }: Props)
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="overflow-hidden rounded border border-zinc-200 dark:border-zinc-800">
+      <div className="overflow-hidden rounded border border-border">
         <CodeMirror
           value={value}
           height="240px"
@@ -32,7 +32,7 @@ export function DescriptionEditor({ itemId, initial, onStaged, onClose }: Props)
         <button
           type="button"
           onClick={onClose}
-          className="rounded border border-zinc-200 px-3 py-1 text-xs hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+          className="rounded border border-border px-3 py-1 text-xs text-fg hover:bg-surface-alt"
         >
           Cancel
         </button>
@@ -50,7 +50,7 @@ export function DescriptionEditor({ itemId, initial, onStaged, onClose }: Props)
               },
             )
           }
-          className="rounded bg-accent px-3 py-1 text-xs font-semibold text-white hover:bg-accent/90 disabled:opacity-50"
+          className="rounded bg-accent px-3 py-1 text-xs font-semibold text-accent-fg hover:bg-accent/90 disabled:opacity-50"
         >
           {propose.isPending ? "Staging…" : "Stage edit"}
         </button>

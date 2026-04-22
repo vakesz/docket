@@ -5,11 +5,270 @@
 
 @variant dark (&:where(.dark, .dark *));
 
+/* Semantic color tokens.
+ *
+ * The values declared in @theme are Tailwind v4 design tokens that generate
+ * utility classes (bg-bg, text-fg, border-border, etc.). The defaults below
+ * are the LIGHT palette; per-theme overrides further down redeclare the same
+ * CSS custom properties on `:root[data-theme="..."]`.
+ *
+ * Token roles:
+ *   bg          — page background (deepest)
+ *   surface     — cards, panes, raised regions
+ *   surface-alt — hover/active row tint, secondary surface
+ *   fg          — primary text
+ *   fg-muted    — secondary text, labels
+ *   fg-faint    — tertiary text, monospace key prefixes
+ *   border      — dividers and outlines
+ *   accent      — focus, primary action, pinned indicator
+ *   accent-fg   — text/icon on accent backgrounds
+ *   warning / warning-bg / warning-fg — pending, stale rows, "needs info"
+ *   danger  / danger-bg  / danger-fg  — errors, blocked, offline, read-only
+ *   success / success-bg / success-fg — online, resolved, OK
+ */
 @theme {
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
+  --color-bg: oklch(100% 0 0);
+  --color-surface: oklch(98.5% 0 0);
+  --color-surface-alt: oklch(96% 0 0);
+  --color-fg: oklch(20% 0 0);
+  --color-fg-muted: oklch(45% 0 0);
+  --color-fg-faint: oklch(65% 0 0);
+  --color-border: oklch(90% 0 0);
   --color-accent: oklch(58.5% 0.2 277);
+  --color-accent-fg: oklch(100% 0 0);
+
+  --color-warning: #b45309;
+  --color-warning-bg: #fef3c7;
+  --color-warning-fg: #78350f;
+  --color-danger: #dc2626;
+  --color-danger-bg: #fee2e2;
+  --color-danger-fg: #7f1d1d;
+  --color-success: #059669;
+  --color-success-bg: #d1fae5;
+  --color-success-fg: #064e3b;
+}
+
+/* ─── light (explicit) ────────────────────────────────────────── */
+:root[data-theme="light"] {
+  --color-bg: oklch(100% 0 0);
+  --color-surface: oklch(98.5% 0 0);
+  --color-surface-alt: oklch(96% 0 0);
+  --color-fg: oklch(20% 0 0);
+  --color-fg-muted: oklch(45% 0 0);
+  --color-fg-faint: oklch(65% 0 0);
+  --color-border: oklch(90% 0 0);
+  --color-accent: oklch(58.5% 0.2 277);
+  --color-accent-fg: oklch(100% 0 0);
+  --color-warning: #b45309;
+  --color-warning-bg: #fef3c7;
+  --color-warning-fg: #78350f;
+  --color-danger: #dc2626;
+  --color-danger-bg: #fee2e2;
+  --color-danger-fg: #7f1d1d;
+  --color-success: #059669;
+  --color-success-bg: #d1fae5;
+  --color-success-fg: #064e3b;
+}
+
+/* ─── dark (explicit) ─────────────────────────────────────────── */
+:root[data-theme="dark"] {
+  --color-bg: oklch(15% 0 0);
+  --color-surface: oklch(19% 0 0);
+  --color-surface-alt: oklch(24% 0 0);
+  --color-fg: oklch(95% 0 0);
+  --color-fg-muted: oklch(70% 0 0);
+  --color-fg-faint: oklch(50% 0 0);
+  --color-border: oklch(30% 0 0);
+  --color-accent: oklch(70% 0.18 277);
+  --color-accent-fg: oklch(15% 0 0);
+  --color-warning: #fbbf24;
+  --color-warning-bg: oklch(28% 0.06 80);
+  --color-warning-fg: #fde68a;
+  --color-danger: #f87171;
+  --color-danger-bg: oklch(28% 0.08 25);
+  --color-danger-fg: #fecaca;
+  --color-success: #34d399;
+  --color-success-bg: oklch(28% 0.07 165);
+  --color-success-fg: #a7f3d0;
+}
+
+/* ─── nord ────────────────────────────────────────────────────── */
+:root[data-theme="nord"] {
+  --color-bg: #2e3440;
+  --color-surface: #3b4252;
+  --color-surface-alt: #434c5e;
+  --color-fg: #eceff4;
+  --color-fg-muted: #d8dee9;
+  --color-fg-faint: #81a1c1;
+  --color-border: #4c566a;
+  --color-accent: #88c0d0;
+  --color-accent-fg: #2e3440;
+  --color-warning: #ebcb8b;
+  --color-warning-bg: #4c443a;
+  --color-warning-fg: #ebcb8b;
+  --color-danger: #bf616a;
+  --color-danger-bg: #4a3a3e;
+  --color-danger-fg: #d08c92;
+  --color-success: #a3be8c;
+  --color-success-bg: #3d4838;
+  --color-success-fg: #a3be8c;
+}
+
+/* ─── dracula ─────────────────────────────────────────────────── */
+:root[data-theme="dracula"] {
+  --color-bg: #282a36;
+  --color-surface: #343746;
+  --color-surface-alt: #44475a;
+  --color-fg: #f8f8f2;
+  --color-fg-muted: #bfbfbf;
+  --color-fg-faint: #6272a4;
+  --color-border: #44475a;
+  --color-accent: #bd93f9;
+  --color-accent-fg: #282a36;
+  --color-warning: #f1fa8c;
+  --color-warning-bg: #44443a;
+  --color-warning-fg: #f1fa8c;
+  --color-danger: #ff5555;
+  --color-danger-bg: #4a3438;
+  --color-danger-fg: #ff8585;
+  --color-success: #50fa7b;
+  --color-success-bg: #2c4438;
+  --color-success-fg: #50fa7b;
+}
+
+/* ─── gruvbox-dark ────────────────────────────────────────────── */
+:root[data-theme="gruvbox-dark"] {
+  --color-bg: #282828;
+  --color-surface: #32302f;
+  --color-surface-alt: #3c3836;
+  --color-fg: #ebdbb2;
+  --color-fg-muted: #d5c4a1;
+  --color-fg-faint: #928374;
+  --color-border: #504945;
+  --color-accent: #fabd2f;
+  --color-accent-fg: #282828;
+  --color-warning: #fe8019;
+  --color-warning-bg: #3d3128;
+  --color-warning-fg: #fe8019;
+  --color-danger: #fb4934;
+  --color-danger-bg: #3d2c2a;
+  --color-danger-fg: #fb4934;
+  --color-success: #b8bb26;
+  --color-success-bg: #353a26;
+  --color-success-fg: #b8bb26;
+}
+
+/* ─── gruvbox-light ───────────────────────────────────────────── */
+:root[data-theme="gruvbox-light"] {
+  --color-bg: #fbf1c7;
+  --color-surface: #f9f5d7;
+  --color-surface-alt: #ebdbb2;
+  --color-fg: #3c3836;
+  --color-fg-muted: #504945;
+  --color-fg-faint: #7c6f64;
+  --color-border: #d5c4a1;
+  --color-accent: #b57614;
+  --color-accent-fg: #fbf1c7;
+  --color-warning: #af3a03;
+  --color-warning-bg: #f5deb8;
+  --color-warning-fg: #af3a03;
+  --color-danger: #9d0006;
+  --color-danger-bg: #f5d4cc;
+  --color-danger-fg: #9d0006;
+  --color-success: #79740e;
+  --color-success-bg: #e6e0a8;
+  --color-success-fg: #79740e;
+}
+
+/* ─── tokyo-night ─────────────────────────────────────────────── */
+:root[data-theme="tokyo-night"] {
+  --color-bg: #1a1b26;
+  --color-surface: #1f2335;
+  --color-surface-alt: #292e42;
+  --color-fg: #c0caf5;
+  --color-fg-muted: #a9b1d6;
+  --color-fg-faint: #565f89;
+  --color-border: #3b4261;
+  --color-accent: #7aa2f7;
+  --color-accent-fg: #1a1b26;
+  --color-warning: #e0af68;
+  --color-warning-bg: #2e2a30;
+  --color-warning-fg: #e0af68;
+  --color-danger: #f7768e;
+  --color-danger-bg: #2e2532;
+  --color-danger-fg: #f7768e;
+  --color-success: #9ece6a;
+  --color-success-bg: #232c2c;
+  --color-success-fg: #9ece6a;
+}
+
+/* ─── catppuccin-mocha ────────────────────────────────────────── */
+:root[data-theme="catppuccin-mocha"] {
+  --color-bg: #1e1e2e;
+  --color-surface: #313244;
+  --color-surface-alt: #45475a;
+  --color-fg: #cdd6f4;
+  --color-fg-muted: #bac2de;
+  --color-fg-faint: #6c7086;
+  --color-border: #45475a;
+  --color-accent: #cba6f7;
+  --color-accent-fg: #1e1e2e;
+  --color-warning: #f9e2af;
+  --color-warning-bg: #3a3640;
+  --color-warning-fg: #f9e2af;
+  --color-danger: #f38ba8;
+  --color-danger-bg: #3a2c3c;
+  --color-danger-fg: #f38ba8;
+  --color-success: #a6e3a1;
+  --color-success-bg: #2e3a36;
+  --color-success-fg: #a6e3a1;
+}
+
+/* ─── catppuccin-latte ────────────────────────────────────────── */
+:root[data-theme="catppuccin-latte"] {
+  --color-bg: #eff1f5;
+  --color-surface: #e6e9ef;
+  --color-surface-alt: #dce0e8;
+  --color-fg: #4c4f69;
+  --color-fg-muted: #5c5f77;
+  --color-fg-faint: #8c8fa1;
+  --color-border: #ccd0da;
+  --color-accent: #8839ef;
+  --color-accent-fg: #eff1f5;
+  --color-warning: #df8e1d;
+  --color-warning-bg: #f5ebd6;
+  --color-warning-fg: #8a5a16;
+  --color-danger: #d20f39;
+  --color-danger-bg: #f5d6dc;
+  --color-danger-fg: #8a0a26;
+  --color-success: #40a02b;
+  --color-success-bg: #d8ebd2;
+  --color-success-fg: #2a6a1c;
+}
+
+/* ─── solarized-light ─────────────────────────────────────────── */
+:root[data-theme="solarized-light"] {
+  --color-bg: #fdf6e3;
+  --color-surface: #eee8d5;
+  --color-surface-alt: #e3dcc4;
+  --color-fg: #073642;
+  --color-fg-muted: #586e75;
+  --color-fg-faint: #93a1a1;
+  --color-border: #d8d2bd;
+  --color-accent: #268bd2;
+  --color-accent-fg: #fdf6e3;
+  --color-warning: #b58900;
+  --color-warning-bg: #f0e6c0;
+  --color-warning-fg: #785a00;
+  --color-danger: #dc322f;
+  --color-danger-bg: #f5d4cc;
+  --color-danger-fg: #8a1f1c;
+  --color-success: #859900;
+  --color-success-bg: #e6e8c0;
+  --color-success-fg: #586300;
 }
 
 @layer base {
@@ -20,11 +279,9 @@
   }
 
   body {
-    @apply bg-white text-zinc-900 antialiased;
-  }
-
-  .dark body {
-    @apply bg-zinc-950 text-zinc-100;
+    background-color: var(--color-bg);
+    color: var(--color-fg);
+    @apply antialiased;
   }
 
   ::selection {

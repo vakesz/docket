@@ -17,7 +17,7 @@ export function PinButton({ itemId }: { itemId: string }) {
         "rounded border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider",
         pinned
           ? "border-accent bg-accent/10 text-accent"
-          : "border-zinc-200 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-900",
+          : "border-border text-fg-muted hover:bg-surface-alt",
       )}
     >
       {pinned ? "Pinned" : "Pin"}

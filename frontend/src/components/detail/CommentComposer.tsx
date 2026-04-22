@@ -26,7 +26,7 @@ export function CommentComposer({ itemId, onStaged }: Props) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="self-start rounded border border-zinc-200 px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-zinc-600 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-900"
+        className="self-start rounded border border-border px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:bg-surface-alt"
       >
         Add comment
       </button>
@@ -35,7 +35,7 @@ export function CommentComposer({ itemId, onStaged }: Props) {
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="overflow-hidden rounded border border-zinc-200 dark:border-zinc-800">
+      <div className="overflow-hidden rounded border border-border">
         <CodeMirror
           value={value}
           height="140px"
@@ -46,11 +46,7 @@ export function CommentComposer({ itemId, onStaged }: Props) {
           basicSetup={{ lineNumbers: false, foldGutter: false }}
         />
       </div>
-      {propose.error && (
-        <p className="text-xs text-rose-600 dark:text-rose-400">
-          {(propose.error as Error).message}
-        </p>
-      )}
+      {propose.error && <p className="text-xs text-danger">{(propose.error as Error).message}</p>}
       <div className="flex justify-end gap-2">
         <button
           type="button"
@@ -59,7 +55,7 @@ export function CommentComposer({ itemId, onStaged }: Props) {
             setOpen(false);
             propose.reset();
           }}
-          className="rounded border border-zinc-200 px-3 py-1 text-xs hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+          className="rounded border border-border px-3 py-1 text-xs text-fg hover:bg-surface-alt"
         >
           Cancel
         </button>
@@ -78,7 +74,7 @@ export function CommentComposer({ itemId, onStaged }: Props) {
               },
             )
           }
-          className="rounded bg-accent px-3 py-1 text-xs font-semibold text-white hover:bg-accent/90 disabled:opacity-50"
+          className="rounded bg-accent px-3 py-1 text-xs font-semibold text-accent-fg hover:bg-accent/90 disabled:opacity-50"
         >
           {propose.isPending ? "Staging…" : "Stage comment"}
         </button>
