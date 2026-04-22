@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 ### Docket backend — FastAPI image (uvicorn + uv-managed venv)
 #
 # Built with `uv` for fast, deterministic installs. The `gh` and `az` CLIs
@@ -13,10 +14,20 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_PROJECT_ENVIRONMENT=/opt/venv
 
 WORKDIR /app
+
+# Install locked deps first with only manifests mounted in — this layer
+# is reused across rebuilds whenever src/ changes but pyproject/uv.lock don't.
+# `--mount=type=cache` keeps uv's wheel cache between builds.
+RUN --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=README.md,target=README.md \
+    --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-install-project
+
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
 
-RUN uv sync --frozen --no-dev && \
+RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --python /opt/venv/bin/python .
 
 
@@ -28,7 +39,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     XDG_STATE_HOME=/data/state \
     XDG_CACHE_HOME=/data/cache
 
-RUN apt-get update && \
+# Keep apt archives across builds (overrides the Debian image's docker-clean).
+RUN rm -f /etc/apt/apt.conf.d/docker-clean && \
+    echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       ca-certificates curl gnupg git tini && \
     mkdir -p -m 0755 /etc/apt/keyrings && \
@@ -42,8 +59,7 @@ RUN apt-get update && \
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ bookworm main" \
       > /etc/apt/sources.list.d/azure-cli.list && \
     apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends gh azure-cli && \
-    rm -rf /var/lib/apt/lists/*
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends gh azure-cli
 
 COPY --from=build /opt/venv /opt/venv
 WORKDIR /app

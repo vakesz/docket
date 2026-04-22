@@ -21,9 +21,17 @@ name: docket
 
 services:
   backend:
+    image: docket-backend:latest
     build:
       context: .
       dockerfile: Dockerfile
+      # Inline cache: BuildKit writes layer-cache metadata into the image
+      # itself, so the next build reuses layers straight from the tagged
+      # image. No external cache directory or builder setup needed.
+      cache_from:
+        - docket-backend:latest
+      cache_to:
+        - type=inline
     restart: unless-stopped
     environment:
       DOCKET_API_TOKEN: ${DOCKET_API_TOKEN:?set DOCKET_API_TOKEN in .env}
@@ -47,9 +55,14 @@ services:
       start_period: 20s
 
   frontend:
+    image: docket-frontend:latest
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      cache_from:
+        - docket-frontend:latest
+      cache_to:
+        - type=inline
     restart: unless-stopped
     depends_on:
       backend:

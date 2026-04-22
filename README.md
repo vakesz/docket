@@ -6,13 +6,10 @@
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![uv](https://img.shields.io/badge/packaging-uv-261230?logo=python&logoColor=white)](https://docs.astral.sh/uv/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](#license)
 [![Type-checked: mypy](https://img.shields.io/badge/type--checked-mypy%20strict-2a6db2?logo=python&logoColor=white)](https://mypy-lang.org/)
 [![Lint: ruff](https://img.shields.io/badge/lint-ruff-261230?logo=ruff&logoColor=white)](https://docs.astral.sh/ruff/)
-[![Tests](https://img.shields.io/badge/tests-327%20passing-brightgreen)](#testing)
 [![Azure DevOps](https://img.shields.io/badge/Azure%20DevOps-ready-0078d7?logo=azuredevops&logoColor=white)](#providers)
 [![GitHub](https://img.shields.io/badge/GitHub-ready-181717?logo=github&logoColor=white)](#providers)
-[![Status: phase-2 landed](https://img.shields.io/badge/status-phase%202%20landed-success)](#roadmap)
 
 Browse · Filter · Chat · Transition · Patch · Create — without leaving your terminal.
 
@@ -333,7 +330,7 @@ Before opening a PR:
 
 ## Docs
 
-- 📘 **[First-Time Setup Guide](docs/FIRST_TIME_SETUP.md)** — install, wizard walkthrough, provider-specific prerequisites, troubleshooting
+- 📘 **[First-Time Setup Guide](.docs/FIRST_TIME_SETUP.md)** — install, wizard walkthrough, provider-specific prerequisites, troubleshooting
 - 🤖 **[CLAUDE.md](CLAUDE.md)** — conventions for AI assistants working in this repo
 
 ## License

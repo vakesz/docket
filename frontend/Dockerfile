@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 ### Docket frontend — production image
 #
 # Stage 1 installs full dependencies and runs `bun run build`.
@@ -11,7 +12,8 @@ FROM oven/bun:1.3-alpine AS build
 WORKDIR /app
 
 COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+    bun install --frozen-lockfile
 
 COPY tsconfig.json vite.config.ts biome.json ./
 COPY src ./src
@@ -25,7 +27,8 @@ ENV NODE_ENV=production \
     PORT=3000
 
 COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile --production
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+    bun install --frozen-lockfile --production
 
 COPY --from=build /app/dist ./dist
 COPY server.ts ./
