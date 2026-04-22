@@ -100,7 +100,16 @@ def get_runtime(request: Request) -> RuntimeState:
     return runtime
 
 
+def get_active_provider_key(request: Request) -> str:
+    """Active provider key from the runtime, or `""` when no runtime is wired
+    (e.g., bootstrap mode or tests). Repos truth-test this value, so `""` and
+    `None` are handled identically downstream."""
+    runtime: RuntimeState | None = getattr(request.app.state, "runtime", None)
+    return runtime.provider_key if runtime is not None else ""
+
+
 __all__ = [
+    "get_active_provider_key",
     "get_conn",
     "get_paths",
     "get_proposals",

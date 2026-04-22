@@ -97,11 +97,15 @@ def create_app(
     else:
         app.state.agent = None
 
-    app.include_router(items_routes.router)
+    # Sub-routers keyed off `/items/{item_id:path}/…` must be registered
+    # before the catch-all item routes, otherwise the `:path` converter
+    # on the plain `/{item_id}` route greedy-matches and swallows
+    # `/conversation`, `/pinned`, etc. into the item id.
     app.include_router(mutations_routes.router)
     app.include_router(conversations_routes.router)
     app.include_router(pins_routes.router)
     app.include_router(suggestions_routes.router)
+    app.include_router(items_routes.router)
     app.include_router(prompts_routes.router)
     app.include_router(settings_routes.router)
     app.include_router(scopes_routes.router)

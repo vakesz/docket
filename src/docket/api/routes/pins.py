@@ -9,29 +9,22 @@ from __future__ import annotations
 
 import sqlite3
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from docket.api.auth import require_bearer
-from docket.api.deps import get_conn, require_not_read_only
-from docket.api.runtime import RuntimeState
+from docket.api.deps import get_active_provider_key, get_conn, require_not_read_only
 from docket.api.schemas import ItemDTO, PinnedStatusDTO
 from docket.storage.repos import item_repo, watchlist_repo
 
 router = APIRouter(tags=["pins"], dependencies=[Depends(require_bearer)])
 
 
-def _active_provider_key(request: Request) -> str:
-    runtime: RuntimeState | None = getattr(request.app.state, "runtime", None)
-    return runtime.provider_key if runtime is not None else ""
-
-
-@router.get("/items/{item_id}/pinned", response_model=PinnedStatusDTO)
+@router.get("/items/{item_id:path}/pinned", response_model=PinnedStatusDTO)
 def is_pinned(
     item_id: str,
-    request: Request,
     conn: sqlite3.Connection = Depends(get_conn),
+    provider_key: str = Depends(get_active_provider_key),
 ) -> PinnedStatusDTO:
-    provider_key = _active_provider_key(request)
     if item_repo.get_item(conn, item_id, provider_key=provider_key) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown item '{item_id}'")
     return PinnedStatusDTO(
@@ -41,43 +34,41 @@ def is_pinned(
 
 
 @router.post(
-    "/items/{item_id}/pin",
+    "/items/{item_id:path}/pin",
     status_code=status.HTTP_204_NO_CONTENT,
     dependencies=[Depends(require_not_read_only)],
 )
 def pin_item(
     item_id: str,
-    request: Request,
     conn: sqlite3.Connection = Depends(get_conn),
+    provider_key: str = Depends(get_active_provider_key),
 ) -> None:
-    watchlist_repo.pin(conn, item_id, provider_key=_active_provider_key(request))
+    watchlist_repo.pin(conn, item_id, provider_key=provider_key)
     conn.commit()
 
 
 @router.delete(
-    "/items/{item_id}/pin",
+    "/items/{item_id:path}/pin",
     status_code=status.HTTP_204_NO_CONTENT,
     dependencies=[Depends(require_not_read_only)],
 )
 def unpin_item(
     item_id: str,
-    request: Request,
     conn: sqlite3.Connection = Depends(get_conn),
+    provider_key: str = Depends(get_active_provider_key),
 ) -> None:
-    watchlist_repo.unpin(conn, item_id, provider_key=_active_provider_key(request))
+    watchlist_repo.unpin(conn, item_id, provider_key=provider_key)
     conn.commit()
 
 
 @router.get("/pinned", response_model=list[ItemDTO])
 def list_pinned(
-    request: Request,
     conn: sqlite3.Connection = Depends(get_conn),
+    provider_key: str = Depends(get_active_provider_key),
 ) -> list[ItemDTO]:
     return [
         ItemDTO.from_core(i)
-        for i in watchlist_repo.list_pinned_items(
-            conn, provider_key=_active_provider_key(request) or None
-        )
+        for i in watchlist_repo.list_pinned_items(conn, provider_key=provider_key)
     ]
 
 

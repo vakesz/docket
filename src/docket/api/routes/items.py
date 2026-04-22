@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import sqlite3
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from docket.api.auth import require_bearer
-from docket.api.deps import get_conn, get_provider, require_not_read_only
-from docket.api.runtime import RuntimeState
+from docket.api.deps import get_active_provider_key, get_conn, get_provider, require_not_read_only
 from docket.api.schemas import (
     CommentDTO,
     CreateItemRequest,
@@ -28,79 +27,49 @@ router = APIRouter(
 )
 
 
-def _active_provider_key(request: Request) -> str:
-    runtime: RuntimeState | None = getattr(request.app.state, "runtime", None)
-    return runtime.provider_key if runtime is not None else ""
-
-
 @router.get("", response_model=list[ItemDTO])
 def list_items(
-    request: Request,
     conn: sqlite3.Connection = Depends(get_conn),
     kind: ItemKind | None = Query(None, description="Filter by item kind."),
     include_archived: bool = Query(False, alias="archived"),
     parent_id: str | None = Query(None),
+    provider_key: str = Depends(get_active_provider_key),
 ) -> list[ItemDTO]:
     items = item_repo.list_items(
         conn,
         kind=kind,
         parent_id=parent_id,
         include_archived=include_archived,
-        provider_key=_active_provider_key(request) or None,
+        provider_key=provider_key,
     )
     return [ItemDTO.from_core(i) for i in items]
 
 
-@router.get("/{item_id}", response_model=ItemDTO)
-def get_item(
-    item_id: str,
-    request: Request,
-    conn: sqlite3.Connection = Depends(get_conn),
-    provider: WorkItemProvider = Depends(get_provider),
-    refresh: bool = Query(False, description="Fetch from provider instead of cache."),
-) -> ItemDTO:
-    if refresh:
-        try:
-            fresh = provider.get_item(item_id)
-        except Exception as e:
-            raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Provider lookup failed: {e}") from e
-        provider_key = _active_provider_key(request)
-        if provider_key:
-            fresh.provider_key = provider_key
-        item_repo.upsert_item(conn, fresh)
-        return ItemDTO.from_core(fresh)
-    cached = item_repo.get_item(conn, item_id, provider_key=_active_provider_key(request) or None)
-    if cached is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown item '{item_id}'")
-    return ItemDTO.from_core(cached)
-
-
-@router.get("/{item_id}/comments", response_model=list[CommentDTO])
+# Sub-path routes must come before the bare `/{item_id:path}` catch-all,
+# otherwise `:path` greedy-matches and swallows `/comments`, `/linked` into
+# the item id.
+@router.get("/{item_id:path}/comments", response_model=list[CommentDTO])
 def get_comments(
     item_id: str,
-    request: Request,
     conn: sqlite3.Connection = Depends(get_conn),
     provider: WorkItemProvider = Depends(get_provider),
     refresh: bool = Query(False, description="Fetch fresh from provider."),
+    provider_key: str = Depends(get_active_provider_key),
 ) -> list[CommentDTO]:
     if refresh:
         try:
             fresh = provider.get_comments(item_id)
         except Exception as e:
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Provider lookup failed: {e}") from e
-        comment_repo.replace_comments_for_item(
-            conn, item_id, fresh, provider_key=_active_provider_key(request)
-        )
+        comment_repo.replace_comments_for_item(conn, item_id, fresh, provider_key=provider_key)
         return [CommentDTO.from_core(c) for c in fresh]
     return [
         CommentDTO.from_core(c)
-        for c in comment_repo.list_comments(
-            conn, item_id, provider_key=_active_provider_key(request) or None
-        )
+        for c in comment_repo.list_comments(conn, item_id, provider_key=provider_key)
     ]
 
 
-@router.get("/{item_id}/linked", response_model=list[ItemDTO])
+@router.get("/{item_id:path}/linked", response_model=list[ItemDTO])
 def get_linked(
     item_id: str,
     provider: WorkItemProvider = Depends(get_provider),
@@ -112,6 +81,29 @@ def get_linked(
     return [ItemDTO.from_core(i) for i in linked]
 
 
+@router.get("/{item_id:path}", response_model=ItemDTO)
+def get_item(
+    item_id: str,
+    conn: sqlite3.Connection = Depends(get_conn),
+    provider: WorkItemProvider = Depends(get_provider),
+    refresh: bool = Query(False, description="Fetch from provider instead of cache."),
+    provider_key: str = Depends(get_active_provider_key),
+) -> ItemDTO:
+    if refresh:
+        try:
+            fresh = provider.get_item(item_id)
+        except Exception as e:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Provider lookup failed: {e}") from e
+        if provider_key:
+            fresh.provider_key = provider_key
+        item_repo.upsert_item(conn, fresh)
+        return ItemDTO.from_core(fresh)
+    cached = item_repo.get_item(conn, item_id, provider_key=provider_key)
+    if cached is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown item '{item_id}'")
+    return ItemDTO.from_core(cached)
+
+
 @router.post(
     "",
     status_code=status.HTTP_201_CREATED,
@@ -119,10 +111,10 @@ def get_linked(
 )
 def create_item(
     payload: CreateItemRequest,
-    request: Request,
     conn: sqlite3.Connection = Depends(get_conn),
     provider: WorkItemProvider = Depends(get_provider),
     dry_run: bool = Query(False, description="Return the proposal without creating."),
+    provider_key: str = Depends(get_active_provider_key),
 ) -> ProposalDTO | MutationConfirmedDTO:
     """Create a work item through the mutation pipeline.
 
@@ -133,9 +125,7 @@ def create_item(
     if dry_run:
         return ProposalDTO.from_core(proposal)
     try:
-        result = mutation_service.confirm(
-            conn, provider, proposal, provider_key=_active_provider_key(request)
-        )
+        result = mutation_service.confirm(conn, provider, proposal, provider_key=provider_key)
     except Exception as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Create failed: {e}") from e
     item_dto = ItemDTO.from_core(result.item) if result.item else None

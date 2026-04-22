@@ -12,17 +12,17 @@ from __future__ import annotations
 
 import sqlite3
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from docket.agent.llm_client import LlmClient
 from docket.api.auth import require_bearer
 from docket.api.deps import (
+    get_active_provider_key,
     get_conn,
     get_proposals,
     require_llm,
     require_not_read_only,
 )
-from docket.api.runtime import RuntimeState
 from docket.api.schemas import ProposalDTO, SuggestionDTO, SuggestionStageRequest
 from docket.core.services import mutation_service, suggestion_service
 from docket.core.services.proposal_store import ProposalStore
@@ -30,25 +30,20 @@ from docket.core.services.suggestion_service import Suggestion, SuggestionError
 from docket.storage.repos import item_repo
 
 router = APIRouter(
-    prefix="/items/{item_id}/suggestion",
+    prefix="/items/{item_id:path}/suggestion",
     tags=["suggestions"],
     dependencies=[Depends(require_bearer)],
 )
 
 
-def _active_provider_key(request: Request) -> str:
-    runtime: RuntimeState | None = getattr(request.app.state, "runtime", None)
-    return runtime.provider_key if runtime is not None else ""
-
-
 @router.post("", response_model=SuggestionDTO)
 def get_suggestion(
     item_id: str,
-    request: Request,
     conn: sqlite3.Connection = Depends(get_conn),
     llm: LlmClient = Depends(require_llm),
+    provider_key: str = Depends(get_active_provider_key),
 ) -> SuggestionDTO:
-    item = item_repo.get_item(conn, item_id, provider_key=_active_provider_key(request) or None)
+    item = item_repo.get_item(conn, item_id, provider_key=provider_key)
     if item is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown item '{item_id}'")
     try:
@@ -71,9 +66,9 @@ def get_suggestion(
 def stage_suggestion(
     item_id: str,
     payload: SuggestionStageRequest,
-    request: Request,
     conn: sqlite3.Connection = Depends(get_conn),
     store: ProposalStore = Depends(get_proposals),
+    provider_key: str = Depends(get_active_provider_key),
 ) -> list[ProposalDTO]:
     suggestion = Suggestion(
         item_id=item_id,
@@ -81,9 +76,7 @@ def stage_suggestion(
         description_patch_md=payload.description_patch_md,
     )
     try:
-        staged = suggestion_service.stage_suggestion(
-            conn, suggestion, provider_key=_active_provider_key(request)
-        )
+        staged = suggestion_service.stage_suggestion(conn, suggestion, provider_key=provider_key)
     except KeyError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
     out: list[ProposalDTO] = []

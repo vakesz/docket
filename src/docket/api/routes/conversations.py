@@ -21,8 +21,7 @@ from sse_starlette.sse import EventSourceResponse, ServerSentEvent  # type: igno
 from docket.agent.loop import AgentLoop
 from docket.agent.types import ChatMessage, StreamDelta
 from docket.api.auth import require_bearer
-from docket.api.deps import get_conn, get_proposals, require_agent
-from docket.api.runtime import RuntimeState
+from docket.api.deps import get_active_provider_key, get_conn, get_proposals, require_agent
 from docket.api.schemas import (
     ChatRoleDTO,
     ConversationDTO,
@@ -37,7 +36,7 @@ from docket.storage.repos import conversation_repo, item_repo
 log = logging.getLogger(__name__)
 
 router = APIRouter(
-    prefix="/items/{item_id}/conversation",
+    prefix="/items/{item_id:path}/conversation",
     tags=["conversations"],
     dependencies=[Depends(require_bearer)],
 )
@@ -55,18 +54,12 @@ def _message_dto(m: ChatMessage) -> ChatRoleDTO:
     )
 
 
-def _active_provider_key(request: Request) -> str:
-    runtime: RuntimeState | None = getattr(request.app.state, "runtime", None)
-    return runtime.provider_key if runtime is not None else ""
-
-
 @router.get("", response_model=ConversationHistoryDTO)
 def get_history(
     item_id: str,
-    request: Request,
     conn: sqlite3.Connection = Depends(get_conn),
+    provider_key: str = Depends(get_active_provider_key),
 ) -> ConversationHistoryDTO:
-    provider_key = _active_provider_key(request)
     if item_repo.get_item(conn, item_id, provider_key=provider_key) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown item '{item_id}'")
     convo = conversation_repo.get_active_for_item(conn, item_id, provider_key=provider_key)
@@ -82,10 +75,9 @@ def get_history(
 @router.post("/thread", response_model=ConversationDTO)
 def start_thread(
     item_id: str,
-    request: Request,
     conn: sqlite3.Connection = Depends(get_conn),
+    provider_key: str = Depends(get_active_provider_key),
 ) -> ConversationDTO:
-    provider_key = _active_provider_key(request)
     if item_repo.get_item(conn, item_id, provider_key=provider_key) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown item '{item_id}'")
     convo = conversation_service.new_thread(conn, item_id, provider_key=provider_key)
@@ -100,6 +92,7 @@ async def send_message(
     conn: sqlite3.Connection = Depends(get_conn),
     store: ProposalStore = Depends(get_proposals),
     agent: AgentLoop = Depends(require_agent),
+    provider_key: str = Depends(get_active_provider_key),
 ) -> EventSourceResponse:
     """Drive one agent turn, streaming assistant text and tool events via SSE.
 
@@ -111,7 +104,6 @@ async def send_message(
       - `done` — terminal, carries usage totals
       - `error` — terminal, carries a human-readable detail
     """
-    provider_key = _active_provider_key(request)
     if item_repo.get_item(conn, item_id, provider_key=provider_key) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown item '{item_id}'")
 
