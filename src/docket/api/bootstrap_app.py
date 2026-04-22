@@ -1,6 +1,6 @@
 """Minimal FastAPI used when `config.toml` is missing.
 
-Only `/healthz` and `/setup/*` are exposed, gated by `DOCKET_SETUP_TOKEN`.
+Only `/health` and `/setup/*` are exposed, gated by `DOCKET_SETUP_TOKEN`.
 The frontend can poll `GET /setup/status` (auth-free) to detect this mode
 and run its built-in wizard. On `POST /setup/complete` the backend writes
 config and signals itself to exit so the supervisor restarts it in normal
@@ -24,7 +24,7 @@ def create_bootstrap_app(*, paths: Paths, setup_token: str) -> FastAPI:
     app = FastAPI(
         title="Docket (setup)",
         version="0.1.0",
-        description="First-time setup surface. Only /healthz and /setup/* are exposed.",
+        description="First-time setup surface. Only /health and /setup/* are exposed.",
     )
     app.state.paths = paths
     app.state.setup_token = setup_token
@@ -35,8 +35,8 @@ def create_bootstrap_app(*, paths: Paths, setup_token: str) -> FastAPI:
 
     app.include_router(setup_routes.router)
 
-    @app.get("/healthz", response_model=HealthDTO, tags=["health"])
-    def healthz() -> HealthDTO:
+    @app.get("/health", response_model=HealthDTO, tags=["health"])
+    def health() -> HealthDTO:
         return HealthDTO()
 
     return app

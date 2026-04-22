@@ -3,7 +3,7 @@
 Verifies `create_app(..., read_only=True)`:
   - returns 403 on every POST under `/items/{id}/mutations/*`
   - returns 403 on `POST /items` (create)
-  - keeps all reads (`GET /items`, `GET /items/{id}`, `/healthz`, `/whoami`)
+  - keeps all reads (`GET /items`, `GET /items/{id}`, `/health`, `/whoami`)
     working unchanged
   - strips the mutating tools from the agent registry so the in-process
     agent can still chat but can't stage writes
@@ -140,7 +140,7 @@ def test_reject_blocked(ro_client: TestClient) -> None:
 
 
 def test_reads_still_work(ro_client: TestClient) -> None:
-    assert ro_client.get("/healthz").status_code == 200
+    assert ro_client.get("/health").status_code == 200
     assert ro_client.get("/whoami", headers=AUTH).status_code == 200
     listing = ro_client.get("/items", headers=AUTH)
     assert listing.status_code == 200

@@ -68,7 +68,7 @@ const server = Bun.serve({
   async fetch(req) {
     const url = new URL(req.url);
 
-    if (url.pathname === "/healthz") return new Response("ok");
+    if (url.pathname === "/health") return new Response("ok");
 
     if (url.pathname.startsWith("/api/")) {
       try {

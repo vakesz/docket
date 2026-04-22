@@ -64,8 +64,8 @@ def test_wrong_bearer_returns_401(client: TestClient) -> None:
     assert resp.status_code == 401
 
 
-def test_healthz_is_unauthenticated(client: TestClient) -> None:
-    resp = client.get("/healthz")
+def test_health_is_unauthenticated(client: TestClient) -> None:
+    resp = client.get("/health")
     assert resp.status_code == 200
     assert resp.json() == {"status": "ok"}
 

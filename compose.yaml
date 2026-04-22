@@ -48,7 +48,7 @@ services:
     expose:
       - "8765"
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8765/healthz"]
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8765/health"]
       interval: 30s
       timeout: 3s
       retries: 5
@@ -74,7 +74,7 @@ services:
     ports:
       - "${DOCKET_FRONTEND_PORT:-3000}:3000"
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/healthz"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
       interval: 30s
       timeout: 3s
       retries: 5

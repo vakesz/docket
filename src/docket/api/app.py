@@ -109,8 +109,8 @@ def create_app(
     app.include_router(status_routes.router)
     app.include_router(setup_routes.router)
 
-    @app.get("/healthz", response_model=HealthDTO, tags=["health"])
-    def healthz() -> HealthDTO:
+    @app.get("/health", response_model=HealthDTO, tags=["health"])
+    def health() -> HealthDTO:
         return HealthDTO()
 
     @app.get("/whoami", tags=["health"], dependencies=[Depends(require_bearer)])

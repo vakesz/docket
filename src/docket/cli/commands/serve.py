@@ -50,7 +50,7 @@ def serve_command(
     """Run the HTTP surface (FastAPI + SSE) on the configured port.
 
     When `config.toml` is missing, falls through to bootstrap mode: a tiny
-    FastAPI exposing only `/healthz` and `/setup/*`, gated by
+    FastAPI exposing only `/health` and `/setup/*`, gated by
     `DOCKET_SETUP_TOKEN`, so the frontend wizard can write config and trigger
     a restart."""
     import uvicorn

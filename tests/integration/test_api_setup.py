@@ -2,7 +2,7 @@
 
 Two modes are covered:
 
-- **bootstrap app** (no config.toml yet): only `/healthz` and `/setup/*` are
+- **bootstrap app** (no config.toml yet): only `/health` and `/setup/*` are
   mounted, auth uses `DOCKET_SETUP_TOKEN`.
 - **full app** with setup routes mounted alongside normal endpoints, so an
   operator can re-run setup after config exists.
@@ -69,10 +69,10 @@ def test_bootstrap_status_no_auth(tmp_path: Path) -> None:
     assert body["config_path"].endswith("config.toml")
 
 
-def test_bootstrap_healthz_works(tmp_path: Path) -> None:
+def test_bootstrap_health_works(tmp_path: Path) -> None:
     paths = _mk_paths(tmp_path)
     client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
-    r = client.get("/healthz")
+    r = client.get("/health")
     assert r.status_code == 200
 
 

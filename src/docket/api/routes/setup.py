@@ -2,7 +2,7 @@
 
 Mounted on both the full `create_app` and the bootstrap app spun up when
 `config.toml` doesn't exist yet. In bootstrap mode only `/setup/*` and
-`/healthz` are exposed, gated by `DOCKET_SETUP_TOKEN`. Once setup completes
+`/health` are exposed, gated by `DOCKET_SETUP_TOKEN`. Once setup completes
 the server writes config and exits so the supervisor (docker compose,
 `docket serve` rerun) can restart with real wiring.
 

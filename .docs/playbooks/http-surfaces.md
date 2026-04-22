@@ -13,7 +13,7 @@
 docket serve
    |
    +--> create_bootstrap_app(paths, setup_token)
-   |        exposes /healthz + /setup/*
+   |        exposes /health + /setup/*
    |
    +--> create_app(conn, provider, bearer_token, runtime, ...)
             mounts routes/*
