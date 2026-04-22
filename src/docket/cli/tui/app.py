@@ -506,8 +506,21 @@ class DocketApp(App[None]):
         bar.provider_name = str(display)
         bar.scope_label = self.tui_ctx.scope_key
         bar.active_view = self.tui_ctx.scope_key
+        bar.project_name = self._resolve_project_name()
         bar.read_only = self.tui_ctx.read_only
-        bar.tooltip = "Session status: provider, active view, sync health, streaming, cost, and read-only mode."
+        bar.tooltip = "Session status: project, provider, active view, sync health, streaming, cost, and read-only mode."
+
+    def _resolve_project_name(self) -> str:
+        """Display name for the active (provider, scope) project, or empty
+        string if no name has been configured yet (status bar will skip)."""
+        cfg = self.tui_ctx.config
+        if cfg is None:
+            return ""
+        from docket.core.model import project_id_for
+
+        pid = project_id_for(self.tui_ctx.provider_key, self.tui_ctx.scope_key)
+        entry = cfg.projects.get(pid)
+        return entry.name if entry else ""
 
     def _apply_tooltips(self) -> None:
         with contextlib.suppress(Exception):
@@ -1175,6 +1188,7 @@ class DocketApp(App[None]):
             bar = self.query_one(StatusBar)
             bar.scope_label = name
             bar.active_view = name
+            bar.project_name = self._resolve_project_name()
         self._reload_tree()
         self.notify(f"Switched to view '{name}'.", severity="information")
 
@@ -1234,6 +1248,7 @@ class DocketApp(App[None]):
             bar.provider_name = entry.display_name
             bar.scope_label = scope_name
             bar.active_view = scope_name
+            bar.project_name = self._resolve_project_name()
         with contextlib.suppress(Exception):
             self.query_one(ItemTree).stale_threshold_days = self._resolved_stale_threshold()
             self.query_one(ItemDetail).stale_threshold_days = self._resolved_stale_threshold()

@@ -135,3 +135,29 @@ class PRMatch:
     state: str = ""  # "open" | "merged" | "closed" — provider-specific labels OK
     author: str = ""
     confidence: float = 0.5
+
+
+@dataclass
+class Project:
+    """A named (provider_key, scope_key) pair. The id is the storage-layer
+    composite key built by `project_id_for(provider_key, scope_key)` so that
+    memory, sources, and sub-agents can be FK-scoped without exposing the
+    composite shape to UI code."""
+
+    id: str
+    provider_key: str
+    scope_key: str
+    name: str
+    description: str = ""
+    created_at: datetime | None = None
+    archived_at: datetime | None = None
+
+
+def project_id_for(provider_key: str, scope_key: str) -> str:
+    """Deterministic project id for a (provider_key, scope_key) pair.
+
+    Stable across renames: changing `name` or `description` does not change
+    the id, so memory/sources/sub-agents follow the same project even after
+    a rename. Empty `provider_key` is allowed for tests and for the implicit
+    "no provider configured yet" case."""
+    return f"{provider_key}::{scope_key}"

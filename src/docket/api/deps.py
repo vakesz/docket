@@ -14,6 +14,7 @@ from fastapi import HTTPException, Request, status
 from docket.agent.llm_client import LlmClient
 from docket.agent.loop import AgentLoop
 from docket.api.runtime import RuntimeState
+from docket.config.models import Config
 from docket.config.paths import Paths
 from docket.core.services.proposal_store import ProposalStore
 from docket.providers.base import WorkItemProvider
@@ -108,8 +109,23 @@ def get_active_provider_key(request: Request) -> str:
     return runtime.provider_key if runtime is not None else ""
 
 
+def get_config(request: Request) -> Config:
+    """Return the in-memory `Config` object the server was booted with.
+
+    Mutations that need to persist back to disk should also use `get_paths()`
+    so they can call `save_config(paths, config)`."""
+    cfg: Config | None = getattr(request.app.state, "config", None)
+    if cfg is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Config is not wired — this endpoint requires `docket serve`.",
+        )
+    return cfg
+
+
 __all__ = [
     "get_active_provider_key",
+    "get_config",
     "get_conn",
     "get_paths",
     "get_proposals",

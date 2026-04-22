@@ -8,6 +8,7 @@ from docket.cli.commands.list import list_command
 from docket.cli.commands.new import new_command
 from docket.cli.commands.open import open_command, run_open_tui
 from docket.cli.commands.patch import patch_command
+from docket.cli.commands.project import project_app
 from docket.cli.commands.serve import serve_command
 from docket.cli.commands.setup import setup_app
 from docket.cli.commands.show import show_command
@@ -40,6 +41,7 @@ def _root(ctx: typer.Context) -> None:
 
 
 app.add_typer(setup_app, name="setup")
+app.add_typer(project_app, name="project")
 app.command("sync")(sync_command)
 app.command("list")(list_command)
 app.command("show")(show_command)

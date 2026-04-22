@@ -87,6 +87,7 @@ class StatusBar(Static):
 
     provider_name: reactive[str] = reactive("—")
     scope_label: reactive[str] = reactive("—")
+    project_name: reactive[str] = reactive("")
     last_sync: reactive[datetime | None] = reactive(None)
     next_sync_at: reactive[datetime | None] = reactive(None)
     active_view: reactive[str | None] = reactive(None)
@@ -104,6 +105,8 @@ class StatusBar(Static):
             style = self.get_component_rich_style(component, partial=True) if component else None
             out.append(text, style=style)
 
+        if self.project_name:
+            append_part(self.project_name, "status-bar--accent")
         append_part(self.provider_name)
         append_part(self.scope_label)
         if self.active_view and self.active_view != self.scope_label:

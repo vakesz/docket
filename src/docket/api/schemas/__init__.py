@@ -46,6 +46,8 @@ from docket.api.schemas.setup import (
 )
 from docket.api.schemas.tui_parity import (
     PinnedStatusDTO,
+    ProjectDTO,
+    ProjectUpdateRequest,
     PromptDTO,
     PromptSummaryDTO,
     PromptUpdateRequest,
@@ -72,6 +74,8 @@ __all__ = [
     "ItemDTO",
     "MutationConfirmedDTO",
     "PinnedStatusDTO",
+    "ProjectDTO",
+    "ProjectUpdateRequest",
     "PromptDTO",
     "PromptSummaryDTO",
     "PromptUpdateRequest",

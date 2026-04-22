@@ -3,6 +3,7 @@ from docket.core.services import (
     conversation_service,
     external_update_service,
     mutation_service,
+    project_service,
     suggestion_service,
     sync_service,
 )
@@ -12,6 +13,7 @@ __all__ = [
     "conversation_service",
     "external_update_service",
     "mutation_service",
+    "project_service",
     "suggestion_service",
     "sync_service",
 ]

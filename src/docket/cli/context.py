@@ -17,7 +17,8 @@ from docket.config import (
     load_env,
     resolve_paths,
 )
-from docket.core.model import ScopeFilters
+from docket.core.model import Project, ScopeFilters, project_id_for
+from docket.core.services import project_service
 from docket.providers.base import WorkItemProvider
 from docket.providers.registry import UnknownProviderError
 from docket.providers.registry import build as build_provider
@@ -66,6 +67,24 @@ class Context:
     def scope_key_for(self, provider: str | None = None) -> str:
         return self.provider_entry(provider).active_scope
 
+    @property
+    def project_id(self) -> str:
+        """Derived id for the currently-active (provider, scope).
+
+        Stable across renames; safe to use as a foreign key for memory,
+        sources, sub-agents, and any future per-project state."""
+        return project_id_for(self.active_provider, self.scope_key_for())
+
+    def active_project(self) -> Project:
+        """Get-or-create the project row for the active (provider, scope)."""
+        return project_service.activate(
+            self.config,
+            self.paths,
+            self.conn,
+            provider_key=self.active_provider,
+            scope_key=self.scope_key_for(),
+        )
+
     def close(self) -> None:
         self.conn.close()
 
@@ -101,13 +120,26 @@ def prepare() -> Context:
         if config.active_provider in providers
         else (next(iter(providers), ""))
     )
-    return Context(
+    ctx = Context(
         paths=paths,
         config=config,
         conn=conn,
         providers=providers,
         active_provider=active,
     )
+    # Mirror config.projects -> SQLite so memory/sources/sub-agents have a
+    # valid FK target. Lazily seed an entry for the active (provider, scope)
+    # if the user has not declared one explicitly yet.
+    project_service.mirror_into_db(config, conn)
+    if active and active in config.providers:
+        project_service.activate(
+            config,
+            paths,
+            conn,
+            provider_key=active,
+            scope_key=config.providers[active].active_scope,
+        )
+    return ctx
 
 
 def prepare_or_wizard() -> Context:

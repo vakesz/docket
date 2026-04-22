@@ -96,12 +96,31 @@ class StaleConfig(BaseModel):
     threshold_days_by_provider: dict[str, int] = Field(default_factory=dict)
 
 
+class ProjectEntry(BaseModel):
+    """User-facing project metadata persisted in `config.toml`.
+
+    A project is identified by `(provider_key, scope_key)` — those two fields
+    plus the dict key in `Config.projects` form the composite identity. The
+    SQLite `projects` table mirrors this for FK integrity (memory, sources,
+    sub-agents) but `config.toml` is the source of truth for `name` and
+    `description`. Renaming a project means editing this file."""
+
+    provider_key: str
+    scope_key: str
+    name: str
+    description: str = ""
+    archived: bool = False
+
+
 class Config(BaseModel):
     """Top-level `config.toml` schema. Every backend is a named entry under
     `providers`; `active_provider` picks which one the TUI opens by default."""
 
     providers: dict[str, ProviderEntry] = Field(default_factory=dict)
     active_provider: str = ""
+    # Project metadata, keyed by the composite id `f"{provider_key}::{scope_key}"`.
+    # The active project is derived from `(active_provider, providers[active_provider].active_scope)`.
+    projects: dict[str, ProjectEntry] = Field(default_factory=dict)
     llm: LlmConfig = Field(default_factory=LlmConfig)
     http: HttpConfig = Field(default_factory=HttpConfig)
     telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)

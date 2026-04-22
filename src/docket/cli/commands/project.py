@@ -1,0 +1,191 @@
+"""`docket project ...` — manage named (provider, scope) projects.
+
+Project metadata (name, description, archive flag) lives in `config.toml`.
+The active project is whichever (active_provider, active_scope) pair is
+selected; switching scope on the active provider switches project too.
+"""
+
+from __future__ import annotations
+
+import typer
+from rich.console import Console
+from rich.table import Table
+
+from docket.cli.context import prepare_or_wizard
+from docket.core.model import project_id_for
+from docket.core.services import project_service
+
+console = Console()
+
+project_app = typer.Typer(
+    name="project",
+    help="List, rename, describe, archive named projects (provider · scope pairs).",
+    no_args_is_help=True,
+)
+
+
+def _project_id_from_args(ctx_provider: str, scope: str | None) -> str:
+    return project_id_for(ctx_provider, scope or "default")
+
+
+@project_app.command("list")
+def project_list(
+    show_archived: bool = typer.Option(False, "--archived", help="Include archived projects."),
+) -> None:
+    """List configured projects from config.toml."""
+    ctx = prepare_or_wizard()
+    try:
+        active_id = ctx.project_id
+        rows = project_service.list_all(ctx.conn, include_archived=show_archived)
+        table = Table(title=f"Projects ({len(rows)})")
+        table.add_column("Active", style="green")
+        table.add_column("Name", style="cyan")
+        table.add_column("Provider", style="magenta")
+        table.add_column("Scope", style="yellow")
+        table.add_column("Description")
+        table.add_column("Archived", style="dim")
+        for project in rows:
+            table.add_row(
+                "●" if project.id == active_id else "",
+                project.name,
+                project.provider_key or "—",
+                project.scope_key or "—",
+                project.description or "",
+                "yes" if project.archived_at else "",
+            )
+        console.print(table)
+        console.print(
+            "[dim]Tip:[/dim] switch projects by switching scope: "
+            "`docket setup` or the TUI scope picker (Ctrl+P)."
+        )
+    finally:
+        ctx.close()
+
+
+@project_app.command("show")
+def project_show(
+    scope: str | None = typer.Option(None, "--scope", help="Scope key (defaults to active scope)."),
+    provider: str | None = typer.Option(
+        None, "--provider", help="Provider key (defaults to active provider)."
+    ),
+) -> None:
+    """Show one project's metadata."""
+    ctx = prepare_or_wizard()
+    try:
+        provider_key = provider or ctx.active_provider
+        scope_key = scope or ctx.config.providers[provider_key].active_scope
+        project = project_service.get_by_scope(
+            ctx.conn, provider_key=provider_key, scope_key=scope_key
+        )
+        if project is None:
+            console.print(
+                f"[yellow]No project metadata for[/yellow] "
+                f"{provider_key} · {scope_key} (run `docket project rename` to create)."
+            )
+            raise typer.Exit(1)
+        console.print(f"[bold cyan]{project.name}[/bold cyan]")
+        console.print(f"[dim]id:[/dim]          {project.id}")
+        console.print(f"[dim]provider:[/dim]    {project.provider_key}")
+        console.print(f"[dim]scope:[/dim]       {project.scope_key}")
+        console.print(f"[dim]description:[/dim] {project.description or '—'}")
+        if project.archived_at:
+            console.print(f"[red]archived at:[/red] {project.archived_at.isoformat()}")
+    finally:
+        ctx.close()
+
+
+@project_app.command("rename")
+def project_rename(
+    name: str = typer.Argument(..., help="New display name."),
+    scope: str | None = typer.Option(None, "--scope", help="Scope key (defaults to active scope)."),
+    provider: str | None = typer.Option(
+        None, "--provider", help="Provider key (defaults to active provider)."
+    ),
+) -> None:
+    """Rename the project for (provider, scope). Persists to config.toml."""
+    ctx = prepare_or_wizard()
+    try:
+        provider_key = provider or ctx.active_provider
+        scope_key = scope or ctx.config.providers[provider_key].active_scope
+        project = project_service.upsert(
+            ctx.config,
+            ctx.paths,
+            ctx.conn,
+            provider_key=provider_key,
+            scope_key=scope_key,
+            name=name,
+        )
+        console.print(
+            f"[green]Renamed[/green] {project.id} → [cyan]{project.name}[/cyan] "
+            "(saved to config.toml)."
+        )
+    finally:
+        ctx.close()
+
+
+@project_app.command("describe")
+def project_describe(
+    description: str = typer.Argument(..., help="Project description."),
+    scope: str | None = typer.Option(None, "--scope", help="Scope key (defaults to active scope)."),
+    provider: str | None = typer.Option(
+        None, "--provider", help="Provider key (defaults to active provider)."
+    ),
+) -> None:
+    """Set the description on the project for (provider, scope)."""
+    ctx = prepare_or_wizard()
+    try:
+        provider_key = provider or ctx.active_provider
+        scope_key = scope or ctx.config.providers[provider_key].active_scope
+        project = project_service.upsert(
+            ctx.config,
+            ctx.paths,
+            ctx.conn,
+            provider_key=provider_key,
+            scope_key=scope_key,
+            description=description,
+        )
+        console.print(
+            f"[green]Updated[/green] description for [cyan]{project.name}[/cyan] "
+            "(saved to config.toml)."
+        )
+    finally:
+        ctx.close()
+
+
+@project_app.command("archive")
+def project_archive(
+    scope: str | None = typer.Option(None, "--scope", help="Scope key (defaults to active scope)."),
+    provider: str | None = typer.Option(
+        None, "--provider", help="Provider key (defaults to active provider)."
+    ),
+) -> None:
+    """Mark a project as archived (hidden from default lists)."""
+    ctx = prepare_or_wizard()
+    try:
+        provider_key = provider or ctx.active_provider
+        scope_key = scope or ctx.config.providers[provider_key].active_scope
+        project_id = project_id_for(provider_key, scope_key)
+        project_service.archive(ctx.config, ctx.paths, ctx.conn, project_id)
+        console.print(f"[yellow]Archived[/yellow] {project_id}.")
+    finally:
+        ctx.close()
+
+
+@project_app.command("unarchive")
+def project_unarchive(
+    scope: str | None = typer.Option(None, "--scope", help="Scope key."),
+    provider: str | None = typer.Option(None, "--provider", help="Provider key."),
+) -> None:
+    """Restore an archived project."""
+    ctx = prepare_or_wizard()
+    try:
+        provider_key = provider or ctx.active_provider
+        scope_key = scope or ctx.config.providers[provider_key].active_scope
+        project_id = project_id_for(provider_key, scope_key)
+        project_service.unarchive(ctx.config, ctx.paths, ctx.conn, project_id)
+        console.print(f"[green]Unarchived[/green] {project_id}.")
+    finally:
+        ctx.close()
+
+
+__all__ = ["project_app"]

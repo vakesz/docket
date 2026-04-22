@@ -13,7 +13,7 @@ from datetime import datetime
 from threading import RLock
 
 from docket.config.models import Config
-from docket.core.model import ScopeFilters
+from docket.core.model import ScopeFilters, project_id_for
 from docket.providers.base import WorkItemProvider
 
 
@@ -37,6 +37,12 @@ class RuntimeState:
         with self._lock:
             entry = self.config.providers[self.provider_key]
             return entry.scopes[self.scope_key].to_core()
+
+    @property
+    def project_id(self) -> str:
+        """Derived id for the active (provider, scope). Stable across renames."""
+        with self._lock:
+            return project_id_for(self.provider_key, self.scope_key)
 
     def switch_provider(self, key: str) -> None:
         with self._lock:

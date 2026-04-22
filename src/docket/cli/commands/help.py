@@ -38,6 +38,11 @@ COMMANDS: tuple[CommandHelp, ...] = (
     ),
     CommandHelp("serve", "Run the local HTTP API surface.", "docket serve"),
     CommandHelp("setup", "Run or resume first-time setup.", "docket setup"),
+    CommandHelp(
+        "project",
+        "List, rename, describe, archive named projects.",
+        "docket project list",
+    ),
     CommandHelp("help", "Show commands and examples.", "docket help"),
 )
 

@@ -127,6 +127,7 @@ def serve_command(
             paths=ctx.paths,
             runtime=runtime,
             setup_token=setup_token,
+            config=ctx.config,
         )
         mode = "read-only" if effective_read_only else "read-write"
         console.print(

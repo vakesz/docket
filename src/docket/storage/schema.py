@@ -102,6 +102,24 @@ STATEMENTS: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_watchlist_pinned_at ON watchlist(pinned_at DESC)",
+    # Projects. A project IS a (provider_key, scope_key) pair given a name and
+    # optional description. The id is derived: `{provider_key}::{scope_key}`.
+    # Memory, sources, and sub-agents are scoped by project_id. Rows are
+    # created lazily the first time a project is touched, but users can also
+    # rename / describe them up front via `docket project add`.
+    """
+    CREATE TABLE IF NOT EXISTS projects (
+        id           TEXT PRIMARY KEY,
+        provider_key TEXT NOT NULL,
+        scope_key    TEXT NOT NULL,
+        name         TEXT NOT NULL,
+        description  TEXT NOT NULL DEFAULT '',
+        created_at   TEXT NOT NULL,
+        archived_at  TEXT,
+        UNIQUE (provider_key, scope_key)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_projects_provider ON projects(provider_key, archived_at)",
     # FTS5 index across items + their comments. Comments are stored as a
     # single `group_concat(body_md, char(10))` blob re-derived whenever the
     # item or any of its comments is written.
