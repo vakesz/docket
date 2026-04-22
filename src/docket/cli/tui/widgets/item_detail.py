@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import re
+from datetime import UTC, datetime
+
 from textual.app import ComposeResult
 from textual.containers import VerticalScroll
 from textual.widgets import Markdown, Static
@@ -30,9 +33,18 @@ class ItemDetail(VerticalScroll):
     }
     """
 
-    def __init__(self, *, id: str | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        id: str | None = None,
+        stale_threshold_days: int | None = None,
+    ) -> None:
         super().__init__(id=id)
         self.tooltip = "Selected item details: metadata, description, attachments, and comments."
+        # Mirror ItemTree: when set, the Updated timestamp is colorized to
+        # warn when the cached snapshot is approaching / past staleness. The
+        # parent app pushes updates here whenever config changes.
+        self.stale_threshold_days = stale_threshold_days
 
     def compose(self) -> ComposeResult:
         yield Static("Select an item to see details.", id="meta")
@@ -52,7 +64,7 @@ class ItemDetail(VerticalScroll):
             self.query_one("#comments", Markdown).update("")
             return
 
-        self.query_one("#meta", Static).update(_format_meta(item))
+        self.query_one("#meta", Static).update(_format_meta(item, self.stale_threshold_days))
         self.query_one("#body", Markdown).update(item.description_md or "_(no description)_")
 
         if item.attachments:
@@ -77,7 +89,44 @@ class ItemDetail(VerticalScroll):
             self.query_one("#comments", Markdown).update("")
 
 
-def _format_meta(item: Item) -> str:
+# Mirrors `displayTag` in frontend/src/lib/format.ts: GitHub label names
+# often embed emoji shortcodes like ":chart_with_upwards_trend:" that
+# render as noisy literal text in a terminal. Strip them for display.
+_EMOJI_SHORTCODE = re.compile(r":[a-z0-9_+-]+:", re.IGNORECASE)
+
+
+def _display_tag(raw: str) -> str:
+    cleaned = _EMOJI_SHORTCODE.sub("", raw)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned or raw
+
+
+def _age_days(updated_at: datetime | None) -> int | None:
+    if updated_at is None:
+        return None
+    ref = datetime.now() if updated_at.tzinfo is None else datetime.now(UTC)
+    return max(0, (ref - updated_at).days)
+
+
+def _freshness_marker(updated_at: datetime | None, threshold_days: int | None) -> str:
+    """Return a Rich-styled badge mirroring the web `FreshnessStamp`.
+
+    Returns an empty string when no threshold is configured or the item is
+    still fresh — keeps the meta line uncluttered for healthy tickets.
+    """
+    if not threshold_days or threshold_days <= 0:
+        return ""
+    age = _age_days(updated_at)
+    if age is None:
+        return ""
+    if age >= threshold_days * 2:
+        return "  [red on rgb(60,15,20)] stale [/]"
+    if age >= threshold_days:
+        return "  [yellow on rgb(60,45,15)] aging [/]"
+    return ""
+
+
+def _format_meta(item: Item, stale_threshold_days: int | None) -> str:
     raw_fields = item.provider_raw.get("fields", {}) if isinstance(item.provider_raw, dict) else {}
     area = raw_fields.get("System.AreaPath")
     iteration = raw_fields.get("System.IterationPath")
@@ -86,19 +135,26 @@ def _format_meta(item: Item) -> str:
     if isinstance(changed_by, dict):
         changed_by = changed_by.get("displayName") or changed_by.get("uniqueName")
 
+    tag_str = ", ".join(_display_tag(t) for t in item.tags) or "—"
+
     lines = [
         f"[b]{item.title}[/b]",
         f"[dim]ID[/dim] {item.id}  ·  [dim]Kind[/dim] {item.kind.value}  ·  [dim]State[/dim] {item.state.value}",
-        f"[dim]Assignee[/dim] {item.assignee or '—'}  ·  [dim]Tags[/dim] {', '.join(item.tags) or '—'}",
     ]
+    if item.author:
+        lines.append(f"[dim]Opened by[/dim] {item.author}")
+    lines.append(
+        f"[dim]Assignee[/dim] {item.assignee or '—'}  ·  [dim]Tags[/dim] {tag_str}",
+    )
     if area:
         lines.append(f"[dim]Area[/dim] {area}")
     if iteration:
         lines.append(f"[dim]Iteration[/dim] {iteration}")
     if item.updated_at:
         updated = item.updated_at.isoformat()
+        marker = _freshness_marker(item.updated_at, stale_threshold_days)
         lines.append(
-            f"[dim]Updated[/dim] {updated}"
+            f"[dim]Updated[/dim] {updated}{marker}"
             + (f"  ·  [dim]By[/dim] {changed_by}" if changed_by else "")
         )
     if created:

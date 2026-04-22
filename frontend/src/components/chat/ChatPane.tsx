@@ -1,15 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import type { DTO } from "~/api/client";
-import { useConversation, useStartThread, useStatus } from "~/api/hooks";
+import { useConversation, useItem, useStartThread, useStatus } from "~/api/hooks";
 import { Markdown } from "~/components/detail/Markdown";
 import { ProposalCard } from "~/components/mutations/ProposalCard";
 import { cn } from "~/lib/cn";
+import { type IssueLinkContext, issueLinkContextFromUrl } from "~/lib/issueLinks";
 import { type ChatMessage, useChatStream } from "./useChatStream";
 
 export function ChatPane({ itemId }: { itemId: string }) {
   const status = useStatus();
   const history = useConversation(itemId);
   const startThread = useStartThread();
+  const item = useItem(itemId);
+  const issueLinks = issueLinkContextFromUrl(item.data?.url);
   const [draft, setDraft] = useState("");
   const [proposals, setProposals] = useState<DTO["ProposalDTO"][]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -65,11 +68,15 @@ export function ChatPane({ itemId }: { itemId: string }) {
         ) : (
           <>
             {history.data?.messages.map((m, i) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: persisted conversation history is append-only and indexed by position — the index is a stable identity here.
-              <PersistedMessage key={`h-${m.role}-${i}-${m.content.length}`} message={m} />
+              <PersistedMessage
+                // biome-ignore lint/suspicious/noArrayIndexKey: persisted conversation history is append-only and indexed by position — the index is a stable identity here.
+                key={`h-${m.role}-${i}-${m.content.length}`}
+                message={m}
+                issueLinks={issueLinks}
+              />
             ))}
             {messages.map((m) => (
-              <LiveMessage key={m.id} message={m} />
+              <LiveMessage key={m.id} message={m} issueLinks={issueLinks} />
             ))}
             {proposals.length > 0 && (
               <div className="mt-3 flex flex-col gap-2">
@@ -126,7 +133,13 @@ export function ChatPane({ itemId }: { itemId: string }) {
   );
 }
 
-function PersistedMessage({ message }: { message: DTO["ChatRoleDTO"] }) {
+function PersistedMessage({
+  message,
+  issueLinks,
+}: {
+  message: DTO["ChatRoleDTO"];
+  issueLinks: IssueLinkContext;
+}) {
   if (message.role === "system") return null;
   const role = message.role;
   return (
@@ -147,13 +160,19 @@ function PersistedMessage({ message }: { message: DTO["ChatRoleDTO"] }) {
       {role === "tool" ? (
         <pre className="whitespace-pre-wrap font-mono text-xs">{message.content}</pre>
       ) : (
-        <Markdown source={message.content} />
+        <Markdown source={message.content} issueLinks={issueLinks} />
       )}
     </div>
   );
 }
 
-function LiveMessage({ message }: { message: ChatMessage }) {
+function LiveMessage({
+  message,
+  issueLinks,
+}: {
+  message: ChatMessage;
+  issueLinks: IssueLinkContext;
+}) {
   return (
     <div
       className={cn(
@@ -173,7 +192,10 @@ function LiveMessage({ message }: { message: ChatMessage }) {
       {message.kind === "tool" ? (
         <pre className="whitespace-pre-wrap font-mono text-xs">{message.text}</pre>
       ) : (
-        <Markdown source={message.text || (message.kind === "assistant" ? "…" : "")} />
+        <Markdown
+          source={message.text || (message.kind === "assistant" ? "…" : "")}
+          issueLinks={issueLinks}
+        />
       )}
     </div>
   );

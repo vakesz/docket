@@ -295,7 +295,10 @@ class DocketApp(App[None]):
             with Pane(id="mid"):
                 yield FullscreenToggle()
                 yield Static("Details", classes="pane-heading")
-                yield ItemDetail(id="mid-detail")
+                yield ItemDetail(
+                    id="mid-detail",
+                    stale_threshold_days=self._resolved_stale_threshold(),
+                )
             with Pane(id="right"):
                 yield FullscreenToggle()
                 yield Static("Assistant", classes="pane-heading")
@@ -1233,6 +1236,7 @@ class DocketApp(App[None]):
             bar.active_view = scope_name
         with contextlib.suppress(Exception):
             self.query_one(ItemTree).stale_threshold_days = self._resolved_stale_threshold()
+            self.query_one(ItemDetail).stale_threshold_days = self._resolved_stale_threshold()
         self._reload_tree()
         self.notify(
             f"Switched to provider '{entry.display_name}'.",

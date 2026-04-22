@@ -7,6 +7,7 @@ import { StatePill } from "~/components/items/ItemsList";
 import { ProposalCard } from "~/components/mutations/ProposalCard";
 import { cn } from "~/lib/cn";
 import { displayTag, formatKind, formatRelative } from "~/lib/format";
+import { issueLinkContextFromUrl } from "~/lib/issueLinks";
 import { CommentComposer } from "./CommentComposer";
 import { DescriptionEditor } from "./DescriptionEditor";
 import { Markdown } from "./Markdown";
@@ -43,6 +44,7 @@ export function ItemDetail({ itemId }: Props) {
   }
 
   const it = item.data;
+  const issueLinks = issueLinkContextFromUrl(it.url);
 
   return (
     <div className="flex h-full flex-col overflow-auto bg-white dark:bg-zinc-950">
@@ -173,7 +175,7 @@ export function ItemDetail({ itemId }: Props) {
             onClose={() => setEditing(false)}
           />
         ) : (
-          <Markdown source={it.description_md ?? ""} />
+          <Markdown source={it.description_md ?? ""} issueLinks={issueLinks} />
         )}
       </section>
 
@@ -181,7 +183,7 @@ export function ItemDetail({ itemId }: Props) {
         <SuggestBlock itemId={it.id} onStaged={pushProposals} />
       </section>
 
-      <CommentsSection itemId={it.id} onStaged={pushProposal} />
+      <CommentsSection itemId={it.id} issueUrl={it.url} onStaged={pushProposal} />
       <LinkedSection itemId={it.id} />
     </div>
   );
@@ -202,12 +204,15 @@ function ParentLink({ id }: { id: string }) {
 
 function CommentsSection({
   itemId,
+  issueUrl,
   onStaged,
 }: {
   itemId: string;
+  issueUrl?: string | null;
   onStaged: (proposal: DTO["ProposalDTO"]) => void;
 }) {
   const comments = useComments(itemId);
+  const issueLinks = issueLinkContextFromUrl(issueUrl);
   return (
     <section className="flex flex-col gap-3 border-t border-zinc-200 p-4 dark:border-zinc-800">
       <h2 className="font-mono text-[11px] uppercase tracking-wider text-zinc-500">
@@ -224,7 +229,7 @@ function CommentsSection({
               <span className="font-medium text-zinc-700 dark:text-zinc-300">{c.author}</span>
               <span className="font-mono text-[10px]">{formatRelative(c.created_at)}</span>
             </div>
-            <Markdown source={c.body_md} />
+            <Markdown source={c.body_md} issueLinks={issueLinks} />
           </li>
         ))}
       </ul>
