@@ -24,7 +24,7 @@ Most triage tools make you context-switch between a browser, a Kanban board, and
 - **Local-first.** SQLite cache with FTS5 full-text search means browsing and filtering are instant, even when the remote provider is slow or unreachable.
 - **Multi-provider.** One `WorkItemProvider` protocol, one canonical model. Ships with Azure DevOps and GitHub live, plus a `github_stub` for tests and demos. Swap providers from the command palette.
 - **Safe by design.** Every mutation — CLI, TUI, HTTP, or AI-initiated — flows through the same proposal → diff → confirm gate. Read-only mode hides write tools from the agent entirely.
-- **Prompt-caching friendly.** The system/kind prefix is byte-stable across turns, so Azure AI Foundry's prompt cache hits on every follow-up.
+- **Prompt-caching friendly.** The system/kind prefix is byte-stable across turns, so the Azure OpenAI prompt cache hits on every follow-up.
 
 ---
 
@@ -164,7 +164,7 @@ Docket stores everything under XDG paths resolved by `platformdirs`:
 | Path (macOS) | Purpose |
 | --- | --- |
 | `~/Library/Application Support/docket/config.toml` | providers, scopes, LLM settings, UI preferences |
-| `~/Library/Application Support/docket/.env` | optional local secrets (Foundry key, etc.) |
+| `~/Library/Application Support/docket/.env` | optional local secrets (Azure OpenAI key, provider tokens) |
 | `~/Library/Application Support/docket/prompts/` | `system_base.md` + `kind_<kind>.md` — live-reloads on save |
 | `~/Library/Caches/docket/docket.db` | SQLite cache (items, comments, messages, watchlist, FTS5) |
 | `~/Library/Logs/docket/` | structlog output |
@@ -176,7 +176,7 @@ Linux and Windows resolve to their usual XDG equivalents. The setup wizard write
 | Variable | Effect |
 | --- | --- |
 | `DOCKET_READ_ONLY=1` | Disable every mutation path — agent tools, CLI writes, TUI confirm modals |
-| `AZURE_OPENAI_ENDPOINT` / `AZURE_OPENAI_API_KEY` / `AZURE_OPENAI_API_VERSION` | Foundry client config; `.env` takes precedence over `config.toml` |
+| `AZURE_OPENAI_ENDPOINT` / `AZURE_OPENAI_API_KEY` / `AZURE_OPENAI_API_VERSION` | Azure OpenAI client config; `.env` takes precedence over `config.toml` |
 | `GITHUB_TOKEN` | Fallback for the GitHub provider when `gh auth token` isn't available |
 | `XDG_CONFIG_HOME` / `XDG_STATE_HOME` / `XDG_CACHE_HOME` | Override docket paths (tests use this to sandbox per-test) |
 
@@ -206,29 +206,30 @@ Azure DevOps  GitHub   github_stub
 
 Core rules that hold this together:
 
-- `core/`, `storage/`, `agent/`, and `api/` **must not** import concrete providers — they speak only to the `WorkItemProvider` Protocol. Enforced by `tests/test_import_boundary.py`.
+- `core/`, `storage/`, `agent/`, and `api/` **must not** import concrete providers — they speak only to the `WorkItemProvider` Protocol. Enforced by `tests/unit/test_import_boundary.py`.
 - **Named transition intents** (`TransitionIntent.CLOSE_DONE`, `.START_WORK`, …) are the canonical mutation vocabulary. Providers translate them to native state strings inside `state_map.py`.
 - **Every mutation** — from a keystroke, a CLI flag, an HTTP POST, or an LLM tool call — goes through `mutation_service.propose → render_diff → confirm`. There is no shortcut.
-- **The prompt prefix is cache-stable**: `[system + kind template] → [ticket snapshot] → ---` is byte-identical across turns, so Foundry prompt caching hits on every follow-up.
+- **The prompt prefix is cache-stable**: `[system + kind template] → [ticket snapshot] → ---` is byte-identical across turns, so prompt caching hits on every follow-up.
 
-These invariants are enforced by tests — `test_import_boundary.py`, `test_state_map_reverse.py`, and the per-provider cross-cutting suites in `tests/test_github_stub_provider.py` — so a refactor that violates one fails loudly.
+These invariants are enforced by tests — `tests/unit/test_import_boundary.py`, `tests/unit/test_state_map_reverse.py`, and the per-provider cross-cutting suites in `tests/integration/test_github_stub_provider.py` — so a refactor that violates one fails loudly.
 
 ---
 
 ## Testing
 
 ```bash
-uv run pytest                         # 327 tests, async auto-mode
-uv run pytest tests/test_foo.py       # one file
-uv run pytest tests/test_foo.py::bar  # one test
-uv run pytest -k "pattern"            # by name
+uv run pytest                              # ~370 tests, async auto-mode
+uv run pytest tests/integration/test_api.py    # one file
+uv run pytest tests/integration/test_api.py::test_name  # one test
+uv run pytest -k "pattern"                 # by name
 uv run ruff check . && uv run ruff format .
-uv run mypy src                       # strict
+uv run mypy src                            # strict
 ```
 
 Testing conventions:
 
-- **TUI tests are pilot-style** — mount `ItvApp` with a `FakeProvider` via `app.run_test()` and drive with `pilot.press(...)`. Don't assert on CSS or private widget state.
+- Tests live under three trees: `tests/unit/` (pure Python), `tests/integration/` (DB/FastAPI/Typer), `tests/pilot/` (Textual `run_test()`).
+- **TUI tests are pilot-style** — mount `DocketApp` with a `FakeProvider` via `app.run_test()` and drive with `pilot.press(...)`. Don't assert on CSS or private widget state.
 - **`tmp_xdg` fixture** in `conftest.py` sandboxes every XDG path into a temp root. Use it whenever a test touches config.
 - **VCR cassettes** under `tests/fixtures/cassettes/` back the live `AzureDevOpsProvider` tests (pytest-recording).
 - **`test_import_boundary.py`** guards the provider-abstraction invariant — if it fails, fix the import leak, not the test.
@@ -250,7 +251,7 @@ src/docket/
 ├── cli/                 # typer entrypoint + commands + Textual TUI
 ├── api/                 # FastAPI app (items / conversations / SSE stream)
 ├── core/                # canonical model + services (the single write gate)
-├── agent/               # Foundry client, tool registry, prompt loader
+├── agent/               # Azure OpenAI client, tool registry, prompt loader
 ├── providers/           # base Protocol + concrete backends
 ├── storage/             # SQLite schema + repos (items, comments, watchlist, FTS5)
 └── config/              # Pydantic config models + setup wizard + paths
@@ -293,7 +294,7 @@ Four rules that keep providers safe to compose:
 Checklist for a new provider named `foo`:
 
 - `src/docket/providers/foo/__init__.py` + `provider.py` + `state_map.py` (re-export `FooProvider`)
-- Register in `src/docket/config/` and the setup wizard (`src/docket/cli/setup/`) — ADO is the selection shape to copy
+- Register a `ProviderSpec` in `src/docket/providers/registry.py::_register_builtins` — the spec carries the factory plus the `SetupField` list the setup surfaces render
 - Put auth in `providers/foo/auth.py`, raising `ProviderAuthError` on failure so the wizard can re-prompt
 - Satisfy the cross-cutting tests (see [Testing](#testing))
 
@@ -301,32 +302,20 @@ Performance: `sync_service.refresh` calls `item_repo.upsert_items` with `execute
 
 ---
 
-## Roadmap
+## Invariants
 
-Docket is in active phase-2 development. M1–M16 have landed; comment draft queue is carved out of M16 as a follow-up:
+These are enforced by tests — don't violate them without updating the tests too:
 
-| Phase | Status | Highlights |
-| --- | --- | --- |
-| Phase 1 (M1–M8) | ✅ landed | Provider abstraction, canonical model, SQLite cache, TUI shell, service layer, CLI surface, Foundry wiring, diff-preview mutations |
-| Phase 2 (M9–M16) | ✅ landed | Multi-provider config, GitHub provider, setup wizard, prompt library, background sync, read-only mode, draft proposal queue, watchlist + PR discovery |
-| Follow-up | pending | Comment draft queue (M16 carve-out), Jira/Linear providers, richer linked-item graph |
+- `tests/integration/test_import_boundary.py` — `core/`, `storage/`, `agent/`, `api/` must not import concrete providers
+- `tests/integration/test_state_map_reverse.py` — every `TransitionIntent` round-trips through every provider's state map
+- `tests/integration/test_github_stub_provider.py` — the reference cross-cutting suite every provider should pass
 
-Invariants enforced by tests — don't violate them without updating the tests too:
+Plus the informal rules:
 
-- `tests/test_import_boundary.py` — `core/`, `storage/`, `agent/`, `api/` must not import concrete providers
-- `tests/test_state_map_reverse.py` — every `TransitionIntent` round-trips through every provider's state map
-- `tests/test_github_stub_provider.py` — the reference cross-cutting suite every provider should pass
-
----
-
-## Contributing
-
-Before opening a PR:
-
-1. Keep the layered dependency rule intact — `tests/test_import_boundary.py` fails loudly if you break it.
-2. If you add a provider, copy the cross-cutting tests from `tests/test_github_stub_provider.py` and point them at your provider.
-3. Run `uv run ruff check . && uv run mypy src && uv run pytest` before pushing.
-4. New mutations must flow through `mutation_service.propose` → diff → confirm. No exceptions for "it's just a CLI flag."
+- Keep the layered dependency rule intact — the import-boundary test fails loudly if you break it.
+- If you add a provider, copy the cross-cutting suite from `test_github_stub_provider.py` and point it at your provider.
+- Every mutation — CLI flag, TUI keypress, HTTP POST, agent tool call — flows through `mutation_service.propose → render_diff → confirm`. No shortcuts.
+- Run `uv run ruff check . && uv run mypy src && uv run pytest` before committing.
 
 ## Docs
 

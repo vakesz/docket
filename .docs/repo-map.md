@@ -3,18 +3,17 @@
 ## Top Level
 
 - `src/docket/`: application package.
-- `tests/`: pytest suite, including Textual pilot tests, API tests, provider tests, and fakes.
-- `docs/`: user-facing setup guide.
+- `tests/`: pytest suite split into `unit/`, `integration/`, and `pilot/` trees, plus `fakes/` and `fixtures/` at the root.
+- `.docs/`: architectural references (this tree); user-facing install/setup guide lives at `.docs/FIRST_TIME_SETUP.md`.
 - `README.md`: product tour, provider contract, and developer quick start.
 - `AGENTS.md`: repo-specific assistant guidance consumed by coding agents.
-- `PLAN.md`, `TODO.md`: planning notes, not architectural source of truth.
 - `pyproject.toml`: package metadata, runtime and dev dependencies, Ruff, pytest, and mypy config.
 
 ## `src/docket/`
 
 - `cli/`: Typer commands plus the Textual TUI.
 - `api/`: FastAPI apps, route adapters, auth, deps, and runtime state.
-- `agent/`: prompt assembly, tool registry, agent turn loop, Foundry client integration, transcript rendering.
+- `agent/`: prompt assembly, tool registry, agent turn loop, Azure OpenAI client integration, transcript rendering, and `factory.build_agent` used by both surfaces.
 - `core/`: canonical model types, proposal types, acceptance extraction, redaction, and workflow services.
 - `providers/`: provider protocol, registry, and concrete Azure DevOps, GitHub, and stub adapters.
 - `storage/`: SQLite connection setup, schema migrations, and repo helpers.

@@ -27,7 +27,7 @@
 ## TUI Work
 
 - The TUI has background workers, modal-based mutation review, provider/scope switching, and read-only behavior.
-- `ItvApp` is already a hotspot, so new code placement matters.
+- `DocketApp` is already a hotspot, so new code placement matters.
 - Read [TUI Surface](playbooks/tui-surface.md).
 
 ## Setup and Config Work

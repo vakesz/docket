@@ -80,7 +80,7 @@ cli.app / cli.commands.serve
 cli.context.prepare[_or_wizard]
   resolve paths -> load env -> load config -> init SQLite -> build providers
         |
-        +--> Textual TUI (ItvApp)
+        +--> Textual TUI (DocketApp)
         |      reads SQLite cache
         |      syncs via sync_service
         |      chats via conversation_service -> AgentLoop
