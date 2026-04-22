@@ -46,7 +46,6 @@ from docket.config.models import (
 )
 from docket.config.paths import Paths
 from docket.config.prompt_templates import scaffold as scaffold_prompts
-from docket.core.model import ScopeFilters
 from docket.core.services import sync_service
 from docket.providers.base import ProviderError
 from docket.providers.registry import UnknownProviderError
@@ -252,13 +251,7 @@ def setup_complete(
     initial_sync: SyncSummaryDTO | None = None
     if req.run_initial_sync:
         provider = built_providers[req.active_provider]
-        scope = providers_cfg[req.active_provider].scopes["default"]
-        filters = ScopeFilters(
-            team=scope.team,
-            area_path=scope.area_path,
-            iteration_path=scope.iteration_path,
-            assignee=scope.assignee,
-        )
+        filters = providers_cfg[req.active_provider].scopes["default"].to_core()
         conn = init_db(paths.db_file)
         try:
             summary = sync_service.full_refresh(conn, provider, "default", filters)

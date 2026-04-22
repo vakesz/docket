@@ -36,13 +36,7 @@ class RuntimeState:
     def scope(self) -> ScopeFilters:
         with self._lock:
             entry = self.config.providers[self.provider_key]
-            sf = entry.scopes[self.scope_key]
-            return ScopeFilters(
-                team=sf.team,
-                area_path=sf.area_path,
-                iteration_path=sf.iteration_path,
-                assignee=sf.assignee,
-            )
+            return entry.scopes[self.scope_key].to_core()
 
     def switch_provider(self, key: str) -> None:
         with self._lock:

@@ -4,6 +4,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field, HttpUrl
 
+from docket.core.model import ScopeFilters
+
 
 class ScopeFilter(BaseModel):
     """A named scope filter for work-item sync."""
@@ -12,6 +14,19 @@ class ScopeFilter(BaseModel):
     area_path: str = ""
     iteration_path: str = ""
     assignee: str = "@me"
+
+    def to_core(self) -> ScopeFilters:
+        """Convert to the core-layer filter (same shape, different layer).
+
+        Providers and services accept `core.model.ScopeFilters`; `ScopeFilter`
+        is the pydantic config model. Keep the two separate so core has no
+        pydantic dependency, but offer the obvious conversion here."""
+        return ScopeFilters(
+            team=self.team,
+            area_path=self.area_path,
+            iteration_path=self.iteration_path,
+            assignee=self.assignee,
+        )
 
 
 class ProviderEntry(BaseModel):

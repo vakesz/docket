@@ -32,7 +32,6 @@ from docket.config.models import (
 )
 from docket.config.paths import Paths, resolve_paths
 from docket.config.prompt_templates import scaffold as scaffold_prompts
-from docket.core.model import ScopeFilters
 from docket.core.services import sync_service
 from docket.providers.azure_devops import AzureDevOpsProvider, discover
 from docket.providers.azure_devops.auth import ensure_logged_in
@@ -394,13 +393,7 @@ def _count_items_for_scope(state: WizardState, scope: ScopeFilter) -> int | None
             organization_url=state.ado_organization,
             project=state.ado_project,
         )
-        filters = ScopeFilters(
-            team=scope.team,
-            area_path=scope.area_path,
-            iteration_path=scope.iteration_path,
-            assignee=scope.assignee,
-        )
-        items = list(provider.list_changes_since(None, filters))
+        items = list(provider.list_changes_since(None, scope.to_core()))
         return len(items)
     except ProviderError:
         return None
@@ -446,14 +439,8 @@ def _step_db_and_sync(state: WizardState) -> None:
             organization_url=state.ado_organization,
             project=state.ado_project,
         )
-        filters = ScopeFilters(
-            team=state.scope.team,
-            area_path=state.scope.area_path,
-            iteration_path=state.scope.iteration_path,
-            assignee=state.scope.assignee,
-        )
         console.print("Running initial full sync...")
-        summary = sync_service.full_refresh(conn, provider, "default", filters)
+        summary = sync_service.full_refresh(conn, provider, "default", state.scope.to_core())
         console.print(
             f"[green]✓ synced {summary.upserted} item(s)[/green] "
             f"(archived {summary.archived}, watermark {summary.watermark})"

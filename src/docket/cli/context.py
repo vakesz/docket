@@ -61,13 +61,7 @@ class Context:
     def scope_filters(
         self, name: str | None = None, *, provider: str | None = None
     ) -> ScopeFilters:
-        sf = self.scope_filter(name, provider=provider)
-        return ScopeFilters(
-            team=sf.team,
-            area_path=sf.area_path,
-            iteration_path=sf.iteration_path,
-            assignee=sf.assignee,
-        )
+        return self.scope_filter(name, provider=provider).to_core()
 
     def scope_key_for(self, provider: str | None = None) -> str:
         return self.provider_entry(provider).active_scope

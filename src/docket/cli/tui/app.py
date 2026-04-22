@@ -1094,14 +1094,8 @@ class DocketApp(App[None]):
         if config is None or entry is None or name not in entry.scopes:
             self.notify(f"No saved view named '{name}'.", severity="warning")
             return
-        sf = entry.scopes[name]
         self.tui_ctx.scope_key = name
-        self.tui_ctx.scope = ScopeFilters(
-            team=sf.team,
-            area_path=sf.area_path,
-            iteration_path=sf.iteration_path,
-            assignee=sf.assignee,
-        )
+        self.tui_ctx.scope = entry.scopes[name].to_core()
         with contextlib.suppress(Exception):
             bar = self.query_one(StatusBar)
             bar.scope_label = name
@@ -1139,12 +1133,7 @@ class DocketApp(App[None]):
             sf = ScopeFilter(assignee="")
             scope_name = "default"
         self.tui_ctx.scope_key = scope_name
-        self.tui_ctx.scope = ScopeFilters(
-            team=sf.team,
-            area_path=sf.area_path,
-            iteration_path=sf.iteration_path,
-            assignee=sf.assignee,
-        )
+        self.tui_ctx.scope = sf.to_core()
         self._selected_item_id = None
         with contextlib.suppress(Exception):
             bar = self.query_one(StatusBar)
