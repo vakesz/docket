@@ -2,8 +2,6 @@ import { Link } from "@tanstack/react-router";
 
 import { cn } from "~/lib/cn";
 import { ProviderSwitcher } from "./ProviderSwitcher";
-import { ScopeSwitcher } from "./ScopeSwitcher";
-import { SyncButton } from "./SyncButton";
 import { ThemeToggle } from "./ThemeToggle";
 
 export function TopBar() {
@@ -22,8 +20,6 @@ export function TopBar() {
       </nav>
       <div className="ml-auto flex items-center gap-2">
         <ProviderSwitcher />
-        <ScopeSwitcher />
-        <SyncButton />
         <ThemeToggle />
       </div>
     </header>

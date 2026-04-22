@@ -80,6 +80,7 @@ class SetupCompleteRequest(BaseModel):
     http_port: int = 8765
     http_token: str = ""
     telemetry_enabled: bool = True
+    telemetry_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "DEBUG"
     run_initial_sync: bool = True
 
 

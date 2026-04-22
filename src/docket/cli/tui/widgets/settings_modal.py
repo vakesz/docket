@@ -345,6 +345,21 @@ class SettingsModal(ModalScreen[Config | None]):
                 )
                 telemetry_checkbox.tooltip = "Telemetry stays local on disk."
                 yield telemetry_checkbox
+                yield Static("Telemetry log level", classes="field-label")
+                level_options = [
+                    (lvl, lvl) for lvl in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+                ]
+                level_select = Select(
+                    options=level_options,
+                    value=self._config.telemetry.level,
+                    allow_blank=False,
+                    id="telemetry-level",
+                )
+                level_select.tooltip = (
+                    "DEBUG keeps every event; raise to reduce log volume. "
+                    "Disabled when telemetry is off."
+                )
+                yield level_select
             yield Static("Ctrl+S save  ·  Esc cancel", id="hint")
 
     def on_mount(self) -> None:
@@ -436,6 +451,9 @@ class SettingsModal(ModalScreen[Config | None]):
         )
         raw["http"]["token"] = self.query_one("#http-token", Input).value.strip()
         raw["telemetry"]["enabled"] = self.query_one("#telemetry-enabled", Checkbox).value
+        level_value = self.query_one("#telemetry-level", Select).value
+        if isinstance(level_value, str):
+            raw["telemetry"]["level"] = level_value
         raw["llm"]["compaction_threshold_tokens"] = _parse_int(
             self.query_one("#llm-compaction", Input).value,
             field_name="Compaction threshold",

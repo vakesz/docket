@@ -4,7 +4,7 @@ export function ScopeSwitcher() {
   const scopes = useScopes();
   const setActive = useSetActiveScope();
 
-  if (!scopes.data?.length) return null;
+  if (!scopes.data?.length || scopes.data.length <= 1) return null;
   const active = scopes.data.find((s) => s.active) ?? scopes.data[0];
   if (!active) return null;
 

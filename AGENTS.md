@@ -110,6 +110,7 @@ Future target:
 - Conversation compaction summarizes older messages into a synthetic `system` row and marks originals as `compacted=1` so transcripts stay complete while live prompt history stays short (`src/docket/core/services/compaction_service.py`, `src/docket/storage/repos/message_repo.py`).
 - External item changes are injected back into active conversations as system messages so the assistant does not keep reasoning over stale ticket state (`src/docket/core/services/external_update_service.py`).
 - Bootstrap HTTP mode is a separate minimal app exposing only `/health` and `/setup/*` until `config.toml` exists (`src/docket/api/bootstrap_app.py`, `src/docket/api/routes/setup.py`).
+- Telemetry is on by default and writes one JSON object per line to `<paths.log_dir>/docket.log` (rotating 1 MB x 3) at `DEBUG` level — the on-disk log is the only place worker-thread tracebacks surface during a TUI session, so verbosity is intentional. Toggle via `config.telemetry.enabled` or lower the volume via `config.telemetry.level` (`DEBUG|INFO|WARNING|ERROR|CRITICAL`); `init_logging` is called once before config load (verbose default) and again with the resolved settings (`src/docket/telemetry/logging.py`, `src/docket/cli/context.py`, `src/docket/config/models.py`).
 
 ## Mutation Surface Pattern
 

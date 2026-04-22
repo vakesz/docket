@@ -2,6 +2,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import type { DTO } from "~/api/client";
 import { useComments, useItem, useLinked, useRefreshItem } from "~/api/hooks";
+import { useChatPaneController } from "~/components/chat/ChatPaneContext";
 import { FreshnessStamp, useStaleThreshold } from "~/components/items/ItemFreshness";
 import { StatePill } from "~/components/items/ItemsList";
 import { ProposalCard } from "~/components/mutations/ProposalCard";
@@ -24,6 +25,7 @@ const metaLabelClassName = "font-mono text-[10px] uppercase tracking-wider text-
 export function ItemDetail({ itemId }: Props) {
   const item = useItem(itemId);
   const refresh = useRefreshItem();
+  const chatController = useChatPaneController();
   const staleThresholdDays = useStaleThreshold();
   const [editing, setEditing] = useState(false);
   const [proposals, setProposals] = useState<DTO["ProposalDTO"][]>([]);
@@ -60,6 +62,27 @@ export function ItemDetail({ itemId }: Props) {
             <FreshnessStamp updatedAt={it.updated_at} thresholdDays={staleThresholdDays} />
           </span>
           <div className="ml-auto flex items-center gap-2">
+            {/*
+              Always rendered (toggle, not "open-only") so Safari can't
+              cancel the click event by detaching the button mid-dispatch
+              when chatController.open flips. Gating on status.chat_enabled
+              is intentionally omitted; if the backend reports chat
+              disabled the pane itself surfaces the disabled state.
+            */}
+            <button
+              type="button"
+              onClick={() => chatController.setOpen(!chatController.open)}
+              title={chatController.open ? "Close chat" : "Open chat about this item"}
+              aria-pressed={chatController.open}
+              className={cn(
+                "rounded border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider transition-colors",
+                chatController.open
+                  ? "border-accent bg-accent text-white hover:bg-accent/90"
+                  : "border-accent bg-accent/10 text-accent hover:bg-accent/20",
+              )}
+            >
+              {chatController.open ? "✕ Chat" : "💬 Chat"}
+            </button>
             <PinButton itemId={it.id} />
             <button
               type="button"

@@ -18,6 +18,7 @@ from docket.config.env import (
     get_setup_token,
 )
 from docket.config.paths import resolve_paths
+from docket.telemetry import init_logging
 
 if TYPE_CHECKING:
     from docket.agent.llm_client import AzureOpenAIClient
@@ -68,6 +69,9 @@ def serve_command(
     except ConfigMissingError:
         paths = resolve_paths()
         paths.ensure()
+        # Bootstrap surface still needs the rotating JSON log so any error
+        # raised while finishing setup is captured for operators.
+        init_logging(paths)
 
         if not setup_token:
             setup_token = secrets.token_urlsafe(32)

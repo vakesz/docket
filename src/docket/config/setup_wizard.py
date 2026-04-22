@@ -77,6 +77,7 @@ class WizardState:
     scope: ScopeFilter = field(default_factory=ScopeFilter)
     # Shared host surfaces. Inherited from existing config if present.
     telemetry_enabled: bool = True
+    telemetry_level: str = "DEBUG"
     http_enabled: bool = True
     http_bind: str = "127.0.0.1"
     http_port: int = 8765
@@ -155,6 +156,7 @@ def _load_existing_state(paths: Paths) -> WizardState:
         return state
     state.existing = cfg
     state.telemetry_enabled = cfg.telemetry.enabled
+    state.telemetry_level = cfg.telemetry.level
     state.http_enabled = cfg.http.enabled
     state.http_bind = cfg.http.bind
     state.http_port = cfg.http.port
@@ -589,6 +591,18 @@ def _step_telemetry(state: WizardState) -> None:
         "Nothing is shipped off-device. You can change this later from the in-app settings screen or config.toml."
     )
     state.telemetry_enabled = Confirm.ask("Keep local telemetry enabled?", default=True)
+    if state.telemetry_enabled:
+        # DEBUG is intentional: the on-disk JSON log is the only place worker
+        # tracebacks surface during a TUI session, and a small group of
+        # operators reviews it. Drop to INFO if log volume becomes a problem.
+        levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+        default = state.telemetry_level if state.telemetry_level in levels else "DEBUG"
+        chosen = Prompt.ask(
+            "Log level (DEBUG keeps everything; raise to reduce volume)",
+            choices=levels,
+            default=default,
+        )
+        state.telemetry_level = chosen
 
 
 # ---- step 6: HTTP surface ---------------------------------------------------
@@ -719,7 +733,10 @@ def _build_config_from_state(state: WizardState) -> Config:
         update={
             "providers": providers,
             "active_provider": active_provider,
-            "telemetry": TelemetryConfig(enabled=state.telemetry_enabled),
+            "telemetry": TelemetryConfig(
+                enabled=state.telemetry_enabled,
+                level=state.telemetry_level,
+            ),
             "http": HttpConfig(
                 enabled=state.http_enabled,
                 bind=state.http_bind,

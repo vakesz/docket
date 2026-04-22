@@ -3,6 +3,7 @@ context (paths, config, DB connection, providers). Keeps command bodies short an
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from dataclasses import dataclass, field
 
@@ -98,8 +99,16 @@ def prepare() -> Context:
     paths = resolve_paths()
     paths.ensure()
     load_env(paths)
+    # Bring up logging immediately at the verbose default so anything that
+    # raises during config load is captured. Once the config is in hand we
+    # re-init with the user-resolved telemetry setting (no-op if unchanged).
     init_logging(paths)
     config = load_config(paths)
+    init_logging(
+        paths,
+        enabled=config.telemetry.enabled,
+        level=logging.getLevelName(config.telemetry.level),
+    )
     configure_prompt_loader(paths.prompts_dir)
     conn = init_db(paths.db_file)
 

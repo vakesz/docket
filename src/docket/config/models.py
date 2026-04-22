@@ -64,7 +64,20 @@ class HttpConfig(BaseModel):
 
 
 class TelemetryConfig(BaseModel):
+    """Local telemetry / logging settings.
+
+    `enabled=True` (the default) routes every stdlib + structlog call through a
+    rotating JSON file under `paths.log_dir`. `level` is a stdlib logging name
+    (`"DEBUG"`, `"INFO"`, `"WARNING"`, `"ERROR"`, `"CRITICAL"`) — defaults to
+    `DEBUG` so the on-disk log captures as much context as possible for the
+    small group of operators reviewing it. Lower it to `INFO` if the log volume
+    becomes a problem."""
+
     enabled: bool = True
+    level: str = Field(
+        default="DEBUG",
+        pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$",
+    )
 
 
 class UiConfig(BaseModel):

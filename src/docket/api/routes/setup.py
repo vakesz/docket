@@ -239,7 +239,10 @@ def setup_complete(
             port=req.http_port,
             token=http_token,
         ),
-        telemetry=TelemetryConfig(enabled=req.telemetry_enabled),
+        telemetry=TelemetryConfig(
+            enabled=req.telemetry_enabled,
+            level=req.telemetry_level,
+        ),
     )
 
     paths.ensure()
