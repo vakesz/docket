@@ -65,8 +65,8 @@ class Item:
     attachments: list[Attachment] = field(default_factory=list)
     provider_raw: dict[str, Any] = field(default_factory=dict)
     # Stamped at the storage boundary (sync_service + mutation upserts) so the
-    # shared items cache can be filtered to the active provider. Empty string
-    # means "unscoped" (legacy rows before the column existed).
+    # shared items cache can be filtered to the active provider. Defaults to
+    # "" for unit tests and in-memory construction; real code always stamps it.
     provider_key: str = ""
 
 

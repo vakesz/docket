@@ -338,34 +338,48 @@ class DocketApp(App[None]):
 
         Provider calls block on the network, so we spawn a thread worker —
         the UI stays responsive while the sync runs. `exclusive=True` means
-        a slow sync never stacks up behind itself."""
+        a slow sync never stacks up behind itself.
+
+        We snapshot the provider/scope on the event-loop thread and close
+        the worker over them; a mid-sync provider switch must not swap the
+        target out from under an in-flight refresh."""
         interval = self._resolved_sync_interval()
         if interval <= 0:
             return  # Disabled mid-session — nothing to do.
         # Push the next target *now* so the countdown keeps moving even if
         # the worker is still chewing on the last one.
         self._schedule_next_sync(interval)
+        provider = self.tui_ctx.provider
+        provider_key = self.tui_ctx.provider_key
+        scope_key = self.tui_ctx.scope_key
+        scope = self.tui_ctx.scope
         self.run_worker(
-            self._background_sync_once,
+            lambda: self._background_sync_once(provider, provider_key, scope_key, scope),
             group="background-sync",
             exclusive=True,
             thread=True,
         )
 
-    def _background_sync_once(self) -> None:
+    def _background_sync_once(
+        self,
+        provider: WorkItemProvider,
+        provider_key: str,
+        scope_key: str,
+        scope: ScopeFilters,
+    ) -> None:
         try:
             summary = sync_service.refresh(
                 self.tui_ctx.conn,
-                self.tui_ctx.provider,
-                self.tui_ctx.scope_key,
-                self.tui_ctx.scope,
-                provider_key=self.tui_ctx.provider_key,
+                provider,
+                scope_key,
+                scope,
+                provider_key=provider_key,
             )
         except Exception:
             # Background sync is best-effort; a provider hiccup shouldn't
             # interrupt the session. Flip the offline flag so the user has
             # some signal that their list may be stale.
-            log.exception("background sync failed for scope %s", self.tui_ctx.scope_key)
+            log.exception("background sync failed for scope %s", scope_key)
             self.call_from_thread(self._set_offline, True)
             return
 
@@ -389,20 +403,24 @@ class DocketApp(App[None]):
         item_id = self._selected_item_id
         if item_id is None:
             return
+        provider = self.tui_ctx.provider
+        provider_key = self.tui_ctx.provider_key
         self.run_worker(
-            lambda iid=item_id: self._external_watch_once(iid),
+            lambda: self._external_watch_once(item_id, provider, provider_key),
             group=f"external-watch-{item_id}",
             exclusive=True,
             thread=True,
         )
 
-    def _external_watch_once(self, item_id: str) -> None:
+    def _external_watch_once(
+        self, item_id: str, provider: WorkItemProvider, provider_key: str
+    ) -> None:
         try:
             result = external_update_service.check_and_inject(
                 self.tui_ctx.conn,
-                self.tui_ctx.provider,
+                provider,
                 item_id,
-                provider_key=self.tui_ctx.provider_key,
+                provider_key=provider_key,
             )
         except Exception:
             # External updates are a nice-to-have; a provider hiccup shouldn't
@@ -413,15 +431,14 @@ class DocketApp(App[None]):
             return
 
         def apply() -> None:
-            # Guard: the user may have switched items between the worker
-            # starting and this callback firing.
-            if self._selected_item_id != item_id:
+            # Guard: the user may have switched items or providers between
+            # the worker starting and this callback firing; only repaint if
+            # both the item and its owning provider still match.
+            if self._selected_item_id != item_id or self.tui_ctx.provider_key != provider_key:
                 return
-            fresh_item = item_repo.get_item(
-                self.tui_ctx.conn, item_id, provider_key=self.tui_ctx.provider_key
-            )
+            fresh_item = item_repo.get_item(self.tui_ctx.conn, item_id, provider_key=provider_key)
             fresh_comments = comment_repo.list_comments(
-                self.tui_ctx.conn, item_id, provider_key=self.tui_ctx.provider_key
+                self.tui_ctx.conn, item_id, provider_key=provider_key
             )
             self.query_one(ItemDetail).show(fresh_item, fresh_comments)
             chat = self.query_one(ChatPane)
@@ -1202,6 +1219,13 @@ class DocketApp(App[None]):
                 read_only=self.tui_ctx.read_only,
                 provider_key=self.tui_ctx.provider_key,
             )
+        # The detail and chat panes were rendered for an item from the previous
+        # provider. Wipe them so the user doesn't chat against a ticket that no
+        # longer exists in the active cache slice.
+        with contextlib.suppress(Exception):
+            self.query_one(ItemDetail).show(None, [])
+        with contextlib.suppress(Exception):
+            self.query_one(ChatPane).bind_item(None)
         with contextlib.suppress(Exception):
             bar = self.query_one(StatusBar)
             bar.provider_name = entry.display_name

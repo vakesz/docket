@@ -37,7 +37,7 @@ class Context:
     def provider(self) -> WorkItemProvider:
         """Currently-active provider. Every command path that used to read
         `ctx.provider` continues to work — the difference is that it tracks
-        `config.active_provider` instead of a hard-coded ADO instance."""
+        `config.active_provider` instead of a hard-coded Azure DevOps instance."""
         if not self.active_provider:
             raise RuntimeError("no active provider — config has no providers configured")
         return self.providers[self.active_provider]

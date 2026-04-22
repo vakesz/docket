@@ -1,22 +1,26 @@
 """First-launch setup wizard.
 
-The wizard walks the user through az login → ADO probe → scope → telemetry →
-prompt scaffold → DB/first sync. Output shape: each backend is an entry under
-`providers`, with `active_provider` pointing at the default one.
+The wizard walks the user through picking a provider type, running that
+provider's auth/connection/scope onboarding, filling in the shared host
+surfaces (telemetry, HTTP), scaffolding prompts, and running a first sync.
+Output shape: each backend is an entry under `providers`, with
+`active_provider` pointing at whichever one should open by default.
 
 `--step=<name>` jumps directly to a step and writes config atomically on
-completion.
+completion. Step names are provider-agnostic: provider, auth, connection,
+scope, telemetry, http, prompts, sync, default.
 
-Auto-discovery: whenever `az` + the ADO bearer token can list orgs, projects,
-teams, area paths, or iteration paths, the wizard shows a numbered picker so the
-user never has to type values they could click. Any discovery failure transparently
-falls back to free-form prompts — helpful for restricted networks."""
+Auto-discovery: each provider's onboarding uses its CLI session (az/gh) to
+populate numbered pickers so users rarely have to type values they could
+click. Any discovery failure transparently falls back to free-form prompts
+— helpful for restricted networks."""
 
 from __future__ import annotations
 
 import secrets
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 from urllib.parse import urlparse
 
 from pydantic import HttpUrl, ValidationError
@@ -35,6 +39,7 @@ from docket.config.models import (
 from docket.config.paths import Paths, resolve_paths
 from docket.config.prompt_templates import scaffold as scaffold_prompts
 from docket.core.services import sync_service
+from docket.providers import registry
 from docket.providers.azure_devops import AzureDevOpsProvider, discover
 from docket.providers.azure_devops.auth import ensure_logged_in
 from docket.providers.azure_devops.discover import DiscoveryError
@@ -44,34 +49,41 @@ from docket.storage import init_db
 console = Console()
 
 STEP_NAMES: tuple[str, ...] = (
-    "az",
-    "ado",
+    "provider",
+    "auth",
+    "connection",
     "scope",
     "telemetry",
     "http",
     "prompts",
     "sync",
+    "default",
 )
 
 _CUSTOM_SENTINEL = "__custom__"
 _ANY_SENTINEL = "__any__"
 
-_DEFAULT_PROVIDER_KEY = "ado"
-_DEFAULT_PROVIDER_DISPLAY = "Azure DevOps"
-
 
 @dataclass
 class WizardState:
     paths: Paths
-    ado_organization: str = ""
-    ado_project: str = ""
+    existing: Config = field(default_factory=Config)
+    # Set by the provider-selection step.
+    type_id: str = ""
+    provider_key: str = ""
+    display_name: str = ""
+    provider_config: dict[str, Any] = field(default_factory=dict)
     scope: ScopeFilter = field(default_factory=ScopeFilter)
+    # Shared host surfaces. Inherited from existing config if present.
     telemetry_enabled: bool = True
     http_enabled: bool = True
     http_bind: str = "127.0.0.1"
     http_port: int = 8765
     http_token: str = ""
+    # Discovered hints (used to pre-populate assignee pickers).
     signed_in_email: str | None = None
+    # Whether this entry should become the active provider after saving.
+    make_active: bool = True
 
 
 def run_wizard(start_at: str | None = None) -> None:
@@ -83,20 +95,24 @@ def run_wizard(start_at: str | None = None) -> None:
     console.print(
         Panel.fit(
             "[bold]Docket setup[/bold]\n"
-            "This wizard prepares your config, prompt templates, local cache, and first sync.\n"
+            "This wizard adds or reconfigures a provider, prepares shared\n"
+            "settings, scaffolds prompt templates, and runs an initial sync.\n"
             "You can exit at any time with Ctrl-C and resume with `docket setup`.",
             border_style="cyan",
         )
     )
+    _print_existing_providers(state.existing)
 
     steps: list[tuple[str, Callable[[WizardState], None]]] = [
-        ("az", _step_az_login),
-        ("ado", _step_ado_connection),
-        ("scope", _step_scope_filters),
+        ("provider", _step_pick_provider),
+        ("auth", _step_provider_auth),
+        ("connection", _step_provider_connection),
+        ("scope", _step_provider_scope),
         ("telemetry", _step_telemetry),
         ("http", _step_http_surface),
         ("prompts", _step_prompt_templates),
-        ("sync", _step_db_and_sync),
+        ("sync", _step_initial_sync),
+        ("default", _step_make_active),
     ]
 
     if start_at and start_at not in STEP_NAMES:
@@ -117,72 +133,120 @@ def run_wizard(start_at: str | None = None) -> None:
     console.print(f"[green]✓ config written to[/green] {paths.config_file}")
 
 
-def _build_config_from_state(state: WizardState) -> Config:
-    """Compose the Config object the wizard just assembled in memory.
-
-    Preserves any existing providers (so re-running the wizard doesn't wipe
-    a hand-added github_stub) and upserts the default ADO entry under the
-    canonical `ado` key."""
-    providers: dict[str, ProviderEntry] = {}
-    if state.paths.config_file.exists():
-        try:
-            existing = load_config(state.paths)
-            providers = dict(existing.providers)
-        except (ValidationError, Exception):
-            providers = {}
-
-    ado_entry = providers.get(_DEFAULT_PROVIDER_KEY)
-    scopes = dict(ado_entry.scopes) if ado_entry else {}
-    scopes["default"] = state.scope
-    providers[_DEFAULT_PROVIDER_KEY] = ProviderEntry(
-        type="azure_devops",
-        display_name=_DEFAULT_PROVIDER_DISPLAY,
-        config={
-            "organization": str(HttpUrl(state.ado_organization)),
-            "project": state.ado_project,
-        },
-        scopes=scopes,
-        active_scope="default",
-    )
-    return Config(
-        providers=providers,
-        active_provider=_DEFAULT_PROVIDER_KEY,
-        telemetry=TelemetryConfig(enabled=state.telemetry_enabled),
-        http=HttpConfig(
-            enabled=state.http_enabled,
-            bind=state.http_bind,
-            port=state.http_port,
-            token=state.http_token,
-        ),
-    )
+def _print_existing_providers(cfg: Config) -> None:
+    if not cfg.providers:
+        return
+    console.print("[bold]Existing providers:[/bold]")
+    for key, entry in cfg.providers.items():
+        marker = " [green](active)[/green]" if key == cfg.active_provider else ""
+        console.print(
+            f"  · [cyan]{key}[/cyan] — {entry.display_name} [dim]({entry.type})[/dim]{marker}"
+        )
 
 
 def _load_existing_state(paths: Paths) -> WizardState:
     state = WizardState(paths=paths)
-    if paths.config_file.exists():
-        try:
-            cfg = load_config(paths)
-        except (ValidationError, Exception):
-            return state
-        entry = cfg.providers.get(_DEFAULT_PROVIDER_KEY) or cfg.providers.get(cfg.active_provider)
-        if entry is not None and entry.type == "azure_devops":
-            state.ado_organization = str(entry.config.get("organization", ""))
-            state.ado_project = str(entry.config.get("project", ""))
-            state.scope = entry.scopes.get(entry.active_scope) or entry.scopes.get(
-                "default", ScopeFilter()
-            )
-        state.telemetry_enabled = cfg.telemetry.enabled
-        state.http_enabled = cfg.http.enabled
-        state.http_bind = cfg.http.bind
-        state.http_port = cfg.http.port
-        state.http_token = cfg.http.token
+    if not paths.config_file.exists():
+        return state
+    try:
+        cfg = load_config(paths)
+    except (ValidationError, Exception):
+        return state
+    state.existing = cfg
+    state.telemetry_enabled = cfg.telemetry.enabled
+    state.http_enabled = cfg.http.enabled
+    state.http_bind = cfg.http.bind
+    state.http_port = cfg.http.port
+    state.http_token = cfg.http.token
+    key = cfg.active_provider or next(iter(cfg.providers), "")
+    entry = cfg.providers.get(key) if key else None
+    if entry is not None:
+        state.provider_key = key
+        state.type_id = entry.type
+        state.display_name = entry.display_name
+        state.provider_config = dict(entry.config)
+        state.scope = entry.scopes.get(entry.active_scope) or entry.scopes.get(
+            "default", ScopeFilter()
+        )
     return state
 
 
-# ---- step 1 ------------------------------------------------------------------
+# ---- step 1: provider selection ---------------------------------------------
 
 
-def _step_az_login(state: WizardState) -> None:
+def _step_pick_provider(state: WizardState) -> None:
+    """Pick a provider type and a config key for it.
+
+    When the user already has a provider entry of the chosen type, we offer a
+    fresh sibling id by default so additions don't silently overwrite. Reusing
+    an existing id prompts for explicit confirmation before we clobber it."""
+    specs = registry.specs()
+    if not specs:
+        console.print("[red]No provider types registered.[/red]")
+        raise SystemExit(2)
+    labels = [f"{s.display_name} ({s.type_id})" for s in specs]
+    choice = _pick("Provider type", labels)
+    assert isinstance(choice, int)
+    spec = specs[choice]
+    state.type_id = spec.type_id
+    state.display_name = spec.display_name
+
+    existing_keys = set(state.existing.providers)
+    if spec.type_id not in existing_keys:
+        state.provider_key = spec.type_id
+        state.provider_config = {}
+        state.scope = ScopeFilter()
+        return
+
+    default_key = _next_sibling_key(spec.type_id, existing_keys)
+    console.print(
+        f"[dim]A provider of type '{spec.type_id}' is already configured. "
+        f"Choose a new id to add another, or reuse an existing id to reconfigure it.[/dim]"
+    )
+    raw = Prompt.ask("Config key for this provider", default=default_key).strip()
+    key = raw or default_key
+    if key in existing_keys:
+        existing_entry = state.existing.providers[key]
+        if not Confirm.ask(
+            f"Reconfigure existing provider '{key}' ({existing_entry.type})?",
+            default=False,
+        ):
+            raise SystemExit(1)
+        # Carry display_name / scope forward so unchanged values survive.
+        state.display_name = existing_entry.display_name
+        state.provider_config = dict(existing_entry.config)
+        state.scope = existing_entry.scopes.get(existing_entry.active_scope, ScopeFilter())
+    else:
+        state.provider_config = {}
+        state.scope = ScopeFilter()
+    state.provider_key = key
+
+
+def _next_sibling_key(type_id: str, taken: set[str]) -> str:
+    i = 2
+    while f"{type_id}-{i}" in taken:
+        i += 1
+    return f"{type_id}-{i}"
+
+
+# ---- step 2: auth (per-provider) --------------------------------------------
+
+
+def _step_provider_auth(state: WizardState) -> None:
+    if state.type_id == "azure_devops":
+        _azure_devops_step_auth(state)
+    elif state.type_id == "github":
+        _github_step_auth(state)
+    elif state.type_id == "github_stub":
+        console.print("[dim]No auth needed — github_stub runs entirely in-memory.[/dim]")
+    else:
+        console.print(
+            f"[dim]No built-in auth step for '{state.type_id}'. "
+            "The provider factory will surface auth errors on first sync.[/dim]"
+        )
+
+
+def _azure_devops_step_auth(state: WizardState) -> None:
     console.print("Checking Azure CLI session...")
     while True:
         try:
@@ -197,10 +261,43 @@ def _step_az_login(state: WizardState) -> None:
         return
 
 
-# ---- step 2 ------------------------------------------------------------------
+def _github_step_auth(state: WizardState) -> None:
+    from docket.providers.github.auth import (
+        ensure_logged_in as gh_ensure_logged_in,
+    )
+    from docket.providers.github.auth import (
+        signed_in_email as gh_signed_in_email,
+    )
+
+    console.print("Checking GitHub CLI session...")
+    while True:
+        try:
+            login = gh_ensure_logged_in()
+        except ProviderAuthError as e:
+            console.print(f"[yellow]{e}[/yellow]")
+            if not Confirm.ask("Retry now?", default=True):
+                raise SystemExit(1) from e
+            continue
+        console.print(f"[green]✓ signed in as[/green] {login}")
+        state.signed_in_email = gh_signed_in_email()
+        return
 
 
-def _step_ado_connection(state: WizardState) -> None:
+# ---- step 3: connection (per-provider) --------------------------------------
+
+
+def _step_provider_connection(state: WizardState) -> None:
+    if state.type_id == "azure_devops":
+        _azure_devops_step_connection(state)
+    elif state.type_id == "github":
+        _github_step_connection(state)
+    elif state.type_id == "github_stub":
+        _github_stub_step_connection(state)
+    else:
+        _generic_step_connection(state)
+
+
+def _azure_devops_step_connection(state: WizardState) -> None:
     """Pick org and project — from discovery when available, manual otherwise."""
     while True:
         org = _pick_org(state)
@@ -213,11 +310,12 @@ def _step_ado_connection(state: WizardState) -> None:
             console.print(f"[red]Connection failed:[/red] {e}")
             if not Confirm.ask("Try different values?", default=True):
                 raise SystemExit(1) from e
-            state.ado_organization = org
-            state.ado_project = project
+            state.provider_config = {"organization": org, "project": project}
             continue
-        state.ado_organization = org
-        state.ado_project = project
+        state.provider_config = {
+            "organization": str(HttpUrl(org)),
+            "project": project,
+        }
         console.print("[green]✓ reachable[/green]")
         return
 
@@ -239,11 +337,12 @@ def _pick_org(state: WizardState) -> str:
 
 
 def _prompt_org_url(state: WizardState) -> str:
+    current = str(state.provider_config.get("organization", ""))
     while True:
         raw = (
             Prompt.ask(
                 "Azure DevOps organization URL",
-                default=state.ado_organization or "https://dev.azure.com/your-org",
+                default=current or "https://dev.azure.com/your-org",
             )
             .strip()
             .rstrip("/")
@@ -273,11 +372,47 @@ def _pick_project(state: WizardState, org_url: str) -> str:
 
 
 def _prompt_project_name(state: WizardState) -> str:
+    current = str(state.provider_config.get("project", ""))
     while True:
-        project = Prompt.ask("Project name", default=state.ado_project or "").strip()
+        project = Prompt.ask("Project name", default=current or "").strip()
         if project:
             return project
         console.print("[red]Project name is required.[/red]")
+
+
+def _github_step_connection(state: WizardState) -> None:
+    repo = _pick_github_repo()
+    state.provider_config = {"default_repo": repo}
+
+
+def _github_stub_step_connection(state: WizardState) -> None:
+    current = str(state.provider_config.get("default_repo", "example/repo"))
+    repo = Prompt.ask("Default repo (owner/name)", default=current).strip() or current
+    state.provider_config = {"default_repo": repo}
+
+
+def _generic_step_connection(state: WizardState) -> None:
+    """Prompt raw config fields declared by a third-party provider spec."""
+    spec = registry.spec(state.type_id)
+    if spec is None or not spec.setup_fields:
+        console.print(f"[dim]No connection fields declared for '{state.type_id}'.[/dim]")
+        return
+    config: dict[str, Any] = {}
+    for setup_field in spec.setup_fields:
+        prompt_label = setup_field.label + ("" if setup_field.required else " (optional)")
+        current = str(state.provider_config.get(setup_field.key, ""))
+        default = current or setup_field.placeholder
+        while True:
+            raw = Prompt.ask(prompt_label, default=default).strip()
+            if setup_field.required and not raw:
+                console.print(f"[red]{setup_field.label} is required.[/red]")
+                continue
+            if setup_field.kind == "url" and raw and not _looks_like_http_url(raw):
+                console.print("[red]Must be a full URL (http or https).[/red]")
+                continue
+            config[setup_field.key] = raw
+            break
+    state.provider_config = config
 
 
 def _looks_like_http_url(value: str) -> bool:
@@ -285,10 +420,21 @@ def _looks_like_http_url(value: str) -> bool:
     return parsed.scheme in ("http", "https") and bool(parsed.netloc)
 
 
-# ---- step 3 ------------------------------------------------------------------
+# ---- step 4: scope (per-provider) -------------------------------------------
 
 
-def _step_scope_filters(state: WizardState) -> None:
+def _step_provider_scope(state: WizardState) -> None:
+    if state.type_id == "azure_devops":
+        _azure_devops_step_scope(state)
+    elif state.type_id in ("github", "github_stub"):
+        _github_step_scope(state)
+    else:
+        state.scope = ScopeFilter()
+
+
+def _azure_devops_step_scope(state: WizardState) -> None:
+    org = str(state.provider_config.get("organization", ""))
+    project = str(state.provider_config.get("project", ""))
     console.print(
         "Scope filters limit which work items get cached locally. "
         "Leave any axis as 'any' to include everything."
@@ -296,17 +442,17 @@ def _step_scope_filters(state: WizardState) -> None:
     while True:
         team = _pick_optional(
             "Team",
-            fetch=lambda: discover.list_teams(state.ado_organization, state.ado_project),
+            fetch=lambda: discover.list_teams(org, project),
             current=state.scope.team,
         )
         area = _pick_optional(
             "Area path",
-            fetch=lambda: discover.list_area_paths(state.ado_organization, state.ado_project),
+            fetch=lambda: discover.list_area_paths(org, project),
             current=state.scope.area_path,
         )
         iteration = _pick_optional(
             "Iteration path",
-            fetch=lambda: discover.list_iteration_paths(state.ado_organization, state.ado_project),
+            fetch=lambda: discover.list_iteration_paths(org, project),
             current=state.scope.iteration_path,
         )
         assignee = _pick_assignee(state)
@@ -317,7 +463,7 @@ def _step_scope_filters(state: WizardState) -> None:
             assignee=assignee,
         )
 
-        count = _count_items_for_scope(state, scope)
+        count = _count_azure_devops_items_for_scope(org, project, scope)
         if count is None:
             console.print("[yellow]Could not count items — proceeding with this scope.[/yellow]")
         else:
@@ -326,6 +472,16 @@ def _step_scope_filters(state: WizardState) -> None:
         if Confirm.ask("Use this scope?", default=True):
             state.scope = scope
             return
+
+
+def _github_step_scope(state: WizardState) -> None:
+    """GitHub scope is just the assignee — team/area/iteration don't apply."""
+    console.print(
+        "Scope filters limit which issues/PRs get cached locally. "
+        "Only 'assignee' is meaningful for GitHub."
+    )
+    assignee = _pick_assignee(state)
+    state.scope = ScopeFilter(assignee=assignee)
 
 
 def _pick_optional(
@@ -414,19 +570,16 @@ def _pick(
     return int(raw) - 1 - offset
 
 
-def _count_items_for_scope(state: WizardState, scope: ScopeFilter) -> int | None:
+def _count_azure_devops_items_for_scope(org: str, project: str, scope: ScopeFilter) -> int | None:
     try:
-        provider = AzureDevOpsProvider(
-            organization_url=state.ado_organization,
-            project=state.ado_project,
-        )
+        provider = AzureDevOpsProvider(organization_url=org, project=project)
         items = list(provider.list_changes_since(None, scope.to_core()))
         return len(items)
     except ProviderError:
         return None
 
 
-# ---- step 7 ------------------------------------------------------------------
+# ---- step 5: telemetry ------------------------------------------------------
 
 
 def _step_telemetry(state: WizardState) -> None:
@@ -437,7 +590,7 @@ def _step_telemetry(state: WizardState) -> None:
     state.telemetry_enabled = Confirm.ask("Keep local telemetry enabled?", default=True)
 
 
-# ---- step 7b -----------------------------------------------------------------
+# ---- step 6: HTTP surface ---------------------------------------------------
 
 
 def _step_http_surface(state: WizardState) -> None:
@@ -467,7 +620,7 @@ def _step_http_surface(state: WizardState) -> None:
     console.print(f"[dim]Bind:[/dim] {state.http_bind}  [dim]Port:[/dim] {state.http_port}")
 
 
-# ---- step 8 ------------------------------------------------------------------
+# ---- step 7: prompts --------------------------------------------------------
 
 
 def _step_prompt_templates(state: WizardState) -> None:
@@ -485,16 +638,17 @@ def _step_prompt_templates(state: WizardState) -> None:
         console.print(f"Templates already present at {state.paths.prompts_dir} — no changes.")
 
 
-# ---- step 9 ------------------------------------------------------------------
+# ---- step 8: initial sync ---------------------------------------------------
 
 
-def _step_db_and_sync(state: WizardState) -> None:
+def _step_initial_sync(state: WizardState) -> None:
     console.print(f"Initializing database at [cyan]{state.paths.db_file}[/cyan]...")
     conn = init_db(state.paths.db_file)
     try:
-        provider = AzureDevOpsProvider(
-            organization_url=state.ado_organization,
-            project=state.ado_project,
+        provider = registry.build(
+            state.type_id,
+            state.provider_config,
+            display_name=state.display_name,
         )
         console.print("Running initial full sync...")
         summary = sync_service.full_refresh(
@@ -502,7 +656,7 @@ def _step_db_and_sync(state: WizardState) -> None:
             provider,
             "default",
             state.scope.to_core(),
-            provider_key=_DEFAULT_PROVIDER_KEY,
+            provider_key=state.provider_key,
         )
         console.print(
             f"[green]✓ synced {summary.upserted} item(s)[/green] "
@@ -510,6 +664,62 @@ def _step_db_and_sync(state: WizardState) -> None:
         )
     finally:
         conn.close()
+
+
+# ---- step 9: default provider ----------------------------------------------
+
+
+def _step_make_active(state: WizardState) -> None:
+    """Decide whether this entry becomes the active provider.
+
+    Auto-active when there are no siblings or nothing is currently active.
+    Otherwise ask — users adding a second/third provider rarely want it to
+    silently take over the TUI's default."""
+    siblings = [k for k in state.existing.providers if k != state.provider_key]
+    current = state.existing.active_provider
+    if not siblings or not current or current == state.provider_key:
+        state.make_active = True
+        return
+    state.make_active = Confirm.ask(
+        f"Make '{state.provider_key}' the active provider? (currently: {current})",
+        default=False,
+    )
+
+
+# ---- build & persist --------------------------------------------------------
+
+
+def _build_config_from_state(state: WizardState) -> Config:
+    """Compose the Config object by layering the new provider entry onto
+    whatever was loaded. Non-wizard fields (llm, ui, sync, stale) survive
+    untouched so partial runs with `--step=<name>` don't clobber them."""
+    providers = dict(state.existing.providers)
+    existing_entry = providers.get(state.provider_key)
+    scopes = dict(existing_entry.scopes) if existing_entry else {}
+    scopes["default"] = state.scope
+    providers[state.provider_key] = ProviderEntry(
+        type=state.type_id,
+        display_name=state.display_name,
+        config=state.provider_config,
+        scopes=scopes,
+        active_scope=existing_entry.active_scope if existing_entry else "default",
+    )
+    active_provider = state.existing.active_provider
+    if state.make_active or not active_provider:
+        active_provider = state.provider_key
+    return state.existing.model_copy(
+        update={
+            "providers": providers,
+            "active_provider": active_provider,
+            "telemetry": TelemetryConfig(enabled=state.telemetry_enabled),
+            "http": HttpConfig(
+                enabled=state.http_enabled,
+                bind=state.http_bind,
+                port=state.http_port,
+                token=state.http_token,
+            ),
+        }
+    )
 
 
 # ---- provider subcommands ----------------------------------------------------

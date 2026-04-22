@@ -6,25 +6,12 @@ from collections.abc import Iterable, Iterator
 from datetime import UTC, datetime
 
 from docket.core.model import Item, ItemKind, ItemState
-from docket.storage.item_keys import item_storage_key, split_item_storage_key
+from docket.storage.item_keys import item_storage_key
 
 
 def _row_to_item(row: sqlite3.Row) -> Item:
-    url: str | None
-    try:
-        url = row["url"]
-    except (IndexError, KeyError):
-        url = None
-    try:
-        provider_key = row["provider_key"] or ""
-    except (IndexError, KeyError):
-        provider_key, _ = split_item_storage_key(row["id"])
-    try:
-        item_id = row["provider_item_id"]
-    except (IndexError, KeyError):
-        _, item_id = split_item_storage_key(row["id"])
     return Item(
-        id=item_id,
+        id=row["provider_item_id"],
         kind=ItemKind(row["kind"]),
         title=row["title"],
         description_md=row["description_md"],
@@ -33,9 +20,9 @@ def _row_to_item(row: sqlite3.Row) -> Item:
         parent_id=row["parent_id"],
         tags=json.loads(row["tags_json"]),
         updated_at=datetime.fromisoformat(row["updated_at"]) if row["updated_at"] else None,
-        url=url,
+        url=row["url"],
         provider_raw=json.loads(row["provider_raw"]),
-        provider_key=provider_key,
+        provider_key=row["provider_key"],
     )
 
 
@@ -104,11 +91,6 @@ def get_item(conn: sqlite3.Connection, id: str, *, provider_key: str | None = No
             "SELECT * FROM items WHERE id = ?",
             (item_storage_key(provider_key, id),),
         ).fetchone()
-        if row is None:
-            row = conn.execute(
-                "SELECT * FROM items WHERE provider_key = '' AND provider_item_id = ?",
-                (id,),
-            ).fetchone()
         return _row_to_item(row) if row else None
     rows = conn.execute(
         "SELECT * FROM items WHERE provider_item_id = ? ORDER BY updated_at DESC",
@@ -146,7 +128,7 @@ def list_items(
     if tag is not None:
         # tags_json is a JSON array of strings; JSON1's `json_each` gives us
         # a sub-select that matches exact values (case-sensitive, which aligns
-        # with how GitHub/ADO treat labels).
+        # with how GitHub/Azure DevOps treat labels).
         clauses.append(
             "EXISTS (SELECT 1 FROM json_each(items.tags_json) WHERE json_each.value = ?)"
         )

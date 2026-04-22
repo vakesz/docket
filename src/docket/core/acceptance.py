@@ -15,7 +15,7 @@ count as acceptance criteria:
 
 Only one pattern needs to hit; if both are present, the task-list items
 anywhere in the document take precedence so no criterion is dropped. We
-lean GFM-task-list because it survives round-trips through the ADO and
+lean GFM-task-list because it survives round-trips through the Azure DevOps and
 GitHub Markdown renderers we actually write to.
 """
 

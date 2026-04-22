@@ -90,7 +90,7 @@ def _register_builtins() -> None:
     from docket.providers.github.provider import GitHubProvider
     from docket.providers.github_stub.provider import GitHubStubProvider
 
-    def _ado_factory(config: dict[str, Any], display_name: str) -> WorkItemProvider:
+    def _azure_devops_factory(config: dict[str, Any], display_name: str) -> WorkItemProvider:
         organization = config.get("organization")
         project = config.get("project")
         if not organization or not project:
@@ -121,7 +121,7 @@ def _register_builtins() -> None:
         ProviderSpec(
             type_id="azure_devops",
             display_name="Azure DevOps",
-            factory=_ado_factory,
+            factory=_azure_devops_factory,
             requires_cli=("az",),
             setup_fields=(
                 SetupField(

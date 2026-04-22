@@ -46,7 +46,7 @@ async def test_settings_modal_persists_and_updates_runtime(tmp_xdg: Path) -> Non
     paths.ensure()
     cfg = Config(
         providers={
-            "ado": ProviderEntry(
+            "azure_devops": ProviderEntry(
                 type="azure_devops",
                 display_name="Azure DevOps",
                 config={"organization": "https://dev.azure.com/example", "project": "Demo"},
@@ -54,7 +54,7 @@ async def test_settings_modal_persists_and_updates_runtime(tmp_xdg: Path) -> Non
                 active_scope="default",
             ),
         },
-        active_provider="ado",
+        active_provider="azure_devops",
     )
     item = _mk_item()
     conn = init_db(paths.db_file)
@@ -62,7 +62,7 @@ async def test_settings_modal_persists_and_updates_runtime(tmp_xdg: Path) -> Non
     ctx = TuiContext(
         conn=conn,
         provider=FakeProvider(items=[item]),
-        provider_key="ado",
+        provider_key="azure_devops",
         scope=ScopeFilters(),
         scope_key="default",
         paths=paths,
@@ -89,9 +89,9 @@ async def test_settings_modal_persists_and_updates_runtime(tmp_xdg: Path) -> Non
         assert app.query_one(ChatPane)._show_acceptance_criteria is False
 
     reloaded = load_config(paths)
-    ado_entry = reloaded.providers["ado"]
-    assert ado_entry.active_scope == "focused"
-    assert ado_entry.scopes["focused"].team == "Platform"
+    azure_devops_entry = reloaded.providers["azure_devops"]
+    assert azure_devops_entry.active_scope == "focused"
+    assert azure_devops_entry.scopes["focused"].team == "Platform"
     assert reloaded.ui.default_new_item_kind == "bug"
     assert reloaded.ui.show_acceptance_criteria is False
     assert reloaded.stale.threshold_days == 3

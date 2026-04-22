@@ -41,7 +41,7 @@ TOKEN = "test-bearer-token-abcdef"
 AUTH = {"Authorization": f"Bearer {TOKEN}"}
 
 
-def _mk_item(id_: str = "S-1", title: str = "Login") -> Item:
+def _mk_item(id_: str = "S-1", title: str = "Login", provider_key: str = "primary") -> Item:
     return Item(
         id=id_,
         kind=ItemKind.STORY,
@@ -51,6 +51,7 @@ def _mk_item(id_: str = "S-1", title: str = "Login") -> Item:
         assignee=None,
         parent_id=None,
         updated_at=datetime.now(UTC),
+        provider_key=provider_key,
     )
 
 

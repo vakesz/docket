@@ -3,7 +3,7 @@
 Converted from the internal dataclasses so the HTTP contract is decoupled
 from on-disk / in-memory representations. Only fields useful to a headless
 API caller are exposed — `provider_raw` for example is deliberately omitted
-since it leaks ADO-specific shape.
+since it leaks Azure DevOps-specific shape.
 
 Split into submodules by route group (`core`, `mutations`, `tui_parity`,
 `setup`). Callers should import from `docket.api.schemas` and let this

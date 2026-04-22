@@ -67,7 +67,13 @@ export function ItemsList({ selectedId }: Props) {
   const virtualizer = useVirtualizer({
     count: filtered.length,
     getScrollElement: () => parentRef.current,
+    // Rows grow with 2-line titles, assignee, and tag pills, so the 58px
+    // estimate was a floor, not a ceiling — fixed-height slots caused rows
+    // to visually overlap. `measureElement` lets the virtualizer read each
+    // row's actual height after it renders and lay them out without gaps
+    // or overlap.
     estimateSize: () => 58,
+    measureElement: (el) => el.getBoundingClientRect().height,
     overscan: 8,
   });
 
@@ -188,12 +194,12 @@ export function ItemsList({ selectedId }: Props) {
                 <div
                   key={it.id}
                   data-index={virtualRow.index}
+                  ref={virtualizer.measureElement}
                   style={{
                     position: "absolute",
                     top: 0,
                     left: 0,
                     width: "100%",
-                    height: `${virtualRow.size}px`,
                     transform: `translateY(${virtualRow.start}px)`,
                   }}
                 >

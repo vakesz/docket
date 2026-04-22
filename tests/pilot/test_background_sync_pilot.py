@@ -53,7 +53,7 @@ def _single_provider_cfg(
     *,
     scopes: dict[str, ScopeFilter],
     active_scope: str = "default",
-    key: str = "ado",
+    key: str = "azure_devops",
 ) -> Config:
     """Build a Config whose single provider entry carries the given scopes.
 
@@ -160,7 +160,7 @@ async def test_status_bar_shows_active_view_and_next_sync(tmp_path: Path) -> Non
     ctx = TuiContext(
         conn=conn,
         provider=FakeProvider(items=[item]),
-        provider_key="ado",
+        provider_key="azure_devops",
         scope=ScopeFilters(team="Team A"),
         scope_key="my-team",
         background_sync_interval_seconds=300.0,
@@ -195,7 +195,7 @@ async def test_switch_view_reloads_tree_with_new_scope(tmp_path: Path) -> None:
     ctx = TuiContext(
         conn=conn,
         provider=FakeProvider(items=[item]),
-        provider_key="ado",
+        provider_key="azure_devops",
         scope=ScopeFilters(),
         scope_key="default",
         config=cfg,
@@ -221,7 +221,7 @@ async def test_switch_view_rejects_unknown_name(tmp_path: Path) -> None:
     ctx = TuiContext(
         conn=conn,
         provider=FakeProvider(items=[]),
-        provider_key="ado",
+        provider_key="azure_devops",
         scope=ScopeFilters(),
         scope_key="default",
         config=cfg,
@@ -254,7 +254,7 @@ async def test_palette_exposes_switch_view_entries(tmp_path: Path) -> None:
     ctx = TuiContext(
         conn=conn,
         provider=FakeProvider(items=[]),
-        provider_key="ado",
+        provider_key="azure_devops",
         scope=ScopeFilters(),
         scope_key="default",
         config=cfg,

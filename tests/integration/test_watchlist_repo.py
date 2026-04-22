@@ -94,18 +94,24 @@ def test_list_pinned_items_drops_missing_and_archived(tmp_path: Path) -> None:
 def test_provider_scoped_pins_keep_same_external_id_apart(tmp_path: Path) -> None:
     conn = init_db(tmp_path / "t.db")
     with transaction(conn):
-        item_repo.upsert_item(conn, _make_item("42", title="ado", provider_key="ado"))
+        item_repo.upsert_item(
+            conn, _make_item("42", title="azure_devops", provider_key="azure_devops")
+        )
         item_repo.upsert_item(conn, _make_item("42", title="github", provider_key="github"))
-        watchlist_repo.pin(conn, "42", provider_key="ado", at=datetime(2026, 4, 20, tzinfo=UTC))
+        watchlist_repo.pin(
+            conn, "42", provider_key="azure_devops", at=datetime(2026, 4, 20, tzinfo=UTC)
+        )
         watchlist_repo.pin(
             conn,
             "42",
             provider_key="github",
             at=datetime(2026, 4, 21, tzinfo=UTC),
         )
-    assert watchlist_repo.is_pinned(conn, "42", provider_key="ado") is True
+    assert watchlist_repo.is_pinned(conn, "42", provider_key="azure_devops") is True
     assert watchlist_repo.is_pinned(conn, "42", provider_key="github") is True
-    assert [i.title for i in watchlist_repo.list_pinned_items(conn, provider_key="ado")] == ["ado"]
+    assert [
+        i.title for i in watchlist_repo.list_pinned_items(conn, provider_key="azure_devops")
+    ] == ["azure_devops"]
     assert [i.title for i in watchlist_repo.list_pinned_items(conn, provider_key="github")] == [
         "github"
     ]

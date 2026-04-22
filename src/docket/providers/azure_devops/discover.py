@@ -2,7 +2,7 @@
 
 These functions turn the user's `az` session into concrete selection choices so
 the wizard doesn't have to ask them to hand-type org URLs, project names, team
-names, area paths, or iteration paths. Every call reuses the short-lived ADO
+names, area paths, or iteration paths. Every call reuses the short-lived Azure DevOps
 bearer token minted from `az` — no PATs, no extra auth.
 
 Design rules:
@@ -23,7 +23,7 @@ from typing import Any
 
 import requests  # type: ignore[import-untyped]
 
-from docket.providers.azure_devops.auth import _az_path, get_ado_bearer_token
+from docket.providers.azure_devops.auth import _az_path, get_azure_devops_bearer_token
 from docket.providers.base import ProviderError
 
 _VSSPS_BASE = "https://app.vssps.visualstudio.com"
@@ -72,10 +72,10 @@ def signed_in_email() -> str | None:
 
 
 def list_orgs() -> list[OrgRef]:
-    """Return every ADO organization the signed-in user belongs to.
+    """Return every Azure DevOps organization the signed-in user belongs to.
 
     Two-step: profile/me → memberId, then accounts?memberId=…. Each "account" is
-    an org in ADO terminology."""
+    an org in Azure DevOps terminology."""
     me = _get_json(f"{_VSSPS_BASE}/_apis/profile/profiles/me?api-version=7.1-preview.3")
     member_id = me.get("id")
     if not member_id:
@@ -136,7 +136,7 @@ def _classification_paths(org_url: str, project: str, structure: str, depth: int
 def _collect_node_paths(node: dict[str, Any], *, prefix: str, sink: list[str]) -> None:
     """Walk the classification-node tree and flatten it into backslash-delimited paths.
 
-    ADO's public display form is `Project\\Parent\\Child`. The root node itself
+    Azure DevOps's public display form is `Project\\Parent\\Child`. The root node itself
     shares the project name, so the root's emitted path is just the project."""
     name = node.get("name")
     if not name:
@@ -150,7 +150,7 @@ def _collect_node_paths(node: dict[str, Any], *, prefix: str, sink: list[str]) -
 
 def _get_json(url: str, *, params: dict[str, str] | None = None) -> dict[str, Any]:
     try:
-        token = get_ado_bearer_token()
+        token = get_azure_devops_bearer_token()
     except ProviderError as e:
         raise DiscoveryError(str(e)) from e
     try:

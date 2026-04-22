@@ -23,7 +23,7 @@ def _az_path() -> str:
     return path
 
 
-def get_ado_bearer_token() -> str:
+def get_azure_devops_bearer_token() -> str:
     """Return a short-lived AAD access token for Azure DevOps, using the user's `az` session.
 
     Raises ProviderAuthError if `az` is missing, the user is not logged in, or the token

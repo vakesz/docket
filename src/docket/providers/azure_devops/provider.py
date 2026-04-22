@@ -24,12 +24,12 @@ from docket.core.model import (
     ScopeFilters,
     TransitionIntent,
 )
-from docket.providers.azure_devops.auth import get_ado_bearer_token
+from docket.providers.azure_devops.auth import get_azure_devops_bearer_token
 from docket.providers.azure_devops.field_map import html_to_md, to_item
 from docket.providers.azure_devops.state_map import KIND_BY_WIT, merge_tags, plan_for_intent
 from docket.providers.base import ProviderUnreachableError
 
-_MAX_WIQL_IDS = 200  # ADO caps at 20,000 per query; we batch defensively
+_MAX_WIQL_IDS = 200  # Azure DevOps caps at 20,000 per query; we batch defensively
 
 _DEFAULT_FIELDS: tuple[str, ...] = (
     "System.Id",
@@ -66,7 +66,7 @@ class AzureDevOpsProvider:
 
     def _conn(self) -> Connection:
         if self._connection is None:
-            token = get_ado_bearer_token()
+            token = get_azure_devops_bearer_token()
             self._connection = Connection(
                 base_url=self._org,
                 creds=BasicAuthentication("", token),
@@ -83,7 +83,9 @@ class AzureDevOpsProvider:
             core = self._conn().clients.get_core_client()
             core.get_project(self._project)
         except Exception as e:  # azure-devops raises its own exception types
-            raise ProviderUnreachableError(f"ADO unreachable or project not found: {e}") from e
+            raise ProviderUnreachableError(
+                f"Azure DevOps unreachable or project not found: {e}"
+            ) from e
 
     # -- reads ---------------------------------------------------------------
 
@@ -174,8 +176,8 @@ class AzureDevOpsProvider:
         plan = plan_for_intent(current.kind, intent)
         new_tags = merge_tags(current.tags, plan)
         patch: list[dict[str, Any]] = []
-        if plan.ado_state is not None:
-            patch.append({"op": "add", "path": "/fields/System.State", "value": plan.ado_state})
+        if plan.state is not None:
+            patch.append({"op": "add", "path": "/fields/System.State", "value": plan.state})
         patch.append({"op": "add", "path": "/fields/System.Tags", "value": "; ".join(new_tags)})
         wit = self._wit_client()
         raw = wit.update_work_item(document=patch, id=int(id))

@@ -43,8 +43,8 @@ def unpin(conn: sqlite3.Connection, item_id: str, *, provider_key: str = "") -> 
 
 def is_pinned(conn: sqlite3.Connection, item_id: str, *, provider_key: str = "") -> bool:
     row = conn.execute(
-        "SELECT 1 FROM watchlist WHERE id IN (?, ?)",
-        (item_storage_key(provider_key, item_id), item_id),
+        "SELECT 1 FROM watchlist WHERE id = ?",
+        (item_storage_key(provider_key, item_id),),
     ).fetchone()
     return row is not None
 
@@ -72,14 +72,7 @@ def list_pinned_items(conn: sqlite3.Connection, *, provider_key: str | None = No
             SELECT i.*
               FROM watchlist w
               JOIN items i ON i.id = w.id
-                OR (
-                    i.provider_key = ''
-                    AND i.provider_item_id = CASE
-                        WHEN instr(w.id, char(31)) > 0 THEN substr(w.id, instr(w.id, char(31)) + 1)
-                        ELSE w.id
-                    END
-                )
-             WHERE i.archived = 0 AND i.provider_key IN (?, '')
+             WHERE i.archived = 0 AND i.provider_key = ?
              ORDER BY w.pinned_at DESC
             """,
             (provider_key,),
@@ -90,13 +83,6 @@ def list_pinned_items(conn: sqlite3.Connection, *, provider_key: str | None = No
             SELECT i.*
               FROM watchlist w
               JOIN items i ON i.id = w.id
-                OR (
-                    i.provider_key = ''
-                    AND i.provider_item_id = CASE
-                        WHEN instr(w.id, char(31)) > 0 THEN substr(w.id, instr(w.id, char(31)) + 1)
-                        ELSE w.id
-                    END
-                )
              WHERE i.archived = 0
              ORDER BY w.pinned_at DESC
             """

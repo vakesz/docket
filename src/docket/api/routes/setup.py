@@ -174,12 +174,12 @@ def setup_complete(
 ) -> SetupCompleteDTO:
     if req.active_provider not in req.providers:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"active_provider '{req.active_provider}' is not in providers map",
         )
     if not req.providers:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="at least one provider is required",
         )
 
@@ -195,19 +195,19 @@ def setup_complete(
             )
         except UnknownProviderError as e:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=str(e),
             ) from e
         except (ValueError, ValidationError) as e:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=f"invalid config for '{key}': {e}",
             ) from e
         try:
             scope = ScopeFilter(**dict(entry.scope))
         except ValidationError as e:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=f"invalid scope for '{key}': {e}",
             ) from e
         providers_cfg[key] = ProviderEntry(
@@ -225,7 +225,7 @@ def setup_complete(
             llm_cfg = LlmConfig(endpoint=req.llm.endpoint, deployment=req.llm.deployment)
         except ValidationError as e:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=f"invalid llm config: {e}",
             ) from e
 

@@ -29,7 +29,7 @@ def test_config_roundtrip(tmp_xdg: Path) -> None:
     paths.ensure()
     cfg = Config(
         providers={
-            "ado": ProviderEntry(
+            "azure_devops": ProviderEntry(
                 type="azure_devops",
                 display_name="Azure DevOps",
                 config={"organization": "https://dev.azure.com/example", "project": "Demo"},
@@ -40,12 +40,12 @@ def test_config_roundtrip(tmp_xdg: Path) -> None:
                 active_scope="default",
             ),
         },
-        active_provider="ado",
+        active_provider="azure_devops",
     )
     save_config(paths, cfg)
     loaded = load_config(paths)
-    assert loaded.active_provider == "ado"
-    entry = loaded.providers["ado"]
+    assert loaded.active_provider == "azure_devops"
+    entry = loaded.providers["azure_devops"]
     assert entry.type == "azure_devops"
     assert entry.config["project"] == "Demo"
     assert entry.scopes["default"].area_path == "Demo\\Team A"

@@ -19,7 +19,7 @@ class _FakeWI:
 
 
 @pytest.mark.parametrize(
-    "ado_state,expected",
+    "state,expected",
     [
         ("New", ItemState.NEW),
         ("Active", ItemState.ACTIVE),
@@ -29,8 +29,8 @@ class _FakeWI:
         ("Something", ItemState.ACTIVE),  # fallback
     ],
 )
-def test_map_state_agile(ado_state: str, expected: ItemState) -> None:
-    assert map_state(ItemKind.STORY, ado_state) is expected
+def test_map_state_agile(state: str, expected: ItemState) -> None:
+    assert map_state(ItemKind.STORY, state) is expected
 
 
 def test_is_removed() -> None:
@@ -161,12 +161,16 @@ def test_to_item_parses_attachments_from_relations() -> None:
             "System.State": "Active",
         },
         relations=[
-            _FakeRelation("AttachedFile", "https://ado/att/1", {"name": "crash.log"}),
-            _FakeRelation("System.LinkTypes.Hierarchy-Reverse", "https://ado/wit/41", {}),
-            _FakeRelation("AttachedFile", "https://ado/att/2", {"name": "screenshot.png"}),
+            _FakeRelation("AttachedFile", "https://azure-devops.test/att/1", {"name": "crash.log"}),
+            _FakeRelation(
+                "System.LinkTypes.Hierarchy-Reverse", "https://azure-devops.test/wit/41", {}
+            ),
+            _FakeRelation(
+                "AttachedFile", "https://azure-devops.test/att/2", {"name": "screenshot.png"}
+            ),
         ],
     )
     item = to_item(wi)
     assert item is not None
     assert [a.filename for a in item.attachments] == ["crash.log", "screenshot.png"]
-    assert item.attachments[0].url == "https://ado/att/1"
+    assert item.attachments[0].url == "https://azure-devops.test/att/1"

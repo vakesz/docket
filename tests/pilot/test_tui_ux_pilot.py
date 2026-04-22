@@ -94,14 +94,14 @@ async def test_theme_picker_persists_selection_to_config(tmp_xdg: Path, ctx) -> 
     paths.ensure()
     config = Config(
         providers={
-            "ado": ProviderEntry(
+            "azure_devops": ProviderEntry(
                 type="azure_devops",
-                display_name="ADO",
+                display_name="Azure DevOps",
                 config={"organization": "https://dev.azure.com/example", "project": "Demo"},
                 scopes={"default": ScopeFilter()},
             )
         },
-        active_provider="ado",
+        active_provider="azure_devops",
     )
     ctx.paths = paths
     ctx.config = config

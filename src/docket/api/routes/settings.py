@@ -94,7 +94,7 @@ def patch_settings(
         merged = Config.model_validate(merged_raw)
     except Exception as e:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             f"Config validation failed: {e}",
         ) from e
 

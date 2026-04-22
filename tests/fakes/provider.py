@@ -15,7 +15,7 @@ from docket.core.model import (
     TransitionIntent,
 )
 
-# Simple in-memory canonical-state transition logic mirroring the ADO Agile plan,
+# Simple in-memory canonical-state transition logic mirroring the Azure DevOps Agile plan,
 # minus provider-specific tag bookkeeping. Good enough for exercising the mutation
 # pipeline end-to-end in tests.
 _STATE_BY_INTENT: dict[TransitionIntent, ItemState] = {
@@ -80,7 +80,7 @@ class FakeProvider:
             tags=list(current.tags),
             updated_at=datetime.now(UTC),
             url=current.url,
-            provider_raw={**current.provider_raw, "ado_state": new_state.value},
+            provider_raw={**current.provider_raw, "state": new_state.value},
         )
         self._replace(updated)
         return updated

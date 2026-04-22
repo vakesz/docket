@@ -20,7 +20,7 @@ def _item(id: str = "1") -> Item:
         assignee=None,
         parent_id=None,
         updated_at=datetime(2026, 4, 21, 10, 0, tzinfo=UTC),
-        provider_key="ado",
+        provider_key="azure_devops",
     )
 
 
@@ -29,7 +29,7 @@ def test_init_db_resets_incompatible_cache_schema(tmp_path: Path) -> None:
     conn = init_db(path)
     with transaction(conn):
         item_repo.upsert_item(conn, _item("1"))
-        watchlist_repo.pin(conn, "1", provider_key="ado")
+        watchlist_repo.pin(conn, "1", provider_key="azure_devops")
     conn.close()
 
     raw = sqlite3.connect(path)

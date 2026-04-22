@@ -29,7 +29,7 @@ class ProviderAuthError(ProviderError):
 
 @runtime_checkable
 class WorkItemProvider(Protocol):
-    """Provider-agnostic interface for work-item systems (ADO first; Jira/GitHub later).
+    """Provider-agnostic interface for work-item systems (Azure DevOps first; Jira/GitHub later).
 
     All canonical-model instances returned from here have provider-specific state strings
     already translated into ItemState. Providers MUST NOT leak raw provider state through

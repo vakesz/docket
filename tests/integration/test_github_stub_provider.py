@@ -4,7 +4,7 @@ These tests exist not to catch bugs in the stub itself (it's a trivial
 in-memory impl) but to prove the abstraction: every TransitionIntent maps to
 a legal GitHub state/reason pair, and the full `WorkItemProvider` Protocol
 is satisfied structurally. If a future interface change breaks this stub
-without breaking the ADO provider, that's a signal the abstraction leaked.
+without breaking the Azure DevOps provider, that's a signal the abstraction leaked.
 """
 
 from __future__ import annotations

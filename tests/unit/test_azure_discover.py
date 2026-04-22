@@ -1,6 +1,6 @@
 """Unit tests for the Azure DevOps discovery module.
 
-The module only talks to ADO via `requests`, so we stub the HTTP boundary
+The module only talks to Azure DevOps via `requests`, so we stub the HTTP boundary
 rather than hitting the network. A custom fake session lets each test script
 exactly which URL returns which payload, including error paths."""
 
@@ -56,7 +56,7 @@ _SENTINEL = object()
 @pytest.fixture(autouse=True)
 def _fake_token(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "docket.providers.azure_devops.discover.get_ado_bearer_token",
+        "docket.providers.azure_devops.discover.get_azure_devops_bearer_token",
         lambda: "t0ken",
     )
 

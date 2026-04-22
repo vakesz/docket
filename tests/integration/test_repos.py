@@ -113,7 +113,9 @@ def test_comments_replace_and_list(tmp_path: Path) -> None:
 def test_provider_scoped_items_and_comments_do_not_collide(tmp_path: Path) -> None:
     conn = init_db(tmp_path / "t.db")
     with transaction(conn):
-        item_repo.upsert_item(conn, _make_item("42", title="ado item", provider_key="ado"))
+        item_repo.upsert_item(
+            conn, _make_item("42", title="azure_devops item", provider_key="azure_devops")
+        )
         item_repo.upsert_item(conn, _make_item("42", title="gh item", provider_key="github"))
         comment_repo.replace_comments_for_item(
             conn,
@@ -122,12 +124,12 @@ def test_provider_scoped_items_and_comments_do_not_collide(tmp_path: Path) -> No
                 Comment(
                     id="c1",
                     item_id="42",
-                    author="ado",
-                    body_md="ado comment",
+                    author="azure_devops",
+                    body_md="azure_devops comment",
                     created_at=datetime(2026, 4, 21, 10, 1, tzinfo=UTC),
                 )
             ],
-            provider_key="ado",
+            provider_key="azure_devops",
         )
         comment_repo.replace_comments_for_item(
             conn,
@@ -144,15 +146,17 @@ def test_provider_scoped_items_and_comments_do_not_collide(tmp_path: Path) -> No
             provider_key="github",
         )
 
-    ado = item_repo.get_item(conn, "42", provider_key="ado")
+    azure_devops = item_repo.get_item(conn, "42", provider_key="azure_devops")
     gh = item_repo.get_item(conn, "42", provider_key="github")
-    assert ado and ado.title == "ado item"
+    assert azure_devops and azure_devops.title == "azure_devops item"
     assert gh and gh.title == "gh item"
-    assert [i.title for i in item_repo.list_items(conn, provider_key="ado")] == ["ado item"]
-    assert [i.title for i in item_repo.list_items(conn, provider_key="github")] == ["gh item"]
-    assert [c.body_md for c in comment_repo.list_comments(conn, "42", provider_key="ado")] == [
-        "ado comment"
+    assert [i.title for i in item_repo.list_items(conn, provider_key="azure_devops")] == [
+        "azure_devops item"
     ]
+    assert [i.title for i in item_repo.list_items(conn, provider_key="github")] == ["gh item"]
+    assert [
+        c.body_md for c in comment_repo.list_comments(conn, "42", provider_key="azure_devops")
+    ] == ["azure_devops comment"]
     assert [c.body_md for c in comment_repo.list_comments(conn, "42", provider_key="github")] == [
         "gh comment"
     ]

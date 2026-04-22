@@ -65,19 +65,6 @@ export function useStatus(refetchIntervalMs?: number) {
   });
 }
 
-export function useWhoami() {
-  return useQuery({
-    queryKey: qk.whoami(),
-    queryFn: ({ signal }) =>
-      api.get<{ user: string; provider: string; scope: string; read_only: boolean }>(
-        "/whoami",
-        undefined,
-        signal,
-      ),
-    staleTime: 60_000,
-  });
-}
-
 export function useSettings() {
   return useQuery({
     queryKey: qk.settings(),
@@ -111,12 +98,10 @@ export function useSetActiveProvider() {
   return useMutation({
     mutationFn: (body: DTO["ProviderSwitchRequest"]) =>
       api.put<DTO["ProviderDTO"]>("/providers/active", body),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: qk.providers() });
-      qc.invalidateQueries({ queryKey: qk.scopes() });
-      qc.invalidateQueries({ queryKey: qk.status() });
-      qc.invalidateQueries({ queryKey: [...qk.all, "items"] });
-    },
+    // Every cached read is provider-scoped (items, pins, conversations, prompts
+    // live against the active provider's cache slice). Blow it all away rather
+    // than enumerate — missing one leaves stale rows in the UI.
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.all }),
   });
 }
 
@@ -132,11 +117,10 @@ export function useSetActiveScope() {
   return useMutation({
     mutationFn: (body: DTO["ScopeSwitchRequest"]) =>
       api.put<DTO["ScopeDTO"]>("/scopes/active", body),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: qk.scopes() });
-      qc.invalidateQueries({ queryKey: qk.status() });
-      qc.invalidateQueries({ queryKey: [...qk.all, "items"] });
-    },
+    // Scope changes what the next sync pulls; items, pinned status, and the
+    // status footer can all shift. Keeping the net wide here matches the
+    // provider-switch handler and avoids stale-row surprises.
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.all }),
   });
 }
 

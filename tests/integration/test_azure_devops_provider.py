@@ -21,7 +21,7 @@ from docket.providers.azure_devops.provider import AzureDevOpsProvider
 @pytest.fixture
 def provider(monkeypatch: pytest.MonkeyPatch) -> AzureDevOpsProvider:
     monkeypatch.setattr(
-        "docket.providers.azure_devops.provider.get_ado_bearer_token",
+        "docket.providers.azure_devops.provider.get_azure_devops_bearer_token",
         lambda: "fake-token",
     )
     return AzureDevOpsProvider(organization_url="https://dev.azure.com/org", project="proj")

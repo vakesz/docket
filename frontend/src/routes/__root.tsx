@@ -16,6 +16,17 @@ interface RouterContext {
   queryClient: QueryClient;
 }
 
+// Applied before React hydrates so the <html> class matches the user's theme
+// on first paint. Reads the same localStorage key as ThemeToggle; when absent
+// (or set to "system"), follows `prefers-color-scheme`.
+const THEME_BOOTSTRAP = `(() => {
+  try {
+    var s = localStorage.getItem("docket.theme");
+    var d = s === "dark" || ((s !== "light") && matchMedia("(prefers-color-scheme: dark)").matches);
+    document.documentElement.classList.toggle("dark", d);
+  } catch (_) {}
+})();`;
+
 export const Route = createRootRouteWithContext<RouterContext>()({
   head: () => ({
     meta: [
@@ -24,6 +35,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       { title: "Docket" },
     ],
     links: [{ rel: "stylesheet", href: globalsCss }],
+    scripts: [{ children: THEME_BOOTSTRAP }],
   }),
   component: RootComponent,
 });

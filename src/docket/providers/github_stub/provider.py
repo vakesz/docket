@@ -4,7 +4,7 @@ Satisfies `WorkItemProvider` without network access. Useful for:
 
 - Demos and docs that need a second backend.
 - Cross-provider integration tests — the same service-layer code paths run
-  against ADO and this stub unchanged.
+  against Azure DevOps and this stub unchanged.
 - Bootstrapping a real GitHub provider: swap `_issues`/`_comments` for REST
   calls (`/repos/{owner}/{repo}/issues`) and keep everything else identical.
 

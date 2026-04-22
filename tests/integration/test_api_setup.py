@@ -122,7 +122,7 @@ def test_bootstrap_test_provider_unknown_type_reports_error(tmp_path: Path) -> N
     assert "nonexistent" in body["error"]
 
 
-def test_bootstrap_test_provider_ado_missing_fields(tmp_path: Path) -> None:
+def test_bootstrap_test_provider_azure_devops_missing_fields(tmp_path: Path) -> None:
     paths = _mk_paths(tmp_path)
     client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
     r = client.post(

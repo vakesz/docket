@@ -89,9 +89,9 @@ def _stub_infra(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Paths:
     return paths
 
 
-def _ado_entry(cfg):
-    entry = cfg.providers.get("ado") or cfg.providers.get(cfg.active_provider)
-    assert entry is not None, "wizard produced no ADO provider entry"
+def _azure_devops_entry(cfg):
+    entry = cfg.providers.get("azure_devops") or cfg.providers.get(cfg.active_provider)
+    assert entry is not None, "wizard produced no Azure DevOps provider entry"
     return entry
 
 
@@ -136,6 +136,7 @@ def test_wizard_uses_discovery_selections_end_to_end(
     _script_prompts(
         monkeypatch,
         prompt_answers=[
+            "1",  # pick provider type → azure_devops (sorted first alphabetically)
             "1",  # pick org → contoso (no 'any' in org picker)
             "1",  # pick project → platform (no 'any' in project picker)
             "2",  # team picker → Alpha
@@ -149,8 +150,8 @@ def test_wizard_uses_discovery_selections_end_to_end(
     setup_wizard.run_wizard()
 
     cfg = load_config(paths)
-    assert cfg.active_provider == "ado"
-    entry = _ado_entry(cfg)
+    assert cfg.active_provider == "azure_devops"
+    entry = _azure_devops_entry(cfg)
     assert str(entry.config["organization"]).rstrip("/") == "https://dev.azure.com/contoso"
     assert entry.config["project"] == "platform"
     scope = entry.scopes["default"]
@@ -180,6 +181,7 @@ def test_wizard_falls_back_when_discovery_fails(
     _script_prompts(
         monkeypatch,
         prompt_answers=[
+            "1",  # pick provider type → azure_devops
             "https://dev.azure.com/contoso",  # org URL
             "platform",  # project name
             "",  # team (blank)
@@ -193,7 +195,7 @@ def test_wizard_falls_back_when_discovery_fails(
     setup_wizard.run_wizard()
 
     cfg = load_config(paths)
-    entry = _ado_entry(cfg)
+    entry = _azure_devops_entry(cfg)
     assert str(entry.config["organization"]).rstrip("/") == "https://dev.azure.com/contoso"
     assert entry.config["project"] == "platform"
     scope = entry.scopes["default"]
@@ -225,6 +227,7 @@ def test_wizard_rejects_bare_org_name_then_accepts_full_url(
     _script_prompts(
         monkeypatch,
         prompt_answers=[
+            "1",  # pick provider type → azure_devops
             "platform",  # rejected — not a URL
             "https://dev.azure.com/contoso",  # accepted
             "platform",  # project name
@@ -238,7 +241,7 @@ def test_wizard_rejects_bare_org_name_then_accepts_full_url(
 
     setup_wizard.run_wizard()
     cfg = load_config(paths)
-    entry = _ado_entry(cfg)
+    entry = _azure_devops_entry(cfg)
     assert str(entry.config["organization"]).rstrip("/") == "https://dev.azure.com/contoso"
 
 
@@ -262,6 +265,7 @@ def test_wizard_enables_http_and_mints_token(
     _script_prompts(
         monkeypatch,
         prompt_answers=[
+            "1",  # pick provider type → azure_devops
             "1",  # pick org (no 'any')
             "1",  # pick project (no 'any')
             "",  # team
@@ -298,6 +302,7 @@ def test_wizard_http_disabled_leaves_token_empty(
     _script_prompts(
         monkeypatch,
         prompt_answers=[
+            "1",  # pick provider type → azure_devops
             "https://dev.azure.com/contoso",
             "platform",
             "",

@@ -155,10 +155,10 @@ class SettingsModal(ModalScreen[Config | None]):
         current_scope = scopes.get(active_scope_name, ScopeFilter())
 
         # Per-type defaults so opening settings on a fresh github_stub entry
-        # doesn't show empty ADO fields.
+        # doesn't show empty Azure DevOps fields.
         provider_type = entry.type if entry is not None else "azure_devops"
-        ado_org = str(entry.config.get("organization", "")) if entry is not None else ""
-        ado_project = str(entry.config.get("project", "")) if entry is not None else ""
+        azure_devops_org = str(entry.config.get("organization", "")) if entry is not None else ""
+        azure_devops_project = str(entry.config.get("project", "")) if entry is not None else ""
         with Vertical():
             yield Static("Settings", id="title")
             yield Static(
@@ -230,12 +230,16 @@ class SettingsModal(ModalScreen[Config | None]):
                 if provider_type == "azure_devops":
                     yield Static("organization URL", classes="field-label")
                     yield Input(
-                        value=ado_org,
+                        value=azure_devops_org,
                         placeholder="https://dev.azure.com/your-org",
-                        id="ado-org",
+                        id="azure-devops-org",
                     )
                     yield Static("project", classes="field-label")
-                    yield Input(value=ado_project, placeholder="project name", id="ado-project")
+                    yield Input(
+                        value=azure_devops_project,
+                        placeholder="project name",
+                        id="azure-devops-project",
+                    )
 
                 yield Static("LLM endpoint", classes="field-label")
                 yield Input(
@@ -412,8 +416,12 @@ class SettingsModal(ModalScreen[Config | None]):
 
         if entry.type == "azure_devops":
             provider_raw.setdefault("config", {})
-            provider_raw["config"]["organization"] = self.query_one("#ado-org", Input).value.strip()
-            provider_raw["config"]["project"] = self.query_one("#ado-project", Input).value.strip()
+            provider_raw["config"]["organization"] = self.query_one(
+                "#azure-devops-org", Input
+            ).value.strip()
+            provider_raw["config"]["project"] = self.query_one(
+                "#azure-devops-project", Input
+            ).value.strip()
 
         default_kind = self.query_one("#ui-default-kind", Select).value
         if default_kind is Select.BLANK:
