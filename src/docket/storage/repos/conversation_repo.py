@@ -43,52 +43,27 @@ def get(conn: sqlite3.Connection, convo_id: str) -> Conversation | None:
 
 
 def get_active_for_item(
-    conn: sqlite3.Connection, item_id: str, *, provider_key: str | None = None
+    conn: sqlite3.Connection, item_id: str, *, provider_key: str
 ) -> Conversation | None:
-    if provider_key:
-        row = conn.execute(
-            """
-            SELECT * FROM conversations
-            WHERE item_id = ? AND archived_at IS NULL
-            ORDER BY started_at DESC
-            LIMIT 1
-            """,
-            (item_storage_key(provider_key, item_id),),
-        ).fetchone()
-    else:
-        row = conn.execute(
-            """
-            SELECT c.*
-            FROM conversations c
-            JOIN items i ON i.id = c.item_id
-            WHERE i.provider_item_id = ? AND c.archived_at IS NULL
-            ORDER BY c.started_at DESC
-            LIMIT 1
-            """,
-            (item_id,),
-        ).fetchone()
+    row = conn.execute(
+        """
+        SELECT * FROM conversations
+        WHERE item_id = ? AND archived_at IS NULL
+        ORDER BY started_at DESC
+        LIMIT 1
+        """,
+        (item_storage_key(provider_key, item_id),),
+    ).fetchone()
     return _row_to_conversation(row) if row else None
 
 
 def list_for_item(
-    conn: sqlite3.Connection, item_id: str, *, provider_key: str | None = None
+    conn: sqlite3.Connection, item_id: str, *, provider_key: str
 ) -> list[Conversation]:
-    if provider_key:
-        rows = conn.execute(
-            "SELECT * FROM conversations WHERE item_id = ? ORDER BY started_at ASC",
-            (item_storage_key(provider_key, item_id),),
-        ).fetchall()
-    else:
-        rows = conn.execute(
-            """
-            SELECT c.*
-            FROM conversations c
-            JOIN items i ON i.id = c.item_id
-            WHERE i.provider_item_id = ?
-            ORDER BY c.started_at ASC
-            """,
-            (item_id,),
-        ).fetchall()
+    rows = conn.execute(
+        "SELECT * FROM conversations WHERE item_id = ? ORDER BY started_at ASC",
+        (item_storage_key(provider_key, item_id),),
+    ).fetchall()
     return [_row_to_conversation(r) for r in rows]
 
 

@@ -51,7 +51,7 @@ uv run mypy src
 - Treat SQLite as a cache, not the system of record; refresh from the provider and refresh local rows after writes (`src/docket/core/services/sync_service.py`, `src/docket/core/services/mutation_service.py`).
 - Pass `conn`, `provider`, `paths`, `config`, and runtime state explicitly through contexts or `app.state`; do not introduce hidden global runtime singletons (`src/docket/cli/context.py`, `src/docket/api/app.py`, `src/docket/cli/tui/app.py`).
 - Read-only mode must block every mutation entry point and strip mutating agent tools, not just show a warning (`src/docket/cli/guard.py`, `src/docket/api/deps.py`, `src/docket/cli/tui/app.py`, `tests/test_cli_read_only.py`, `tests/test_api_read_only.py`, `tests/test_read_only_mode.py`).
-- Keep watchlist rows independent from `items(id)`; pinned ids are allowed to outlive the current cache scope (`src/docket/storage/schema/v6.py`).
+- Keep watchlist rows independent from `items(id)`; pinned ids are allowed to outlive the current cache scope (`src/docket/storage/schema.py`).
 
 ## Testing
 

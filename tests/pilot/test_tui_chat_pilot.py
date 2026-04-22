@@ -94,7 +94,7 @@ async def test_streamed_text_lands_in_transcript(chat_env) -> None:
         assert "tokens" in str(ledger.render())
 
     # Persistence survived the run
-    convos = conversation_repo.list_for_item(ctx.conn, "S-1")
+    convos = conversation_repo.list_for_item(ctx.conn, "S-1", provider_key=ctx.provider_key)
     assert len(convos) == 1
     msgs = message_repo.list_for_conversation(ctx.conn, convos[0].id)
     assert [m.role for m in msgs] == ["user", "assistant"]
@@ -117,7 +117,7 @@ async def test_tool_call_produces_note_line(chat_env) -> None:
         await app.workers.wait_for_complete()
         await pilot.pause()
 
-    convos = conversation_repo.list_for_item(ctx.conn, "S-1")
+    convos = conversation_repo.list_for_item(ctx.conn, "S-1", provider_key=ctx.provider_key)
     msgs = message_repo.list_for_conversation(ctx.conn, convos[0].id)
     assert [m.role for m in msgs] == ["user", "assistant", "tool", "assistant"]
     assert msgs[-1].content == "Summary."
@@ -138,7 +138,7 @@ async def test_t_starts_new_thread(chat_env) -> None:
         await app.run_action("new_thread")
         await pilot.pause()
 
-    convos = conversation_repo.list_for_item(ctx.conn, "S-1")
+    convos = conversation_repo.list_for_item(ctx.conn, "S-1", provider_key=ctx.provider_key)
     assert len(convos) == 2
     # Oldest is archived, newest is active.
     archived = [c for c in convos if c.archived_at is not None]
@@ -205,5 +205,5 @@ async def test_chat_disabled_without_llm(chat_env) -> None:
         await pilot.pause()
 
     # No conversation should have been created.
-    convos = conversation_repo.list_for_item(ctx.conn, "S-1")
+    convos = conversation_repo.list_for_item(ctx.conn, "S-1", provider_key=ctx.provider_key)
     assert convos == []

@@ -49,7 +49,7 @@ def test_first_message_starts_thread_and_persists(env) -> None:
     result = conversation_service.send_user_message(conn, loop, item.id, "Hello")
 
     # Conversation exists and is active
-    active = conversation_repo.get_active_for_item(conn, item.id)
+    active = conversation_repo.get_active_for_item(conn, item.id, provider_key="")
     assert active is not None
     assert active.id == result.conversation.id
     # Messages persisted (user + assistant)
@@ -69,7 +69,7 @@ def test_second_message_continues_same_thread(env) -> None:
     conversation_service.send_user_message(conn, loop, item.id, "first")
     conversation_service.send_user_message(conn, loop, item.id, "second")
 
-    convos = conversation_repo.list_for_item(conn, item.id)
+    convos = conversation_repo.list_for_item(conn, item.id, provider_key="")
     assert len(convos) == 1
     msgs = message_repo.list_for_conversation(conn, convos[0].id)
     assert [m.role for m in msgs] == ["user", "assistant", "user", "assistant"]

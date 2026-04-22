@@ -59,7 +59,7 @@ def test_below_threshold_noop(env) -> None:
         compaction_threshold_tokens=10_000,
     )
 
-    convo = conversation_repo.get_active_for_item(conn, item.id)
+    convo = conversation_repo.get_active_for_item(conn, item.id, provider_key="")
     assert convo is not None
     all_msgs = message_repo.list_for_conversation(conn, convo.id, live_only=False)
     # No summary was inserted.
@@ -88,7 +88,7 @@ def test_above_threshold_compacts_old_turns(env) -> None:
         )
 
     # Sanity: we now have 20 live messages (10 user + 10 assistant).
-    convo = conversation_repo.get_active_for_item(conn, item.id)
+    convo = conversation_repo.get_active_for_item(conn, item.id, provider_key="")
     assert convo is not None
     pre = message_repo.list_for_conversation(conn, convo.id, live_only=True)
     assert len(pre) == 20
@@ -121,7 +121,7 @@ def test_compact_now_keeps_tail_intact(env) -> None:
     for i in range(8):
         conversation_service.send_user_message(conn, loop, item.id, f"q{i}")
 
-    convo = conversation_repo.get_active_for_item(conn, item.id)
+    convo = conversation_repo.get_active_for_item(conn, item.id, provider_key="")
     assert convo is not None
 
     result = compaction_service.compact_now(conn, llm=client, convo_id=convo.id, tail_keep=4)
@@ -140,7 +140,7 @@ def test_compact_now_noop_when_nothing_to_fold(env) -> None:
     loop = AgentLoop(client=client, tools=reg)
     conversation_service.send_user_message(conn, loop, item.id, "hi")
 
-    convo = conversation_repo.get_active_for_item(conn, item.id)
+    convo = conversation_repo.get_active_for_item(conn, item.id, provider_key="")
     assert convo is not None
     result = compaction_service.compact_now(conn, llm=client, convo_id=convo.id, tail_keep=6)
     assert result.compacted_message_count == 0

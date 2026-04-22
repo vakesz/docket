@@ -41,18 +41,12 @@ def _root(ctx: typer.Context) -> None:
 
 app.add_typer(setup_app, name="setup")
 app.command("sync")(sync_command)
-app.command("refresh", hidden=True)(sync_command)
 app.command("list")(list_command)
-app.command("ls", hidden=True)(list_command)
 app.command("show")(show_command)
-app.command("view", hidden=True)(show_command)
 app.command("open")(open_command)
-app.command("browse", hidden=True)(open_command)
-app.command("ui", hidden=True)(open_command)
 app.command("transition")(transition_command)
 app.command("patch")(patch_command)
 app.command("new")(new_command)
-app.command("create", hidden=True)(new_command)
 app.command("serve")(serve_command)
 app.command("help")(help_command)
 

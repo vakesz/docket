@@ -7,7 +7,7 @@ an older cache is detected, `init_db()` recreates it instead of migrating.
 from __future__ import annotations
 
 APPLICATION_ID = 0x49545600
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 1
 
 STATEMENTS: tuple[str, ...] = (
     """

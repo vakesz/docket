@@ -80,7 +80,3 @@ def _provider_remove(
 ) -> None:
     """Remove a provider entry from config.toml."""
     setup_wizard.provider_remove(name)
-
-
-# Backwards-compatible entrypoint for code that still imports the old name.
-setup_command = setup_app
