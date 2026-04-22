@@ -33,7 +33,14 @@ async function request<T>(
   );
   if (init.query) {
     for (const [k, v] of Object.entries(init.query)) {
-      if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
+      if (v === undefined || v === null) continue;
+      if (Array.isArray(v)) {
+        for (const entry of v) {
+          if (entry !== undefined && entry !== null) url.searchParams.append(k, String(entry));
+        }
+      } else {
+        url.searchParams.set(k, String(v));
+      }
     }
   }
 

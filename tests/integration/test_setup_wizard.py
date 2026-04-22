@@ -141,7 +141,7 @@ def test_wizard_uses_discovery_selections_end_to_end(
             "2",  # iteration path picker → platform\Sprint 42
             "1",  # assignee picker → @me
         ],
-        confirm_answers=[True, True],  # scope ok; telemetry enabled
+        confirm_answers=[True, True, True],  # scope ok; telemetry enabled; http enabled
     )
 
     setup_wizard.run_wizard()
@@ -185,7 +185,7 @@ def test_wizard_falls_back_when_discovery_fails(
             "",  # iteration
             "1",  # assignee picker → @me
         ],
-        confirm_answers=[True, True],  # scope ok; telemetry enabled
+        confirm_answers=[True, True, True],  # scope ok; telemetry enabled; http enabled
     )
 
     setup_wizard.run_wizard()
@@ -231,13 +231,85 @@ def test_wizard_rejects_bare_org_name_then_accepts_full_url(
             "",  # iteration
             "1",  # assignee → @me
         ],
-        confirm_answers=[True, True],  # scope ok; telemetry enabled
+        confirm_answers=[True, True, True],  # scope ok; telemetry enabled; http enabled
     )
 
     setup_wizard.run_wizard()
     cfg = load_config(paths)
     entry = _ado_entry(cfg)
     assert str(entry.config["organization"]).rstrip("/") == "https://dev.azure.com/contoso"
+
+
+def test_wizard_enables_http_and_mints_token(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    paths = _stub_infra(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        setup_wizard.discover,
+        "list_orgs",
+        lambda: [OrgRef(name="contoso", url="https://dev.azure.com/contoso")],
+    )
+    monkeypatch.setattr(
+        setup_wizard.discover,
+        "list_projects",
+        lambda _org: [ProjectRef(id="p1", name="platform")],
+    )
+    for name in ("list_teams", "list_area_paths", "list_iteration_paths"):
+        monkeypatch.setattr(setup_wizard.discover, name, lambda *_: [])
+
+    _script_prompts(
+        monkeypatch,
+        prompt_answers=[
+            "1",  # pick org
+            "1",  # pick project
+            "",  # team
+            "",  # area
+            "",  # iteration
+            "1",  # assignee → @me
+        ],
+        confirm_answers=[True, True, True],  # scope ok; telemetry; http enabled
+    )
+
+    setup_wizard.run_wizard()
+    cfg = load_config(paths)
+    assert cfg.http.enabled is True
+    assert cfg.http.token != ""
+    assert len(cfg.http.token) >= 32
+
+
+def test_wizard_http_disabled_leaves_token_empty(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    paths = _stub_infra(monkeypatch, tmp_path)
+    for name in (
+        "list_orgs",
+        "list_projects",
+        "list_teams",
+        "list_area_paths",
+        "list_iteration_paths",
+    ):
+        monkeypatch.setattr(
+            setup_wizard.discover,
+            name,
+            lambda *_a, **_kw: (_ for _ in ()).throw(setup_wizard.DiscoveryError("no")),
+        )
+    _script_prompts(
+        monkeypatch,
+        prompt_answers=[
+            "https://dev.azure.com/contoso",
+            "platform",
+            "",
+            "",
+            "",
+            "1",
+        ],
+        confirm_answers=[True, True, False],  # scope ok; telemetry; http DISABLED
+    )
+
+    setup_wizard.run_wizard()
+    cfg = load_config(paths)
+    assert cfg.http.enabled is False
+    assert cfg.http.token == ""
 
 
 def test_pick_returns_sentinels_for_any_and_custom(monkeypatch: pytest.MonkeyPatch) -> None:

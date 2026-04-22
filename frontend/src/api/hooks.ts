@@ -9,6 +9,7 @@ import { api, type DTO } from "./client";
 import { qk } from "./keys";
 
 type ItemKind = DTO["ItemKind"];
+type ItemState = DTO["ItemState"];
 type TransitionIntent = DTO["TransitionIntent"];
 
 // ---------- Setup (bootstrap + full-app) -------------------------------------
@@ -142,7 +143,13 @@ export function useSetActiveScope() {
 // ---------- Items ------------------------------------------------------------
 
 export function useItems(
-  filter: { kind?: ItemKind | null; archived?: boolean; parent_id?: string | null } = {},
+  filter: {
+    kind?: ItemKind | null;
+    state?: ItemState[] | null;
+    tag?: string | null;
+    archived?: boolean;
+    parent_id?: string | null;
+  } = {},
 ) {
   return useQuery({
     queryKey: qk.items(filter),
@@ -151,6 +158,8 @@ export function useItems(
         "/items",
         {
           kind: filter.kind ?? undefined,
+          state: filter.state && filter.state.length > 0 ? filter.state : undefined,
+          tag: filter.tag ?? undefined,
           archived: filter.archived,
           parent_id: filter.parent_id ?? undefined,
         },

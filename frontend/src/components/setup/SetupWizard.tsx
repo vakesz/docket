@@ -398,7 +398,7 @@ function ReviewStep({
         },
       },
       active_provider: provider.key,
-      foundry: llm.skip
+      llm: llm.skip
         ? null
         : {
             endpoint: llm.endpoint,

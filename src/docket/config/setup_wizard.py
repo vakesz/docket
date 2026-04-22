@@ -14,6 +14,7 @@ falls back to free-form prompts — helpful for restricted networks."""
 
 from __future__ import annotations
 
+import secrets
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
@@ -26,6 +27,7 @@ from rich.prompt import Confirm, Prompt
 from docket.config.loader import load_config, save_config
 from docket.config.models import (
     Config,
+    HttpConfig,
     ProviderEntry,
     ScopeFilter,
     TelemetryConfig,
@@ -46,6 +48,7 @@ STEP_NAMES: tuple[str, ...] = (
     "ado",
     "scope",
     "telemetry",
+    "http",
     "prompts",
     "sync",
 )
@@ -64,6 +67,10 @@ class WizardState:
     ado_project: str = ""
     scope: ScopeFilter = field(default_factory=ScopeFilter)
     telemetry_enabled: bool = True
+    http_enabled: bool = True
+    http_bind: str = "127.0.0.1"
+    http_port: int = 8765
+    http_token: str = ""
     signed_in_email: str | None = None
 
 
@@ -87,6 +94,7 @@ def run_wizard(start_at: str | None = None) -> None:
         ("ado", _step_ado_connection),
         ("scope", _step_scope_filters),
         ("telemetry", _step_telemetry),
+        ("http", _step_http_surface),
         ("prompts", _step_prompt_templates),
         ("sync", _step_db_and_sync),
     ]
@@ -140,6 +148,12 @@ def _build_config_from_state(state: WizardState) -> Config:
         providers=providers,
         active_provider=_DEFAULT_PROVIDER_KEY,
         telemetry=TelemetryConfig(enabled=state.telemetry_enabled),
+        http=HttpConfig(
+            enabled=state.http_enabled,
+            bind=state.http_bind,
+            port=state.http_port,
+            token=state.http_token,
+        ),
     )
 
 
@@ -158,6 +172,10 @@ def _load_existing_state(paths: Paths) -> WizardState:
                 "default", ScopeFilter()
             )
         state.telemetry_enabled = cfg.telemetry.enabled
+        state.http_enabled = cfg.http.enabled
+        state.http_bind = cfg.http.bind
+        state.http_port = cfg.http.port
+        state.http_token = cfg.http.token
     return state
 
 
@@ -408,6 +426,36 @@ def _step_telemetry(state: WizardState) -> None:
         "Nothing is shipped off-device. You can change this later from the in-app settings screen or config.toml."
     )
     state.telemetry_enabled = Confirm.ask("Keep local telemetry enabled?", default=True)
+
+
+# ---- step 7b -----------------------------------------------------------------
+
+
+def _step_http_surface(state: WizardState) -> None:
+    """Enable the HTTP API and mint a bearer token for it.
+
+    The frontend (and any external HTTP client) needs both `http.enabled` and
+    a non-empty `http.token`. Default to enabling — `docket` on its own is a
+    TUI, but the web UI is the expected graphical entry point."""
+    console.print(
+        "The HTTP API powers the web UI and any external clients. "
+        "When enabled, a bearer token is required on every request."
+    )
+    state.http_enabled = Confirm.ask("Enable the HTTP API?", default=state.http_enabled)
+    if not state.http_enabled:
+        console.print("[dim]Skipped — `docket serve` will refuse to start until re-enabled.[/dim]")
+        return
+    if state.http_token and not Confirm.ask(
+        "An HTTP token is already configured — generate a new one?", default=False
+    ):
+        console.print("[dim]Keeping the existing token.[/dim]")
+    else:
+        state.http_token = secrets.token_urlsafe(32)
+        console.print(
+            "[green]✓ generated a new bearer token[/green] "
+            "[dim](stored in config.toml under http.token)[/dim]"
+        )
+    console.print(f"[dim]Bind:[/dim] {state.http_bind}  [dim]Port:[/dim] {state.http_port}")
 
 
 # ---- step 8 ------------------------------------------------------------------

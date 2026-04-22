@@ -8,8 +8,20 @@ import { formatKind, formatState } from "~/lib/format";
 
 type Item = DTO["ItemDTO"];
 type ItemKind = DTO["ItemKind"];
+type ItemState = DTO["ItemState"];
 
 const KINDS: Array<ItemKind | "all"> = ["all", "epic", "feature", "story", "task", "bug"];
+
+type StateBucket = "open" | "done" | "all";
+
+// "Open" collapses the triage-relevant states; "Done" is the terminal set the
+// user usually wants to hide. Keep the backend enum literals as the source of
+// truth — rename here if core/model.py ever grows a new state.
+const STATE_BUCKETS: Record<StateBucket, ItemState[] | null> = {
+  open: ["new", "active", "blocked", "needs_info"],
+  done: ["resolved", "closed"],
+  all: null,
+};
 
 interface Props {
   selectedId: string | undefined;
@@ -17,15 +29,30 @@ interface Props {
 
 export function ItemsList({ selectedId }: Props) {
   const [kind, setKind] = useState<ItemKind | "all">("all");
+  const [stateBucket, setStateBucket] = useState<StateBucket>("open");
+  const [activeTag, setActiveTag] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [showArchived, setShowArchived] = useState(false);
-  const items = useItems({ kind: kind === "all" ? undefined : kind, archived: showArchived });
+  const items = useItems({
+    kind: kind === "all" ? undefined : kind,
+    state: STATE_BUCKETS[stateBucket] ?? undefined,
+    tag: activeTag ?? undefined,
+    archived: showArchived,
+  });
   const pinned = usePinned();
 
   const navigate = useNavigate();
   const parentRef = useRef<HTMLDivElement>(null);
 
   const pinnedIds = useMemo(() => new Set((pinned.data ?? []).map((p) => p.id)), [pinned.data]);
+
+  const tagCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const it of items.data ?? []) {
+      for (const t of it.tags ?? []) counts.set(t, (counts.get(t) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }, [items.data]);
 
   const filtered = useMemo(() => {
     if (!items.data) return [];
@@ -80,6 +107,63 @@ export function ItemsList({ selectedId }: Props) {
             Archived
           </label>
         </div>
+        <div className="flex flex-wrap items-center gap-1">
+          {(["open", "done", "all"] as StateBucket[]).map((b) => (
+            <button
+              type="button"
+              key={b}
+              onClick={() => setStateBucket(b)}
+              className={cn(
+                "rounded px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider",
+                stateBucket === b
+                  ? "bg-accent text-white"
+                  : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900",
+              )}
+              title={
+                b === "open"
+                  ? "new, active, blocked, needs info"
+                  : b === "done"
+                    ? "resolved, closed"
+                    : "every state"
+              }
+            >
+              {b === "open" ? "Open" : b === "done" ? "Done" : "All states"}
+            </button>
+          ))}
+        </div>
+        {tagCounts.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setActiveTag(null)}
+              className={cn(
+                "rounded px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider",
+                activeTag === null
+                  ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                  : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900",
+              )}
+            >
+              Any tag
+            </button>
+            {tagCounts.slice(0, 20).map(([t, n]) => (
+              <button
+                type="button"
+                key={t}
+                onClick={() => setActiveTag(activeTag === t ? null : t)}
+                className={cn(
+                  "rounded px-2 py-0.5 font-mono text-[10px] lowercase tracking-wider",
+                  activeTag === t
+                    ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                    : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900",
+                )}
+                title={`${n} item${n === 1 ? "" : "s"}`}
+              >
+                {t}
+                <span className="ml-1 text-zinc-400">{n}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div ref={parentRef} className="flex-1 overflow-auto">

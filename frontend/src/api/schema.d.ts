@@ -4,82 +4,6 @@
  */
 
 export interface paths {
-    "/items": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Items */
-        get: operations["list_items_items_get"];
-        put?: never;
-        /**
-         * Create Item
-         * @description Create a work item through the mutation pipeline.
-         *
-         *     With `dry_run=true`, returns a `ProposalDTO` the caller can preview. Without,
-         *     executes the create and returns the stored result (still via
-         *     `mutation_service.confirm`, so any provider-side validation runs).
-         */
-        post: operations["create_item_items_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/items/{item_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Item */
-        get: operations["get_item_items__item_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/items/{item_id}/comments": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Comments */
-        get: operations["get_comments_items__item_id__comments_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/items/{item_id}/linked": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Linked */
-        get: operations["get_linked_items__item_id__linked_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/items/{item_id}/mutations/transition/propose": {
         parameters: {
             query?: never;
@@ -330,6 +254,82 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Items */
+        get: operations["list_items_items_get"];
+        put?: never;
+        /**
+         * Create Item
+         * @description Create a work item through the mutation pipeline.
+         *
+         *     With `dry_run=true`, returns a `ProposalDTO` the caller can preview. Without,
+         *     executes the create and returns the stored result (still via
+         *     `mutation_service.confirm`, so any provider-side validation runs).
+         */
+        post: operations["create_item_items_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{item_id}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Comments */
+        get: operations["get_comments_items__item_id__comments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{item_id}/linked": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Linked */
+        get: operations["get_linked_items__item_id__linked_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Item */
+        get: operations["get_item_items__item_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/prompts": {
         parameters: {
             query?: never;
@@ -361,12 +361,11 @@ export interface paths {
         post?: never;
         /**
          * Reset Prompt
-         * @description Restore the canonical template and remove any legacy-named file.
+         * @description Restore the canonical template.
          *
-         *     After a reset we keep the customized flag `True` because the current
-         *     implementation rewrites the file to the default rather than deleting it.
-         *     Clients can distinguish by reading the content — the returned `content_md`
-         *     is exactly the canonical template.
+         *     The customized flag stays `True` because reset rewrites the file to the
+         *     default rather than deleting it. Clients can distinguish by reading the
+         *     content — the returned `content_md` is exactly the canonical template.
          */
         delete: operations["reset_prompt_prompts__key__delete"];
         options?: never;
@@ -628,8 +627,8 @@ export interface components {
         };
         /**
          * ChatRoleDTO
-         * @description We deliberately mirror the internal ChatMessage but flatten tool_calls
-         *     so JSON consumers don't need to chase a union.
+         * @description Mirrors the internal ChatMessage but flattens tool_calls so JSON
+         *     consumers don't need to chase a union.
          */
         ChatRoleDTO: {
             /** Role */
@@ -982,7 +981,7 @@ export interface components {
             };
             /** Active Provider */
             active_provider: string;
-            foundry?: components["schemas"]["SetupFoundryEntry"] | null;
+            llm?: components["schemas"]["SetupLlmEntry"] | null;
             /**
              * Http Bind
              * @default 0.0.0.0
@@ -1009,8 +1008,8 @@ export interface components {
              */
             run_initial_sync: boolean;
         };
-        /** SetupFoundryEntry */
-        SetupFoundryEntry: {
+        /** SetupLlmEntry */
+        SetupLlmEntry: {
             /** Endpoint */
             endpoint: string;
             /** Api Key */
@@ -1234,175 +1233,6 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    list_items_items_get: {
-        parameters: {
-            query?: {
-                /** @description Filter by item kind. */
-                kind?: components["schemas"]["ItemKind"] | null;
-                archived?: boolean;
-                parent_id?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ItemDTO"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_item_items_post: {
-        parameters: {
-            query?: {
-                /** @description Return the proposal without creating. */
-                dry_run?: boolean;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateItemRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProposalDTO"] | components["schemas"]["MutationConfirmedDTO"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_item_items__item_id__get: {
-        parameters: {
-            query?: {
-                /** @description Fetch from provider instead of cache. */
-                refresh?: boolean;
-            };
-            header?: never;
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ItemDTO"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_comments_items__item_id__comments_get: {
-        parameters: {
-            query?: {
-                /** @description Fetch fresh from provider. */
-                refresh?: boolean;
-            };
-            header?: never;
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CommentDTO"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_linked_items__item_id__linked_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ItemDTO"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     propose_transition_items__item_id__mutations_transition_propose_post: {
         parameters: {
             query?: never;
@@ -1861,6 +1691,179 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProposalDTO"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_items_items_get: {
+        parameters: {
+            query?: {
+                /** @description Filter by item kind. */
+                kind?: components["schemas"]["ItemKind"] | null;
+                /** @description Filter by item state. Repeat to union (e.g. ?state=active&state=blocked). */
+                state?: components["schemas"]["ItemState"][] | null;
+                /** @description Filter to items that carry this tag/label. */
+                tag?: string | null;
+                archived?: boolean;
+                parent_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemDTO"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_item_items_post: {
+        parameters: {
+            query?: {
+                /** @description Return the proposal without creating. */
+                dry_run?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateItemRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalDTO"] | components["schemas"]["MutationConfirmedDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_comments_items__item_id__comments_get: {
+        parameters: {
+            query?: {
+                /** @description Fetch fresh from provider. */
+                refresh?: boolean;
+            };
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommentDTO"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_linked_items__item_id__linked_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemDTO"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_item_items__item_id__get: {
+        parameters: {
+            query?: {
+                /** @description Fetch from provider instead of cache. */
+                refresh?: boolean;
+            };
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemDTO"];
                 };
             };
             /** @description Validation Error */

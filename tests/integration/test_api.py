@@ -95,6 +95,54 @@ def test_list_items(client: TestClient) -> None:
     assert body[0]["kind"] == "story"
 
 
+def test_list_items_filters_by_state(env, tmp_path: Path) -> None:
+    conn, provider, proposals, _ = env
+    item_repo.upsert_item(
+        conn,
+        Item(
+            id="S-2",
+            kind=ItemKind.TASK,
+            title="Done",
+            description_md="",
+            state=ItemState.CLOSED,
+            assignee=None,
+            parent_id=None,
+            updated_at=datetime.now(UTC),
+        ),
+    )
+    client = TestClient(
+        create_app(conn=conn, provider=provider, bearer_token=TOKEN, proposals=proposals)
+    )
+    resp = client.get("/items?state=new&state=active", headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    assert [i["id"] for i in resp.json()] == ["S-1"]
+    resp_closed = client.get("/items?state=closed", headers=AUTH_HEADERS)
+    assert [i["id"] for i in resp_closed.json()] == ["S-2"]
+
+
+def test_list_items_filters_by_tag(env, tmp_path: Path) -> None:
+    conn, provider, proposals, _ = env
+    item_repo.upsert_item(
+        conn,
+        Item(
+            id="S-2",
+            kind=ItemKind.TASK,
+            title="Bugfix",
+            description_md="",
+            state=ItemState.ACTIVE,
+            assignee=None,
+            parent_id=None,
+            tags=["bug"],
+            updated_at=datetime.now(UTC),
+        ),
+    )
+    client = TestClient(
+        create_app(conn=conn, provider=provider, bearer_token=TOKEN, proposals=proposals)
+    )
+    resp = client.get("/items?tag=bug", headers=AUTH_HEADERS)
+    assert [i["id"] for i in resp.json()] == ["S-2"]
+
+
 def test_get_item_by_id(client: TestClient) -> None:
     resp = client.get("/items/S-1", headers=AUTH_HEADERS)
     assert resp.status_code == 200

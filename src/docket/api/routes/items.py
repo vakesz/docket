@@ -15,7 +15,7 @@ from docket.api.schemas import (
     MutationConfirmedDTO,
     ProposalDTO,
 )
-from docket.core.model import ItemKind
+from docket.core.model import ItemKind, ItemState
 from docket.core.services import mutation_service
 from docket.providers.base import WorkItemProvider
 from docket.storage.repos import comment_repo, item_repo
@@ -31,6 +31,11 @@ router = APIRouter(
 def list_items(
     conn: sqlite3.Connection = Depends(get_conn),
     kind: ItemKind | None = Query(None, description="Filter by item kind."),
+    state: list[ItemState] | None = Query(
+        None,
+        description="Filter by item state. Repeat to union (e.g. ?state=active&state=blocked).",
+    ),
+    tag: str | None = Query(None, description="Filter to items that carry this tag/label."),
     include_archived: bool = Query(False, alias="archived"),
     parent_id: str | None = Query(None),
     provider_key: str = Depends(get_active_provider_key),
@@ -38,6 +43,8 @@ def list_items(
     items = item_repo.list_items(
         conn,
         kind=kind,
+        states=state,
+        tag=tag,
         parent_id=parent_id,
         include_archived=include_archived,
         provider_key=provider_key,

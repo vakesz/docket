@@ -47,6 +47,30 @@ def test_item_upsert_is_idempotent(tmp_path: Path) -> None:
     assert len(item_repo.list_items(conn)) == 1
 
 
+def test_list_items_filters_by_state(tmp_path: Path) -> None:
+    conn = init_db(tmp_path / "t.db")
+    with transaction(conn):
+        item_repo.upsert_item(conn, _make_item("1", state=ItemState.ACTIVE))
+        item_repo.upsert_item(conn, _make_item("2", state=ItemState.CLOSED))
+        item_repo.upsert_item(conn, _make_item("3", state=ItemState.RESOLVED))
+    open_only = item_repo.list_items(conn, states=[ItemState.ACTIVE, ItemState.BLOCKED])
+    assert [i.id for i in open_only] == ["1"]
+    closed_set = item_repo.list_items(conn, states=[ItemState.CLOSED, ItemState.RESOLVED])
+    assert {i.id for i in closed_set} == {"2", "3"}
+    assert item_repo.list_items(conn, states=[]) == []
+
+
+def test_list_items_filters_by_tag(tmp_path: Path) -> None:
+    conn = init_db(tmp_path / "t.db")
+    with transaction(conn):
+        item_repo.upsert_item(conn, _make_item("1", tags=["bug", "triaged"]))
+        item_repo.upsert_item(conn, _make_item("2", tags=["enhancement"]))
+        item_repo.upsert_item(conn, _make_item("3", tags=[]))
+    assert [i.id for i in item_repo.list_items(conn, tag="bug")] == ["1"]
+    assert [i.id for i in item_repo.list_items(conn, tag="enhancement")] == ["2"]
+    assert item_repo.list_items(conn, tag="nope") == []
+
+
 def test_mark_archived_hides_from_default_list(tmp_path: Path) -> None:
     conn = init_db(tmp_path / "t.db")
     with transaction(conn):

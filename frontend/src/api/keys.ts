@@ -9,6 +9,7 @@
 import type { components } from "./schema";
 
 type ItemKind = components["schemas"]["ItemKind"];
+type ItemState = components["schemas"]["ItemState"];
 
 export const qk = {
   all: ["docket"] as const,
@@ -25,8 +26,13 @@ export const qk = {
   scopes: () => [...qk.all, "scopes"] as const,
   activeScope: () => [...qk.all, "scopes", "active"] as const,
 
-  items: (filter?: { kind?: ItemKind | null; archived?: boolean; parent_id?: string | null }) =>
-    [...qk.all, "items", filter ?? {}] as const,
+  items: (filter?: {
+    kind?: ItemKind | null;
+    state?: ItemState[] | null;
+    tag?: string | null;
+    archived?: boolean;
+    parent_id?: string | null;
+  }) => [...qk.all, "items", filter ?? {}] as const,
   item: (id: string) => [...qk.all, "item", id] as const,
   comments: (id: string) => [...qk.all, "item", id, "comments"] as const,
   linked: (id: string) => [...qk.all, "item", id, "linked"] as const,

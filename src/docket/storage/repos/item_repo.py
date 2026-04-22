@@ -124,6 +124,8 @@ def list_items(
     conn: sqlite3.Connection,
     *,
     kind: ItemKind | None = None,
+    states: Iterable[ItemState] | None = None,
+    tag: str | None = None,
     parent_id: str | None = None,
     include_archived: bool = False,
     provider_key: str | None = None,
@@ -133,6 +135,22 @@ def list_items(
     if kind is not None:
         clauses.append("kind = ?")
         params.append(kind.value)
+    if states is not None:
+        state_values = [s.value for s in states]
+        if not state_values:
+            # Explicit empty filter — caller asked for nothing, give them nothing.
+            return []
+        placeholders = ",".join("?" for _ in state_values)
+        clauses.append(f"state IN ({placeholders})")
+        params.extend(state_values)
+    if tag is not None:
+        # tags_json is a JSON array of strings; JSON1's `json_each` gives us
+        # a sub-select that matches exact values (case-sensitive, which aligns
+        # with how GitHub/ADO treat labels).
+        clauses.append(
+            "EXISTS (SELECT 1 FROM json_each(items.tags_json) WHERE json_each.value = ?)"
+        )
+        params.append(tag)
     if parent_id is not None:
         clauses.append("parent_id = ?")
         params.append(parent_id)
