@@ -109,6 +109,27 @@ class StaleConfig(BaseModel):
     threshold_days_by_provider: dict[str, int] = Field(default_factory=dict)
 
 
+class MCPServerEntry(BaseModel):
+    """One MCP server, scoped to a project.
+
+    Only stdio transport is supported in this iteration. The server is launched
+    as a subprocess with `command` + `args` (and optional `env`); its tools are
+    auto-registered into the agent under `mcp__<server_name>__<tool>`.
+
+    Set `enabled=False` to keep the entry in `config.toml` without spawning
+    the server (useful for one-off debugging without losing the config)."""
+
+    transport: str = "stdio"
+    command: str = ""
+    args: list[str] = Field(default_factory=list)
+    env: dict[str, str] = Field(default_factory=dict)
+    enabled: bool = True
+    # How long to wait for the initial handshake / `tools/list` before giving
+    # up and skipping the server. The agent build is best-effort: a slow
+    # server should not block chat startup.
+    startup_timeout_seconds: float = 10.0
+
+
 class ProjectEntry(BaseModel):
     """User-facing project metadata persisted in `config.toml`.
 
@@ -123,6 +144,10 @@ class ProjectEntry(BaseModel):
     name: str
     description: str = ""
     archived: bool = False
+    # MCP servers exposed to this project's agent. Keyed by short name; the
+    # name is what shows up in tool ids (`mcp__<name>__<tool>`), so keep it
+    # short and stable — renaming invalidates the prompt prefix cache.
+    mcp: dict[str, MCPServerEntry] = Field(default_factory=dict)
 
 
 class Config(BaseModel):

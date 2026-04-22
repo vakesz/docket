@@ -30,6 +30,7 @@ def rebuild_agent(request: Request, runtime: RuntimeState) -> None:
         read_only=bool(getattr(state, "read_only", False)),
         provider_key=runtime.provider_key,
         project_id=runtime.project_id,
+        mcp_manager=runtime.mcp_manager,
     )
 
 

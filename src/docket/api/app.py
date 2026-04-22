@@ -8,12 +8,14 @@ build them with fakes."""
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
 
 from docket.agent.factory import build_agent
 from docket.agent.llm_client import LlmClient
+from docket.agent.mcp import MCPManager
 from docket.api.auth import require_bearer
 from docket.api.routes import conversations as conversations_routes
 from docket.api.routes import items as items_routes
@@ -36,6 +38,22 @@ from docket.config.models import Config
 from docket.config.paths import Paths
 from docket.core.services.proposal_store import ProposalStore
 from docket.providers.base import WorkItemProvider
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Tear down resources that outlive a single request.
+
+    Currently just MCP subprocesses: their stdio sessions and child
+    processes need an explicit `close_all()` so the OS reclaims them
+    when the server exits cleanly. SQLite/provider lifetimes are owned
+    by the caller (`docket serve`), not the FastAPI app."""
+    try:
+        yield
+    finally:
+        mgr = getattr(app.state, "mcp_manager", None)
+        if mgr is not None:
+            mgr.close_all()
 
 
 def create_app(
@@ -77,6 +95,7 @@ def create_app(
         title="Docket",
         version="0.1.0",
         description="Terminal work-item triage over HTTP.",
+        lifespan=_lifespan,
     )
     app.state.conn = conn
     app.state.provider = provider
@@ -90,6 +109,20 @@ def create_app(
     app.state.setup_token = setup_token
     app.state.config = config if config is not None else (runtime.config if runtime else None)
 
+    # Wire MCP into the runtime so scope/provider switches rebind the
+    # fleet to the new project. Skip in read-only mode — `build_agent`
+    # would strip the tools anyway, and we'd rather not spawn
+    # subprocesses we'll never call. The manager is mounted on
+    # `app.state.mcp_manager` for shutdown handlers and tests.
+    mcp_manager: MCPManager | None = None
+    if runtime is not None and not read_only:
+        mcp_manager = MCPManager()
+        runtime.mcp_manager = mcp_manager
+        project = runtime.config.projects.get(runtime.project_id)
+        servers = dict(project.mcp) if project is not None else {}
+        mcp_manager.bind_project(runtime.project_id, servers)
+    app.state.mcp_manager = mcp_manager
+
     if llm is not None:
         app.state.agent = build_agent(
             llm=llm,
@@ -100,6 +133,7 @@ def create_app(
             read_only=read_only,
             provider_key=runtime.provider_key if runtime is not None else "",
             project_id=runtime.project_id if runtime is not None else "",
+            mcp_manager=mcp_manager,
         )
     else:
         app.state.agent = None

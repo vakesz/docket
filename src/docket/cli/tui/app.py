@@ -21,6 +21,7 @@ from textual.widgets import Input, Static
 from docket.agent.factory import build_agent
 from docket.agent.llm_client import LlmClient
 from docket.agent.loop import AgentLoop
+from docket.agent.mcp import MCPManager
 from docket.agent.types import ChatMessage, StreamDelta
 from docket.cli.tui.widgets.batch_diff_modal import BatchDecision, BatchDiffModal
 from docket.cli.tui.widgets.chat_pane import ChatPane, TurnFinished, UserTurnRequest
@@ -176,6 +177,9 @@ class TuiContext:
     # Pilot tests can leave these as None; persistence becomes a no-op.
     paths: Paths | None = None
     config: Config | None = None
+    # Per-project MCP fleet. Built by `serve`/`open`; pilot tests leave it
+    # `None` and the agent skips MCP tool registration entirely.
+    mcp_manager: MCPManager | None = None
 
 
 def _docket_commands_provider() -> type[Provider]:
@@ -288,6 +292,7 @@ class DocketApp(App[None]):
                 read_only=tui_ctx.read_only,
                 provider_key=tui_ctx.provider_key,
                 project_id=project_id_for(tui_ctx.provider_key, tui_ctx.scope_key),
+                mcp_manager=tui_ctx.mcp_manager,
             )
 
     def compose(self) -> ComposeResult:
@@ -524,6 +529,23 @@ class DocketApp(App[None]):
         pid = project_id_for(self.tui_ctx.provider_key, self.tui_ctx.scope_key)
         entry = cfg.projects.get(pid)
         return entry.name if entry else ""
+
+    def _rebind_mcp_for_active_project(self) -> None:
+        """Switch the MCP fleet to match the current (provider, scope).
+
+        Called from the scope/provider switch handlers before rebuilding
+        the agent so the fresh `ToolRegistry` sees the new project's
+        MCP tools. No-op when MCP isn't wired (pilot tests, read-only
+        sessions). MCP startup can be slow; failures are logged inside
+        the manager and don't block the UI."""
+        mgr = self.tui_ctx.mcp_manager
+        cfg = self.tui_ctx.config
+        if mgr is None or cfg is None:
+            return
+        pid = project_id_for(self.tui_ctx.provider_key, self.tui_ctx.scope_key)
+        project = cfg.projects.get(pid)
+        servers = dict(project.mcp) if project is not None else {}
+        mgr.bind_project(pid, servers)
 
     def _apply_tooltips(self) -> None:
         with contextlib.suppress(Exception):
@@ -1225,7 +1247,10 @@ class DocketApp(App[None]):
         self.tui_ctx.scope_key = name
         self.tui_ctx.scope = entry.scopes[name].to_core()
         # Active project changed (project_id = provider_key + scope_key) → the
-        # agent's memory/sources tools captured the previous one.
+        # agent's memory/sources tools captured the previous one. The MCP
+        # fleet is also per-project, so rebind it before rebuilding the
+        # agent so the new tool set reflects the new project's servers.
+        self._rebind_mcp_for_active_project()
         if self.tui_ctx.llm is not None:
             self._agent = build_agent(
                 llm=self.tui_ctx.llm,
@@ -1238,6 +1263,7 @@ class DocketApp(App[None]):
                 project_id=project_id_for(
                     self.tui_ctx.provider_key, self.tui_ctx.scope_key
                 ),
+                mcp_manager=self.tui_ctx.mcp_manager,
             )
         with contextlib.suppress(Exception):
             bar = self.query_one(StatusBar)
@@ -1280,7 +1306,9 @@ class DocketApp(App[None]):
         self.tui_ctx.scope = sf.to_core()
         self._selected_item_id = None
         # The agent holds tool closures bound to the old provider + provider_key.
-        # Rebuild so `search_items` and `get_item` target the new backend.
+        # Rebuild so `search_items` and `get_item` target the new backend. MCP
+        # fleet is per-project (provider_key + scope_key), so rebind first.
+        self._rebind_mcp_for_active_project()
         if self.tui_ctx.llm is not None:
             self._agent = build_agent(
                 llm=self.tui_ctx.llm,
@@ -1293,6 +1321,7 @@ class DocketApp(App[None]):
                 project_id=project_id_for(
                     self.tui_ctx.provider_key, self.tui_ctx.scope_key
                 ),
+                mcp_manager=self.tui_ctx.mcp_manager,
             )
         # The detail and chat panes were rendered for an item from the previous
         # provider. Wipe them so the user doesn't chat against a ticket that no
