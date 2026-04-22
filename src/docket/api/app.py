@@ -26,6 +26,7 @@ from docket.api.routes import providers as providers_routes
 from docket.api.routes import scopes as scopes_routes
 from docket.api.routes import settings as settings_routes
 from docket.api.routes import setup as setup_routes
+from docket.api.routes import source as source_routes
 from docket.api.routes import status as status_routes
 from docket.api.routes import suggestions as suggestions_routes
 from docket.api.routes import sync as sync_routes
@@ -118,8 +119,10 @@ def create_app(
     app.include_router(providers_routes.router)
     # Memory routes must come before `projects_routes` because the catch-all
     # `/projects/{project_id:path}` greedy-matches and would swallow
-    # `/projects/{project_id}/memory` into the project_id.
+    # `/projects/{project_id}/memory` into the project_id. Same applies to
+    # source routes.
     app.include_router(memory_routes.router)
+    app.include_router(source_routes.router)
     app.include_router(projects_routes.router)
     app.include_router(sync_routes.router)
     app.include_router(status_routes.router)

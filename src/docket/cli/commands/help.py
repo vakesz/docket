@@ -48,6 +48,11 @@ COMMANDS: tuple[CommandHelp, ...] = (
         "Manage per-project agent memory entries.",
         "docket memory list",
     ),
+    CommandHelp(
+        "source",
+        "Manage per-project reference documents (sources).",
+        "docket source list",
+    ),
     CommandHelp("help", "Show commands and examples.", "docket help"),
 )
 

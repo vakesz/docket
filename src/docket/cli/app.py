@@ -13,6 +13,7 @@ from docket.cli.commands.project import project_app
 from docket.cli.commands.serve import serve_command
 from docket.cli.commands.setup import setup_app
 from docket.cli.commands.show import show_command
+from docket.cli.commands.source import source_app
 from docket.cli.commands.sync import sync_command
 from docket.cli.commands.transition import transition_command
 
@@ -44,6 +45,7 @@ def _root(ctx: typer.Context) -> None:
 app.add_typer(setup_app, name="setup")
 app.add_typer(project_app, name="project")
 app.add_typer(memory_app, name="memory")
+app.add_typer(source_app, name="source")
 app.command("sync")(sync_command)
 app.command("list")(list_command)
 app.command("show")(show_command)

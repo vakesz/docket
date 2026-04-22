@@ -33,6 +33,7 @@ from docket.cli.tui.widgets.new_item_modal import NewItemModal, NewItemRequest
 from docket.cli.tui.widgets.prompt_library import PromptLibraryModal
 from docket.cli.tui.widgets.quick_open import QuickOpenModal, QuickOpenResult
 from docket.cli.tui.widgets.settings_modal import SettingsModal
+from docket.cli.tui.widgets.source_pane import SourcePane
 from docket.cli.tui.widgets.status_bar import StatusBar
 from docket.cli.tui.widgets.suggestion_modal import SuggestionModal
 from docket.cli.tui.widgets.theme_picker import ThemePicker
@@ -252,6 +253,7 @@ class DocketApp(App[None]):
         Binding("comma", "open_settings", "Settings"),
         Binding("p", "edit_prompts", "Prompts"),
         Binding("m", "open_memory", "Memory", show=False),
+        Binding("u", "open_source", "Sources", show=False),
         Binding("ctrl+f", "toggle_fullscreen", "Fullscreen pane", show=False),
         Binding("ctrl+left", "shrink_pane", "Shrink pane", show=False),
         Binding("ctrl+right", "grow_pane", "Grow pane", show=False),
@@ -1151,6 +1153,23 @@ class DocketApp(App[None]):
         project_name = self._resolve_project_name() or project_id
         self.push_screen(
             MemoryPane(
+                conn=self.tui_ctx.conn,
+                project_id=project_id,
+                project_name=project_name,
+                read_only=self.tui_ctx.read_only,
+            )
+        )
+
+    def action_open_source(self) -> None:
+        """Open the per-project sources editor for the active project."""
+        cfg = self.tui_ctx.config
+        if cfg is None:
+            self.notify("Sources are unavailable in this session.", severity="warning")
+            return
+        project_id = project_id_for(self.tui_ctx.provider_key, self.tui_ctx.scope_key)
+        project_name = self._resolve_project_name() or project_id
+        self.push_screen(
+            SourcePane(
                 conn=self.tui_ctx.conn,
                 project_id=project_id,
                 project_name=project_name,
