@@ -49,10 +49,7 @@ def append(
     tool_calls_json: str | None = None
     if message.tool_calls:
         tool_calls_json = json.dumps(
-            [
-                {"id": tc.id, "name": tc.name, "arguments": tc.arguments}
-                for tc in message.tool_calls
-            ]
+            [{"id": tc.id, "name": tc.name, "arguments": tc.arguments} for tc in message.tool_calls]
         )
     conn.execute(
         """
@@ -111,9 +108,7 @@ def mark_compacted(conn: sqlite3.Connection, ids: Iterable[str]) -> int:
     if not ids_list:
         return 0
     placeholders = ",".join("?" for _ in ids_list)
-    cur = conn.execute(
-        f"UPDATE messages SET compacted = 1 WHERE id IN ({placeholders})", ids_list
-    )
+    cur = conn.execute(f"UPDATE messages SET compacted = 1 WHERE id IN ({placeholders})", ids_list)
     return cur.rowcount
 
 

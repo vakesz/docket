@@ -5,6 +5,7 @@ These tests don't hit the network; they stub the SDK client objects returned by
 historical failure mode they guard against is passing a dict where the SDK
 expects a model instance (see the `TeamContext` fix).
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -28,10 +29,12 @@ def provider(monkeypatch: pytest.MonkeyPatch) -> AzureDevOpsProvider:
 
 def _stub_clients(provider: AzureDevOpsProvider, wit_client) -> None:
     """Install a fake Connection whose `clients.get_work_item_tracking_client` returns `wit_client`."""
-    fake_conn = SimpleNamespace(clients=SimpleNamespace(
-        get_work_item_tracking_client=lambda: wit_client,
-        get_core_client=lambda: SimpleNamespace(get_project=lambda _: None),
-    ))
+    fake_conn = SimpleNamespace(
+        clients=SimpleNamespace(
+            get_work_item_tracking_client=lambda: wit_client,
+            get_core_client=lambda: SimpleNamespace(get_project=lambda _: None),
+        )
+    )
     provider._connection = fake_conn  # type: ignore[attr-defined]
 
 

@@ -10,17 +10,17 @@ from rich.console import Console
 from docket.cli.context import prepare
 from docket.config import ConfigMissingError
 from docket.config.env import (
-    get_foundry_api_key,
-    get_foundry_api_version,
-    get_foundry_deployment,
-    get_foundry_endpoint,
+    get_llm_api_key,
+    get_llm_api_version,
+    get_llm_deployment,
+    get_llm_endpoint,
     get_read_only,
     get_setup_token,
 )
 from docket.config.paths import resolve_paths
 
 if TYPE_CHECKING:
-    from docket.agent.foundry_client import FoundryClient
+    from docket.agent.llm_client import AzureOpenAIClient
 
 console = Console()
 
@@ -34,9 +34,13 @@ def _resolve_log_level() -> str:
 
 
 def serve_command(
-    host: str | None = typer.Option(None, "--host", help="Override bind address from config.http.bind."),
+    host: str | None = typer.Option(
+        None, "--host", help="Override bind address from config.http.bind."
+    ),
     port: int | None = typer.Option(None, "--port", help="Override port from config.http.port."),
-    no_chat: bool = typer.Option(False, "--no-chat", help="Skip LLM wiring; chat endpoints return 503."),
+    no_chat: bool = typer.Option(
+        False, "--no-chat", help="Skip LLM wiring; chat endpoints return 503."
+    ),
     read_only: bool = typer.Option(
         False,
         "--read-only",
@@ -51,7 +55,7 @@ def serve_command(
     a restart."""
     import uvicorn
 
-    from docket.agent.foundry_client import LlmClient
+    from docket.agent.llm_client import LlmClient
     from docket.api.app import create_app
     from docket.api.bootstrap_app import create_bootstrap_app
     from docket.api.runtime import RuntimeState
@@ -67,17 +71,13 @@ def serve_command(
 
         if not setup_token:
             setup_token = secrets.token_urlsafe(32)
-            console.print(
-                "[yellow]No config.toml found — starting setup surface.[/yellow]"
-            )
+            console.print("[yellow]No config.toml found — starting setup surface.[/yellow]")
             console.print(
                 "[yellow]DOCKET_SETUP_TOKEN was not set; generated one for this session:[/yellow]"
             )
             console.print(f"  [cyan]{setup_token}[/cyan]")
         else:
-            console.print(
-                "[yellow]No config.toml found — starting setup surface[/yellow]"
-            )
+            console.print("[yellow]No config.toml found — starting setup surface[/yellow]")
 
         bind = host or "127.0.0.1"
         listen_port = port or 8765
@@ -138,20 +138,20 @@ def serve_command(
         ctx.close()
 
 
-def _build_llm_client() -> FoundryClient | None:
-    from docket.agent.foundry_client import FoundryClient
+def _build_llm_client() -> AzureOpenAIClient | None:
+    from docket.agent.llm_client import AzureOpenAIClient
 
-    api_key = get_foundry_api_key()
-    endpoint = get_foundry_endpoint()
-    deployment = get_foundry_deployment()
-    api_version = get_foundry_api_version()
+    api_key = get_llm_api_key()
+    endpoint = get_llm_endpoint()
+    deployment = get_llm_deployment()
+    api_version = get_llm_api_version()
     if not api_key or not endpoint:
         console.print(
             "[yellow]Chat disabled[/yellow]: set AZURE_OPENAI_API_KEY and "
             "AZURE_OPENAI_ENDPOINT in your .env to enable /conversation endpoints."
         )
         return None
-    return FoundryClient(
+    return AzureOpenAIClient(
         endpoint=endpoint,
         api_key=api_key,
         deployment=deployment,

@@ -10,8 +10,12 @@ console = Console()
 
 
 def sync_command(
-    full: bool = typer.Option(False, "--full", help="Reset watermark and resync everything in scope."),
-    scope: str | None = typer.Option(None, "--scope", help="Named scope to sync (defaults to active scope)."),
+    full: bool = typer.Option(
+        False, "--full", help="Reset watermark and resync everything in scope."
+    ),
+    scope: str | None = typer.Option(
+        None, "--scope", help="Named scope to sync (defaults to active scope)."
+    ),
     provider: str | None = typer.Option(
         None, "--provider", help="Provider id to sync (defaults to config.active_provider)."
     ),

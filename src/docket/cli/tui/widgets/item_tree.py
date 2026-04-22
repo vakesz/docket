@@ -205,7 +205,9 @@ class ItemTree(Tree[str]):
         available_width = max(1, self.size.width - self._guide_width_for_node(node))
         prefix = Text()
         if node.allow_expand:
-            prefix.append(self.ICON_NODE_EXPANDED if node.is_expanded else self.ICON_NODE, style=base_style)
+            prefix.append(
+                self.ICON_NODE_EXPANDED if node.is_expanded else self.ICON_NODE, style=base_style
+            )
 
         age_days = _age_days(row.updated_at)
         age_label = f"{age_days}d" if age_days is not None else ""
@@ -236,7 +238,9 @@ class ItemTree(Tree[str]):
         cursor_style = self.get_component_rich_style("tree--cursor", partial=False)
         if cursor_style.bgcolor is None:
             return strip
-        segments = list(Segment.apply_style(strip._segments, post_style=Style(bgcolor=cursor_style.bgcolor)))
+        segments = list(
+            Segment.apply_style(strip._segments, post_style=Style(bgcolor=cursor_style.bgcolor))
+        )
         return Strip(segments, strip.cell_length)
 
     def get_label_width(self, node: TreeNode[str]) -> int:

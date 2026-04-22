@@ -120,7 +120,9 @@ class ChatPane(Vertical):
         self._active_assistant: Static | None = None
         self._active_text: str = ""
         self._show_acceptance_criteria = show_acceptance_criteria
-        self.tooltip = "Chat about the selected item, stage proposals, and review acceptance criteria."
+        self.tooltip = (
+            "Chat about the selected item, stage proposals, and review acceptance criteria."
+        )
 
     def compose(self) -> ComposeResult:
         yield Static("Select a ticket", id="chat-title")
@@ -176,7 +178,9 @@ class ChatPane(Vertical):
                 transcript.mount(Static(f"[b]you[/b]  {m.content}", classes="msg-user"))
             elif m.role == "assistant":
                 if m.content:
-                    transcript.mount(Static(f"[b]assistant[/b]  {m.content}", classes="msg-assistant"))
+                    transcript.mount(
+                        Static(f"[b]assistant[/b]  {m.content}", classes="msg-assistant")
+                    )
                 for tc in m.tool_calls:
                     transcript.mount(
                         Static(f"[i]→ {tc.name}({tc.arguments})[/i]", classes="msg-tool")

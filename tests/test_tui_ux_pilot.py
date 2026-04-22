@@ -1,25 +1,25 @@
-"""Pilot coverage for M9 UX additions: theme picker, quick-open, command
+"""Pilot coverage for TUI UX surface: theme picker, quick-open, command
 palette, and fullscreen toggle.
 
 These run through Textual's `run_test` driver. They're deliberately narrow —
 we're verifying wiring (action opens screen, selection routes correctly,
 persistence fires) rather than rendering fidelity.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from pydantic import HttpUrl
 
-from docket.cli.tui import ItvApp, TuiContext
+from docket.cli.tui import DocketApp, TuiContext
 from docket.cli.tui.app import Pane
 from docket.cli.tui.commands import DocketCommands
 from docket.cli.tui.widgets.item_detail import ItemDetail
 from docket.cli.tui.widgets.quick_open import QuickOpenModal
 from docket.cli.tui.widgets.theme_picker import ThemePicker
-from docket.config import AdoConfig, Config, ScopeFilter, load_config, resolve_paths
+from docket.config import Config, ProviderEntry, ScopeFilter, load_config, resolve_paths
 from docket.core.model import Item, ItemKind, ItemState, ScopeFilters
 from docket.storage import init_db
 from docket.storage.repos import item_repo
@@ -55,7 +55,7 @@ def ctx(tmp_path: Path):
 
 
 async def test_theme_picker_opens_previews_and_reverts_on_escape(ctx) -> None:
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         original = app.theme
         await app.run_action("pick_theme")
@@ -80,7 +80,7 @@ async def test_theme_picker_opens_previews_and_reverts_on_escape(ctx) -> None:
 
 
 async def test_quick_open_modal_uses_translucent_backdrop(ctx) -> None:
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         await app.run_action("quick_open")
         await pilot.pause()
@@ -93,16 +93,20 @@ async def test_theme_picker_persists_selection_to_config(tmp_xdg: Path, ctx) -> 
     paths = resolve_paths()
     paths.ensure()
     config = Config(
-        ado=AdoConfig(
-            organization=HttpUrl("https://dev.azure.com/example"),
-            project="Demo",
-        ),
-        scopes={"default": ScopeFilter()},
+        providers={
+            "ado": ProviderEntry(
+                type="azure_devops",
+                display_name="ADO",
+                config={"organization": "https://dev.azure.com/example", "project": "Demo"},
+                scopes={"default": ScopeFilter()},
+            )
+        },
+        active_provider="ado",
     )
     ctx.paths = paths
     ctx.config = config
 
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         await app.run_action("pick_theme")
         await pilot.pause()
@@ -121,7 +125,7 @@ async def test_theme_picker_persists_selection_to_config(tmp_xdg: Path, ctx) -> 
 
 
 async def test_quick_open_selects_item_via_modal(ctx) -> None:
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         await app.run_action("quick_open")
         await pilot.pause()
@@ -138,7 +142,7 @@ async def test_quick_open_selects_item_via_modal(ctx) -> None:
 
 
 async def test_quick_open_unknown_id_notifies_without_selecting(ctx) -> None:
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         await app.run_action("quick_open")
         await pilot.pause()
@@ -151,7 +155,7 @@ async def test_quick_open_unknown_id_notifies_without_selecting(ctx) -> None:
 
 
 async def test_command_palette_provider_registered(ctx) -> None:
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test():
         resolved: set[type] = set()
         for entry in app.COMMANDS:
@@ -161,7 +165,7 @@ async def test_command_palette_provider_registered(ctx) -> None:
 
 
 async def test_docket_commands_expose_core_actions(ctx) -> None:
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test():
         provider = DocketCommands(screen=app.screen, match_style=None)
         labels = [label for label, _help, _cb in provider._commands()]
@@ -171,7 +175,7 @@ async def test_docket_commands_expose_core_actions(ctx) -> None:
 async def test_transition_commands_hidden_without_selection(ctx) -> None:
     """No selected item → no transition entries in the palette. Keeps the
     palette tidy and prevents actions that would just warn."""
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test():
         provider = DocketCommands(screen=app.screen, match_style=None)
         labels = [label for label, _h, _cb in provider._commands()]
@@ -183,7 +187,7 @@ async def test_transition_commands_appear_after_selection(ctx) -> None:
     appears so the user can trigger any transition by name."""
     from docket.cli.tui.widgets.item_tree import ItemSelected
 
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         app.post_message(ItemSelected("S-1"))
         await pilot.pause()
@@ -203,7 +207,7 @@ async def test_new_item_form_surfaces_duplicates_and_stages_proposal(ctx) -> Non
     from docket.cli.tui.widgets.new_item_modal import NewItemModal
     from docket.core.mutation import ItemCreate
 
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         await app.run_action("new_item")
         await pilot.pause()
@@ -214,7 +218,9 @@ async def test_new_item_form_surfaces_duplicates_and_stages_proposal(ctx) -> Non
         await pilot.pause()
         # Cached "Add login" should show up as a possible duplicate.
         duplicates = form.query_one("#duplicates")
-        rendered = " ".join(str(getattr(child, "render", lambda: "")()) for child in duplicates.children)
+        rendered = " ".join(
+            str(getattr(child, "render", lambda: "")()) for child in duplicates.children
+        )
         assert "S-1" in rendered, f"expected S-1 in duplicate list, got: {rendered!r}"
 
         form.query_one("#desc").text = "Body."
@@ -236,7 +242,7 @@ async def test_transition_command_stages_proposal_and_opens_modal(ctx) -> None:
     from docket.cli.tui.widgets.diff_modal import DiffModal
     from docket.cli.tui.widgets.item_tree import ItemSelected
 
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         app.post_message(ItemSelected("S-1"))
         await pilot.pause()
@@ -249,7 +255,7 @@ async def test_transition_command_stages_proposal_and_opens_modal(ctx) -> None:
 
 
 async def test_fullscreen_toggle_maximizes_then_restores(ctx) -> None:
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         left = app.query_one("#left", Pane)
         left.focus()

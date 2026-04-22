@@ -3,6 +3,7 @@
 Shows the diff, asks for a keypress, returns True iff the user agreed. Same code
 path covers interactive CLI, interactive TUI modals, and (later) HTTP two-step flow.
 """
+
 from __future__ import annotations
 
 from rich.console import Console

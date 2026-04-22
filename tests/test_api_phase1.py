@@ -11,6 +11,7 @@
 
 Shared fixtures build a config with two providers + two scopes so switch
 endpoints have something non-trivial to flip between."""
+
 from __future__ import annotations
 
 import json
@@ -291,16 +292,12 @@ def test_delete_prompt_restores_default_content(client: TestClient, env) -> None
 
 def test_prompt_unknown_key_404(client: TestClient) -> None:
     assert client.get("/prompts/nonsense", headers=AUTH).status_code == 404
-    r = client.put(
-        "/prompts/nonsense", headers=AUTH, json={"content_md": "x"}
-    )
+    r = client.put("/prompts/nonsense", headers=AUTH, json={"content_md": "x"})
     assert r.status_code == 404
 
 
 def test_prompt_put_read_only_403(ro_client: TestClient) -> None:
-    r = ro_client.put(
-        "/prompts/system_base", headers=AUTH, json={"content_md": "x"}
-    )
+    r = ro_client.put("/prompts/system_base", headers=AUTH, json={"content_md": "x"})
     assert r.status_code == 403
 
 
@@ -316,9 +313,7 @@ def test_get_settings_masks_token(client: TestClient) -> None:
     assert TOKEN not in masked
 
 
-def test_patch_settings_deep_merges_and_persists(
-    client: TestClient, env
-) -> None:
+def test_patch_settings_deep_merges_and_persists(client: TestClient, env) -> None:
     r = client.patch(
         "/settings",
         headers=AUTH,
@@ -382,24 +377,18 @@ def test_list_scopes_marks_active(client: TestClient) -> None:
 
 
 def test_switch_scope_updates_runtime(client: TestClient, env) -> None:
-    r = client.put(
-        "/scopes/active", headers=AUTH, json={"name": "team"}
-    )
+    r = client.put("/scopes/active", headers=AUTH, json={"name": "team"})
     assert r.status_code == 200
     assert env["runtime"].scope_key == "team"
 
 
 def test_switch_scope_unknown_returns_404(client: TestClient) -> None:
-    r = client.put(
-        "/scopes/active", headers=AUTH, json={"name": "ghost"}
-    )
+    r = client.put("/scopes/active", headers=AUTH, json={"name": "ghost"})
     assert r.status_code == 404
 
 
 def test_scope_switch_read_only_403(ro_client: TestClient) -> None:
-    r = ro_client.put(
-        "/scopes/active", headers=AUTH, json={"name": "team"}
-    )
+    r = ro_client.put("/scopes/active", headers=AUTH, json={"name": "team"})
     assert r.status_code == 403
 
 

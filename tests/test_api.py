@@ -158,18 +158,14 @@ def test_propose_transition_and_confirm(client: TestClient, env) -> None:
     fetched = client.get(f"/items/S-1/mutations/{proposal_id}", headers=AUTH_HEADERS)
     assert fetched.status_code == 200
 
-    confirm = client.post(
-        f"/items/S-1/mutations/{proposal_id}/confirm", headers=AUTH_HEADERS
-    )
+    confirm = client.post(f"/items/S-1/mutations/{proposal_id}/confirm", headers=AUTH_HEADERS)
     assert confirm.status_code == 200
     assert confirm.json()["item"]["state"] == "active"
     # Provider now reports active too
     assert provider.get_item("S-1").state == ItemState.ACTIVE
 
     # Second confirm → 404 (consumed)
-    again = client.post(
-        f"/items/S-1/mutations/{proposal_id}/confirm", headers=AUTH_HEADERS
-    )
+    again = client.post(f"/items/S-1/mutations/{proposal_id}/confirm", headers=AUTH_HEADERS)
     assert again.status_code == 404
 
 
@@ -180,14 +176,10 @@ def test_reject_discards_proposal(client: TestClient) -> None:
         json={"new_description_md": "New body."},
     )
     proposal_id = propose.json()["id"]
-    reject = client.post(
-        f"/items/S-1/mutations/{proposal_id}/reject", headers=AUTH_HEADERS
-    )
+    reject = client.post(f"/items/S-1/mutations/{proposal_id}/reject", headers=AUTH_HEADERS)
     assert reject.status_code == 204
     # Gone
-    again = client.post(
-        f"/items/S-1/mutations/{proposal_id}/confirm", headers=AUTH_HEADERS
-    )
+    again = client.post(f"/items/S-1/mutations/{proposal_id}/confirm", headers=AUTH_HEADERS)
     assert again.status_code == 404
 
 
@@ -204,9 +196,7 @@ def test_attachment_propose_accepts_base64(client: TestClient, env) -> None:
     )
     assert propose.status_code == 200
     proposal_id = propose.json()["id"]
-    confirm = client.post(
-        f"/items/S-1/mutations/{proposal_id}/confirm", headers=AUTH_HEADERS
-    )
+    confirm = client.post(f"/items/S-1/mutations/{proposal_id}/confirm", headers=AUTH_HEADERS)
     assert confirm.status_code == 200
     assert confirm.json()["attachment_url"].endswith("convo-001.md")
     assert provider.uploaded[0] == ("S-1", "convo-001.md", content)
@@ -245,8 +235,11 @@ def test_sse_streams_delta_and_done(env) -> None:
     conn, provider, proposals, _ = env
     llm = FakeLlmClient(script=[text_turn("hello world")])
     app = create_app(
-        conn=conn, provider=provider, bearer_token=TOKEN,
-        proposals=proposals, llm=llm,
+        conn=conn,
+        provider=provider,
+        bearer_token=TOKEN,
+        proposals=proposals,
+        llm=llm,
     )
     client = TestClient(app)
 
@@ -277,8 +270,11 @@ def test_sse_emits_proposal_event_when_agent_stages_mutation(env) -> None:
         ]
     )
     app = create_app(
-        conn=conn, provider=provider, bearer_token=TOKEN,
-        proposals=proposals, llm=llm,
+        conn=conn,
+        provider=provider,
+        bearer_token=TOKEN,
+        proposals=proposals,
+        llm=llm,
     )
     client = TestClient(app)
 
@@ -298,9 +294,7 @@ def test_sse_emits_proposal_event_when_agent_stages_mutation(env) -> None:
     assert payload["item_id"] == "S-1"
     # The proposal is now confirmable via the REST endpoint.
     pid = payload["id"]
-    confirm = client.post(
-        f"/items/S-1/mutations/{pid}/confirm", headers=AUTH_HEADERS
-    )
+    confirm = client.post(f"/items/S-1/mutations/{pid}/confirm", headers=AUTH_HEADERS)
     assert confirm.status_code == 200
 
 
@@ -308,15 +302,20 @@ def test_new_thread_archives_previous(env) -> None:
     conn, provider, proposals, _ = env
     llm = FakeLlmClient(script=[text_turn("ack")])
     app = create_app(
-        conn=conn, provider=provider, bearer_token=TOKEN,
-        proposals=proposals, llm=llm,
+        conn=conn,
+        provider=provider,
+        bearer_token=TOKEN,
+        proposals=proposals,
+        llm=llm,
     )
     client = TestClient(app)
 
     # Seed a conversation.
     with client.stream(
-        "POST", "/items/S-1/conversation/messages",
-        headers=AUTH_HEADERS, json={"text": "hi"},
+        "POST",
+        "/items/S-1/conversation/messages",
+        headers=AUTH_HEADERS,
+        json={"text": "hi"},
     ) as r:
         list(r.iter_lines())
 

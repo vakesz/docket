@@ -5,6 +5,7 @@ Scope/provider-switch endpoints mutate it under a lock; read endpoints snapshot
 the fields they need. The existing routes still read `app.state.provider` for
 backwards compatibility; `switch_provider` keeps that attribute in sync.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

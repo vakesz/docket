@@ -11,6 +11,7 @@ cached. No explicit cache flag is needed; the service hashes the prefix
 automatically. What matters is that message ordering and tool schema stay
 deterministic between calls.
 """
+
 from __future__ import annotations
 
 import json
@@ -201,7 +202,7 @@ def _from_openai_message(msg: Any) -> ChatMessage:
     role = cast(Literal["system", "user", "assistant", "tool"], msg.role or "assistant")
     content = msg.content or ""
     tool_calls: list[ToolCall] = []
-    for tc in (msg.tool_calls or []):
+    for tc in msg.tool_calls or []:
         try:
             args = json.loads(tc.function.arguments or "{}")
         except json.JSONDecodeError:

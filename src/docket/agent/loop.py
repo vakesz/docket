@@ -10,6 +10,7 @@ Given a user message, a prefix, and a tool registry, the loop:
 The loop does not persist anything — conversation_service handles that after
 the loop returns.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -17,7 +18,7 @@ import json
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
 
-from docket.agent.foundry_client import LlmClient, accumulate_stream
+from docket.agent.llm_client import LlmClient, accumulate_stream
 from docket.agent.tools import ToolRegistry
 from docket.agent.types import ChatMessage, CompletionResult, StreamDelta, ToolCall, Usage
 
@@ -144,8 +145,7 @@ def message_to_json(m: ChatMessage) -> dict[str, object]:
     }
     if m.tool_calls:
         out["tool_calls"] = [
-            {"id": tc.id, "name": tc.name, "arguments": tc.arguments}
-            for tc in m.tool_calls
+            {"id": tc.id, "name": tc.name, "arguments": tc.arguments} for tc in m.tool_calls
         ]
     if m.tool_call_id:
         out["tool_call_id"] = m.tool_call_id
@@ -180,7 +180,9 @@ def message_from_json(payload: dict[str, object]) -> ChatMessage:
         role=role_val,  # type: ignore[arg-type]
         content=str(payload.get("content", "") or ""),
         tool_calls=tool_calls,
-        tool_call_id=payload.get("tool_call_id") if isinstance(payload.get("tool_call_id"), str) else None,  # type: ignore[arg-type]
+        tool_call_id=payload.get("tool_call_id")
+        if isinstance(payload.get("tool_call_id"), str)
+        else None,  # type: ignore[arg-type]
         name=payload.get("name") if isinstance(payload.get("name"), str) else None,  # type: ignore[arg-type]
     )
     return msg

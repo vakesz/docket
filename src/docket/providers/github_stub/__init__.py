@@ -13,6 +13,7 @@ implementing a real GitHub provider should follow this structure:
 The stub keeps items in memory and is useful as a scripted backend for
 docs, demos, and cross-provider tests.
 """
+
 from __future__ import annotations
 
 from docket.providers.github_stub.provider import GitHubStubProvider

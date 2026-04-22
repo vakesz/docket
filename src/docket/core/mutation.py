@@ -6,6 +6,7 @@ which the caller shows to the user. Only after explicit confirmation is it execu
 against the provider. This is the single architectural gate that keeps
 AI-initiated writes safe.
 """
+
 from __future__ import annotations
 
 import difflib
@@ -65,7 +66,8 @@ def render_diff(proposal: Proposal) -> str:
         old = (proposal.item.description_md or "").splitlines(keepends=False)
         new = (proposal.new_md or "").splitlines(keepends=False)
         diff = difflib.unified_diff(
-            old, new,
+            old,
+            new,
             fromfile=f"{proposal.item.id}:description (current)",
             tofile=f"{proposal.item.id}:description (proposed)",
             lineterm="",

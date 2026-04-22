@@ -38,7 +38,13 @@ def _insert_attachment(conn, item_id: str, filename: str) -> None:
     conn.execute(
         "INSERT INTO attachments (id, item_id, conversation_id, filename, remote_url, uploaded_at) "
         "VALUES (?, ?, NULL, ?, ?, ?)",
-        (str(uuid.uuid4()), item_id, filename, f"https://fake/{filename}", datetime.now(UTC).isoformat()),
+        (
+            str(uuid.uuid4()),
+            item_id,
+            filename,
+            f"https://fake/{filename}",
+            datetime.now(UTC).isoformat(),
+        ),
     )
 
 
@@ -86,7 +92,11 @@ def test_render_markdown_includes_header_and_user_and_assistant() -> None:
             role="assistant",
             content="I'll stage a transition now.",
             tool_calls=[
-                ToolCall(id="c1", name="propose_transition", arguments={"id": "S-1", "intent": "start_work"})
+                ToolCall(
+                    id="c1",
+                    name="propose_transition",
+                    arguments={"id": "S-1", "intent": "start_work"},
+                )
             ],
         ),
         ChatMessage(

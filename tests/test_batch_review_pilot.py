@@ -1,4 +1,4 @@
-"""End-to-end batch-review flow test (M11).
+"""End-to-end batch-review flow test.
 
 When two or more proposals are queued, the TUI opens a `BatchDiffModal`
 instead of chaining y/n modals. Covers:
@@ -11,6 +11,7 @@ instead of chaining y/n modals. Covers:
 - esc/cancel leaves the queue untouched for a later review pass
 - end-to-end: agent stages 3 proposals in one turn → a single review pass
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -19,7 +20,7 @@ from pathlib import Path
 import pytest
 from textual.widgets import Checkbox
 
-from docket.cli.tui import ItvApp, TuiContext
+from docket.cli.tui import DocketApp, TuiContext
 from docket.cli.tui.widgets.batch_diff_modal import BatchDiffModal
 from docket.cli.tui.widgets.chat_pane import ChatPane
 from docket.cli.tui.widgets.diff_modal import DiffModal
@@ -55,7 +56,7 @@ def _find_node(node, target_id: str):
     return None
 
 
-async def _select(app: ItvApp, pilot, id_: str) -> None:
+async def _select(app: DocketApp, pilot, id_: str) -> None:
     tree = app.query_one(ItemTree)
     node = _find_node(tree.root, id_)
     assert node is not None
@@ -82,7 +83,7 @@ def batch_env(tmp_path: Path):
     conn.close()
 
 
-def _stage_two_transitions(app: ItvApp, conn) -> tuple[str, str]:
+def _stage_two_transitions(app: DocketApp, conn) -> tuple[str, str]:
     """Hand-stage two transition proposals bypassing the agent, so the
     batch-UX tests don't depend on agent-loop scripting."""
     p1 = mutation_service.propose_transition(conn, "S-1", TransitionIntent.START_WORK)
@@ -94,7 +95,7 @@ def _stage_two_transitions(app: ItvApp, conn) -> tuple[str, str]:
 
 async def test_batch_modal_opens_when_two_or_more_queued(batch_env) -> None:
     ctx, _, _ = batch_env
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         _stage_two_transitions(app, ctx.conn)
         await app.run_action("review_pending")
@@ -109,7 +110,7 @@ async def test_batch_modal_opens_when_two_or_more_queued(batch_env) -> None:
 
 async def test_single_proposal_still_uses_diff_modal(batch_env) -> None:
     ctx, _, _ = batch_env
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         p = mutation_service.propose_transition(ctx.conn, "S-1", TransitionIntent.START_WORK)
         app._proposals.add(p, source="agent")
@@ -121,7 +122,7 @@ async def test_single_proposal_still_uses_diff_modal(batch_env) -> None:
 
 async def test_apply_all_confirms_each_through_provider(batch_env) -> None:
     ctx, _, provider = batch_env
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         _stage_two_transitions(app, ctx.conn)
         await app.run_action("review_pending")
@@ -141,7 +142,7 @@ async def test_apply_all_confirms_each_through_provider(batch_env) -> None:
 
 async def test_reject_all_drains_without_touching_provider(batch_env) -> None:
     ctx, _, provider = batch_env
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         _stage_two_transitions(app, ctx.conn)
         await app.run_action("review_pending")
@@ -160,7 +161,7 @@ async def test_apply_selected_drops_unchecked_rows(batch_env) -> None:
     """Unchecking a row and pressing `y` applies only the checked proposals
     and drops the unchecked one — the queue drains entirely in one pass."""
     ctx, _, provider = batch_env
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         p1_id, _p2_id = _stage_two_transitions(app, ctx.conn)
         await app.run_action("review_pending")
@@ -183,7 +184,7 @@ async def test_apply_selected_drops_unchecked_rows(batch_env) -> None:
 
 async def test_cancel_preserves_queue_for_later(batch_env) -> None:
     ctx, _, provider = batch_env
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         _stage_two_transitions(app, ctx.conn)
         await app.run_action("review_pending")
@@ -200,10 +201,10 @@ async def test_cancel_preserves_queue_for_later(batch_env) -> None:
 
 
 async def test_agent_three_proposals_land_in_single_review_pass(batch_env) -> None:
-    """M11 exit criterion: three agent tool calls in one turn → one modal,
-    not a chain of three. The script drives three tool rounds feeding back
-    through the agent loop; after the text turn closes the cycle there should
-    be three pending proposals and one BatchDiffModal on screen."""
+    """Three agent tool calls in one turn should land in one batch modal, not
+    a chain of three. The script drives three tool rounds feeding back through
+    the agent loop; after the text turn closes the cycle there should be three
+    pending proposals and one BatchDiffModal on screen."""
     ctx, client, provider = batch_env
     client.script = [
         tool_turn("tc-1", "propose_transition", '{"id":"S-1","intent":"start_work"}'),
@@ -211,7 +212,7 @@ async def test_agent_three_proposals_land_in_single_review_pass(batch_env) -> No
         tool_turn("tc-3", "propose_transition", '{"id":"S-3","intent":"start_work"}'),
         text_turn("Staged three."),
     ]
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         await _select(app, pilot, "S-1")
         prompt = app.query_one(ChatPane).query_one("#prompt")

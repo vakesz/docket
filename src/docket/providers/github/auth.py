@@ -5,6 +5,7 @@ lived token, one session-status probe, and cached-path resolution. We
 never ask for a PAT — if `gh auth token` fails we surface the actionable
 error and point back at `gh auth login`.
 """
+
 from __future__ import annotations
 
 import json
@@ -84,7 +85,12 @@ def signed_in_email() -> str | None:
             timeout=10,
         )
         payload = json.loads(result.stdout)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, json.JSONDecodeError, ProviderAuthError):
+    except (
+        subprocess.CalledProcessError,
+        subprocess.TimeoutExpired,
+        json.JSONDecodeError,
+        ProviderAuthError,
+    ):
         return None
     email = payload.get("email")
     return email if isinstance(email, str) and email else None

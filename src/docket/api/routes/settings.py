@@ -2,10 +2,11 @@
 
 Maps 1:1 to `config.toml`. GET returns the full Config with `http.token` masked.
 PATCH takes a deep-partial merge and writes atomically via `save_config`. Some
-fields (providers, http.bind/port, foundry.*, sync.background_interval_seconds)
+fields (providers, http.bind/port, llm.*, sync.background_interval_seconds)
 take effect only on restart — we surface the list of changed top-level sections
 that need one in the `requires_restart` response field.
 """
+
 from __future__ import annotations
 
 from copy import deepcopy
@@ -28,9 +29,7 @@ router = APIRouter(
 )
 
 
-_RESTART_SECTIONS = frozenset(
-    {"providers", "active_provider", "foundry", "http", "sync"}
-)
+_RESTART_SECTIONS = frozenset({"providers", "active_provider", "llm", "http", "sync"})
 
 
 def _mask_config(cfg: Config) -> dict[str, Any]:
@@ -48,10 +47,7 @@ def _mask_config(cfg: Config) -> dict[str, Any]:
 def _deep_merge(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
     out = deepcopy(base)
     for key, value in patch.items():
-        if (
-            isinstance(value, dict)
-            and isinstance(out.get(key), dict)
-        ):
+        if isinstance(value, dict) and isinstance(out.get(key), dict):
             out[key] = _deep_merge(out[key], value)
         else:
             out[key] = deepcopy(value)

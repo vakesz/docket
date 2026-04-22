@@ -50,7 +50,5 @@ def full_refresh(
     and on `docket sync --full`."""
     with transaction(conn):
         sync_repo.record_full_sync(conn, scope_key)
-        conn.execute(
-            "UPDATE sync_state SET watermark_iso = NULL WHERE scope_key = ?", (scope_key,)
-        )
+        conn.execute("UPDATE sync_state SET watermark_iso = NULL WHERE scope_key = ?", (scope_key,))
     return refresh(conn, provider, scope_key, filters)

@@ -9,6 +9,7 @@ Two modes are covered:
 
 We mock out the self-restart signal path so the process doesn't die while the
 test client is still reading the response."""
+
 from __future__ import annotations
 
 import tomllib
@@ -161,7 +162,7 @@ def test_bootstrap_complete_writes_config_and_runs_sync(tmp_path: Path) -> None:
             }
         },
         "active_provider": "demo",
-        "foundry": None,
+        "llm": None,
         "http_bind": "0.0.0.0",
         "http_port": 9000,
         "http_token": "",
@@ -208,7 +209,7 @@ def test_bootstrap_complete_uses_provided_token(tmp_path: Path) -> None:
             }
         },
         "active_provider": "demo",
-        "foundry": None,
+        "llm": None,
         "http_token": "operator-supplied-token-123",
         "run_initial_sync": False,
     }
@@ -246,7 +247,7 @@ def test_bootstrap_complete_rejects_empty_providers(tmp_path: Path) -> None:
     assert r.status_code == 422
 
 
-def test_bootstrap_complete_foundry_persists_api_key_to_env_file(
+def test_bootstrap_complete_llm_persists_api_key_to_env_file(
     tmp_path: Path,
 ) -> None:
     paths = _mk_paths(tmp_path)
@@ -259,7 +260,7 @@ def test_bootstrap_complete_foundry_persists_api_key_to_env_file(
             }
         },
         "active_provider": "demo",
-        "foundry": {
+        "llm": {
             "endpoint": "https://example.cognitiveservices.azure.com/",
             "api_key": "sk-test-1234567890",
             "deployment": "gpt-5-mini",
@@ -272,11 +273,11 @@ def test_bootstrap_complete_foundry_persists_api_key_to_env_file(
     env_path = paths.env_file
     assert env_path.exists()
     assert "AZURE_OPENAI_API_KEY=sk-test-1234567890" in env_path.read_text()
-    # The config.toml stores the foundry endpoint + deployment but NOT the api key.
+    # The config.toml stores the llm endpoint + deployment but NOT the api key.
     with paths.config_file.open("rb") as f:
         raw = tomllib.load(f)
-    assert raw["foundry"]["deployment"] == "gpt-5-mini"
-    assert "api_key" not in raw["foundry"]
+    assert raw["llm"]["deployment"] == "gpt-5-mini"
+    assert "api_key" not in raw["llm"]
 
 
 # ---- full app (setup router also mounted alongside normal routes) -----------
@@ -346,7 +347,5 @@ def test_full_app_setup_accepts_setup_token(tmp_path: Path) -> None:
 
 def test_full_app_setup_rejects_unknown_token(tmp_path: Path) -> None:
     client = _full_app_client(tmp_path)
-    r = client.get(
-        "/setup/providers/types", headers={"Authorization": "Bearer nope"}
-    )
+    r = client.get("/setup/providers/types", headers={"Authorization": "Bearer nope"})
     assert r.status_code == 401

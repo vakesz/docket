@@ -4,6 +4,7 @@ Used by `frontend/bun run gen:api` via an HTTP call, but also handy for CI
 and offline generation: spins up `create_app` with throwaway deps and dumps
 the schema without needing a running server or real config.
 """
+
 from __future__ import annotations
 
 import json
@@ -14,16 +15,17 @@ from pathlib import Path
 # Let us import `tests.fakes.*` whether invoked from the repo root or elsewhere.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from docket.api.app import create_app  # noqa: E402
-from docket.api.runtime import RuntimeState  # noqa: E402
-from docket.config.models import (  # noqa: E402
+from tests.fakes.provider import FakeProvider
+
+from docket.api.app import create_app
+from docket.api.runtime import RuntimeState
+from docket.config.models import (
     Config,
     HttpConfig,
     ProviderEntry,
     ScopeFilter,
 )
-from docket.storage import init_db  # noqa: E402
-from tests.fakes.provider import FakeProvider  # noqa: E402
+from docket.storage import init_db
 
 
 def main() -> int:

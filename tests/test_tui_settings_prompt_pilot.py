@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-from docket.cli.tui import ItvApp, TuiContext
+from docket.cli.tui import DocketApp, TuiContext
 from docket.cli.tui.widgets.chat_pane import ChatPane
 from docket.cli.tui.widgets.help_modal import HelpModal
 from docket.cli.tui.widgets.prompt_library import PromptLibraryModal
@@ -33,7 +33,7 @@ async def test_help_modal_opens_from_action(tmp_xdg: Path) -> None:
     item = _mk_item()
     item_repo.upsert_item(conn, item)
     ctx = TuiContext(conn=conn, provider=FakeProvider(items=[item]), scope=ScopeFilters())
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         await app.run_action("show_help")
         await pilot.pause()
@@ -69,7 +69,7 @@ async def test_settings_modal_persists_and_updates_runtime(tmp_xdg: Path) -> Non
         config=cfg,
     )
 
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         await app.run_action("open_settings")
         await pilot.pause()
@@ -110,7 +110,7 @@ async def test_prompt_library_modal_saves_prompt_from_the_app(tmp_xdg: Path) -> 
         scope=ScopeFilters(),
         paths=paths,
     )
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         await app.run_action("edit_prompts")
         await pilot.pause()

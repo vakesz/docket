@@ -8,6 +8,7 @@ directions without losing triage-level fidelity.
 Implementers writing a real GitHub provider can keep this file structure and
 just swap the lookup tables.
 """
+
 from __future__ import annotations
 
 from docket.core.model import ItemState, TransitionIntent

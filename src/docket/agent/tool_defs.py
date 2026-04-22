@@ -1,9 +1,10 @@
-"""Concrete read-only tools for M4. Bound to a sqlite connection + provider.
+"""Concrete read-only tools. Bound to a sqlite connection + provider.
 
 Lookup strategy: cache-first, fall through to provider on miss. Provider
 failures surface as structured errors rather than exceptions so the model
 sees the failure and can reason about it.
 """
+
 from __future__ import annotations
 
 import json
@@ -144,6 +145,7 @@ def register_readonly_tools(
     # PR URLs on providers (like github_stub) that can't actually search.
     find_prs = getattr(provider, "find_related_prs", None)
     if callable(find_prs):
+
         def find_related_prs(args: dict[str, Any]) -> str:
             id_ = str(args.get("id", "")).strip()
             if not id_:

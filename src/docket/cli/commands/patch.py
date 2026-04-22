@@ -15,7 +15,9 @@ console = Console()
 
 def patch_command(
     id: str = typer.Argument(..., help="Work item ID."),
-    from_file: Path = typer.Option(..., "--from-file", help="Path to Markdown file with the new description."),
+    from_file: Path = typer.Option(
+        ..., "--from-file", help="Path to Markdown file with the new description."
+    ),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show diff, do not write."),
 ) -> None:
     """Replace a work item's description with the contents of a Markdown file."""

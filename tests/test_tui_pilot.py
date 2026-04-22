@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 from textual.widgets import Input
 
-from docket.cli.tui import ItvApp, TuiContext
+from docket.cli.tui import DocketApp, TuiContext
 from docket.cli.tui.widgets.chat_pane import ChatPane
 from docket.cli.tui.widgets.item_detail import ItemDetail
 from docket.cli.tui.widgets.item_tree import ItemTree
@@ -86,7 +86,7 @@ def tui_setup(tmp_path: Path):
 
 async def test_tree_populates_on_mount(tui_setup) -> None:
     ctx, _ = tui_setup
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         tree = app.query_one(ItemTree)
         # Five kind buckets (epic/feature/story/task/bug) under the hidden root.
@@ -99,7 +99,7 @@ async def test_tree_populates_on_mount(tui_setup) -> None:
 
 async def test_select_item_updates_detail_and_chat(tui_setup) -> None:
     ctx, _ = tui_setup
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         tree = app.query_one(ItemTree)
         story_node = _find_node(tree.root, "S-1")
@@ -118,7 +118,7 @@ async def test_select_item_updates_detail_and_chat(tui_setup) -> None:
 
 async def test_layout_has_status_bar_and_no_header(tui_setup) -> None:
     ctx, _ = tui_setup
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         await pilot.pause()
         assert not list(app.query("Header"))
@@ -131,10 +131,8 @@ async def test_layout_has_status_bar_and_no_header(tui_setup) -> None:
 async def test_refresh_action_invokes_sync(tui_setup) -> None:
     ctx, provider = tui_setup
     # Add a fresh item on the provider only; refresh should pull it into the cache.
-    provider.items.append(
-        _mk_item("T-1", kind=ItemKind.TASK, title="New task from provider")
-    )
-    app = ItvApp(ctx)
+    provider.items.append(_mk_item("T-1", kind=ItemKind.TASK, title="New task from provider"))
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         await app.run_action("refresh")
         await pilot.pause()
@@ -146,7 +144,7 @@ async def test_refresh_action_invokes_sync(tui_setup) -> None:
 
 async def test_filter_input_narrows_tree(tui_setup) -> None:
     ctx, _ = tui_setup
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         # Focus the filter and type a query that only matches the bug.
         await pilot.press("slash")
@@ -171,7 +169,7 @@ async def test_filter_input_narrows_tree(tui_setup) -> None:
 
 async def test_selected_tree_row_has_continuous_background(tui_setup) -> None:
     ctx, _ = tui_setup
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         await pilot.pause()
         tree = app.query_one(ItemTree)
@@ -182,11 +180,7 @@ async def test_selected_tree_row_has_continuous_background(tui_setup) -> None:
         await pilot.pause()
 
         strip = tree.render_line(node.line)
-        backgrounds = {
-            segment.style.bgcolor
-            for segment in strip._segments
-            if segment.text
-        }
+        backgrounds = {segment.style.bgcolor for segment in strip._segments if segment.text}
         assert backgrounds
         assert len(backgrounds) == 1
         assert None not in backgrounds
@@ -194,7 +188,7 @@ async def test_selected_tree_row_has_continuous_background(tui_setup) -> None:
 
 async def test_filter_down_moves_focus_into_tree(tui_setup) -> None:
     ctx, _ = tui_setup
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         await app.run_action("focus_filter")
         await pilot.pause()
@@ -209,7 +203,7 @@ async def test_filter_down_moves_focus_into_tree(tui_setup) -> None:
 
 async def test_tree_up_from_first_item_moves_focus_to_filter(tui_setup) -> None:
     ctx, _ = tui_setup
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         await app.run_action("focus_filter")
         await pilot.pause()
@@ -233,7 +227,7 @@ async def test_tree_clamps_virtual_width_to_viewport(tmp_path: Path) -> None:
         scope=ScopeFilters(),
         scope_key="default",
     )
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     try:
         async with app.run_test() as pilot:
             await pilot.pause()

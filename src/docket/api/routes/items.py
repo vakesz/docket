@@ -1,4 +1,5 @@
 """Read + create endpoints for work items."""
+
 from __future__ import annotations
 
 import sqlite3

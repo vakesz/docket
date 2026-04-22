@@ -18,6 +18,7 @@ param; team/area/iteration don't apply and are ignored. Providers that
 can't honor a filter return a superset, never a subset, so `list_changes_since`
 may return extra rows that the storage layer filters again at write-time.
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -61,9 +62,7 @@ class GitHubProvider:
 
     def __post_init__(self) -> None:
         if "/" not in self.default_repo:
-            raise ValueError(
-                f"default_repo must look like 'owner/name', got {self.default_repo!r}"
-            )
+            raise ValueError(f"default_repo must look like 'owner/name', got {self.default_repo!r}")
 
     # -- client plumbing ----------------------------------------------------
 
@@ -163,7 +162,11 @@ class GitHubProvider:
             if not isinstance(entry, dict):
                 continue
             comment_id = str(entry.get("id", ""))
-            author = (entry.get("user") or {}).get("login", "") if isinstance(entry.get("user"), dict) else ""
+            author = (
+                (entry.get("user") or {}).get("login", "")
+                if isinstance(entry.get("user"), dict)
+                else ""
+            )
             body = entry.get("body") or ""
             created = _parse_iso(entry.get("created_at"))
             if not comment_id or created is None:
@@ -210,9 +213,7 @@ class GitHubProvider:
             raise ProviderUnreachableError(f"unexpected PATCH response for {id}")
         return self._issue_to_item(payload)
 
-    def upload_attachment(
-        self, id: str, filename: str, content: bytes, content_type: str
-    ) -> str:
+    def upload_attachment(self, id: str, filename: str, content: bytes, content_type: str) -> str:
         # GitHub REST has no attachment upload endpoint. The common workaround
         # is to post a comment whose body references an externally-hosted
         # asset. We raise — the mutation pipeline is expected to detect this
@@ -254,9 +255,7 @@ class GitHubProvider:
 
     # -- PR discovery -------------------------------------------------------
 
-    def find_related_prs(
-        self, item_id: str, title_keywords: list[str]
-    ) -> list[PRMatch]:
+    def find_related_prs(self, item_id: str, title_keywords: list[str]) -> list[PRMatch]:
         """Best-effort scan of recent PRs for ones that might close this item.
 
         Strategy, cheapest → most expensive:
@@ -277,9 +276,7 @@ class GitHubProvider:
             "sort": "updated",
             "direction": "desc",
         }
-        payload = self._get(
-            f"/repos/{self.default_repo}/pulls", params=params
-        )
+        payload = self._get(f"/repos/{self.default_repo}/pulls", params=params)
         if not isinstance(payload, list):
             return []
         kws = [kw.lower().strip() for kw in title_keywords if kw.strip()]
@@ -343,7 +340,9 @@ class GitHubProvider:
         item_state: ItemState = to_canonical(state, str(reason))
         assignee_obj = payload.get("assignee")
         assignee = (
-            assignee_obj.get("login") if isinstance(assignee_obj, dict) and isinstance(assignee_obj.get("login"), str) else None
+            assignee_obj.get("login")
+            if isinstance(assignee_obj, dict) and isinstance(assignee_obj.get("login"), str)
+            else None
         )
         return Item(
             id=issue_id,

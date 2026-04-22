@@ -192,7 +192,9 @@ class SettingsModal(ModalScreen[Config | None]):
                 default_checkbox.tooltip = "When enabled, Docket opens this view by default."
                 yield default_checkbox
                 yield Static("team", classes="field-label")
-                yield Input(value=current_scope.team, placeholder="team (optional)", id="scope-team")
+                yield Input(
+                    value=current_scope.team, placeholder="team (optional)", id="scope-team"
+                )
                 yield Static("area path", classes="field-label")
                 yield Input(
                     value=current_scope.area_path,
@@ -235,17 +237,17 @@ class SettingsModal(ModalScreen[Config | None]):
                     yield Static("project", classes="field-label")
                     yield Input(value=ado_project, placeholder="project name", id="ado-project")
 
-                yield Static("Foundry endpoint", classes="field-label")
+                yield Static("LLM endpoint", classes="field-label")
                 yield Input(
-                    value=str(self._config.foundry.endpoint or ""),
-                    placeholder="https://your-foundry.openai.azure.com/",
-                    id="foundry-endpoint",
+                    value=str(self._config.llm.endpoint or ""),
+                    placeholder="https://your-resource.openai.azure.com/",
+                    id="llm-endpoint",
                 )
-                yield Static("Foundry deployment", classes="field-label")
+                yield Static("LLM deployment", classes="field-label")
                 yield Input(
-                    value=self._config.foundry.deployment,
+                    value=self._config.llm.deployment,
                     placeholder="gpt-5",
-                    id="foundry-deployment",
+                    id="llm-deployment",
                 )
 
                 yield Static("Behavior", classes="section")
@@ -417,11 +419,13 @@ class SettingsModal(ModalScreen[Config | None]):
         if default_kind is Select.BLANK:
             raise ValueError("Please choose the default new-item kind.")
 
-        raw["foundry"]["endpoint"] = self.query_one("#foundry-endpoint", Input).value.strip() or None
-        raw["foundry"]["deployment"] = self.query_one("#foundry-deployment", Input).value.strip()
+        raw["llm"]["endpoint"] = self.query_one("#llm-endpoint", Input).value.strip() or None
+        raw["llm"]["deployment"] = self.query_one("#llm-deployment", Input).value.strip()
         raw["http"]["enabled"] = self.query_one("#http-enabled", Checkbox).value
         raw["http"]["bind"] = self.query_one("#http-bind", Input).value.strip()
-        raw["http"]["port"] = _parse_int(self.query_one("#http-port", Input).value, field_name="HTTP port")
+        raw["http"]["port"] = _parse_int(
+            self.query_one("#http-port", Input).value, field_name="HTTP port"
+        )
         raw["http"]["token"] = self.query_one("#http-token", Input).value.strip()
         raw["telemetry"]["enabled"] = self.query_one("#telemetry-enabled", Checkbox).value
         raw["llm"]["compaction_threshold_tokens"] = _parse_int(

@@ -4,6 +4,7 @@ Triggered by typing `:` in the main app. The user enters a ticket id, and
 Enter posts `ItemSelected` back through the app so the rest of the detail
 + chat wiring stays on one code path.
 """
+
 from __future__ import annotations
 
 import sqlite3

@@ -7,13 +7,14 @@ Two-step to match the TUI:
    and stages the underlying proposals through the normal proposal pipeline,
    returning their ProposalDTOs. The client confirms each via the existing
    `/items/{id}/mutations/{pid}/confirm` endpoint."""
+
 from __future__ import annotations
 
 import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from docket.agent.foundry_client import LlmClient
+from docket.agent.llm_client import LlmClient
 from docket.api.auth import require_bearer
 from docket.api.deps import (
     get_conn,

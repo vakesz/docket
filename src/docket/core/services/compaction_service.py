@@ -14,13 +14,14 @@ context always has the last few turns verbatim) and summarize everything
 older than that. If everything older already fits in a single summary, we're
 done; otherwise we compact again on the next turn.
 """
+
 from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from docket.agent.foundry_client import LlmClient
+from docket.agent.llm_client import LlmClient
 from docket.agent.types import ChatMessage, ToolSchema
 from docket.storage import transaction
 from docket.storage.repos import conversation_repo, message_repo
@@ -102,9 +103,7 @@ def compact_now(
     summary_created_at = earliest - timedelta(microseconds=1)
 
     with transaction(conn):
-        summary_id = message_repo.append(
-            conn, convo_id, summary_msg, created_at=summary_created_at
-        )
+        summary_id = message_repo.append(conn, convo_id, summary_msg, created_at=summary_created_at)
         message_repo.mark_compacted(conn, head_ids)
 
     return CompactionResult(

@@ -5,6 +5,7 @@ The frontend can poll `GET /setup/status` (auth-free) to detect this mode
 and run its built-in wizard. On `POST /setup/complete` the backend writes
 config and signals itself to exit so the supervisor restarts it in normal
 mode."""
+
 from __future__ import annotations
 
 from fastapi import FastAPI

@@ -14,16 +14,6 @@ class ScopeFilter(BaseModel):
     assignee: str = "@me"
 
 
-class AdoConfig(BaseModel):
-    """Legacy standalone ADO section. Phase-2 M14 moves this under
-    `providers.<name>.config`; this model stays so factory validation can
-    reuse the same shape."""
-
-    organization: HttpUrl
-    project: str
-    description_format: str = Field(default="markdown", pattern="^(markdown|html_fallback)$")
-
-
 class ProviderEntry(BaseModel):
     """One configured backend. `type` maps to a registry id (`"azure_devops"`,
     `"github_stub"`, or anything registered via entry point). `config` is
@@ -37,15 +27,18 @@ class ProviderEntry(BaseModel):
     type: str
     display_name: str
     config: dict[str, Any] = Field(default_factory=dict)
-    scopes: dict[str, ScopeFilter] = Field(
-        default_factory=lambda: {"default": ScopeFilter()}
-    )
+    scopes: dict[str, ScopeFilter] = Field(default_factory=lambda: {"default": ScopeFilter()})
     active_scope: str = "default"
 
 
-class FoundryConfig(BaseModel):
+class LlmConfig(BaseModel):
+    """LLM connection + runtime behavior. The concrete client today targets
+    Azure OpenAI; `endpoint`/`deployment` identify that deployment."""
+
     endpoint: HttpUrl | None = None
     deployment: str = "gpt-5"
+    compaction_threshold_tokens: int = 60000
+    external_watch_interval_seconds: float = 60.0  # 0 disables the watcher
 
 
 class HttpConfig(BaseModel):
@@ -57,11 +50,6 @@ class HttpConfig(BaseModel):
 
 class TelemetryConfig(BaseModel):
     enabled: bool = True
-
-
-class LlmConfig(BaseModel):
-    compaction_threshold_tokens: int = 60000
-    external_watch_interval_seconds: float = 60.0  # 0 disables the watcher
 
 
 class UiConfig(BaseModel):
@@ -91,20 +79,14 @@ class StaleConfig(BaseModel):
 
 
 class Config(BaseModel):
-    """Top-level config.toml schema.
-
-    M14 reshaped the root: there is no longer a singleton `ado` block or a
-    top-level `scopes` / `active_scope`. Instead, every backend lives as a
-    named entry under `providers`, and `active_provider` picks which one the
-    TUI opens by default. Switching providers at runtime is a palette action.
-    """
+    """Top-level `config.toml` schema. Every backend is a named entry under
+    `providers`; `active_provider` picks which one the TUI opens by default."""
 
     providers: dict[str, ProviderEntry] = Field(default_factory=dict)
     active_provider: str = ""
-    foundry: FoundryConfig = Field(default_factory=FoundryConfig)
+    llm: LlmConfig = Field(default_factory=LlmConfig)
     http: HttpConfig = Field(default_factory=HttpConfig)
     telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
-    llm: LlmConfig = Field(default_factory=LlmConfig)
     ui: UiConfig = Field(default_factory=UiConfig)
     sync: SyncConfig = Field(default_factory=SyncConfig)
     stale: StaleConfig = Field(default_factory=StaleConfig)

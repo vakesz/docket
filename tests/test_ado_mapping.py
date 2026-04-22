@@ -17,6 +17,7 @@ class _FakeWI:
 
 # ---- state_map ---------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "ado_state,expected",
     [
@@ -38,6 +39,7 @@ def test_is_removed() -> None:
 
 
 # ---- field_map ---------------------------------------------------------------
+
 
 def test_to_item_from_attrs_shape() -> None:
     wi = _FakeWI(
@@ -67,7 +69,15 @@ def test_to_item_from_attrs_shape() -> None:
 
 
 def test_to_item_from_dict_shape() -> None:
-    raw = {"id": 7, "fields": {"System.Id": 7, "System.WorkItemType": "Bug", "System.Title": "t", "System.State": "New"}}
+    raw = {
+        "id": 7,
+        "fields": {
+            "System.Id": 7,
+            "System.WorkItemType": "Bug",
+            "System.Title": "t",
+            "System.State": "New",
+        },
+    }
     item = to_item(raw)
     assert item is not None
     assert item.kind is ItemKind.BUG
@@ -80,7 +90,15 @@ def test_to_item_returns_none_for_untracked_wit() -> None:
 
 
 def test_to_item_flags_removed_in_provider_raw() -> None:
-    wi = _FakeWI(1, {"System.Id": 1, "System.WorkItemType": "Task", "System.Title": "t", "System.State": "Removed"})
+    wi = _FakeWI(
+        1,
+        {
+            "System.Id": 1,
+            "System.WorkItemType": "Task",
+            "System.Title": "t",
+            "System.State": "Removed",
+        },
+    )
     item = to_item(wi)
     assert item is not None
     assert item.provider_raw.get("archived") is True
@@ -136,7 +154,12 @@ class _FakeWIWithRelations(_FakeWI):
 def test_to_item_parses_attachments_from_relations() -> None:
     wi = _FakeWIWithRelations(
         9,
-        {"System.Id": 9, "System.WorkItemType": "Task", "System.Title": "t", "System.State": "Active"},
+        {
+            "System.Id": 9,
+            "System.WorkItemType": "Task",
+            "System.Title": "t",
+            "System.State": "Active",
+        },
         relations=[
             _FakeRelation("AttachedFile", "https://ado/att/1", {"name": "crash.log"}),
             _FakeRelation("System.LinkTypes.Hierarchy-Reverse", "https://ado/wit/41", {}),

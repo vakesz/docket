@@ -1,4 +1,5 @@
 """Watchlist repo: pin/unpin, ordering, idempotency, archived-item filtering."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime

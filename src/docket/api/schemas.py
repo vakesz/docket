@@ -4,6 +4,7 @@ Converted from the internal dataclasses so the HTTP contract is decoupled
 from on-disk / in-memory representations. Only fields useful to a headless
 API caller are exposed — `provider_raw` for example is deliberately omitted
 since it leaks ADO-specific shape."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -225,7 +226,7 @@ class HealthDTO(BaseModel):
     status: Literal["ok"] = "ok"
 
 
-# -- Phase 1 additions (TUI-parity endpoints) ---------------------------------
+# -- TUI-parity endpoints -----------------------------------------------------
 
 
 class PinnedStatusDTO(BaseModel):
@@ -392,7 +393,7 @@ class SetupProviderEntry(BaseModel):
     scope: dict[str, Any] = Field(default_factory=dict)
 
 
-class SetupFoundryEntry(BaseModel):
+class SetupLlmEntry(BaseModel):
     endpoint: str
     api_key: str
     deployment: str = "gpt-5"
@@ -402,7 +403,7 @@ class SetupFoundryEntry(BaseModel):
 class SetupCompleteRequest(BaseModel):
     providers: dict[str, SetupProviderEntry]
     active_provider: str
-    foundry: SetupFoundryEntry | None = None
+    llm: SetupLlmEntry | None = None
     http_bind: str = "0.0.0.0"
     http_port: int = 8765
     http_token: str = ""
@@ -446,7 +447,7 @@ __all__ = [
     "SettingsUpdatedDTO",
     "SetupCompleteDTO",
     "SetupCompleteRequest",
-    "SetupFoundryEntry",
+    "SetupLlmEntry",
     "SetupProviderEntry",
     "SetupProviderFieldDTO",
     "SetupProviderTypeDTO",

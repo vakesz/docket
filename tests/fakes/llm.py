@@ -4,12 +4,13 @@ Each "turn" is a list of StreamDeltas to emit. The fake returns the next
 scripted turn on every `complete`/`stream` call, so tests can simulate
 multi-round tool-use sequences deterministically.
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 
-from docket.agent.foundry_client import accumulate_stream
+from docket.agent.llm_client import accumulate_stream
 from docket.agent.types import (
     ChatMessage,
     CompletionResult,
@@ -30,7 +31,9 @@ class ScriptedTurn:
 def text_turn(text: str, *, usage: Usage | None = None) -> ScriptedTurn:
     """Convenience: build a turn that streams plain assistant text."""
     deltas: list[StreamDelta] = [StreamDelta(text=ch) for ch in text]
-    deltas.append(StreamDelta(finish_reason="stop", usage=usage or Usage(tokens_in=5, tokens_out=len(text))))
+    deltas.append(
+        StreamDelta(finish_reason="stop", usage=usage or Usage(tokens_in=5, tokens_out=len(text)))
+    )
     return ScriptedTurn(deltas=deltas)
 
 

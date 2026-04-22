@@ -8,6 +8,7 @@ the server writes config and exits so the supervisor (docker compose,
 
 `GET /setup/status` is the one endpoint that stays auth-free — the frontend
 needs to probe which mode it's in before it knows which token to send."""
+
 from __future__ import annotations
 
 import contextlib
@@ -37,8 +38,8 @@ from docket.api.schemas import (
 from docket.config.loader import ConfigMissingError, load_config, save_config
 from docket.config.models import (
     Config,
-    FoundryConfig,
     HttpConfig,
+    LlmConfig,
     ProviderEntry,
     ScopeFilter,
     TelemetryConfig,
@@ -134,7 +135,7 @@ def setup_status(request: Request) -> SetupStatusDTO:
         config_path=str(paths.config_file),
         providers_configured=len(cfg.providers),
         active_provider=cfg.active_provider,
-        llm_configured=bool(cfg.foundry.endpoint),
+        llm_configured=bool(cfg.llm.endpoint),
         http_configured=bool(cfg.http.token),
     )
 
@@ -188,11 +189,11 @@ def test_llm(req: SetupTestLlmRequest) -> SetupTestResultDTO:
     if not req.endpoint or not req.api_key:
         return SetupTestResultDTO(ok=False, error="endpoint and api_key are required")
     try:
-        from docket.agent.foundry_client import FoundryClient
+        from docket.agent.llm_client import AzureOpenAIClient
     except ImportError as e:
         return SetupTestResultDTO(ok=False, error=f"openai SDK not installed: {e}")
     try:
-        client = FoundryClient(
+        client = AzureOpenAIClient(
             endpoint=req.endpoint,
             api_key=req.api_key,
             deployment=req.deployment,
@@ -264,22 +265,20 @@ def setup_complete(
         )
         built_providers[key] = built
 
-    foundry_cfg = FoundryConfig()
-    if req.foundry is not None:
+    llm_cfg = LlmConfig()
+    if req.llm is not None:
         try:
-            foundry_cfg = FoundryConfig(
-                endpoint=req.foundry.endpoint, deployment=req.foundry.deployment
-            )
+            llm_cfg = LlmConfig(endpoint=req.llm.endpoint, deployment=req.llm.deployment)
         except ValidationError as e:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"invalid foundry config: {e}",
+                detail=f"invalid llm config: {e}",
             ) from e
 
     cfg = Config(
         providers=providers_cfg,
         active_provider=req.active_provider,
-        foundry=foundry_cfg,
+        llm=llm_cfg,
         http=HttpConfig(
             enabled=True,
             bind=req.http_bind,
@@ -292,8 +291,8 @@ def setup_complete(
     paths.ensure()
     scaffold_prompts(paths.prompts_dir)
     save_config(paths, cfg)
-    if req.foundry is not None and req.foundry.api_key:
-        _write_env_key(paths, req.foundry.api_key)
+    if req.llm is not None and req.llm.api_key:
+        _write_env_key(paths, req.llm.api_key)
 
     initial_sync: SyncSummaryDTO | None = None
     if req.run_initial_sync:
@@ -353,9 +352,7 @@ def _write_env_key(paths: Paths, api_key: str) -> None:
     lines: list[str] = []
     if env_path.exists():
         lines = env_path.read_text(encoding="utf-8").splitlines()
-        lines = [
-            ln for ln in lines if not ln.strip().startswith("AZURE_OPENAI_API_KEY=")
-        ]
+        lines = [ln for ln in lines if not ln.strip().startswith("AZURE_OPENAI_API_KEY=")]
     lines.append(f"AZURE_OPENAI_API_KEY={api_key}")
     env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     with contextlib.suppress(OSError):
@@ -368,6 +365,7 @@ def _schedule_restart() -> None:
     Docker compose restart policy (`unless-stopped`) will bring the backend back
     up with the freshly-written config. Locally, the user's `docket serve`
     process exits and they re-run it."""
+
     def _die() -> None:
         time.sleep(0.5)
         os.kill(os.getpid(), signal.SIGTERM)

@@ -6,6 +6,7 @@ proposal carries a correctly-versioned filename plus Markdown whose content
 matches the cached messages. Confirming the proposal must then route through
 `mutation_service.confirm` to the provider.
 """
+
 from __future__ import annotations
 
 import json

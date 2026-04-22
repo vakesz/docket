@@ -6,6 +6,7 @@ One process-local store, shared by agent tools (writers) and the UI (readers).
 Confirmation is NOT implemented here — call sites hand the `Proposal` back to
 `mutation_service.confirm(...)` after the user says yes. The store's only job
 is to hold proposals long enough for the confirm UI to pick them up."""
+
 from __future__ import annotations
 
 from collections import OrderedDict

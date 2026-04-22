@@ -1,10 +1,11 @@
 """Map ADO work-item types and states to the canonical model.
 
-Phase 1 supports the **Agile** process template (the default for new ADO projects).
+Supports the **Agile** process template (the default for new ADO projects).
 Other templates (Scrum, CMMI, or custom) can be supported by extending KIND_BY_WIT
 and STATE_BY_KIND; state-map probing during the setup wizard persists the result so
 users on non-default templates don't need code changes.
 """
+
 from __future__ import annotations
 
 from docket.core.model import ItemKind, ItemState

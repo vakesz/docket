@@ -18,7 +18,7 @@ from textual.containers import Horizontal, Vertical
 from textual.widget import Widget
 from textual.widgets import Input, Static
 
-from docket.agent.foundry_client import LlmClient
+from docket.agent.llm_client import LlmClient
 from docket.agent.loop import AgentLoop
 from docket.agent.mutating_tools import register_mutating_tools
 from docket.agent.tool_defs import register_readonly_tools
@@ -127,13 +127,13 @@ class FullscreenToggle(Static):
         screen = self.screen
         if screen.maximized is not None:
             screen.minimize()
-            if isinstance(app, ItvApp):
+            if isinstance(app, DocketApp):
                 app.restore_pane_widths()
         else:
-            if isinstance(app, ItvApp):
+            if isinstance(app, DocketApp):
                 app.clear_pane_width_override(pane)
             screen.maximize(pane)
-        if isinstance(app, ItvApp):
+        if isinstance(app, DocketApp):
             app.sync_fullscreen_icons()
 
 
@@ -142,10 +142,10 @@ class TuiContext:
     """What the TUI needs from the caller to run. Kept small so the app can be mounted
     from production code (via Context) and from pilot-style tests (via fakes).
 
-    M14 introduced multi-provider: `providers` is the full set, `provider_key`
-    selects the active one, and `provider` is a convenience alias that always
-    points at `providers[provider_key]`. Legacy callers (tests, etc.) can still
-    pass `provider=...` alone and we'll synthesize a single-entry mapping."""
+    Multi-provider shape: `providers` is the full set, `provider_key` selects
+    the active one, and `provider` is a convenience alias that always points at
+    `providers[provider_key]`. Callers that only have one backend can pass
+    `provider=...` alone and a single-entry mapping is synthesized."""
 
     conn: sqlite3.Connection
     provider: WorkItemProvider
@@ -153,7 +153,7 @@ class TuiContext:
     scope_key: str = "default"
     providers: dict[str, WorkItemProvider] | None = None
     provider_key: str = ""
-    llm: LlmClient | None = None  # None disables chat (useful for pre-M4 tests)
+    llm: LlmClient | None = None  # None disables chat
     compaction_threshold_tokens: int = 0  # 0 disables — passed to conversation_service
     external_watch_interval_seconds: float = 60.0  # 0 disables external-update watcher
     # Read-only mode: agent mutating tools are not registered, TUI mutation
@@ -180,14 +180,14 @@ class TuiContext:
 def _docket_commands_provider() -> type[Provider]:
     """Lazy loader for the Docket command-palette provider.
 
-    Imported this way because `commands.py` imports `ItvApp` under
+    Imported this way because `commands.py` imports `DocketApp` under
     `TYPE_CHECKING`, so a top-level import here would be circular."""
     from docket.cli.tui.commands import DocketCommands
 
     return DocketCommands
 
 
-class ItvApp(App[None]):
+class DocketApp(App[None]):
     """Three-pane terminal UI for browsing and triaging work items."""
 
     # Replace the default palette providers entirely: Textual's built-in theme
@@ -483,15 +483,13 @@ class ItvApp(App[None]):
         bar.scope_label = self.tui_ctx.scope_key
         bar.active_view = self.tui_ctx.scope_key
         bar.read_only = self.tui_ctx.read_only
-        bar.tooltip = (
-            "Session status: provider, active view, sync health, streaming, cost, and read-only mode."
-        )
+        bar.tooltip = "Session status: provider, active view, sync health, streaming, cost, and read-only mode."
 
     def _apply_tooltips(self) -> None:
         with contextlib.suppress(Exception):
-            self.query_one("#filter", Input).tooltip = (
-                "Filter by title, description, or comments. Press Enter to keep the current results."
-            )
+            self.query_one(
+                "#filter", Input
+            ).tooltip = "Filter by title, description, or comments. Press Enter to keep the current results."
         for toggle in self.query(FullscreenToggle):
             toggle.tooltip = "Maximize or restore this pane."
 
@@ -529,10 +527,12 @@ class ItvApp(App[None]):
             return
         item_repo.upsert_item(self.tui_ctx.conn, fresh)
         comment_repo.replace_comments_for_item(self.tui_ctx.conn, item_id, fresh_comments)
+
         # Only repaint if the user hasn't moved on to another item.
         def paint() -> None:
             if self._selected_item_id == item_id:
                 self.query_one(ItemDetail).show(fresh, fresh_comments)
+
         self.call_from_thread(paint)
 
     def on_input_changed(self, event: Input.Changed) -> None:
@@ -675,7 +675,9 @@ class ItvApp(App[None]):
             if body:
                 detail = f"{detail} — {body[:200]}"
             self.call_from_thread(chat.note, f"chat failed: {detail}", cls="msg-system")
-            self.call_from_thread(chat.note, traceback.format_exc().splitlines()[-1], cls="msg-system")
+            self.call_from_thread(
+                chat.note, traceback.format_exc().splitlines()[-1], cls="msg-system"
+            )
             return
         self.call_from_thread(chat.finish_turn, result.usage)
         # If the turn produced pending proposals, surface the first one.
@@ -742,7 +744,11 @@ class ItvApp(App[None]):
         # defocused the chat prompt), Tab should re-enter that pane's target
         # rather than jump to the next pane — otherwise a single Esc+Tab would
         # skip past the pane the user was working in.
-        if isinstance(focused, Pane) and isinstance(focused.id, str) and focused.id in self._PANE_IDS:
+        if (
+            isinstance(focused, Pane)
+            and isinstance(focused.id, str)
+            and focused.id in self._PANE_IDS
+        ):
             pane_idx = self._PANE_IDS.index(focused.id)
             if 0 <= pane_idx < len(targets):
                 targets[pane_idx].focus()
@@ -1120,16 +1126,12 @@ class ItvApp(App[None]):
         we toast and stay put rather than crashing."""
         providers = self.tui_ctx.providers or {}
         if name not in providers:
-            self.notify(
-                f"No provider named '{name}' is configured.", severity="warning"
-            )
+            self.notify(f"No provider named '{name}' is configured.", severity="warning")
             return
         config = self.tui_ctx.config
         entry = config.providers.get(name) if config else None
         if entry is None:
-            self.notify(
-                f"Provider '{name}' is not in config.toml.", severity="warning"
-            )
+            self.notify(f"Provider '{name}' is not in config.toml.", severity="warning")
             return
         self.tui_ctx.provider = providers[name]
         self.tui_ctx.provider_key = name
@@ -1247,10 +1249,10 @@ class ItvApp(App[None]):
         self.tui_ctx.default_new_item_kind = ItemKind(config.ui.default_new_item_kind)
         self.tui_ctx.show_acceptance_criteria = config.ui.show_acceptance_criteria
         self.query_one(ItemTree).stale_threshold_days = self._resolved_stale_threshold()
-        self.query_one(ChatPane).set_show_acceptance_criteria(
-            config.ui.show_acceptance_criteria
+        self.query_one(ChatPane).set_show_acceptance_criteria(config.ui.show_acceptance_criteria)
+        entry = (
+            config.providers.get(self.tui_ctx.provider_key) if self.tui_ctx.provider_key else None
         )
-        entry = config.providers.get(self.tui_ctx.provider_key) if self.tui_ctx.provider_key else None
         if entry is not None and entry.active_scope in entry.scopes:
             self.action_switch_view(entry.active_scope)
         else:
@@ -1275,9 +1277,7 @@ class ItvApp(App[None]):
                 # Cancel: queue unchanged, user can come back later.
                 return
             # Drop rejected ids first — they never touch the provider.
-            rejected = sum(
-                1 for pid in decision.reject if self._proposals.pop(pid) is not None
-            )
+            rejected = sum(1 for pid in decision.reject if self._proposals.pop(pid) is not None)
             applied = 0
             failed = 0
             for pid in decision.apply:

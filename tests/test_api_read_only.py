@@ -1,4 +1,4 @@
-"""Read-only mode on the HTTP surface (M12).
+"""Read-only mode on the HTTP surface.
 
 Verifies `create_app(..., read_only=True)`:
   - returns 403 on every POST under `/items/{id}/mutations/*`
@@ -10,6 +10,7 @@ Verifies `create_app(..., read_only=True)`:
 
 The TUI and CLI surfaces are covered in their own test modules — this
 file is strictly the HTTP API's contract."""
+
 from __future__ import annotations
 
 import base64
@@ -59,15 +60,20 @@ def env(tmp_path: Path):
 def ro_client(env) -> TestClient:
     conn, provider, proposals = env
     app = create_app(
-        conn=conn, provider=provider, bearer_token=TOKEN,
-        proposals=proposals, read_only=True,
+        conn=conn,
+        provider=provider,
+        bearer_token=TOKEN,
+        proposals=proposals,
+        read_only=True,
     )
     return TestClient(app)
 
 
 def test_create_item_blocked(ro_client: TestClient) -> None:
     resp = ro_client.post(
-        "/items", headers=AUTH, json={"kind": "task", "title": "Nope"},
+        "/items",
+        headers=AUTH,
+        json={"kind": "task", "title": "Nope"},
     )
     assert resp.status_code == 403
     assert "read-only" in resp.json()["detail"].lower()
@@ -78,7 +84,9 @@ def test_create_item_dry_run_also_blocked(ro_client: TestClient) -> None:
     # refuse the whole endpoint rather than letting callers peek at
     # proposals they could never apply.
     resp = ro_client.post(
-        "/items?dry_run=true", headers=AUTH, json={"kind": "task", "title": "Nope"},
+        "/items?dry_run=true",
+        headers=AUTH,
+        json={"kind": "task", "title": "Nope"},
     )
     assert resp.status_code == 403
 
@@ -86,7 +94,8 @@ def test_create_item_dry_run_also_blocked(ro_client: TestClient) -> None:
 def test_propose_transition_blocked(ro_client: TestClient) -> None:
     resp = ro_client.post(
         "/items/S-1/mutations/transition/propose",
-        headers=AUTH, json={"intent": "start_work"},
+        headers=AUTH,
+        json={"intent": "start_work"},
     )
     assert resp.status_code == 403
 
@@ -94,7 +103,8 @@ def test_propose_transition_blocked(ro_client: TestClient) -> None:
 def test_propose_description_blocked(ro_client: TestClient) -> None:
     resp = ro_client.post(
         "/items/S-1/mutations/description/propose",
-        headers=AUTH, json={"new_description_md": "body"},
+        headers=AUTH,
+        json={"new_description_md": "body"},
     )
     assert resp.status_code == 403
 
@@ -115,14 +125,16 @@ def test_confirm_blocked(ro_client: TestClient) -> None:
     # The proposal id doesn't need to exist — the router-level guard
     # fires before the handler runs.
     resp = ro_client.post(
-        "/items/S-1/mutations/anything/confirm", headers=AUTH,
+        "/items/S-1/mutations/anything/confirm",
+        headers=AUTH,
     )
     assert resp.status_code == 403
 
 
 def test_reject_blocked(ro_client: TestClient) -> None:
     resp = ro_client.post(
-        "/items/S-1/mutations/anything/reject", headers=AUTH,
+        "/items/S-1/mutations/anything/reject",
+        headers=AUTH,
     )
     assert resp.status_code == 403
 
@@ -140,8 +152,12 @@ def test_reads_still_work(ro_client: TestClient) -> None:
 def test_agent_registry_lacks_mutating_tools(env) -> None:
     conn, provider, proposals = env
     app = create_app(
-        conn=conn, provider=provider, bearer_token=TOKEN,
-        proposals=proposals, llm=FakeLlmClient(), read_only=True,
+        conn=conn,
+        provider=provider,
+        bearer_token=TOKEN,
+        proposals=proposals,
+        llm=FakeLlmClient(),
+        read_only=True,
     )
     assert app.state.agent is not None
     registry = app.state.agent._tools  # type: ignore[attr-defined]
@@ -156,11 +172,15 @@ def test_writable_default_keeps_mutations(env) -> None:
     """Sanity: without read_only, POSTs go through as before."""
     conn, provider, proposals = env
     app = create_app(
-        conn=conn, provider=provider, bearer_token=TOKEN, proposals=proposals,
+        conn=conn,
+        provider=provider,
+        bearer_token=TOKEN,
+        proposals=proposals,
     )
     client = TestClient(app)
     resp = client.post(
         "/items/S-1/mutations/transition/propose",
-        headers=AUTH, json={"intent": "start_work"},
+        headers=AUTH,
+        json={"intent": "start_work"},
     )
     assert resp.status_code == 200

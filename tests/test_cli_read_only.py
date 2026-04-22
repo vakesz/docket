@@ -1,4 +1,4 @@
-"""CLI-side coverage for read-only mode (M12).
+"""CLI-side coverage for read-only mode.
 
 The mutation commands (`transition`, `new`, `patch`) abort before touching
 the DB or provider when `DOCKET_READ_ONLY` is set. We test the command
@@ -9,6 +9,7 @@ to verify the exit.
 `serve` plumbs the flag into `create_app`; that path is already covered by
 `tests/test_api_read_only.py`, so here we just check `get_read_only()`
 honors the expected env tokens."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -65,15 +66,20 @@ def test_new_command_exits_before_touching_prepare(
     monkeypatch.setenv("DOCKET_READ_ONLY", "1")
     with pytest.raises(typer.Exit) as exc:
         new_command(
-            kind="task", title="Nope",
-            description_file=None, parent_id=None, assignee=None, tags=None,
+            kind="task",
+            title="Nope",
+            description_file=None,
+            parent_id=None,
+            assignee=None,
+            tags=None,
             dry_run=False,
         )
     assert exc.value.exit_code == 3
 
 
 def test_patch_command_exits_before_touching_prepare(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     monkeypatch.setenv("DOCKET_READ_ONLY", "1")
     # Pick a path that does exist — the guard fires before the file check.

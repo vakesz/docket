@@ -1,4 +1,5 @@
 """Connection / sync status snapshot for the frontend status footer + top bar."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request

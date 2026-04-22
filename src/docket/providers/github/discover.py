@@ -8,6 +8,7 @@ calls so the wizard inherits the user's session without us touching PATs.
 host overrides (GitHub Enterprise), pagination, and auth without us
 re-implementing them.
 """
+
 from __future__ import annotations
 
 import json

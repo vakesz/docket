@@ -2,6 +2,7 @@
 
 Each test uses a synthetic secret (clearly fake, but pattern-matching) so we
 can assert the replacement tag is emitted and the original string is gone."""
+
 from __future__ import annotations
 
 import pytest

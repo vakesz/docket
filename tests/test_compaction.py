@@ -52,7 +52,10 @@ def test_below_threshold_noop(env) -> None:
     loop = AgentLoop(client=client, tools=reg)
 
     conversation_service.send_user_message(
-        conn, loop, item.id, "hello",
+        conn,
+        loop,
+        item.id,
+        "hello",
         compaction_threshold_tokens=10_000,
     )
 
@@ -68,8 +71,7 @@ def test_above_threshold_compacts_old_turns(env) -> None:
 
     # Seed a long thread: 10 turns, each worth ~200 tokens.
     turn_script = [
-        text_turn(f"reply {i}", usage=Usage(tokens_in=100, tokens_out=100))
-        for i in range(10)
+        text_turn(f"reply {i}", usage=Usage(tokens_in=100, tokens_out=100)) for i in range(10)
     ]
     summary_reply = text_turn("earlier: discussed scope and priorities.", usage=Usage())
     client = FakeLlmClient(script=[*turn_script, summary_reply, text_turn("next")])
@@ -78,7 +80,10 @@ def test_above_threshold_compacts_old_turns(env) -> None:
     # Accumulate history without triggering compaction yet (threshold huge).
     for i in range(10):
         conversation_service.send_user_message(
-            conn, loop, item.id, f"ask {i}",
+            conn,
+            loop,
+            item.id,
+            f"ask {i}",
             compaction_threshold_tokens=100_000,
         )
 
@@ -90,7 +95,10 @@ def test_above_threshold_compacts_old_turns(env) -> None:
 
     # Next turn crosses a low threshold → compaction runs first.
     result = conversation_service.send_user_message(
-        conn, loop, item.id, "what have we learned?",
+        conn,
+        loop,
+        item.id,
+        "what have we learned?",
         compaction_threshold_tokens=500,
     )
     assert result.final_text == "next"
@@ -108,9 +116,7 @@ def test_above_threshold_compacts_old_turns(env) -> None:
 
 def test_compact_now_keeps_tail_intact(env) -> None:
     conn, reg, item = env
-    client = FakeLlmClient(
-        script=[text_turn(f"r{i}") for i in range(8)] + [text_turn("summary")]
-    )
+    client = FakeLlmClient(script=[text_turn(f"r{i}") for i in range(8)] + [text_turn("summary")])
     loop = AgentLoop(client=client, tools=reg)
     for i in range(8):
         conversation_service.send_user_message(conn, loop, item.id, f"q{i}")
@@ -136,8 +142,6 @@ def test_compact_now_noop_when_nothing_to_fold(env) -> None:
 
     convo = conversation_repo.get_active_for_item(conn, item.id)
     assert convo is not None
-    result = compaction_service.compact_now(
-        conn, llm=client, convo_id=convo.id, tail_keep=6
-    )
+    result = compaction_service.compact_now(conn, llm=client, convo_id=convo.id, tail_keep=6)
     assert result.compacted_message_count == 0
     assert result.summary_message_id is None

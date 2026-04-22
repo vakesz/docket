@@ -18,6 +18,7 @@ anywhere in the document take precedence so no criterion is dropped. We
 lean GFM-task-list because it survives round-trips through the ADO and
 GitHub Markdown renderers we actually write to.
 """
+
 from __future__ import annotations
 
 import re

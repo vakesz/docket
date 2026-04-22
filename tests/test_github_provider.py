@@ -4,6 +4,7 @@ Uses `httpx.MockTransport` so no network is touched — the provider is
 injected with a prebuilt `httpx.Client` that routes every request through
 a dispatcher function. We test the mapping layer (issue/pr → Item, kind
 guessing, state mapping, id parsing) and the write-path URL shapes."""
+
 from __future__ import annotations
 
 import json
@@ -29,7 +30,7 @@ def _issue_payload(
     assignee: str | None = None,
     is_pr: bool = False,
     updated_at: str = "2024-05-30T18:32:21Z",
-    repo: str = "vakesz/docket",
+    repo: str = "acme/widgets",
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "number": number,
@@ -58,7 +59,7 @@ def _mk_provider(handler) -> GitHubProvider:
         transport=transport,
         headers={"Authorization": "Bearer test", "Accept": "application/vnd.github+json"},
     )
-    return GitHubProvider(default_repo="vakesz/docket", _client=client)
+    return GitHubProvider(default_repo="acme/widgets", _client=client)
 
 
 def test_default_repo_must_look_like_owner_name() -> None:
@@ -68,21 +69,21 @@ def test_default_repo_must_look_like_owner_name() -> None:
 
 def test_get_item_maps_fields_and_guesses_kind() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/repos/vakesz/docket/issues/42"
+        assert request.url.path == "/repos/acme/widgets/issues/42"
         return httpx.Response(
             200,
             json=_issue_payload(labels=["bug"], assignee="alice"),
         )
 
     provider = _mk_provider(handler)
-    item = provider.get_item("vakesz/docket#42")
-    assert item.id == "vakesz/docket#42"
+    item = provider.get_item("acme/widgets#42")
+    assert item.id == "acme/widgets#42"
     assert item.kind is ItemKind.BUG
     assert item.state is ItemState.ACTIVE
     assert item.assignee == "alice"
     assert item.title == "Login crashes"
     assert item.tags == ["bug"]
-    assert item.url == "https://github.com/vakesz/docket/issues/42"
+    assert item.url == "https://github.com/acme/widgets/issues/42"
 
 
 def _static_handler(payload: dict[str, Any]):
@@ -94,32 +95,32 @@ def _static_handler(payload: dict[str, Any]):
 
 def test_kind_guessing_prefers_bug_then_story_then_task() -> None:
     item = _mk_provider(_static_handler(_issue_payload(labels=["enhancement"]))).get_item(
-        "vakesz/docket#1"
+        "acme/widgets#1"
     )
     assert item.kind is ItemKind.STORY
 
-    item = _mk_provider(_static_handler(_issue_payload(labels=[]))).get_item("vakesz/docket#1")
+    item = _mk_provider(_static_handler(_issue_payload(labels=[]))).get_item("acme/widgets#1")
     assert item.kind is ItemKind.TASK
 
 
 def test_pull_requests_map_to_task_regardless_of_labels() -> None:
-    item = _mk_provider(
-        _static_handler(_issue_payload(labels=["bug"], is_pr=True))
-    ).get_item("vakesz/docket#1")
+    item = _mk_provider(_static_handler(_issue_payload(labels=["bug"], is_pr=True))).get_item(
+        "acme/widgets#1"
+    )
     assert item.kind is ItemKind.TASK
 
 
 def test_closed_completed_maps_to_resolved() -> None:
     item = _mk_provider(
         _static_handler(_issue_payload(state="closed", state_reason="completed"))
-    ).get_item("vakesz/docket#1")
+    ).get_item("acme/widgets#1")
     assert item.state is ItemState.RESOLVED
 
 
 def test_closed_not_planned_maps_to_closed() -> None:
     item = _mk_provider(
         _static_handler(_issue_payload(state="closed", state_reason="not_planned"))
-    ).get_item("vakesz/docket#1")
+    ).get_item("acme/widgets#1")
     assert item.state is ItemState.CLOSED
 
 
@@ -135,7 +136,7 @@ def test_list_changes_since_passes_iso_watermark() -> None:
     provider = _mk_provider(handler)
     items = list(provider.list_changes_since(watermark, ScopeFilters()))
     assert len(items) == 1
-    assert captured["path"] == "/repos/vakesz/docket/issues"
+    assert captured["path"] == "/repos/acme/widgets/issues"
     assert captured["params"]["since"] == "2024-01-01T12:30:00Z"
     assert captured["params"]["state"] == "all"
 
@@ -155,8 +156,8 @@ def test_transition_sends_native_state_and_reason() -> None:
         raise AssertionError(f"unexpected {request.method} {request.url}")
 
     provider = _mk_provider(handler)
-    result = provider.transition("vakesz/docket#7", TransitionIntent.CLOSE_DONE)
-    assert captured["path"] == "/repos/vakesz/docket/issues/7"
+    result = provider.transition("acme/widgets#7", TransitionIntent.CLOSE_DONE)
+    assert captured["path"] == "/repos/acme/widgets/issues/7"
     assert captured["body"] == {"state": "closed", "state_reason": "completed"}
     assert result.state is ItemState.RESOLVED
 
@@ -169,7 +170,7 @@ def test_patch_description_sends_body_field() -> None:
         return httpx.Response(200, json=_issue_payload(body="new desc"))
 
     provider = _mk_provider(handler)
-    item = provider.patch_description("vakesz/docket#1", "new desc")
+    item = provider.patch_description("acme/widgets#1", "new desc")
     assert captured["body"] == {"body": "new desc"}
     assert item.description_md == "new desc"
 
@@ -192,7 +193,7 @@ def test_create_item_posts_to_issues_endpoint() -> None:
         CreateFields(title="new one", description_md="desc", tags=["bug"]),
     )
     assert captured["method"] == "POST"
-    assert captured["path"] == "/repos/vakesz/docket/issues"
+    assert captured["path"] == "/repos/acme/widgets/issues"
     assert captured["body"]["title"] == "new one"
     assert captured["body"]["labels"] == ["bug"]
     # Caller's kind wins over the label-guesser.
@@ -205,7 +206,7 @@ def test_upload_attachment_raises_with_guidance() -> None:
 
     provider = _mk_provider(handler)
     with pytest.raises(ProviderUnreachableError, match="attachment upload"):
-        provider.upload_attachment("vakesz/docket#1", "f.txt", b"x", "text/plain")
+        provider.upload_attachment("acme/widgets#1", "f.txt", b"x", "text/plain")
 
 
 def test_http_errors_surface_as_unreachable() -> None:
@@ -214,7 +215,7 @@ def test_http_errors_surface_as_unreachable() -> None:
 
     provider = _mk_provider(handler)
     with pytest.raises(ProviderUnreachableError, match="500"):
-        provider.get_item("vakesz/docket#1")
+        provider.get_item("acme/widgets#1")
 
 
 def test_bad_id_rejected_at_the_boundary() -> None:
@@ -235,7 +236,7 @@ def _pr_payload(
     merged_at: str | None = None,
     branch: str = "feature/x",
     author: str = "alice",
-    repo: str = "vakesz/docket",
+    repo: str = "acme/widgets",
 ) -> dict[str, Any]:
     return {
         "number": number,
@@ -254,7 +255,7 @@ def test_find_related_prs_strong_match_on_id_mention() -> None:
     this is the clean `closes #42` / `fixes #42` case."""
 
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/repos/vakesz/docket/pulls"
+        assert request.url.path == "/repos/acme/widgets/pulls"
         assert request.url.params.get("state") == "all"
         return httpx.Response(
             200,
@@ -270,7 +271,7 @@ def test_find_related_prs_strong_match_on_id_mention() -> None:
         )
 
     provider = _mk_provider(handler)
-    matches = provider.find_related_prs("vakesz/docket#42", ["login"])
+    matches = provider.find_related_prs("acme/widgets#42", ["login"])
     assert len(matches) == 1  # only PR 101 signals; PR 100 mentions neither
     top = matches[0]
     assert top.url.endswith("/pull/101")
@@ -288,7 +289,7 @@ def test_find_related_prs_keyword_only_match() -> None:
         )
 
     provider = _mk_provider(handler)
-    matches = provider.find_related_prs("vakesz/docket#42", ["login"])
+    matches = provider.find_related_prs("acme/widgets#42", ["login"])
     assert len(matches) == 1
     assert matches[0].confidence < 0.9  # weaker than a direct id mention
 
@@ -301,4 +302,4 @@ def test_find_related_prs_skips_when_no_signal() -> None:
         )
 
     provider = _mk_provider(handler)
-    assert provider.find_related_prs("vakesz/docket#42", ["login"]) == []
+    assert provider.find_related_prs("acme/widgets#42", ["login"]) == []

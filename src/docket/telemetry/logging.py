@@ -8,6 +8,7 @@ logger there.
 
 Call `init_logging(paths)` exactly once from `prepare()`. Re-invocations are
 no-ops so tests and CLI commands can both go through the same code path."""
+
 from __future__ import annotations
 
 import logging

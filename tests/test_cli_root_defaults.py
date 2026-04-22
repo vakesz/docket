@@ -1,16 +1,13 @@
 """Regression guards on the default-subcommand root callback.
 
-The bare `docket` invocation routes through `_root -> run_open_tui`. The
-older design called `open_command` directly, which meant Click handed its
-`typer.OptionInfo` sentinels to the Python function as defaults — truthy
-objects that silently flipped `--read-only` on (M12 regression) and later
-stringified as `--provider <OptionInfo ...>` on the M14 multi-provider
-path.
+The bare `docket` invocation routes through `_root -> run_open_tui`. Calling
+`open_command` directly would hand Click's `typer.OptionInfo` sentinels to
+the Python function as defaults — truthy objects that silently flip
+`--read-only` on and stringify `--provider` as `<OptionInfo ...>`.
 
-The fix is to route through `run_open_tui`, a keyword-only impl that
-accepts nothing but primitives. This test locks that wiring by patching
-`run_open_tui`, invoking the real CLI with no args, and asserting the
-captured flags are all real primitives."""
+`run_open_tui` is a keyword-only impl that accepts nothing but primitives.
+This test locks that wiring by patching `run_open_tui`, invoking the real
+CLI with no args, and asserting the captured flags are all real primitives."""
 
 from typing import Any
 

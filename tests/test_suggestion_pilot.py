@@ -1,4 +1,5 @@
 """End-to-end: user presses `s` → suggestion modal → accept stages proposals."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -6,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from docket.cli.tui import ItvApp, TuiContext
+from docket.cli.tui import DocketApp, TuiContext
 from docket.cli.tui.widgets.batch_diff_modal import BatchDiffModal
 from docket.cli.tui.widgets.item_tree import ItemTree
 from docket.cli.tui.widgets.suggestion_modal import SuggestionModal
@@ -40,7 +41,7 @@ def _find_node(node, target_id: str):
     return None
 
 
-async def _select_story(app: ItvApp, pilot) -> None:
+async def _select_story(app: DocketApp, pilot) -> None:
     tree = app.query_one(ItemTree)
     node = _find_node(tree.root, "S-1")
     assert node is not None
@@ -77,7 +78,7 @@ async def test_suggest_accept_stages_state_and_patch(pilot_env) -> None:
         )
     ]
 
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         await _select_story(app, pilot)
         await app.workers.wait_for_complete()
@@ -92,7 +93,7 @@ async def test_suggest_accept_stages_state_and_patch(pilot_env) -> None:
         await pilot.press("y")
         await pilot.pause()
 
-        # Two proposals staged → batch review modal (M11), not a y/n chain.
+        # Two proposals staged → batch review modal, not a y/n chain.
         assert isinstance(app.screen, BatchDiffModal)
         assert len(app._proposals) == 2  # state_change + description_patch
 
@@ -105,13 +106,11 @@ async def test_suggest_reject_leaves_store_empty(pilot_env) -> None:
     ctx, client, _, _ = pilot_env
     client.script = [
         text_turn(
-            '{"intent": "needs_info", '
-            '"description_patch_md": "", '
-            '"open_questions": ["which env?"]}'
+            '{"intent": "needs_info", "description_patch_md": "", "open_questions": ["which env?"]}'
         )
     ]
 
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         await _select_story(app, pilot)
         await app.workers.wait_for_complete()
@@ -131,7 +130,7 @@ async def test_suggest_reject_leaves_store_empty(pilot_env) -> None:
 async def test_suggest_without_selection_notifies(pilot_env) -> None:
     ctx, client, _, _ = pilot_env
     client.script = []  # model should not be called
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         await app.run_action("suggest_next")
         await pilot.pause()

@@ -2,6 +2,7 @@
 
 These stub `subprocess.run` because the helpers shell out to `gh`. We're
 testing the wrapper's parsing and error surface, not `gh` itself."""
+
 from __future__ import annotations
 
 import json
@@ -47,15 +48,15 @@ def test_list_repos_for_authed_user(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(discover, "_gh_path", lambda: "/usr/bin/gh")
     body = json.dumps(
         [
-            {"full_name": "vakesz/docket"},
-            {"full_name": "vakesz/dotfiles"},
+            {"full_name": "acme/widgets"},
+            {"full_name": "acme/dotfiles"},
             {"not_full": True},
         ]
     )
     argv = ("api", "/user/repos", "-f", "per_page=50", "-f", "sort=updated")
     monkeypatch.setattr(subprocess, "run", _fake_run_factory({argv: (body, 0)}))
     repos = discover.list_repos()
-    assert [r.full_name for r in repos] == ["vakesz/docket", "vakesz/dotfiles"]
+    assert [r.full_name for r in repos] == ["acme/widgets", "acme/dotfiles"]
 
 
 def test_list_repos_for_user_uses_users_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -107,7 +108,7 @@ def test_gh_api_failure_becomes_discovery_error(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(
         subprocess,
         "run",
-        _fake_run_factory({("api", "/user/orgs", "--paginate"): ("{\"message\":\"Bad creds\"}", 1)}),
+        _fake_run_factory({("api", "/user/orgs", "--paginate"): ('{"message":"Bad creds"}', 1)}),
     )
     with pytest.raises(discover.DiscoveryError):
         discover.list_orgs()

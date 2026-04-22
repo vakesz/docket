@@ -5,6 +5,7 @@ and applies each one live as the user moves through the list. Enter saves
 the choice to `config.ui.theme` and closes; Esc reverts to the theme that
 was active when the picker opened and closes.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar
@@ -111,4 +112,6 @@ class ThemePicker(ModalScreen[None]):
             save_config(self._paths, self._config)
         except Exception:
             # Writing config should never crash the TUI.
-            self.app.notify("Saved theme preview only — could not write config.", severity="warning")
+            self.app.notify(
+                "Saved theme preview only — could not write config.", severity="warning"
+            )

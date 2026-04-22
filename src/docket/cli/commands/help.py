@@ -22,9 +22,24 @@ COMMANDS: tuple[CommandHelp, ...] = (
     CommandHelp("sync", ("refresh",), "Refresh the local cache from the provider.", "docket sync"),
     CommandHelp("list", ("ls",), "List cached items.", "docket list --kind story"),
     CommandHelp("show", ("view",), "Show one cached item in detail.", "docket show S-42"),
-    CommandHelp("new", ("create",), "Create a new work item with a confirm step.", "docket new task --title \"Triage bug\""),
-    CommandHelp("transition", (), "Move an item using a named transition intent.", "docket transition S-42 start_work --dry-run"),
-    CommandHelp("patch", (), "Preview and apply a Markdown description update.", "docket patch S-42 --from-file body.md --dry-run"),
+    CommandHelp(
+        "new",
+        ("create",),
+        "Create a new work item with a confirm step.",
+        'docket new task --title "Triage bug"',
+    ),
+    CommandHelp(
+        "transition",
+        (),
+        "Move an item using a named transition intent.",
+        "docket transition S-42 start_work --dry-run",
+    ),
+    CommandHelp(
+        "patch",
+        (),
+        "Preview and apply a Markdown description update.",
+        "docket patch S-42 --from-file body.md --dry-run",
+    ),
     CommandHelp("serve", (), "Run the local HTTP API surface.", "docket serve"),
     CommandHelp("setup", (), "Run or resume first-time setup.", "docket setup"),
     CommandHelp("help", (), "Show commands, aliases, and examples.", "docket help"),
@@ -48,7 +63,9 @@ def help_command(
         aliases = ", ".join(command.aliases) if command.aliases else "—"
         table.add_row(command.name, aliases, command.summary)
     console.print(table)
-    console.print("\n[dim]Tip:[/dim] `docket` opens the TUI, and `docket --help` still shows Typer's built-in help.")
+    console.print(
+        "\n[dim]Tip:[/dim] `docket` opens the TUI, and `docket --help` still shows Typer's built-in help."
+    )
 
 
 def _render_topic(topic: str) -> None:

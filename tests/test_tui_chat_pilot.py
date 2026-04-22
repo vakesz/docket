@@ -7,6 +7,7 @@ Drives the chat pane via Textual's pilot against a scripted fake LLM. Verifies:
   - the token ledger updates
   - `t` starts a fresh thread (archives current + clears transcript)
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -14,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from docket.cli.tui import ItvApp, TuiContext
+from docket.cli.tui import DocketApp, TuiContext
 from docket.cli.tui.widgets.chat_pane import ChatPane
 from docket.cli.tui.widgets.item_tree import ItemTree
 from docket.core.model import Item, ItemKind, ItemState, ScopeFilters
@@ -65,7 +66,7 @@ def chat_env(tmp_path: Path):
     conn.close()
 
 
-async def _select_story(app: ItvApp, pilot) -> None:
+async def _select_story(app: DocketApp, pilot) -> None:
     tree = app.query_one(ItemTree)
     node = _find_node(tree.root, "S-1")
     assert node is not None
@@ -76,7 +77,7 @@ async def _select_story(app: ItvApp, pilot) -> None:
 async def test_streamed_text_lands_in_transcript(chat_env) -> None:
     ctx, client, _ = chat_env
     client.script = [text_turn("Hello.")]
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         await _select_story(app, pilot)
         chat = app.query_one(ChatPane)
@@ -106,7 +107,7 @@ async def test_tool_call_produces_note_line(chat_env) -> None:
         tool_turn("tc-1", "get_item", '{"id":"S-1"}'),
         text_turn("Summary."),
     ]
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         await _select_story(app, pilot)
 
@@ -125,7 +126,7 @@ async def test_tool_call_produces_note_line(chat_env) -> None:
 async def test_t_starts_new_thread(chat_env) -> None:
     ctx, client, _ = chat_env
     client.script = [text_turn("one")]
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         await _select_story(app, pilot)
         prompt = app.query_one(ChatPane).query_one("#prompt")
@@ -166,7 +167,7 @@ async def test_acceptance_checklist_mounts_from_description(tmp_path: Path) -> N
     provider = FakeProvider(items=[item])
     ctx = TuiContext(conn=conn, provider=provider, scope=ScopeFilters(), scope_key="default")
 
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         tree = app.query_one(ItemTree)
         node = _find_node(tree.root, "S-2")
@@ -184,7 +185,7 @@ async def test_acceptance_checklist_mounts_from_description(tmp_path: Path) -> N
 
 async def test_acceptance_panel_hidden_when_no_criteria(chat_env) -> None:
     ctx, _, _ = chat_env
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         await _select_story(app, pilot)
         chat = app.query_one(ChatPane)
@@ -195,7 +196,7 @@ async def test_acceptance_panel_hidden_when_no_criteria(chat_env) -> None:
 async def test_chat_disabled_without_llm(chat_env) -> None:
     ctx, _, _ = chat_env
     ctx.llm = None  # simulate --no-chat
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         await _select_story(app, pilot)
         prompt = app.query_one(ChatPane).query_one("#prompt")

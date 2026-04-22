@@ -1,10 +1,11 @@
-"""Azure DevOps provider — phase 1 read paths.
+"""Azure DevOps provider.
 
-Write paths (transition, patch_description, upload_attachment, create_item) raise
-NotImplementedError in M1 and will be implemented in M2 together with the mutation
-pipeline. This keeps the provider usable for sync and browsing without half-working
-mutations.
+Implements the full `WorkItemProvider` contract: list/get/comments, transitions,
+description patches, attachment uploads, and item creation. All writes go
+through the mutation service; the provider itself is a thin adapter around the
+Azure DevOps SDK.
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -131,7 +132,11 @@ class AzureDevOpsProvider:
             Comment(
                 id=str(c.id),
                 item_id=id,
-                author=(getattr(c.created_by, "unique_name", None) or getattr(c.created_by, "display_name", None) or "unknown"),
+                author=(
+                    getattr(c.created_by, "unique_name", None)
+                    or getattr(c.created_by, "display_name", None)
+                    or "unknown"
+                ),
                 body_md=html_to_md(c.text),
                 created_at=c.created_date,
             )
@@ -150,7 +155,9 @@ class AzureDevOpsProvider:
                 related_ids.append(int(tail))
         if not related_ids:
             return []
-        batch = wit.get_work_items(ids=related_ids, fields=list(_DEFAULT_FIELDS), error_policy="omit")
+        batch = wit.get_work_items(
+            ids=related_ids, fields=list(_DEFAULT_FIELDS), error_policy="omit"
+        )
         out: list[Item] = []
         for r in batch:
             if r is None:
@@ -168,12 +175,8 @@ class AzureDevOpsProvider:
         new_tags = merge_tags(current.tags, plan)
         patch: list[dict[str, Any]] = []
         if plan.ado_state is not None:
-            patch.append(
-                {"op": "add", "path": "/fields/System.State", "value": plan.ado_state}
-            )
-        patch.append(
-            {"op": "add", "path": "/fields/System.Tags", "value": "; ".join(new_tags)}
-        )
+            patch.append({"op": "add", "path": "/fields/System.State", "value": plan.ado_state})
+        patch.append({"op": "add", "path": "/fields/System.Tags", "value": "; ".join(new_tags)})
         wit = self._wit_client()
         raw = wit.update_work_item(document=patch, id=int(id))
         built = to_item(raw, url=self._web_url(raw.id))
@@ -196,9 +199,7 @@ class AzureDevOpsProvider:
             )
         return built
 
-    def upload_attachment(
-        self, id: str, filename: str, content: bytes, content_type: str
-    ) -> str:
+    def upload_attachment(self, id: str, filename: str, content: bytes, content_type: str) -> str:
         import io
 
         wit = self._wit_client()
@@ -244,9 +245,7 @@ class AzureDevOpsProvider:
                 {"op": "add", "path": "/fields/System.Tags", "value": "; ".join(fields.tags)}
             )
         if fields.parent_id:
-            parent_url = (
-                f"{self._org}/_apis/wit/workItems/{fields.parent_id}"
-            )
+            parent_url = f"{self._org}/_apis/wit/workItems/{fields.parent_id}"
             patch.append(
                 {
                     "op": "add",

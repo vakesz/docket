@@ -13,6 +13,7 @@ The caller is responsible for staging the proposal and opening the diff
 modal — the form only collects input. Matching the pattern keeps the
 confirm-gate invariant intact.
 """
+
 from __future__ import annotations
 
 import sqlite3
@@ -104,7 +105,9 @@ class NewItemModal(ModalScreen["NewItemRequest | None"]):
             yield VerticalScroll(id="duplicates")
             yield Static("description (markdown)", id="desc-label")
             desc = TextArea("", id="desc")
-            desc.tooltip = "Describe the work in Markdown. This is the main body the reviewer will see."
+            desc.tooltip = (
+                "Describe the work in Markdown. This is the main body the reviewer will see."
+            )
             yield desc
             yield Static("parent id · assignee · tags (comma-separated)", id="meta-label")
             yield Input(placeholder="parent id (optional)", id="parent")
@@ -140,9 +143,7 @@ class NewItemModal(ModalScreen["NewItemRequest | None"]):
             if item is None:
                 continue
             # Escape id in brackets so Rich doesn't treat it as markup.
-            container.mount(
-                Static(f"  · \\[{item.id}] {item.title} — {item.state.value}")
-            )
+            container.mount(Static(f"  · \\[{item.id}] {item.title} — {item.state.value}"))
 
     def action_submit(self) -> None:
         kind_value = self.query_one("#kind", Select).value

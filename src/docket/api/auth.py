@@ -4,6 +4,7 @@ The server carries a single configured token. Compared with `secrets.compare_dig
 so we don't leak the correct token through timing. A non-empty token is mandatory —
 if the config is empty we refuse to bind at all (enforced in `app.create_app`).
 """
+
 from __future__ import annotations
 
 import secrets

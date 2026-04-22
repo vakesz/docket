@@ -7,6 +7,7 @@ background sync don't raise.
 
 `list_pinned_items` does the join to `items`; missing ids are silently
 excluded (see `schema/v6.py` for why we don't FK)."""
+
 from __future__ import annotations
 
 import sqlite3

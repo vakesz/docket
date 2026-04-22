@@ -11,6 +11,7 @@ Satisfies `WorkItemProvider` without network access. Useful for:
 Items are stored in a dict keyed by `id`, which for GitHub is
 `"{owner}/{repo}#{number}"` by convention. Seed data is optional.
 """
+
 from __future__ import annotations
 
 import itertools
@@ -115,9 +116,7 @@ class GitHubStubProvider:
         self._replace(updated)
         return updated
 
-    def upload_attachment(
-        self, id: str, filename: str, content: bytes, content_type: str
-    ) -> str:
+    def upload_attachment(self, id: str, filename: str, content: bytes, content_type: str) -> str:
         # GitHub REST doesn't support direct attachment upload — real
         # implementations typically post a comment with a pre-signed URL.
         # For the stub we just record the call and return a synthetic URL.

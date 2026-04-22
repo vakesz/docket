@@ -4,6 +4,7 @@ The agent loop is synchronous, so we run `send_user_message` in a worker thread
 and pipe its `on_delta` / `on_message` callbacks back onto an asyncio.Queue. A
 small sse-starlette generator drains the queue and emits events. Terminal
 events — `done` on success, `error` on failure — let clients close cleanly."""
+
 from __future__ import annotations
 
 import asyncio
@@ -137,9 +138,7 @@ async def _stream_turn(
 
     def on_delta(delta: StreamDelta) -> None:
         if delta.text:
-            _put_threadsafe(
-                ServerSentEvent(event="delta", data=json.dumps({"text": delta.text}))
-            )
+            _put_threadsafe(ServerSentEvent(event="delta", data=json.dumps({"text": delta.text})))
 
     def on_message(msg: ChatMessage) -> None:
         _put_threadsafe(
@@ -156,7 +155,9 @@ async def _stream_turn(
             _put_threadsafe(
                 ServerSentEvent(
                     event="proposal",
-                    data=json.dumps(ProposalDTO.from_core(pending.proposal).model_dump(mode="json")),
+                    data=json.dumps(
+                        ProposalDTO.from_core(pending.proposal).model_dump(mode="json")
+                    ),
                 )
             )
 
@@ -165,8 +166,12 @@ async def _stream_turn(
     def run_turn() -> None:
         try:
             result = conversation_service.send_user_message(
-                conn, agent, item_id, text,
-                on_delta=on_delta, on_message=on_message,
+                conn,
+                agent,
+                item_id,
+                text,
+                on_delta=on_delta,
+                on_message=on_message,
                 compaction_threshold_tokens=threshold,
             )
             _put_threadsafe(

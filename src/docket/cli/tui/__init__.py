@@ -1,3 +1,3 @@
-from docket.cli.tui.app import ItvApp, TuiContext
+from docket.cli.tui.app import DocketApp, TuiContext
 
-__all__ = ["ItvApp", "TuiContext"]
+__all__ = ["DocketApp", "TuiContext"]

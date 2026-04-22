@@ -4,6 +4,7 @@ Covers both patterns (`- [ ]` task list anywhere, `## Acceptance Criteria`
 heading with plain bullets) plus the precedence rule and edge cases that
 showed up while hand-writing real tickets.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -17,12 +18,7 @@ def test_empty_and_none_return_empty_list() -> None:
 
 
 def test_task_list_items_are_extracted_with_state() -> None:
-    md = (
-        "## Notes\n"
-        "- [ ] ship the migration\n"
-        "- [x] add the feature flag\n"
-        "- [X] write the runbook\n"
-    )
+    md = "## Notes\n- [ ] ship the migration\n- [x] add the feature flag\n- [X] write the runbook\n"
     assert extract_acceptance_criteria(md) == [
         AcceptanceCriterion(text="ship the migration", checked=False),
         AcceptanceCriterion(text="add the feature flag", checked=True),
@@ -33,13 +29,7 @@ def test_task_list_items_are_extracted_with_state() -> None:
 def test_task_list_wins_over_acceptance_section() -> None:
     """If a ticket has both styles, the explicit task-list wins — it's the
     most durable signal and already carries check state."""
-    md = (
-        "## Acceptance Criteria\n"
-        "- plain bullet ignored\n"
-        "\n"
-        "## Elsewhere\n"
-        "- [ ] real criterion\n"
-    )
+    md = "## Acceptance Criteria\n- plain bullet ignored\n\n## Elsewhere\n- [ ] real criterion\n"
     assert extract_acceptance_criteria(md) == [
         AcceptanceCriterion(text="real criterion", checked=False),
     ]
@@ -68,22 +58,12 @@ def test_acceptance_heading_is_case_and_colon_tolerant() -> None:
 
 
 def test_section_ends_on_next_heading_or_prose() -> None:
-    md = (
-        "## Acceptance Criteria\n"
-        "- first\n"
-        "## Notes\n"
-        "- should-not-be-included\n"
-    )
+    md = "## Acceptance Criteria\n- first\n## Notes\n- should-not-be-included\n"
     assert [c.text for c in extract_acceptance_criteria(md)] == ["first"]
 
 
 def test_section_ends_on_non_bullet_prose() -> None:
-    md = (
-        "## Acceptance Criteria\n"
-        "- first\n"
-        "Some prose that ends the section.\n"
-        "- not included\n"
-    )
+    md = "## Acceptance Criteria\n- first\nSome prose that ends the section.\n- not included\n"
     assert [c.text for c in extract_acceptance_criteria(md)] == ["first"]
 
 

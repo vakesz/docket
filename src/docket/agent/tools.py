@@ -7,8 +7,9 @@ Tools are Python callables the model can invoke. Each tool declares:
 
 Handlers return a string that becomes the tool-message content. Handlers
 must be side-effect free for read-only tools; mutations go through
-`mutation_service.propose` and come back in M5.
+`mutation_service.propose` and return once the user confirms the diff.
 """
+
 from __future__ import annotations
 
 import json
@@ -31,7 +32,7 @@ class ToolRegistry:
     """Ordered registry of tools.
 
     Order matters for cache stability — the tools list is part of the
-    prompt prefix, so adding/removing tools invalidates Foundry's cache
+    prompt prefix, so adding/removing tools invalidates the LLM's prompt cache
     for every ticket. Treat the registry as append-only in hot paths.
     """
 

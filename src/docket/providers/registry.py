@@ -10,6 +10,7 @@ WorkItemProvider`. The config is whatever the provider declared under its
 `config.toml` entry — the registry does no validation, each factory owns
 schema-checking its own section.
 """
+
 from __future__ import annotations
 
 import importlib.metadata
@@ -90,9 +91,7 @@ def _register_builtins() -> None:
         organization = config.get("organization")
         project = config.get("project")
         if not organization or not project:
-            raise ValueError(
-                "azure_devops provider requires 'organization' and 'project'"
-            )
+            raise ValueError("azure_devops provider requires 'organization' and 'project'")
         return AzureDevOpsProvider(
             organization_url=str(organization),
             project=str(project),

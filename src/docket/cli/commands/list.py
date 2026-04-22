@@ -12,7 +12,9 @@ console = Console()
 
 
 def list_command(
-    kind: str | None = typer.Option(None, "--kind", help="Filter by kind: epic, feature, story, task, bug."),
+    kind: str | None = typer.Option(
+        None, "--kind", help="Filter by kind: epic, feature, story, task, bug."
+    ),
     show_archived: bool = typer.Option(False, "--archived", help="Include archived items."),
 ) -> None:
     """List items from the local cache."""

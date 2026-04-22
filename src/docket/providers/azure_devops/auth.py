@@ -31,7 +31,15 @@ def get_ado_bearer_token() -> str:
     """
     try:
         result = subprocess.run(
-            [_az_path(), "account", "get-access-token", "--resource", ADO_RESOURCE_ID, "-o", "json"],
+            [
+                _az_path(),
+                "account",
+                "get-access-token",
+                "--resource",
+                ADO_RESOURCE_ID,
+                "-o",
+                "json",
+            ],
             capture_output=True,
             text=True,
             check=True,

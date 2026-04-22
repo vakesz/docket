@@ -103,9 +103,7 @@ class FakeProvider:
         self._replace(updated)
         return updated
 
-    def upload_attachment(
-        self, id: str, filename: str, content: bytes, content_type: str
-    ) -> str:
+    def upload_attachment(self, id: str, filename: str, content: bytes, content_type: str) -> str:
         self.uploaded.append((id, filename, content))
         return f"https://fake/attachments/{filename}"
 

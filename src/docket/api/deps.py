@@ -4,13 +4,14 @@ The API is a thin adapter: connection, provider, LLM, proposal store, and the
 (optional) agent loop all live on `app.state`, assembled in `create_app`. These
 helpers give route handlers typed access without importing `app` back into
 themselves."""
+
 from __future__ import annotations
 
 import sqlite3
 
 from fastapi import HTTPException, Request, status
 
-from docket.agent.foundry_client import LlmClient
+from docket.agent.llm_client import LlmClient
 from docket.agent.loop import AgentLoop
 from docket.api.runtime import RuntimeState
 from docket.config.paths import Paths

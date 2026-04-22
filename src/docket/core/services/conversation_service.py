@@ -8,6 +8,7 @@ Responsibilities:
 
 Keeps the TUI / HTTP surfaces thin: they call `send_user_message` and get
 back the full `AgentTurn` plus the persisted conversation id."""
+
 from __future__ import annotations
 
 import sqlite3

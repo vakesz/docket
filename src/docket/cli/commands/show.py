@@ -24,7 +24,7 @@ def show_command(id: str = typer.Argument(..., help="Work item ID.")) -> None:
             f"id={item.id}  kind={item.kind.value}  state={item.state.value}  "
             f"assignee={item.assignee or '—'}  tags={', '.join(item.tags) or '—'}"
         )
-        console.print(Panel.fit(header, title=f"ITV {item.id}"))
+        console.print(Panel.fit(header, title=f"Docket {item.id}"))
         if item.description_md.strip():
             console.print(Markdown(item.description_md))
         comments = comment_repo.list_comments(ctx.conn, id)

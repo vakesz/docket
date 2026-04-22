@@ -1,12 +1,10 @@
 """Bottom-docked status bar for the main TUI.
 
 Renders a single line with dot-separated segments: provider · scope ·
-last-sync · offline · streaming · cost · read-only. Later milestones fill
-in the pieces that are placeholders today (token/cost from the chat pane,
-offline state from the sync service, read-only from the CLI flag), but
-the widget is shaped so that wiring them is just `bar.set_*(value)` from
-the app.
+last-sync · offline · streaming · cost · read-only. The app wires each
+segment by assigning to the reactive attributes on this widget.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime

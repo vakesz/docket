@@ -3,6 +3,7 @@
 Switching is session-scoped — we do *not* persist to `config.toml`. This
 matches the TUI's palette-driven provider switch. To permanently change the
 default provider, edit `active_provider` via `PATCH /settings`."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -55,8 +56,7 @@ def set_active_provider(
     except KeyError as e:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
-            f"Unknown provider '{payload.key}' "
-            f"(known: {sorted(runtime.providers)})",
+            f"Unknown provider '{payload.key}' (known: {sorted(runtime.providers)})",
         ) from e
     return _to_dto(runtime, runtime.provider_key)
 

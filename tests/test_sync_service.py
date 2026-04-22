@@ -13,9 +13,15 @@ from tests.fakes.provider import FakeProvider
 def _item(id: str, updated: datetime, *, archived: bool = False) -> Item:
     raw: dict[str, object] = {"archived": True} if archived else {}
     return Item(
-        id=id, kind=ItemKind.STORY, title=f"i{id}", description_md="",
-        state=ItemState.ACTIVE, assignee=None, parent_id=None,
-        updated_at=updated, provider_raw=raw,
+        id=id,
+        kind=ItemKind.STORY,
+        title=f"i{id}",
+        description_md="",
+        state=ItemState.ACTIVE,
+        assignee=None,
+        parent_id=None,
+        updated_at=updated,
+        provider_raw=raw,
     )
 
 

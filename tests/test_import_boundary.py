@@ -3,6 +3,7 @@ do not import provider-specific modules directly. The CLI is a known exception â
 constructs providers by name and therefore imports the concrete implementation; the
 test excludes it explicitly. Breaking this test means a provider-specific concept
 has leaked into provider-neutral code."""
+
 from __future__ import annotations
 
 from pathlib import Path

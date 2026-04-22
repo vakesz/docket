@@ -5,6 +5,7 @@ as a set of prefix-matched terms implicitly AND'd together — this matches the
 type-as-you-filter UX we want in the TUI's left pane without requiring users
 to know FTS5 syntax.
 """
+
 from __future__ import annotations
 
 import re

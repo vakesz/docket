@@ -1,4 +1,5 @@
 """Scope listing and active-scope switching."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status

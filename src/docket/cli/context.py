@@ -1,5 +1,6 @@
 """Shared bootstrap for CLI commands. Each command calls `prepare()` to get a ready-to-use
 context (paths, config, DB connection, providers). Keeps command bodies short and uniform."""
+
 from __future__ import annotations
 
 import sqlite3
@@ -44,9 +45,7 @@ class Context:
     def provider_entry(self, name: str | None = None) -> ProviderEntry:
         key = name or self.active_provider
         if key not in self.config.providers:
-            raise KeyError(
-                f"unknown provider '{key}' (known: {sorted(self.config.providers)})"
-            )
+            raise KeyError(f"unknown provider '{key}' (known: {sorted(self.config.providers)})")
         return self.config.providers[key]
 
     def scope_filter(self, name: str | None = None, *, provider: str | None = None) -> ScopeFilter:
@@ -59,7 +58,9 @@ class Context:
             )
         return entry.scopes[key]
 
-    def scope_filters(self, name: str | None = None, *, provider: str | None = None) -> ScopeFilters:
+    def scope_filters(
+        self, name: str | None = None, *, provider: str | None = None
+    ) -> ScopeFilters:
         sf = self.scope_filter(name, provider=provider)
         return ScopeFilters(
             team=sf.team,
@@ -101,8 +102,10 @@ def prepare() -> Context:
             # it could actually build.
             continue
 
-    active = config.active_provider if config.active_provider in providers else (
-        next(iter(providers), "")
+    active = (
+        config.active_provider
+        if config.active_provider in providers
+        else (next(iter(providers), ""))
     )
     return Context(
         paths=paths,

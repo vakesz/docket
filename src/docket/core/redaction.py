@@ -16,6 +16,7 @@ Every hit is replaced with `[REDACTED:<tag>]` so the transcript stays readable
 and a reviewer can see which check fired. Ordering matters: the PEM block
 pattern runs first because its body would otherwise trigger other regexes.
 """
+
 from __future__ import annotations
 
 import re

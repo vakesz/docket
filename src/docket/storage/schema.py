@@ -4,6 +4,7 @@ Single-file schema. `init_db()` runs every statement under `IF NOT EXISTS`
 so reopening an existing database is a no-op; creating a new one installs
 the full shape in one transaction.
 """
+
 from __future__ import annotations
 
 APPLICATION_ID = 0x49545600

@@ -4,6 +4,7 @@ The agent exercises this flow too (via the in-process mutating tools), so these
 routes are a thin mirror that lets a headless API caller drive the same pipeline.
 Proposals land in the shared `ProposalStore`; `/confirm` hands them to
 `mutation_service.confirm`."""
+
 from __future__ import annotations
 
 import base64
@@ -78,7 +79,10 @@ def propose_attachment(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Invalid base64 content: {e}") from e
     try:
         proposal = mutation_service.propose_attachment(
-            conn, item_id, filename=payload.filename, content=content,
+            conn,
+            item_id,
+            filename=payload.filename,
+            content=content,
             content_type=payload.content_type,
         )
     except KeyError as e:

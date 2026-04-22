@@ -89,11 +89,7 @@ def test_rejects_non_json(env) -> None:
 
 def test_rejects_bad_shapes(env) -> None:
     conn, item = env
-    payload = (
-        '{"intent": "start_work", '
-        '"description_patch_md": 42, '
-        '"open_questions": []}'
-    )
+    payload = '{"intent": "start_work", "description_patch_md": 42, "open_questions": []}'
     llm = FakeLlmClient(script=[text_turn(payload)])
     with pytest.raises(SuggestionError):
         suggestion_service.suggest_next_action(conn, llm, item)

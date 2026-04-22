@@ -3,9 +3,10 @@
 Registers the app's actions with Textual's built-in `Ctrl+P` palette so the
 user can discover and trigger them by name (with fuzzy search) without
 memorizing keybinds. Each command delegates to an existing `action_*`
-method on `ItvApp` — the palette is a discoverability layer, not a second
+method on `DocketApp` — the palette is a discoverability layer, not a second
 home for behavior.
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -16,7 +17,7 @@ from textual.command import DiscoveryHit, Hit, Hits, Provider
 from docket.core.model import TransitionIntent
 
 if TYPE_CHECKING:
-    from docket.cli.tui.app import ItvApp
+    from docket.cli.tui.app import DocketApp
 
 _INTENT_LABELS: dict[TransitionIntent, str] = {
     TransitionIntent.START_WORK: "Start work",
@@ -49,7 +50,7 @@ class DocketCommands(Provider):
             yield DiscoveryHit(display=label, command=callback, help=help_text)
 
     def _commands(self) -> list[tuple[str, str, Callable[[], None]]]:
-        app: ItvApp = self.app  # type: ignore[assignment]
+        app: DocketApp = self.app  # type: ignore[assignment]
         commands: list[tuple[str, str, Callable[[], None]]] = [
             ("Show help", "Open the shortcut and workflow guide.", app.action_show_help),
             ("Open settings", "Edit config.toml from inside the app.", app.action_open_settings),
@@ -147,15 +148,15 @@ class DocketCommands(Provider):
         return commands
 
 
-def _make_transition_callback(app: ItvApp, intent: TransitionIntent) -> Callable[[], None]:
+def _make_transition_callback(app: DocketApp, intent: TransitionIntent) -> Callable[[], None]:
     """Bind the intent into a zero-arg closure so the palette's command slot
     (which only accepts `Callable[[], None]`) can still reach the right one."""
     return lambda: app.action_transition(intent.value)
 
 
-def _make_switch_view_callback(app: ItvApp, name: str) -> Callable[[], None]:
+def _make_switch_view_callback(app: DocketApp, name: str) -> Callable[[], None]:
     return lambda: app.action_switch_view(name)
 
 
-def _make_switch_provider_callback(app: ItvApp, name: str) -> Callable[[], None]:
+def _make_switch_provider_callback(app: DocketApp, name: str) -> Callable[[], None]:
     return lambda: app.action_switch_provider(name)

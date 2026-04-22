@@ -4,6 +4,7 @@ Pins survive scope and provider switches — the `watchlist` table is keyed by
 item id, not scoped. Pin/unpin are idempotent; missing items 404 on read but
 return 204 on write (matches the TUI's behaviour where you can pin an id
 before it lands in the cache)."""
+
 from __future__ import annotations
 
 import sqlite3

@@ -98,7 +98,8 @@ def _format_meta(item: Item) -> str:
     if item.updated_at:
         updated = item.updated_at.isoformat()
         lines.append(
-            f"[dim]Updated[/dim] {updated}" + (f"  ·  [dim]By[/dim] {changed_by}" if changed_by else "")
+            f"[dim]Updated[/dim] {updated}"
+            + (f"  ·  [dim]By[/dim] {changed_by}" if changed_by else "")
         )
     if created:
         lines.append(f"[dim]Created[/dim] {created}")

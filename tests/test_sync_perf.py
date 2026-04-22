@@ -5,6 +5,7 @@ under CI. Instead we assert the shape of the work: bulk upserts must go
 through a single `executemany`, not N individual `execute` calls. This lets
 us notice if a well-meaning refactor puts the per-item loop back.
 """
+
 from __future__ import annotations
 
 import sqlite3

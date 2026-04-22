@@ -11,6 +11,7 @@ Layout:
 The subcommands don't trigger the wizard — they edit config.toml in place so
 adding a second provider (e.g. github_stub) doesn't re-run az login or full
 sync."""
+
 from __future__ import annotations
 
 import typer
@@ -31,9 +32,7 @@ setup_app.add_typer(provider_app, name="provider")
 @setup_app.callback()
 def _setup_root(
     ctx: typer.Context,
-    step: str | None = typer.Option(
-        None, "--step", help="Jump directly to a wizard step."
-    ),
+    step: str | None = typer.Option(None, "--step", help="Jump directly to a wizard step."),
 ) -> None:
     """Without a subcommand, run (or re-run) the first-time setup wizard."""
     if ctx.invoked_subcommand is None:

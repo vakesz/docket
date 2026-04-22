@@ -1,6 +1,6 @@
 """Prompt assembly.
 
-Foundry caches on exact prefix match, so we keep the prefix layout stable:
+OpenAI-compatible endpoints cache on exact prefix match, so we keep the prefix layout stable:
   [system: role + item-kind template]
   [ticket snapshot: title, metadata, description, comments]
   --- cacheable boundary ---
@@ -17,6 +17,7 @@ The loader reads file mtimes each call, so edits are picked up on the next
 agent turn without restarting the app. Cache invalidation is keyed on
 (path, mtime_ns); re-reads only happen when a file actually changed.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

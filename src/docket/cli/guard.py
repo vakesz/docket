@@ -1,4 +1,5 @@
 """Shared CLI guards — things every mutation command checks before running."""
+
 from __future__ import annotations
 
 import typer

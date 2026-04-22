@@ -49,19 +49,19 @@ def load_env(paths: Paths) -> None:
         load_dotenv(paths.env_file, override=False)
 
 
-def get_foundry_api_key() -> str | None:
+def get_llm_api_key() -> str | None:
     return os.environ.get("AZURE_OPENAI_API_KEY")
 
 
-def get_foundry_endpoint() -> str | None:
+def get_llm_endpoint() -> str | None:
     return os.environ.get("AZURE_OPENAI_ENDPOINT") or None
 
 
-def get_foundry_deployment() -> str | None:
+def get_llm_deployment() -> str | None:
     return os.environ.get("AZURE_OPENAI_DEPLOYMENT") or None
 
 
-def get_foundry_api_version() -> str | None:
+def get_llm_api_version() -> str | None:
     return os.environ.get("AZURE_OPENAI_API_VERSION") or None
 
 

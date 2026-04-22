@@ -1,6 +1,7 @@
 """Agent-side types. These are intentionally SDK-agnostic so a fake LLM
-client can produce the same shapes as the real Foundry client without
+client can produce the same shapes as the real LLM client without
 importing `openai`."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

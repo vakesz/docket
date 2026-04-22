@@ -13,6 +13,7 @@ terse diff so the next turn has grounding, and (c) let the TUI repaint.
 This module is pure (no Textual imports) so it can be called from the TUI's
 background worker and unit-tested with a FakeProvider.
 """
+
 from __future__ import annotations
 
 import sqlite3

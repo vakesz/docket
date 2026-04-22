@@ -10,6 +10,7 @@ The UI picks up the pending proposal, shows it to the user, and either
 confirms (→ `mutation_service.confirm`) or discards it. The model sees only
 "pending_confirmation" and must not assume the change took effect.
 """
+
 from __future__ import annotations
 
 import json
@@ -221,7 +222,10 @@ def register_mutating_tools(
         parameters={
             "type": "object",
             "properties": {
-                "id": {"type": "string", "description": "Item id; defaults to the currently focused item."},
+                "id": {
+                    "type": "string",
+                    "description": "Item id; defaults to the currently focused item.",
+                },
             },
         },
         handler=attach_transcript,

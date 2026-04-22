@@ -4,6 +4,7 @@ The app is a pure adapter: it takes an already-wired SQLite connection,
 provider, optional LLM client, and a shared proposal store, and exposes them
 over HTTP. Production callers build the dependencies in `docket serve`; tests
 build them with fakes."""
+
 from __future__ import annotations
 
 import sqlite3
@@ -11,7 +12,7 @@ from collections.abc import Callable
 
 from fastapi import Depends, FastAPI
 
-from docket.agent.foundry_client import LlmClient
+from docket.agent.llm_client import LlmClient
 from docket.agent.loop import AgentLoop
 from docket.agent.mutating_tools import register_mutating_tools
 from docket.agent.tool_defs import register_readonly_tools

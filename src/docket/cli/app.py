@@ -3,8 +3,8 @@ from __future__ import annotations
 import typer
 from rich.console import Console
 
-from docket.cli.commands.help_cmd import help_command
-from docket.cli.commands.list_cmd import list_command
+from docket.cli.commands.help import help_command
+from docket.cli.commands.list import list_command
 from docket.cli.commands.new import new_command
 from docket.cli.commands.open import open_command, run_open_tui
 from docket.cli.commands.patch import patch_command

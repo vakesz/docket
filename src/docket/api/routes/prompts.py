@@ -4,6 +4,7 @@ prompts.
 Writes go to `$XDG_CONFIG_HOME/docket/prompts/<filename>`. The existing
 mtime-keyed loader cache in `agent/prompt.py` picks up edits on the next
 chat turn without a restart — nothing for this module to do there."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status

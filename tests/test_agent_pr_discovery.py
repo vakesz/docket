@@ -1,12 +1,13 @@
 """`find_related_prs` agent tool gating.
 
-The plan (§M16) says: providers that can't search PRs return
-`NotImplementedError` and the tool is hidden in the agent's registry so
-the model never hallucinates PR URLs.
+Contract: providers that can't search PRs raise `NotImplementedError` and
+the tool is hidden from the agent registry so the model never hallucinates
+PR URLs.
 
 We exercise both directions — provider with support registers the tool
 and the tool maps results faithfully; provider without support does not
 register the tool."""
+
 from __future__ import annotations
 
 import json
@@ -48,17 +49,13 @@ def test_tool_hidden_when_provider_lacks_support(tmp_path: Path) -> None:
 
 def test_tool_registered_when_provider_supports_it(tmp_path: Path) -> None:
     registry = ToolRegistry()
-    register_readonly_tools(
-        registry, conn=_fresh_conn(tmp_path), provider=_PrDiscoveringProvider()
-    )
+    register_readonly_tools(registry, conn=_fresh_conn(tmp_path), provider=_PrDiscoveringProvider())
     assert "find_related_prs" in registry
 
 
 def test_tool_maps_prmatch_list_to_json(tmp_path: Path) -> None:
     registry = ToolRegistry()
-    register_readonly_tools(
-        registry, conn=_fresh_conn(tmp_path), provider=_PrDiscoveringProvider()
-    )
+    register_readonly_tools(registry, conn=_fresh_conn(tmp_path), provider=_PrDiscoveringProvider())
     out = registry.dispatch("find_related_prs", {"id": "item-1", "title_keywords": ["login"]})
     data = json.loads(out)
     assert len(data) == 1
@@ -88,8 +85,6 @@ def test_not_implemented_error_maps_to_soft_error(tmp_path: Path) -> None:
             raise NotImplementedError
 
     registry = ToolRegistry()
-    register_readonly_tools(
-        registry, conn=_fresh_conn(tmp_path), provider=_UnsupportedProvider()
-    )
+    register_readonly_tools(registry, conn=_fresh_conn(tmp_path), provider=_UnsupportedProvider())
     out = registry.dispatch("find_related_prs", {"id": "item-1"})
     assert "does not support" in json.loads(out)["error"]

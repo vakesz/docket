@@ -6,6 +6,7 @@ checks: that the triggers keep the FTS row in sync when the underlying
 item or comment changes, and that malformed user input falls back to LIKE
 instead of blowing up.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -113,9 +114,7 @@ def test_comment_delete_invalidates_match(tmp_path: Path) -> None:
     conn = init_db(tmp_path / "t.db")
     with transaction(conn):
         item_repo.upsert_item(conn, _mk("1", title="t1"))
-        comment_repo.replace_comments_for_item(
-            conn, "1", [_comment("c1", "1", "unique-token-xyz")]
-        )
+        comment_repo.replace_comments_for_item(conn, "1", [_comment("c1", "1", "unique-token-xyz")])
     assert search_repo.search(conn, "unique-token-xyz") == ["1"]
     with transaction(conn):
         comment_repo.replace_comments_for_item(conn, "1", [])
@@ -132,5 +131,3 @@ def test_special_chars_dont_crash(tmp_path: Path) -> None:
     assert search_repo.search(conn, "AB-123") == ["1"]
     # Double-quote should be stripped, not blow up.
     assert search_repo.search(conn, '"handler') == ["1"]
-
-

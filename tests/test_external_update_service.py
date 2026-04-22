@@ -14,8 +14,14 @@ from docket.storage.repos import conversation_repo, item_repo, message_repo
 from tests.fakes.provider import FakeProvider
 
 
-def _item(*, id: str = "S-1", title: str = "Login", state: ItemState = ItemState.NEW,
-          updated: datetime | None = None, description: str = "Add login.") -> Item:
+def _item(
+    *,
+    id: str = "S-1",
+    title: str = "Login",
+    state: ItemState = ItemState.NEW,
+    updated: datetime | None = None,
+    description: str = "Add login.",
+) -> Item:
     return Item(
         id=id,
         kind=ItemKind.STORY,

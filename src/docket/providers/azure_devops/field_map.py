@@ -1,4 +1,5 @@
 """Convert raw ADO work-item dicts into canonical Item instances and vice versa."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -72,7 +73,11 @@ def _attachments(relations: Any) -> list[Attachment]:
         if rel_type != "AttachedFile":
             continue
         url = getattr(rel, "url", None) or (rel.get("url") if isinstance(rel, dict) else None)
-        attrs = getattr(rel, "attributes", None) or (rel.get("attributes") if isinstance(rel, dict) else None) or {}
+        attrs = (
+            getattr(rel, "attributes", None)
+            or (rel.get("attributes") if isinstance(rel, dict) else None)
+            or {}
+        )
         name = attrs.get("name") if isinstance(attrs, dict) else getattr(attrs, "name", None)
         out.append(Attachment(filename=name or "attachment", url=url))
     return out

@@ -61,10 +61,20 @@ def test_comments_replace_and_list(tmp_path: Path) -> None:
     conn = init_db(tmp_path / "t.db")
     with transaction(conn):
         item_repo.upsert_item(conn, _make_item("1"))
-    c1 = Comment(id="c1", item_id="1", author="a", body_md="first",
-                 created_at=datetime(2026, 4, 21, 10, 1, tzinfo=UTC))
-    c2 = Comment(id="c2", item_id="1", author="b", body_md="second",
-                 created_at=datetime(2026, 4, 21, 10, 2, tzinfo=UTC))
+    c1 = Comment(
+        id="c1",
+        item_id="1",
+        author="a",
+        body_md="first",
+        created_at=datetime(2026, 4, 21, 10, 1, tzinfo=UTC),
+    )
+    c2 = Comment(
+        id="c2",
+        item_id="1",
+        author="b",
+        body_md="second",
+        created_at=datetime(2026, 4, 21, 10, 2, tzinfo=UTC),
+    )
     with transaction(conn):
         comment_repo.replace_comments_for_item(conn, "1", [c1, c2])
     got = comment_repo.list_comments(conn, "1")

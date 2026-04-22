@@ -3,6 +3,7 @@
 The module only talks to ADO via `requests`, so we stub the HTTP boundary
 rather than hitting the network. A custom fake session lets each test script
 exactly which URL returns which payload, including error paths."""
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -37,7 +38,9 @@ class FakeHttp:
     """Route URL prefixes to canned responses. Records every call for assertions."""
 
     routes: dict[str, FakeResponse] = field(default_factory=dict)
-    calls: list[tuple[str, Mapping[str, Any] | None, Mapping[str, str]]] = field(default_factory=list)
+    calls: list[tuple[str, Mapping[str, Any] | None, Mapping[str, str]]] = field(
+        default_factory=list
+    )
 
     def get(self, url: str, *, params=None, headers=None, timeout=None) -> FakeResponse:
         self.calls.append((url, params, headers or {}))
@@ -74,7 +77,7 @@ def test_list_orgs_returns_refs_from_accounts_api(http: FakeHttp) -> None:
             status_code=200,
             payload={
                 "value": [
-                    {"accountName": "sthungary"},
+                    {"accountName": "contoso"},
                     {"accountName": "otherco"},
                     {"displayName": "no-name-here"},  # filtered
                 ]
@@ -83,7 +86,7 @@ def test_list_orgs_returns_refs_from_accounts_api(http: FakeHttp) -> None:
     }
     orgs = discover.list_orgs()
     assert orgs == [
-        OrgRef(name="sthungary", url="https://dev.azure.com/sthungary"),
+        OrgRef(name="contoso", url="https://dev.azure.com/contoso"),
         OrgRef(name="otherco", url="https://dev.azure.com/otherco"),
     ]
     # Authorization header flows into every call.
@@ -116,76 +119,76 @@ def test_list_orgs_errors_on_http_failure(http: FakeHttp) -> None:
 
 def test_list_projects(http: FakeHttp) -> None:
     http.routes = {
-        "https://dev.azure.com/sthungary/_apis/projects": FakeResponse(
+        "https://dev.azure.com/contoso/_apis/projects": FakeResponse(
             status_code=200,
             payload={
                 "value": [
-                    {"id": "p1", "name": "aicore"},
+                    {"id": "p1", "name": "platform"},
                     {"id": "p2", "name": "other"},
                     {"id": None, "name": "ignored"},
                 ]
             },
         ),
     }
-    projects = discover.list_projects("https://dev.azure.com/sthungary")
-    assert projects == [ProjectRef(id="p1", name="aicore"), ProjectRef(id="p2", name="other")]
+    projects = discover.list_projects("https://dev.azure.com/contoso")
+    assert projects == [ProjectRef(id="p1", name="platform"), ProjectRef(id="p2", name="other")]
 
 
 def test_list_projects_strips_trailing_slash_in_org(http: FakeHttp) -> None:
     http.routes = {
-        "https://dev.azure.com/sthungary/_apis/projects": FakeResponse(
+        "https://dev.azure.com/contoso/_apis/projects": FakeResponse(
             status_code=200, payload={"value": []}
         ),
     }
-    assert discover.list_projects("https://dev.azure.com/sthungary/") == []
+    assert discover.list_projects("https://dev.azure.com/contoso/") == []
 
 
 def test_list_teams(http: FakeHttp) -> None:
     http.routes = {
-        "https://dev.azure.com/org/_apis/projects/aicore/teams": FakeResponse(
+        "https://dev.azure.com/org/_apis/projects/platform/teams": FakeResponse(
             status_code=200,
             payload={"value": [{"name": "Alpha"}, {"name": "Bravo"}, {"id": "x"}]},
         ),
     }
-    assert discover.list_teams("https://dev.azure.com/org", "aicore") == ["Alpha", "Bravo"]
+    assert discover.list_teams("https://dev.azure.com/org", "platform") == ["Alpha", "Bravo"]
 
 
 def test_classification_paths_flatten_tree(http: FakeHttp) -> None:
     tree = {
-        "name": "aicore",
+        "name": "platform",
         "children": [
             {"name": "Platform", "children": [{"name": "Core"}, {"name": "Edge"}]},
             {"name": "Research"},
         ],
     }
     http.routes = {
-        "https://dev.azure.com/org/aicore/_apis/wit/classificationnodes/Areas": FakeResponse(
+        "https://dev.azure.com/org/platform/_apis/wit/classificationnodes/Areas": FakeResponse(
             status_code=200, payload=tree
         ),
     }
-    paths = discover.list_area_paths("https://dev.azure.com/org", "aicore")
+    paths = discover.list_area_paths("https://dev.azure.com/org", "platform")
     assert paths == [
-        "aicore",
-        "aicore\\Platform",
-        "aicore\\Platform\\Core",
-        "aicore\\Platform\\Edge",
-        "aicore\\Research",
+        "platform",
+        "platform\\Platform",
+        "platform\\Platform\\Core",
+        "platform\\Platform\\Edge",
+        "platform\\Research",
     ]
 
 
 def test_iteration_paths_share_flatten_logic(http: FakeHttp) -> None:
     tree = {
-        "name": "aicore",
+        "name": "platform",
         "children": [{"name": "Sprint 42"}],
     }
     http.routes = {
-        "https://dev.azure.com/org/aicore/_apis/wit/classificationnodes/Iterations": FakeResponse(
+        "https://dev.azure.com/org/platform/_apis/wit/classificationnodes/Iterations": FakeResponse(
             status_code=200, payload=tree
         ),
     }
-    assert discover.list_iteration_paths("https://dev.azure.com/org", "aicore") == [
-        "aicore",
-        "aicore\\Sprint 42",
+    assert discover.list_iteration_paths("https://dev.azure.com/org", "platform") == [
+        "platform",
+        "platform\\Sprint 42",
     ]
 
 
@@ -200,7 +203,7 @@ def test_request_exception_wraps_as_discovery_error(monkeypatch: pytest.MonkeyPa
 
 def test_signed_in_email_returns_upn(monkeypatch: pytest.MonkeyPatch) -> None:
     class _Result:
-        stdout = '{"user": {"name": "gabor@example.com"}}'
+        stdout = '{"user": {"name": "demo@example.com"}}'
 
     monkeypatch.setattr(discover, "_az_path", lambda: "/usr/local/bin/az")
     monkeypatch.setattr(
@@ -208,7 +211,7 @@ def test_signed_in_email_returns_upn(monkeypatch: pytest.MonkeyPatch) -> None:
         "run",
         lambda *a, **kw: _Result(),
     )
-    assert discover.signed_in_email() == "gabor@example.com"
+    assert discover.signed_in_email() == "demo@example.com"
 
 
 def test_signed_in_email_returns_none_on_error(monkeypatch: pytest.MonkeyPatch) -> None:

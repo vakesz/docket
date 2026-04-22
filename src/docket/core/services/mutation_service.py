@@ -8,6 +8,7 @@ Flow:
 Dry-run short-circuits before any provider call. Successful writes refresh the
 local cache so subsequent reads match the remote state.
 """
+
 from __future__ import annotations
 
 import sqlite3
@@ -51,7 +52,10 @@ def propose_description_patch(
 
 
 def propose_attachment(
-    conn: sqlite3.Connection, item_id: str, filename: str, content: bytes,
+    conn: sqlite3.Connection,
+    item_id: str,
+    filename: str,
+    content: bytes,
     content_type: str = "text/markdown; charset=utf-8",
 ) -> AttachmentUpload:
     item = _require_cached(conn, item_id)
@@ -92,8 +96,13 @@ def confirm(
             conn.execute(
                 "INSERT INTO attachments (id, item_id, conversation_id, filename, remote_url, uploaded_at) "
                 "VALUES (?, ?, NULL, ?, ?, ?)",
-                (str(uuid.uuid4()), proposal.item.id, proposal.filename, url,
-                 datetime.now(UTC).isoformat()),
+                (
+                    str(uuid.uuid4()),
+                    proposal.item.id,
+                    proposal.filename,
+                    url,
+                    datetime.now(UTC).isoformat(),
+                ),
             )
         return MutationResult(proposal_id=proposal.id, dry_run=False, attachment_url=url)
 

@@ -8,6 +8,7 @@ The wizard uses `rich.prompt.Prompt.ask` and `rich.prompt.Confirm.ask`; we
 patch those at module level inside `setup_wizard` so every call in a test
 draws its answer from a scripted deque.
 """
+
 from __future__ import annotations
 
 from collections import deque
@@ -105,14 +106,14 @@ def test_wizard_uses_discovery_selections_end_to_end(
         setup_wizard.discover,
         "list_orgs",
         lambda: [
-            OrgRef(name="sthungary", url="https://dev.azure.com/sthungary"),
+            OrgRef(name="contoso", url="https://dev.azure.com/contoso"),
             OrgRef(name="otherco", url="https://dev.azure.com/otherco"),
         ],
     )
     monkeypatch.setattr(
         setup_wizard.discover,
         "list_projects",
-        lambda _org: [ProjectRef(id="p1", name="aicore"), ProjectRef(id="p2", name="infra")],
+        lambda _org: [ProjectRef(id="p1", name="platform"), ProjectRef(id="p2", name="infra")],
     )
     monkeypatch.setattr(
         setup_wizard.discover,
@@ -122,22 +123,22 @@ def test_wizard_uses_discovery_selections_end_to_end(
     monkeypatch.setattr(
         setup_wizard.discover,
         "list_area_paths",
-        lambda *_: ["aicore", "aicore\\Platform"],
+        lambda *_: ["platform", "platform\\Platform"],
     )
     monkeypatch.setattr(
         setup_wizard.discover,
         "list_iteration_paths",
-        lambda *_: ["aicore", "aicore\\Sprint 42"],
+        lambda *_: ["platform", "platform\\Sprint 42"],
     )
 
     _script_prompts(
         monkeypatch,
         prompt_answers=[
-            "1",  # pick org → sthungary
-            "1",  # pick project → aicore
+            "1",  # pick org → contoso
+            "1",  # pick project → platform
             "1",  # team picker → Alpha
-            "1",  # area path picker → aicore
-            "2",  # iteration path picker → aicore\Sprint 42
+            "1",  # area path picker → platform
+            "2",  # iteration path picker → platform\Sprint 42
             "1",  # assignee picker → @me
         ],
         confirm_answers=[True, True],  # scope ok; telemetry enabled
@@ -148,12 +149,12 @@ def test_wizard_uses_discovery_selections_end_to_end(
     cfg = load_config(paths)
     assert cfg.active_provider == "ado"
     entry = _ado_entry(cfg)
-    assert str(entry.config["organization"]).rstrip("/") == "https://dev.azure.com/sthungary"
-    assert entry.config["project"] == "aicore"
+    assert str(entry.config["organization"]).rstrip("/") == "https://dev.azure.com/contoso"
+    assert entry.config["project"] == "platform"
     scope = entry.scopes["default"]
     assert scope.team == "Alpha"
-    assert scope.area_path == "aicore"
-    assert scope.iteration_path == "aicore\\Sprint 42"
+    assert scope.area_path == "platform"
+    assert scope.iteration_path == "platform\\Sprint 42"
     assert scope.assignee == "@me"
 
 
@@ -165,18 +166,24 @@ def test_wizard_falls_back_when_discovery_fails(
     def _raise(*_a, **_kw):
         raise setup_wizard.DiscoveryError("no route to host")
 
-    for name in ("list_orgs", "list_projects", "list_teams", "list_area_paths", "list_iteration_paths"):
+    for name in (
+        "list_orgs",
+        "list_projects",
+        "list_teams",
+        "list_area_paths",
+        "list_iteration_paths",
+    ):
         monkeypatch.setattr(setup_wizard.discover, name, _raise)
 
     _script_prompts(
         monkeypatch,
         prompt_answers=[
-            "https://dev.azure.com/sthungary",  # org URL
-            "aicore",                           # project name
-            "",                                 # team (blank)
-            "",                                 # area
-            "",                                 # iteration
-            "1",                                # assignee picker → @me
+            "https://dev.azure.com/contoso",  # org URL
+            "platform",  # project name
+            "",  # team (blank)
+            "",  # area
+            "",  # iteration
+            "1",  # assignee picker → @me
         ],
         confirm_answers=[True, True],  # scope ok; telemetry enabled
     )
@@ -185,8 +192,8 @@ def test_wizard_falls_back_when_discovery_fails(
 
     cfg = load_config(paths)
     entry = _ado_entry(cfg)
-    assert str(entry.config["organization"]).rstrip("/") == "https://dev.azure.com/sthungary"
-    assert entry.config["project"] == "aicore"
+    assert str(entry.config["organization"]).rstrip("/") == "https://dev.azure.com/contoso"
+    assert entry.config["project"] == "platform"
     scope = entry.scopes["default"]
     assert scope.team == ""
     assert scope.area_path == ""
@@ -197,25 +204,32 @@ def test_wizard_falls_back_when_discovery_fails(
 def test_wizard_rejects_bare_org_name_then_accepts_full_url(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Regression for the MissingSchema traceback: `aicore` (not a URL) used to be
+    """Regression for the MissingSchema traceback: `platform` (not a URL) used to be
     accepted and then blow up deep in the SDK. Now it's rejected at the wizard."""
     paths = _stub_infra(monkeypatch, tmp_path)
-    for name in ("list_orgs", "list_projects", "list_teams", "list_area_paths", "list_iteration_paths"):
+    for name in (
+        "list_orgs",
+        "list_projects",
+        "list_teams",
+        "list_area_paths",
+        "list_iteration_paths",
+    ):
         monkeypatch.setattr(
-            setup_wizard.discover, name,
+            setup_wizard.discover,
+            name,
             lambda *_a, **_kw: (_ for _ in ()).throw(setup_wizard.DiscoveryError("no")),
         )
 
     _script_prompts(
         monkeypatch,
         prompt_answers=[
-            "aicore",                           # rejected — not a URL
-            "https://dev.azure.com/sthungary",  # accepted
-            "aicore",                           # project name
-            "",                                 # team
-            "",                                 # area
-            "",                                 # iteration
-            "1",                                # assignee → @me
+            "platform",  # rejected — not a URL
+            "https://dev.azure.com/contoso",  # accepted
+            "platform",  # project name
+            "",  # team
+            "",  # area
+            "",  # iteration
+            "1",  # assignee → @me
         ],
         confirm_answers=[True, True],  # scope ok; telemetry enabled
     )
@@ -223,7 +237,7 @@ def test_wizard_rejects_bare_org_name_then_accepts_full_url(
     setup_wizard.run_wizard()
     cfg = load_config(paths)
     entry = _ado_entry(cfg)
-    assert str(entry.config["organization"]).rstrip("/") == "https://dev.azure.com/sthungary"
+    assert str(entry.config["organization"]).rstrip("/") == "https://dev.azure.com/contoso"
 
 
 def test_pick_returns_sentinels_for_any_and_custom(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -237,5 +251,8 @@ def test_pick_returns_sentinels_for_any_and_custom(monkeypatch: pytest.MonkeyPat
 
     # options=["Alpha","Bravo"], any+custom → 1:Alpha 2:Bravo 3:any 4:custom
     assert setup_wizard._pick("Team", ["Alpha", "Bravo"], allow_any=True, allow_custom=True) == 1
-    assert setup_wizard._pick("Team", ["Alpha", "Bravo"], allow_any=True, allow_custom=True) == setup_wizard._ANY_SENTINEL
+    assert (
+        setup_wizard._pick("Team", ["Alpha", "Bravo"], allow_any=True, allow_custom=True)
+        == setup_wizard._ANY_SENTINEL
+    )
     assert setup_wizard._pick("Team", ["Alpha", "Bravo"], allow_any=True, allow_custom=True) == 0

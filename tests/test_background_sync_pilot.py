@@ -1,8 +1,9 @@
-"""Pilot coverage for M13: background sync, saved views, stale marker.
+"""Pilot coverage for background sync, saved views, and the stale marker.
 
 Each test stays narrow to one behavior so a breakage points at the exact
 surface. Shared fixture seeds a DB + provider with items whose `updated_at`
 timestamps are tuned for the scenario."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -10,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from docket.cli.tui import ItvApp, TuiContext
+from docket.cli.tui import DocketApp, TuiContext
 from docket.cli.tui.widgets.item_tree import ItemTree
 from docket.cli.tui.widgets.status_bar import StatusBar, _format_countdown
 from docket.config.models import Config, ProviderEntry, ScopeFilter
@@ -56,9 +57,8 @@ def _single_provider_cfg(
 ) -> Config:
     """Build a Config whose single provider entry carries the given scopes.
 
-    Centralized because every M13 test used to construct the legacy shape —
-    now we wrap the ProviderEntry boilerplate so each test still reads as
-    one specific scenario."""
+    Centralized so each test reads as one specific scenario without repeating
+    the ProviderEntry boilerplate."""
     entry = ProviderEntry(
         type="azure_devops",
         display_name="Azure DevOps",
@@ -79,14 +79,17 @@ def stale_ctx(tmp_path: Path):
         item_repo.upsert_item(conn, it)
     provider = FakeProvider(items=[fresh, stale])
     yield TuiContext(
-        conn=conn, provider=provider, scope=ScopeFilters(), scope_key="default",
+        conn=conn,
+        provider=provider,
+        scope=ScopeFilters(),
+        scope_key="default",
         stale_threshold_days=7,
     )
     conn.close()
 
 
 async def test_stale_marker_only_on_old_rows(stale_ctx) -> None:
-    app = ItvApp(stale_ctx)
+    app = DocketApp(stale_ctx)
     async with app.run_test() as pilot:
         await pilot.pause()
         tree = app.query_one(ItemTree)
@@ -103,11 +106,13 @@ async def test_stale_marker_disabled_when_threshold_zero(tmp_path: Path) -> None
     old = _mk_item("S-old", updated_at=datetime.now(UTC) - timedelta(days=365))
     item_repo.upsert_item(conn, old)
     ctx = TuiContext(
-        conn=conn, provider=FakeProvider(items=[old]),
-        scope=ScopeFilters(), scope_key="default",
+        conn=conn,
+        provider=FakeProvider(items=[old]),
+        scope=ScopeFilters(),
+        scope_key="default",
         stale_threshold_days=0,
     )
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     try:
         async with app.run_test() as pilot:
             await pilot.pause()
@@ -126,11 +131,14 @@ async def test_stale_per_provider_override(tmp_path: Path) -> None:
     provider = FakeProvider(items=[item])
     # Global default is 30 (item not stale) but this provider's override is 7.
     ctx = TuiContext(
-        conn=conn, provider=provider, scope=ScopeFilters(), scope_key="default",
+        conn=conn,
+        provider=provider,
+        scope=ScopeFilters(),
+        scope_key="default",
         stale_threshold_days=30,
         stale_threshold_by_provider={"FakeProvider": 7},
     )
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     try:
         async with app.run_test() as pilot:
             await pilot.pause()
@@ -150,13 +158,15 @@ async def test_status_bar_shows_active_view_and_next_sync(tmp_path: Path) -> Non
         active_scope="my-team",
     )
     ctx = TuiContext(
-        conn=conn, provider=FakeProvider(items=[item]),
+        conn=conn,
+        provider=FakeProvider(items=[item]),
         provider_key="ado",
-        scope=ScopeFilters(team="Team A"), scope_key="my-team",
+        scope=ScopeFilters(team="Team A"),
+        scope_key="my-team",
         background_sync_interval_seconds=300.0,
         config=cfg,
     )
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     try:
         async with app.run_test() as pilot:
             await pilot.pause()
@@ -183,12 +193,14 @@ async def test_switch_view_reloads_tree_with_new_scope(tmp_path: Path) -> None:
         },
     )
     ctx = TuiContext(
-        conn=conn, provider=FakeProvider(items=[item]),
+        conn=conn,
+        provider=FakeProvider(items=[item]),
         provider_key="ado",
-        scope=ScopeFilters(), scope_key="default",
+        scope=ScopeFilters(),
+        scope_key="default",
         config=cfg,
     )
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     try:
         async with app.run_test() as pilot:
             await pilot.pause()
@@ -207,11 +219,14 @@ async def test_switch_view_rejects_unknown_name(tmp_path: Path) -> None:
     conn = init_db(tmp_path / "docket.db")
     cfg = _single_provider_cfg(scopes={"default": ScopeFilter()})
     ctx = TuiContext(
-        conn=conn, provider=FakeProvider(items=[]),
+        conn=conn,
+        provider=FakeProvider(items=[]),
         provider_key="ado",
-        scope=ScopeFilters(), scope_key="default", config=cfg,
+        scope=ScopeFilters(),
+        scope_key="default",
+        config=cfg,
     )
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     try:
         async with app.run_test() as pilot:
             await pilot.pause()
@@ -237,11 +252,14 @@ async def test_palette_exposes_switch_view_entries(tmp_path: Path) -> None:
         },
     )
     ctx = TuiContext(
-        conn=conn, provider=FakeProvider(items=[]),
+        conn=conn,
+        provider=FakeProvider(items=[]),
         provider_key="ado",
-        scope=ScopeFilters(), scope_key="default", config=cfg,
+        scope=ScopeFilters(),
+        scope_key="default",
+        config=cfg,
     )
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     try:
         async with app.run_test() as pilot:
             await pilot.pause()
@@ -259,12 +277,14 @@ def test_provider_floor_clamps_background_sync(tmp_path: Path) -> None:
     """Regression guard on the resolver helper — no need to mount the app."""
     conn = init_db(tmp_path / "docket.db")
     ctx = TuiContext(
-        conn=conn, provider=FakeProvider(items=[]),
-        scope=ScopeFilters(), scope_key="default",
+        conn=conn,
+        provider=FakeProvider(items=[]),
+        scope=ScopeFilters(),
+        scope_key="default",
         background_sync_interval_seconds=60.0,
         background_sync_min_interval_by_provider={"FakeProvider": 900.0},
     )
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     try:
         assert app._resolved_sync_interval() == 900.0
     finally:
@@ -275,12 +295,14 @@ def test_disabled_sync_stays_disabled_despite_floor(tmp_path: Path) -> None:
     """0 means off — a floor must not revive the timer."""
     conn = init_db(tmp_path / "docket.db")
     ctx = TuiContext(
-        conn=conn, provider=FakeProvider(items=[]),
-        scope=ScopeFilters(), scope_key="default",
+        conn=conn,
+        provider=FakeProvider(items=[]),
+        scope=ScopeFilters(),
+        scope_key="default",
         background_sync_interval_seconds=0.0,
         background_sync_min_interval_by_provider={"FakeProvider": 900.0},
     )
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     try:
         assert app._resolved_sync_interval() == 0.0
     finally:

@@ -7,24 +7,28 @@ from rich.console import Console
 
 from docket.cli.context import prepare_or_wizard
 from docket.config.env import (
-    get_foundry_api_key,
-    get_foundry_api_version,
-    get_foundry_deployment,
-    get_foundry_endpoint,
+    get_llm_api_key,
+    get_llm_api_version,
+    get_llm_deployment,
+    get_llm_endpoint,
     get_read_only,
 )
 from docket.core.model import ItemKind
 
 if TYPE_CHECKING:
-    from docket.agent.foundry_client import FoundryClient
-    from docket.config.models import FoundryConfig
+    from docket.agent.llm_client import AzureOpenAIClient
+    from docket.config.models import LlmConfig
 
 console = Console()
 
 
 def open_command(
-    scope: str | None = typer.Option(None, "--scope", help="Named scope to browse (defaults to active scope)."),
-    no_chat: bool = typer.Option(False, "--no-chat", help="Skip LLM wiring; useful when Foundry is unreachable."),
+    scope: str | None = typer.Option(
+        None, "--scope", help="Named scope to browse (defaults to active scope)."
+    ),
+    no_chat: bool = typer.Option(
+        False, "--no-chat", help="Skip LLM wiring; useful when the LLM endpoint is unreachable."
+    ),
     read_only: bool = typer.Option(
         False,
         "--read-only",
@@ -62,8 +66,8 @@ def run_open_tui(
     explicit about every flag. Keeps the OptionInfo-leak bug from slipping
     back in as new flags get added — a missing positional here is a
     compile-time error rather than a runtime truthy sentinel."""
-    from docket.agent.foundry_client import LlmClient
-    from docket.cli.tui import ItvApp, TuiContext
+    from docket.agent.llm_client import LlmClient
+    from docket.cli.tui import DocketApp, TuiContext
 
     # Either the flag or DOCKET_READ_ONLY=1 enables the mode — whichever
     # comes first, same outcome.
@@ -79,9 +83,7 @@ def run_open_tui(
             )
             raise typer.Exit(code=2)
         if not ctx.providers or not provider_key:
-            console.print(
-                "[red]No provider configured[/red]. Run `docket setup` first."
-            )
+            console.print("[red]No provider configured[/red]. Run `docket setup` first.")
             raise typer.Exit(code=2)
 
         ctx.active_provider = provider_key
@@ -91,7 +93,7 @@ def run_open_tui(
 
         llm: LlmClient | None = None
         if not no_chat:
-            llm = _build_llm_client(ctx.config.foundry)
+            llm = _build_llm_client(ctx.config.llm)
 
         tui_ctx = TuiContext(
             conn=ctx.conn,
@@ -115,33 +117,35 @@ def run_open_tui(
             paths=ctx.paths,
             config=ctx.config,
         )
-        ItvApp(tui_ctx).run()
+        DocketApp(tui_ctx).run()
     finally:
         ctx.close()
 
 
-def _build_llm_client(foundry_cfg: FoundryConfig) -> FoundryClient | None:
+def _build_llm_client(llm_cfg: LlmConfig) -> AzureOpenAIClient | None:
     """Build the LLM client. `.env` wins over config.toml so users can keep all
-    Foundry settings in one place alongside the API key."""
-    api_key = get_foundry_api_key()
-    endpoint = get_foundry_endpoint() or (str(foundry_cfg.endpoint) if foundry_cfg.endpoint else None)
-    deployment = get_foundry_deployment() or foundry_cfg.deployment
-    api_version = get_foundry_api_version()
+    LLM settings in one place alongside the API key."""
+    api_key = get_llm_api_key()
+    endpoint = get_llm_endpoint() or (str(llm_cfg.endpoint) if llm_cfg.endpoint else None)
+    deployment = get_llm_deployment() or llm_cfg.deployment
+    api_version = get_llm_api_version()
     if not api_key or not endpoint:
         missing = [
-            label for label, value in (
+            label
+            for label, value in (
                 ("AZURE_OPENAI_API_KEY", api_key),
                 ("AZURE_OPENAI_ENDPOINT", endpoint),
-            ) if not value
+            )
+            if not value
         ]
         console.print(
             f"[yellow]Chat disabled[/yellow]: set {', '.join(missing)} in "
             "your .env (repo-local or ~/.config/docket/.env)."
         )
         return None
-    from docket.agent.foundry_client import FoundryClient
+    from docket.agent.llm_client import AzureOpenAIClient
 
-    return FoundryClient(
+    return AzureOpenAIClient(
         endpoint=endpoint,
         api_key=api_key,
         deployment=deployment,

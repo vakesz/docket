@@ -5,6 +5,7 @@ approves (`y`) or rejects (`n`). Verifies that only `y` routes the proposal
 through `mutation_service.confirm` and reaches the provider, while the agent
 tool itself never mutates state.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -12,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from docket.cli.tui import ItvApp, TuiContext
+from docket.cli.tui import DocketApp, TuiContext
 from docket.cli.tui.widgets.chat_pane import ChatPane
 from docket.cli.tui.widgets.diff_modal import DiffModal
 from docket.cli.tui.widgets.item_tree import ItemTree
@@ -46,7 +47,7 @@ def _find_node(node, target_id: str):
     return None
 
 
-async def _select_story(app: ItvApp, pilot) -> None:
+async def _select_story(app: DocketApp, pilot) -> None:
     tree = app.query_one(ItemTree)
     node = _find_node(tree.root, "S-1")
     assert node is not None
@@ -54,7 +55,7 @@ async def _select_story(app: ItvApp, pilot) -> None:
     await pilot.pause()
 
 
-async def _drive_agent_turn(app: ItvApp, pilot, text: str) -> None:
+async def _drive_agent_turn(app: DocketApp, pilot, text: str) -> None:
     prompt = app.query_one(ChatPane).query_one("#prompt")
     prompt.value = text
     await prompt.action_submit()
@@ -86,7 +87,7 @@ async def test_confirm_routes_through_provider(modal_env) -> None:
         tool_turn("tc-1", "propose_transition", '{"id":"S-1","intent":"start_work"}'),
         text_turn("Staged."),
     ]
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         await _select_story(app, pilot)
         await _drive_agent_turn(app, pilot, "start work on this")
@@ -111,7 +112,7 @@ async def test_reject_leaves_provider_untouched(modal_env) -> None:
         tool_turn("tc-1", "propose_transition", '{"id":"S-1","intent":"start_work"}'),
         text_turn("Staged."),
     ]
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         await _select_story(app, pilot)
         await _drive_agent_turn(app, pilot, "start work on this")
@@ -137,7 +138,7 @@ async def test_description_patch_confirm_applies_via_provider(modal_env) -> None
         ),
         text_turn("Staged."),
     ]
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         await _select_story(app, pilot)
         await _drive_agent_turn(app, pilot, "rewrite the description")
@@ -165,7 +166,7 @@ async def test_edit_action_rewrites_description_before_confirm(modal_env) -> Non
         ),
         text_turn("Staged."),
     ]
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         await _select_story(app, pilot)
         await _drive_agent_turn(app, pilot, "rewrite the description")
@@ -175,6 +176,7 @@ async def test_edit_action_rewrites_description_before_confirm(modal_env) -> Non
         await pilot.pause()
 
         from textual.widgets import TextArea
+
         editor = app.screen.query_one("#editor", TextArea)
         assert editor.text == "Agent draft."
         editor.text = "Human override."
@@ -194,7 +196,7 @@ async def test_edit_unsupported_for_transition(modal_env) -> None:
         tool_turn("tc-1", "propose_transition", '{"id":"S-1","intent":"start_work"}'),
         text_turn("Staged."),
     ]
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         await _select_story(app, pilot)
         await _drive_agent_turn(app, pilot, "start work")
@@ -214,7 +216,7 @@ async def test_agent_tool_call_alone_does_not_mutate(modal_env) -> None:
         tool_turn("tc-1", "propose_transition", '{"id":"S-1","intent":"start_work"}'),
         text_turn("Staged."),
     ]
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     async with app.run_test() as pilot:
         await _select_story(app, pilot)
         await _drive_agent_turn(app, pilot, "start work")

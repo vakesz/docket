@@ -6,6 +6,7 @@ a legal GitHub state/reason pair, and the full `WorkItemProvider` Protocol
 is satisfied structurally. If a future interface change breaks this stub
 without breaking the ADO provider, that's a signal the abstraction leaked.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -151,9 +152,7 @@ def test_mutation_pipeline_works_against_stub(tmp_path: Path) -> None:
     provider = GitHubStubProvider(issues=[issue])
     item_repo.upsert_item(conn, issue)
 
-    proposal = mutation_service.propose_transition(
-        conn, issue.id, TransitionIntent.CLOSE_DONE
-    )
+    proposal = mutation_service.propose_transition(conn, issue.id, TransitionIntent.CLOSE_DONE)
     result = mutation_service.confirm(conn, provider, proposal)
     assert result.item is not None and result.item.state == ItemState.RESOLVED
     # Cache was refreshed transparently.
@@ -163,9 +162,7 @@ def test_mutation_pipeline_works_against_stub(tmp_path: Path) -> None:
 
 def test_upload_attachment_records_call() -> None:
     provider = GitHubStubProvider(issues=[_issue()])
-    url = provider.upload_attachment(
-        "example/repo#1", "convo-001.md", b"hello", "text/markdown"
-    )
+    url = provider.upload_attachment("example/repo#1", "convo-001.md", b"hello", "text/markdown")
     assert url.endswith("convo-001.md")
     assert provider.attachments == [("example/repo#1", "convo-001.md", b"hello")]
 

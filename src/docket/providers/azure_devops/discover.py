@@ -13,6 +13,7 @@ Design rules:
 - Timeouts are short so a misconfigured proxy fails fast; we don't want the
   wizard to hang for minutes on a stale DNS response.
 """
+
 from __future__ import annotations
 
 import json
@@ -35,8 +36,8 @@ class DiscoveryError(ProviderError):
 
 @dataclass(frozen=True)
 class OrgRef:
-    name: str  # e.g. "sthungary"
-    url: str   # e.g. "https://dev.azure.com/sthungary"
+    name: str  # e.g. "contoso"
+    url: str  # e.g. "https://dev.azure.com/contoso"
 
 
 @dataclass(frozen=True)
@@ -59,7 +60,12 @@ def signed_in_email() -> str | None:
             timeout=10,
         )
         payload = json.loads(result.stdout)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, json.JSONDecodeError, ProviderError):
+    except (
+        subprocess.CalledProcessError,
+        subprocess.TimeoutExpired,
+        json.JSONDecodeError,
+        ProviderError,
+    ):
         return None
     email = payload.get("user", {}).get("name")
     return email if isinstance(email, str) and email else None

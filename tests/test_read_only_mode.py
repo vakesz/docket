@@ -1,4 +1,4 @@
-"""Pilot coverage for read-only mode (M12).
+"""Pilot coverage for read-only mode.
 
 Verifies that `TuiContext(read_only=True)`:
   - skips `register_mutating_tools` so the agent can't propose writes
@@ -8,6 +8,7 @@ Verifies that `TuiContext(read_only=True)`:
 
 These are the only TUI-level escapes into the mutation pipeline. The HTTP
 API and CLI read-only paths are covered in their own test modules."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -15,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from docket.cli.tui import ItvApp, TuiContext
+from docket.cli.tui import DocketApp, TuiContext
 from docket.cli.tui.widgets.batch_diff_modal import BatchDiffModal
 from docket.cli.tui.widgets.diff_modal import DiffModal
 from docket.cli.tui.widgets.new_item_modal import NewItemModal
@@ -60,7 +61,7 @@ def ro_ctx(tmp_path: Path):
 async def test_read_only_agent_has_no_mutating_tools(ro_ctx) -> None:
     """The agent should keep its read tools (get_item, etc.) but none of
     the propose_* writers."""
-    app = ItvApp(ro_ctx)
+    app = DocketApp(ro_ctx)
     async with app.run_test():
         assert app._agent is not None
         registry = app._agent._tools  # type: ignore[attr-defined]
@@ -72,7 +73,7 @@ async def test_read_only_agent_has_no_mutating_tools(ro_ctx) -> None:
 
 
 async def test_read_only_status_bar_shows_indicator(ro_ctx) -> None:
-    app = ItvApp(ro_ctx)
+    app = DocketApp(ro_ctx)
     async with app.run_test() as pilot:
         await pilot.pause()
         bar = app.query_one(StatusBar)
@@ -81,7 +82,7 @@ async def test_read_only_status_bar_shows_indicator(ro_ctx) -> None:
 
 
 async def test_read_only_blocks_new_item_action(ro_ctx) -> None:
-    app = ItvApp(ro_ctx)
+    app = DocketApp(ro_ctx)
     async with app.run_test() as pilot:
         await app.run_action("new_item")
         await pilot.pause()
@@ -92,7 +93,7 @@ async def test_read_only_blocks_new_item_action(ro_ctx) -> None:
 async def test_read_only_blocks_transition_action(ro_ctx) -> None:
     from docket.cli.tui.widgets.item_tree import ItemSelected
 
-    app = ItvApp(ro_ctx)
+    app = DocketApp(ro_ctx)
     async with app.run_test() as pilot:
         app.post_message(ItemSelected("S-1"))
         await pilot.pause()
@@ -118,7 +119,7 @@ async def test_writable_ctx_allows_new_item(tmp_path: Path) -> None:
         llm=FakeLlmClient(),
         read_only=False,
     )
-    app = ItvApp(ctx)
+    app = DocketApp(ctx)
     try:
         async with app.run_test() as pilot:
             await app.run_action("new_item")

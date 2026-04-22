@@ -1,19 +1,17 @@
 """First-launch setup wizard.
 
 The wizard walks the user through az login → ADO probe → scope → telemetry →
-prompt scaffold → DB/first sync. In M14 the output schema changed: the single
-legacy `ado` block became an entry under `providers`, with an `active_provider`
-pointing at it. The wizard emits that shape directly and never writes the
-legacy layout.
+prompt scaffold → DB/first sync. Output shape: each backend is an entry under
+`providers`, with `active_provider` pointing at the default one.
 
-Steps 4 (state-map probe), 5 (Foundry), and 6 (HTTP bearer token) are added in
-later milestones where their dependencies land. `--step=<name>` jumps directly
-to a step and writes config atomically on completion.
+`--step=<name>` jumps directly to a step and writes config atomically on
+completion.
 
 Auto-discovery: whenever `az` + the ADO bearer token can list orgs, projects,
 teams, area paths, or iteration paths, the wizard shows a numbered picker so the
 user never has to type values they could click. Any discovery failure transparently
 falls back to free-form prompts — helpful for restricted networks."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -76,12 +74,14 @@ def run_wizard(start_at: str | None = None) -> None:
     paths.ensure()
     state = _load_existing_state(paths)
 
-    console.print(Panel.fit(
-        "[bold]Docket setup[/bold]\n"
-        "This wizard prepares your config, prompt templates, local cache, and first sync.\n"
-        "You can exit at any time with Ctrl-C and resume with `docket setup`.",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel.fit(
+            "[bold]Docket setup[/bold]\n"
+            "This wizard prepares your config, prompt templates, local cache, and first sync.\n"
+            "You can exit at any time with Ctrl-C and resume with `docket setup`.",
+            border_style="cyan",
+        )
+    )
 
     steps: list[tuple[str, Callable[[WizardState], None]]] = [
         ("az", _step_az_login),
@@ -223,10 +223,14 @@ def _pick_org(state: WizardState) -> str:
 
 def _prompt_org_url(state: WizardState) -> str:
     while True:
-        raw = Prompt.ask(
-            "Azure DevOps organization URL",
-            default=state.ado_organization or "https://dev.azure.com/your-org",
-        ).strip().rstrip("/")
+        raw = (
+            Prompt.ask(
+                "Azure DevOps organization URL",
+                default=state.ado_organization or "https://dev.azure.com/your-org",
+            )
+            .strip()
+            .rstrip("/")
+        )
         if not _looks_like_http_url(raw):
             console.print(
                 "[red]Please enter a full URL (e.g. https://dev.azure.com/your-org).[/red]"
@@ -285,9 +289,7 @@ def _step_scope_filters(state: WizardState) -> None:
         )
         iteration = _pick_optional(
             "Iteration path",
-            fetch=lambda: discover.list_iteration_paths(
-                state.ado_organization, state.ado_project
-            ),
+            fetch=lambda: discover.list_iteration_paths(state.ado_organization, state.ado_project),
             current=state.scope.iteration_path,
         )
         assignee = _pick_assignee(state)
@@ -499,9 +501,7 @@ def provider_add(
     paths.ensure()
     known = registry_types()
     if type_id not in known:
-        console.print(
-            f"[red]Unknown provider type '{type_id}'[/red] (known: {', '.join(known)})."
-        )
+        console.print(f"[red]Unknown provider type '{type_id}'[/red] (known: {', '.join(known)}).")
         raise SystemExit(2)
 
     config: dict[str, object] = {}
@@ -519,9 +519,7 @@ def provider_add(
         default_repo = _pick_github_repo()
         config = {"default_repo": default_repo}
     elif type_id == "github_stub":
-        default_repo = Prompt.ask(
-            "Default repo (owner/name)", default="example/repo"
-        ).strip()
+        default_repo = Prompt.ask("Default repo (owner/name)", default="example/repo").strip()
         config = {"default_repo": default_repo}
     else:
         # Custom provider types (from entry points) self-validate via the
@@ -603,9 +601,7 @@ def _pick_github_repo() -> str:
             console.print(f"[dim]Skipping org [cyan]{org.login}[/cyan] ({e}).[/dim]")
             continue
         added = len(repos) - before
-        console.print(
-            f"[dim]  · [cyan]{org.login}[/cyan]: {added} repo(s)[/dim]"
-        )
+        console.print(f"[dim]  · [cyan]{org.login}[/cyan]: {added} repo(s)[/dim]")
 
     if not repos:
         return _prompt_github_repo_manual()

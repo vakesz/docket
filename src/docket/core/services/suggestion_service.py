@@ -18,6 +18,7 @@ the obvious next move here?" — a one-shot response is the contract, not a
 conversation. Keeping it out of the chat transcript also means suggestions
 don't pollute future chat turns with stale recommendations.
 """
+
 from __future__ import annotations
 
 import json
@@ -26,7 +27,7 @@ import sqlite3
 from dataclasses import dataclass, field
 from typing import Any
 
-from docket.agent.foundry_client import LlmClient
+from docket.agent.llm_client import LlmClient
 from docket.agent.prompt import build_prefix
 from docket.agent.types import ChatMessage
 from docket.core.model import Item, TransitionIntent
@@ -43,7 +44,7 @@ _USER_PROMPT = f"""Based on the ticket snapshot above, recommend the single next
 
 Respond with ONLY a JSON object — no prose, no code fences — in this exact shape:
 {{
-  "intent": "<one of: {', '.join(_ALLOWED_INTENTS)}>",
+  "intent": "<one of: {", ".join(_ALLOWED_INTENTS)}>",
   "description_patch_md": "<improved description, or empty string if the current one is fine>",
   "open_questions": ["<short question>", ...]
 }}
@@ -99,9 +100,7 @@ def stage_suggestion(
 ) -> StagedSuggestion:
     """Turn an accepted Suggestion into ready-to-confirm proposals. The caller
     is responsible for pushing them into the ProposalStore."""
-    state_change = mutation_service.propose_transition(
-        conn, suggestion.item_id, suggestion.intent
-    )
+    state_change = mutation_service.propose_transition(conn, suggestion.item_id, suggestion.intent)
     desc_patch: DescriptionPatch | None = None
     patch_text = suggestion.description_patch_md.strip()
     if patch_text:
@@ -116,9 +115,7 @@ def _parse(item_id: str, raw: str) -> Suggestion:
     try:
         intent = TransitionIntent(payload["intent"])
     except (KeyError, ValueError) as e:
-        raise SuggestionError(
-            f"model returned unknown intent: {payload.get('intent')!r}"
-        ) from e
+        raise SuggestionError(f"model returned unknown intent: {payload.get('intent')!r}") from e
     description_patch = payload.get("description_patch_md", "") or ""
     if not isinstance(description_patch, str):
         raise SuggestionError("description_patch_md must be a string")

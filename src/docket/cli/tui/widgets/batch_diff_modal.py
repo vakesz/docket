@@ -12,11 +12,12 @@ Contract:
   - Cancel (Esc) dismisses with `None`; the queue is left untouched so the
     user can come back via the palette / `d` keybind later.
 
-The routing decision lives in `ItvApp._open_next_pending`: length ≥ 2 opens
+The routing decision lives in `DocketApp._open_next_pending`: length ≥ 2 opens
 the batch modal, a single proposal keeps using `DiffModal`. That keeps the
 single-proposal ergonomics unchanged and confines the batch UX to the case
 where it actually helps.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

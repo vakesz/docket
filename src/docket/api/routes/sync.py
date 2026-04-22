@@ -3,6 +3,7 @@
 The TUI has a background tick and a `Sync now` action; the HTTP frontend
 relies on this endpoint for the equivalent manual refresh. Updates
 `runtime.last_sync_at` and flips `offline` on provider errors."""
+
 from __future__ import annotations
 
 import sqlite3
@@ -35,14 +36,10 @@ def manual_sync(
                 conn, runtime.provider, runtime.scope_key, runtime.scope
             )
         else:
-            summary = sync_service.refresh(
-                conn, runtime.provider, runtime.scope_key, runtime.scope
-            )
+            summary = sync_service.refresh(conn, runtime.provider, runtime.scope_key, runtime.scope)
     except Exception as e:
         runtime.offline = True
-        raise HTTPException(
-            status.HTTP_502_BAD_GATEWAY, f"Sync failed: {e}"
-        ) from e
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Sync failed: {e}") from e
     runtime.offline = False
     runtime.last_sync_at = datetime.now(UTC)
     return SyncSummaryDTO(
