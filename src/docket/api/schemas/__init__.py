@@ -45,6 +45,11 @@ from docket.api.schemas.setup import (
     SetupTestResultDTO,
 )
 from docket.api.schemas.tui_parity import (
+    MCPServerCreateRequest,
+    MCPServerDTO,
+    MCPServerListDTO,
+    MCPServerTestResultDTO,
+    MCPServerUpdateRequest,
     MemoryCreateRequest,
     MemoryDTO,
     MemoryListDTO,
@@ -80,6 +85,11 @@ __all__ = [
     "CreateItemRequest",
     "HealthDTO",
     "ItemDTO",
+    "MCPServerCreateRequest",
+    "MCPServerDTO",
+    "MCPServerListDTO",
+    "MCPServerTestResultDTO",
+    "MCPServerUpdateRequest",
     "MemoryCreateRequest",
     "MemoryDTO",
     "MemoryListDTO",

@@ -5,6 +5,7 @@ from rich.console import Console
 
 from docket.cli.commands.help import help_command
 from docket.cli.commands.list import list_command
+from docket.cli.commands.mcp import mcp_app
 from docket.cli.commands.memory import memory_app
 from docket.cli.commands.new import new_command
 from docket.cli.commands.open import open_command, run_open_tui
@@ -46,6 +47,7 @@ app.add_typer(setup_app, name="setup")
 app.add_typer(project_app, name="project")
 app.add_typer(memory_app, name="memory")
 app.add_typer(source_app, name="source")
+app.add_typer(mcp_app, name="mcp")
 app.command("sync")(sync_command)
 app.command("list")(list_command)
 app.command("show")(show_command)

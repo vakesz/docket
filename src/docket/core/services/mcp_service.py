@@ -1,0 +1,135 @@
+"""Per-project MCP server config CRUD.
+
+MCP servers live under `[projects.<id>.mcp.<name>]` in `config.toml` —
+this module is the single writer for that section. Surfaces (CLI, HTTP,
+TUI) call `add` / `update` / `remove` here so behavior stays uniform and
+the on-disk layout has one well-tested code path.
+
+The service does not touch the live `MCPManager`; rebinding the running
+fleet after a config change is the surface's responsibility (HTTP route
+calls `runtime.mcp_manager.bind_project(...)`; the CLI process is short
+lived and the running TUI/serve picks up changes on its next bind)."""
+
+from __future__ import annotations
+
+from docket.config.loader import save_config
+from docket.config.models import Config, MCPServerEntry, ProjectEntry
+from docket.config.paths import Paths
+
+
+class UnknownProjectError(KeyError):
+    """Raised when the caller targets a project id that isn't in the config."""
+
+
+class UnknownServerError(KeyError):
+    """Raised when the caller targets an MCP server name that isn't configured."""
+
+
+class DuplicateServerError(ValueError):
+    """Raised when `add` is called with a name that already exists for the project."""
+
+
+def _project(config: Config, project_id: str) -> ProjectEntry:
+    entry = config.projects.get(project_id)
+    if entry is None:
+        raise UnknownProjectError(project_id)
+    return entry
+
+
+def list_servers(config: Config, project_id: str) -> dict[str, MCPServerEntry]:
+    """Snapshot of the project's configured MCP servers (sorted by name)."""
+    project = _project(config, project_id)
+    return dict(sorted(project.mcp.items()))
+
+
+def get_server(config: Config, project_id: str, name: str) -> MCPServerEntry:
+    project = _project(config, project_id)
+    entry = project.mcp.get(name)
+    if entry is None:
+        raise UnknownServerError(name)
+    return entry
+
+
+def add_server(
+    config: Config,
+    paths: Paths,
+    project_id: str,
+    name: str,
+    *,
+    command: str,
+    args: list[str] | None = None,
+    env: dict[str, str] | None = None,
+    transport: str = "stdio",
+    enabled: bool = True,
+    startup_timeout_seconds: float = 10.0,
+) -> MCPServerEntry:
+    """Add a new server to the project. Persists to `config.toml`."""
+    project = _project(config, project_id)
+    if name in project.mcp:
+        raise DuplicateServerError(name)
+    entry = MCPServerEntry(
+        transport=transport,
+        command=command,
+        args=list(args or []),
+        env=dict(env or {}),
+        enabled=enabled,
+        startup_timeout_seconds=startup_timeout_seconds,
+    )
+    project.mcp[name] = entry
+    save_config(paths, config)
+    return entry
+
+
+def update_server(
+    config: Config,
+    paths: Paths,
+    project_id: str,
+    name: str,
+    *,
+    command: str | None = None,
+    args: list[str] | None = None,
+    env: dict[str, str] | None = None,
+    transport: str | None = None,
+    enabled: bool | None = None,
+    startup_timeout_seconds: float | None = None,
+) -> MCPServerEntry:
+    """Replace fields on an existing server entry. Only the kwargs you set
+    are written; pass `args=[]` or `env={}` to explicitly clear those lists.
+    """
+    existing = get_server(config, project_id, name)
+    entry = MCPServerEntry(
+        transport=transport if transport is not None else existing.transport,
+        command=command if command is not None else existing.command,
+        args=list(args) if args is not None else list(existing.args),
+        env=dict(env) if env is not None else dict(existing.env),
+        enabled=enabled if enabled is not None else existing.enabled,
+        startup_timeout_seconds=(
+            startup_timeout_seconds
+            if startup_timeout_seconds is not None
+            else existing.startup_timeout_seconds
+        ),
+    )
+    config.projects[project_id].mcp[name] = entry
+    save_config(paths, config)
+    return entry
+
+
+def remove_server(config: Config, paths: Paths, project_id: str, name: str) -> None:
+    """Delete a server entry from the project."""
+    project = _project(config, project_id)
+    if name not in project.mcp:
+        raise UnknownServerError(name)
+    del project.mcp[name]
+    save_config(paths, config)
+
+
+__all__ = [
+    "DuplicateServerError",
+    "UnknownProjectError",
+    "UnknownServerError",
+    "add_server",
+    "get_server",
+    "list_servers",
+    "remove_server",
+    "update_server",
+]

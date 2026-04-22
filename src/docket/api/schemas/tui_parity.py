@@ -207,3 +207,62 @@ class SourceUpdateRequest(BaseModel):
     kind: str | None = None
     uri: str | None = None
     tags: list[str] | None = None
+
+
+# -- mcp ---------------------------------------------------------------------
+
+
+class MCPServerDTO(BaseModel):
+    """One MCP server attached to a project, as exposed over HTTP.
+
+    Mirrors `docket.config.models.MCPServerEntry` plus the project id and the
+    user-facing `name` (the dict key in `ProjectEntry.mcp`)."""
+
+    project_id: str
+    name: str
+    transport: str = "stdio"
+    command: str = ""
+    args: list[str] = Field(default_factory=list)
+    env: dict[str, str] = Field(default_factory=dict)
+    enabled: bool = True
+    startup_timeout_seconds: float = 10.0
+
+
+class MCPServerListDTO(BaseModel):
+    project_id: str
+    entries: list[MCPServerDTO] = Field(default_factory=list)
+
+
+class MCPServerCreateRequest(BaseModel):
+    name: str
+    command: str
+    args: list[str] = Field(default_factory=list)
+    env: dict[str, str] = Field(default_factory=dict)
+    transport: str = "stdio"
+    enabled: bool = True
+    startup_timeout_seconds: float = 10.0
+
+
+class MCPServerUpdateRequest(BaseModel):
+    """PATCH body. Only fields you set are written; others are left alone.
+
+    Pass `args=[]` or `env={}` to explicitly clear those collections."""
+
+    command: str | None = None
+    args: list[str] | None = None
+    env: dict[str, str] | None = None
+    transport: str | None = None
+    enabled: bool | None = None
+    startup_timeout_seconds: float | None = None
+
+
+class MCPServerTestResultDTO(BaseModel):
+    """Outcome of `POST /projects/{id}/mcp/{name}/test`.
+
+    `tools` is the discovered tool catalog (qualified `mcp__<name>__<tool>`)
+    on success; `error` carries a short human-readable reason on failure."""
+
+    name: str
+    ok: bool
+    tools: list[str] = Field(default_factory=list)
+    error: str = ""
