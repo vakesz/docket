@@ -18,11 +18,9 @@ from textual.containers import Horizontal, Vertical
 from textual.widget import Widget
 from textual.widgets import Input, Static
 
+from docket.agent.factory import build_agent
 from docket.agent.llm_client import LlmClient
 from docket.agent.loop import AgentLoop
-from docket.agent.mutating_tools import register_mutating_tools
-from docket.agent.tool_defs import register_readonly_tools
-from docket.agent.tools import ToolRegistry
 from docket.agent.types import ChatMessage, StreamDelta
 from docket.cli.tui.widgets.batch_diff_modal import BatchDecision, BatchDiffModal
 from docket.cli.tui.widgets.chat_pane import ChatPane, TurnFinished, UserTurnRequest
@@ -276,18 +274,14 @@ class DocketApp(App[None]):
         self._agent: AgentLoop | None = None
         self._pane_pct: dict[str, int] = dict(self._DEFAULT_PANE_PCT)
         if tui_ctx.llm is not None:
-            registry = ToolRegistry()
-            register_readonly_tools(registry, conn=tui_ctx.conn, provider=tui_ctx.provider)
-            # Read-only: the agent keeps its read tools so it can still
-            # answer questions, but no propose_* tools exist in its registry.
-            if not tui_ctx.read_only:
-                register_mutating_tools(
-                    registry,
-                    conn=tui_ctx.conn,
-                    store=self._proposals,
-                    active_item=lambda: self._selected_item_id,
-                )
-            self._agent = AgentLoop(client=tui_ctx.llm, tools=registry)
+            self._agent = build_agent(
+                llm=tui_ctx.llm,
+                conn=tui_ctx.conn,
+                provider=tui_ctx.provider,
+                store=self._proposals,
+                active_item=lambda: self._selected_item_id,
+                read_only=tui_ctx.read_only,
+            )
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="main"):

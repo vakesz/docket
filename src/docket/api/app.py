@@ -12,11 +12,8 @@ from collections.abc import Callable
 
 from fastapi import Depends, FastAPI
 
+from docket.agent.factory import build_agent
 from docket.agent.llm_client import LlmClient
-from docket.agent.loop import AgentLoop
-from docket.agent.mutating_tools import register_mutating_tools
-from docket.agent.tool_defs import register_readonly_tools
-from docket.agent.tools import ToolRegistry
 from docket.api.auth import require_bearer
 from docket.api.routes import conversations as conversations_routes
 from docket.api.routes import items as items_routes
@@ -88,16 +85,14 @@ def create_app(
     app.state.setup_token = setup_token
 
     if llm is not None:
-        registry = ToolRegistry()
-        register_readonly_tools(registry, conn=conn, provider=provider)
-        if not read_only:
-            register_mutating_tools(
-                registry,
-                conn=conn,
-                store=app.state.proposals,
-                active_item=active_item or (lambda: None),
-            )
-        app.state.agent = AgentLoop(client=llm, tools=registry)
+        app.state.agent = build_agent(
+            llm=llm,
+            conn=conn,
+            provider=provider,
+            store=app.state.proposals,
+            active_item=active_item or (lambda: None),
+            read_only=read_only,
+        )
     else:
         app.state.agent = None
 
