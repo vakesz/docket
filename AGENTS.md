@@ -103,7 +103,6 @@ Future target:
 - Keep `cli/`, `cli/tui/`, and `api/routes/` as thin adapters that parse input, call one service, and map the result back to UI or HTTP.
 - Move setup, prompt-file edits, config writes, runtime switching, and agent-runtime assembly toward shared services instead of duplicating them in widgets and route modules.
 - Treat `config/` as file/path primitives plus schemas, not as the long-term home for provider-specific onboarding logic.
-- See [.docs/architecture.md](.docs/architecture.md) and [.docs/exception-audit.md](.docs/exception-audit.md) before extending an existing hotspot.
 
 ## Global Invariants
 
@@ -129,19 +128,3 @@ Derived from `src/docket/cli/commands/transition.py`, with the same shape repeat
 - Ruff is the formatter and linter. Selected rule groups are `E`, `F`, `I`, `N`, `UP`, `B`, `SIM`, and `RUF`; line length is 100 and `E501` is ignored (`pyproject.toml`).
 - Ruff applies per-file ignores to the `tests` tree and to the API and CLI command packages because those areas intentionally use testing shortcuts or FastAPI/Typer default expressions (`pyproject.toml`).
 - Mypy runs in strict mode with the Pydantic plugin enabled; generated code needs real types, not “good enough” annotations (`pyproject.toml`).
-
-## Docs Index
-
-- [.docs/agent-workloads.md](.docs/agent-workloads.md)
-- [.docs/repo-map.md](.docs/repo-map.md)
-- [.docs/architecture.md](.docs/architecture.md)
-- [.docs/modules.md](.docs/modules.md)
-- [.docs/workflows.md](.docs/workflows.md)
-- [.docs/exception-audit.md](.docs/exception-audit.md)
-- [.docs/playbooks/mutation-pipeline.md](.docs/playbooks/mutation-pipeline.md)
-- [.docs/playbooks/agent-chat.md](.docs/playbooks/agent-chat.md)
-- [.docs/playbooks/provider-layer.md](.docs/playbooks/provider-layer.md)
-- [.docs/playbooks/http-surfaces.md](.docs/playbooks/http-surfaces.md)
-- [.docs/playbooks/tui-surface.md](.docs/playbooks/tui-surface.md)
-- [.docs/playbooks/config-and-setup.md](.docs/playbooks/config-and-setup.md)
-- [.docs/playbooks/storage-cache.md](.docs/playbooks/storage-cache.md)

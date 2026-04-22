@@ -123,6 +123,7 @@ Bare `docket` always runs the TUI — subcommands still work, and a missing conf
 </td><td>
 
 **Actions**
+
 - `r` — refresh (sync now)
 - `n` — new item
 - `t` — new chat thread
@@ -134,6 +135,7 @@ Bare `docket` always runs the TUI — subcommands still work, and a missing conf
 </td><td>
 
 **Meta**
+
 - `?` or `F1` — in-app help
 - `,` — settings editor
 - `p` — prompt library
@@ -263,64 +265,9 @@ tests/fixtures/cassettes # pytest-recording cassettes
 
 ---
 
-## Adding a provider
-
-Every backend plugs in through one Protocol (`src/docket/providers/base.py`). Start from the in-memory reference — `src/docket/providers/github_stub/` — and copy its shape. The contract is small:
-
-```python
-class WorkItemProvider(Protocol):
-    def health_check(self) -> None: ...
-    def list_changes_since(
-        self, watermark: datetime | None, filters: ScopeFilters
-    ) -> Iterable[Item]: ...
-    def get_item(self, id: str) -> Item: ...
-    def get_comments(self, id: str) -> list[Comment]: ...
-    def get_linked(self, id: str) -> list[Item]: ...
-    def transition(self, id: str, intent: TransitionIntent) -> Item: ...
-    def patch_description(self, id: str, new_md: str) -> Item: ...
-    def upload_attachment(
-        self, id: str, filename: str, content: bytes, content_type: str
-    ) -> str: ...
-    def create_item(self, kind: ItemKind, fields: CreateFields) -> Item: ...
-```
-
-Four rules that keep providers safe to compose:
-
-1. **Translate at the boundary.** Native state strings stay inside the provider — every `Item` you yield has a canonical `ItemState`. Two dicts do most of the work: `NATIVE_TO_CANONICAL: dict[NativeT, ItemState]` and `INTENT_TO_NATIVE: dict[TransitionIntent, NativeT]`. `to_canonical` must total (pick a safe fallback for unknown states), and `to_native` must cover every `TransitionIntent`.
-2. **Raise the shared errors.** `ProviderUnreachableError`, `ProviderAuthError`, and `ProviderError` from `providers/base.py` — so the CLI, TUI, and API render failures uniformly.
-3. **Stay stateless.** The cache, watermarks, and transcripts are core concerns. The provider is a thin adapter between one REST call and one canonical object.
-4. **Opt in to optional capabilities via method presence.** The agent tool for `find_related_prs` is only registered when the active provider exposes the method — no declaration gymnastics, `getattr(provider, "find_related_prs", None)` is the gate.
-
-Checklist for a new provider named `foo`:
-
-- `src/docket/providers/foo/__init__.py` + `provider.py` + `state_map.py` (re-export `FooProvider`)
-- Register a `ProviderSpec` in `src/docket/providers/registry.py::_register_builtins` — the spec carries the factory plus the `SetupField` list the setup surfaces render
-- Put auth in `providers/foo/auth.py`, raising `ProviderAuthError` on failure so the wizard can re-prompt
-- Satisfy the cross-cutting tests (see [Testing](#testing))
-
-Performance: `sync_service.refresh` calls `item_repo.upsert_items` with `executemany` — don't call `upsert_item` in a loop from the provider. `list_changes_since` should paginate internally and yield items so peak memory stays flat. Keep `provider_raw` small; it's JSON-serialized on every upsert.
-
----
-
-## Invariants
-
-These are enforced by tests — don't violate them without updating the tests too:
-
-- `tests/integration/test_import_boundary.py` — `core/`, `storage/`, `agent/`, `api/` must not import concrete providers
-- `tests/integration/test_state_map_reverse.py` — every `TransitionIntent` round-trips through every provider's state map
-- `tests/integration/test_github_stub_provider.py` — the reference cross-cutting suite every provider should pass
-
-Plus the informal rules:
-
-- Keep the layered dependency rule intact — the import-boundary test fails loudly if you break it.
-- If you add a provider, copy the cross-cutting suite from `test_github_stub_provider.py` and point it at your provider.
-- Every mutation — CLI flag, TUI keypress, HTTP POST, agent tool call — flows through `mutation_service.propose → render_diff → confirm`. No shortcuts.
-- Run `uv run ruff check . && uv run mypy src && uv run pytest` before committing.
-
 ## Docs
 
 - 📘 **[First-Time Setup Guide](.docs/FIRST_TIME_SETUP.md)** — install, wizard walkthrough, provider-specific prerequisites, troubleshooting
-- 🤖 **[CLAUDE.md](CLAUDE.md)** — conventions for AI assistants working in this repo
 
 ## License
 
