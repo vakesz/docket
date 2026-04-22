@@ -51,63 +51,10 @@ from docket.core.services import sync_service
 from docket.providers.base import ProviderError
 from docket.providers.registry import UnknownProviderError
 from docket.providers.registry import build as build_provider
-from docket.providers.registry import types as registry_types
+from docket.providers.registry import specs as provider_specs
 from docket.storage import init_db
 
 router = APIRouter(prefix="/setup", tags=["setup"])
-
-
-_PROVIDER_FIELDS: dict[str, list[SetupProviderFieldDTO]] = {
-    "azure_devops": [
-        SetupProviderFieldDTO(
-            key="organization",
-            label="Organization URL",
-            kind="url",
-            required=True,
-            placeholder="https://dev.azure.com/your-org",
-            help="Full URL, e.g. https://dev.azure.com/contoso",
-        ),
-        SetupProviderFieldDTO(
-            key="project",
-            label="Project",
-            kind="string",
-            required=True,
-            placeholder="Docket",
-            help="Case-sensitive project name.",
-        ),
-    ],
-    "github": [
-        SetupProviderFieldDTO(
-            key="default_repo",
-            label="Default repository",
-            kind="string",
-            required=True,
-            placeholder="anthropics/claude-code",
-            help="owner/name pair.",
-        ),
-    ],
-    "github_stub": [
-        SetupProviderFieldDTO(
-            key="default_repo",
-            label="Default repository",
-            kind="string",
-            required=False,
-            placeholder="example/repo",
-        ),
-    ],
-}
-
-_PROVIDER_REQUIRES_CLI: dict[str, list[str]] = {
-    "azure_devops": ["az"],
-    "github": ["gh"],
-    "github_stub": [],
-}
-
-_PROVIDER_DISPLAY: dict[str, str] = {
-    "azure_devops": "Azure DevOps",
-    "github": "GitHub",
-    "github_stub": "GitHub (in-memory)",
-}
 
 
 @router.get("/status", response_model=SetupStatusDTO)
@@ -146,17 +93,25 @@ def setup_status(request: Request) -> SetupStatusDTO:
     dependencies=[Depends(require_setup_token)],
 )
 def provider_types() -> list[SetupProviderTypeDTO]:
-    out: list[SetupProviderTypeDTO] = []
-    for type_id in registry_types():
-        out.append(
-            SetupProviderTypeDTO(
-                id=type_id,
-                display=_PROVIDER_DISPLAY.get(type_id, type_id),
-                requires_cli=_PROVIDER_REQUIRES_CLI.get(type_id, []),
-                fields=_PROVIDER_FIELDS.get(type_id, []),
-            )
+    return [
+        SetupProviderTypeDTO(
+            id=spec.type_id,
+            display=spec.display_name,
+            requires_cli=list(spec.requires_cli),
+            fields=[
+                SetupProviderFieldDTO(
+                    key=f.key,
+                    label=f.label,
+                    kind=f.kind,
+                    required=f.required,
+                    placeholder=f.placeholder,
+                    help=f.help,
+                )
+                for f in spec.setup_fields
+            ],
         )
-    return out
+        for spec in provider_specs()
+    ]
 
 
 @router.post(

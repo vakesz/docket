@@ -1,27 +1,23 @@
-"""Provider registry — the single place that names map to factories.
+"""Provider registry — the single place that names map to ProviderSpecs.
 
 Built-in providers register themselves at module import so `import
 docket.providers` is enough to see them. Third-party providers opt in by
 declaring a `docket.providers` entry point; `load_entry_points()` pulls them
 in once at startup.
 
-The factory signature is `(raw_config: dict, display_name: str) ->
-WorkItemProvider`. The config is whatever the provider declared under its
-`config.toml` entry — the registry does no validation, each factory owns
-schema-checking its own section.
-"""
+Each spec carries its factory plus the metadata the setup wizard needs
+(display name, required CLIs, config fields). Onboarding surfaces iterate
+specs so a new provider type shows up automatically without edits in
+`api/routes/setup.py` or the CLI wizard."""
 
 from __future__ import annotations
 
 import importlib.metadata
-from collections.abc import Callable
 from typing import Any
 
-from docket.providers.base import WorkItemProvider
+from docket.providers.base import ProviderFactory, ProviderSpec, SetupField, WorkItemProvider
 
-ProviderFactory = Callable[[dict[str, Any], str], WorkItemProvider]
-
-_REGISTRY: dict[str, ProviderFactory] = {}
+_REGISTRY: dict[str, ProviderSpec] = {}
 _ENTRY_POINTS_LOADED = False
 
 
@@ -29,29 +25,40 @@ class UnknownProviderError(KeyError):
     """Raised when `build()` sees a type id that was never registered."""
 
 
-def register(type_id: str, factory: ProviderFactory) -> None:
-    """Register a provider factory under a short type id (e.g. `"azure_devops"`).
+def register(spec: ProviderSpec) -> None:
+    """Register a provider spec under its type id.
 
-    Re-registering the same id replaces the previous factory — this lets a
+    Re-registering the same id replaces the previous spec — this lets a
     third-party package override a built-in if the user explicitly wires it.
     """
-    _REGISTRY[type_id] = factory
+    _REGISTRY[spec.type_id] = spec
 
 
 def build(type_id: str, config: dict[str, Any], *, display_name: str) -> WorkItemProvider:
     load_entry_points()
-    factory = _REGISTRY.get(type_id)
-    if factory is None:
+    spec = _REGISTRY.get(type_id)
+    if spec is None:
         raise UnknownProviderError(
             f"unknown provider type '{type_id}' (known: {sorted(_REGISTRY)})"
         )
-    return factory(config, display_name)
+    return spec.factory(config, display_name)
 
 
 def types() -> list[str]:
     """All currently-registered provider type ids, sorted."""
     load_entry_points()
     return sorted(_REGISTRY)
+
+
+def specs() -> list[ProviderSpec]:
+    """Every registered spec, sorted by type id."""
+    load_entry_points()
+    return [_REGISTRY[tid] for tid in sorted(_REGISTRY)]
+
+
+def spec(type_id: str) -> ProviderSpec | None:
+    load_entry_points()
+    return _REGISTRY.get(type_id)
 
 
 def load_entry_points() -> None:
@@ -81,7 +88,7 @@ def load_entry_points() -> None:
 
 
 def _register_builtins() -> None:
-    """Wire the built-in provider factories. Called at module import so the
+    """Wire the built-in provider specs. Called at module import so the
     registry is populated even without entry-point discovery."""
     from docket.providers.azure_devops.provider import AzureDevOpsProvider
     from docket.providers.github.provider import GitHubProvider
@@ -114,9 +121,66 @@ def _register_builtins() -> None:
             display_name=display_name,
         )
 
-    register("azure_devops", _ado_factory)
-    register("github", _github_factory)
-    register("github_stub", _github_stub_factory)
+    register(
+        ProviderSpec(
+            type_id="azure_devops",
+            display_name="Azure DevOps",
+            factory=_ado_factory,
+            requires_cli=("az",),
+            setup_fields=(
+                SetupField(
+                    key="organization",
+                    label="Organization URL",
+                    kind="url",
+                    required=True,
+                    placeholder="https://dev.azure.com/your-org",
+                    help="Full URL, e.g. https://dev.azure.com/contoso",
+                ),
+                SetupField(
+                    key="project",
+                    label="Project",
+                    kind="string",
+                    required=True,
+                    placeholder="Docket",
+                    help="Case-sensitive project name.",
+                ),
+            ),
+        )
+    )
+    register(
+        ProviderSpec(
+            type_id="github",
+            display_name="GitHub",
+            factory=_github_factory,
+            requires_cli=("gh",),
+            setup_fields=(
+                SetupField(
+                    key="default_repo",
+                    label="Default repository",
+                    kind="string",
+                    required=True,
+                    placeholder="anthropics/claude-code",
+                    help="owner/name pair.",
+                ),
+            ),
+        )
+    )
+    register(
+        ProviderSpec(
+            type_id="github_stub",
+            display_name="GitHub (in-memory)",
+            factory=_github_stub_factory,
+            setup_fields=(
+                SetupField(
+                    key="default_repo",
+                    label="Default repository",
+                    kind="string",
+                    required=False,
+                    placeholder="example/repo",
+                ),
+            ),
+        )
+    )
 
 
 _register_builtins()
@@ -124,9 +188,13 @@ _register_builtins()
 
 __all__ = [
     "ProviderFactory",
+    "ProviderSpec",
+    "SetupField",
     "UnknownProviderError",
     "build",
     "load_entry_points",
     "register",
+    "spec",
+    "specs",
     "types",
 ]
