@@ -17,3 +17,4 @@
   - Show sync health, provider status, and pending proposals in plain language, not internal terms.
 - Plain-language error messages
   - Replace technical failures with clear “what happened / what to do next” guidance, plus one-click retry.
+- remove any mentions of phases, milestones. the current state is unreleased. any fallback legacy behaviour that does migration can be removed we should have a single database schema. the only user for now is me, i can just delete the existing db before relaunching.

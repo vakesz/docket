@@ -1,0 +1,33 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter/wght.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+
+@variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-accent: oklch(58.5% 0.2 277);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-white text-zinc-900 antialiased;
+  }
+
+  .dark body {
+    @apply bg-zinc-950 text-zinc-100;
+  }
+
+  ::selection {
+    background-color: color-mix(in oklab, var(--color-accent) 25%, transparent);
+  }
+}

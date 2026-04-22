@@ -72,3 +72,9 @@ def get_read_only() -> bool:
     source (env var, flag, wrapper script) can enable demo-safe mode."""
     raw = os.environ.get("DOCKET_READ_ONLY", "").strip().lower()
     return raw in {"1", "true", "yes", "on"}
+
+
+def get_setup_token() -> str:
+    """Bootstrap-mode bearer token. Required when config.toml is missing so
+    `docket serve` can run the HTTP setup wizard."""
+    return os.environ.get("DOCKET_SETUP_TOKEN", "").strip()

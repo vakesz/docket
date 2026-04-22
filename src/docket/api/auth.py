@@ -38,4 +38,38 @@ def require_bearer(
         )
 
 
-__all__ = ["require_bearer"]
+def require_setup_token(
+    request: Request,
+    creds: HTTPAuthorizationCredentials | None = Depends(_scheme),
+) -> None:
+    """Auth gate for the /setup/* mutating endpoints.
+
+    Accepts either the setup token (bootstrap mode, before config.toml exists)
+    or the regular bearer token (lets an admin re-run setup later). Either is
+    fine because both already represent full control of the server."""
+    setup_token = getattr(request.app.state, "setup_token", "")
+    bearer_token = getattr(request.app.state, "bearer_token", "")
+    if not setup_token and not bearer_token:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Setup surface requires either DOCKET_SETUP_TOKEN or a configured bearer token.",
+        )
+    if creds is None or creds.scheme.lower() != "bearer" or not creds.credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing bearer token.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    supplied = creds.credentials
+    if setup_token and secrets.compare_digest(supplied, setup_token):
+        return
+    if bearer_token and secrets.compare_digest(supplied, bearer_token):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid bearer token.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+__all__ = ["require_bearer", "require_setup_token"]

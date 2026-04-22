@@ -25,6 +25,7 @@ from docket.api.routes import prompts as prompts_routes
 from docket.api.routes import providers as providers_routes
 from docket.api.routes import scopes as scopes_routes
 from docket.api.routes import settings as settings_routes
+from docket.api.routes import setup as setup_routes
 from docket.api.routes import status as status_routes
 from docket.api.routes import suggestions as suggestions_routes
 from docket.api.routes import sync as sync_routes
@@ -47,6 +48,7 @@ def create_app(
     read_only: bool = False,
     paths: Paths | None = None,
     runtime: RuntimeState | None = None,
+    setup_token: str = "",
 ) -> FastAPI:
     """Build a configured FastAPI app.
 
@@ -82,6 +84,7 @@ def create_app(
     app.state.read_only = read_only
     app.state.paths = paths
     app.state.runtime = runtime
+    app.state.setup_token = setup_token
 
     if llm is not None:
         registry = ToolRegistry()
@@ -108,6 +111,7 @@ def create_app(
     app.include_router(providers_routes.router)
     app.include_router(sync_routes.router)
     app.include_router(status_routes.router)
+    app.include_router(setup_routes.router)
 
     @app.get("/healthz", response_model=HealthDTO, tags=["health"])
     def healthz() -> HealthDTO:

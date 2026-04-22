@@ -1,0 +1,42 @@
+/**
+ * Central React Query key factory.
+ *
+ * Keeping every key in one place means `invalidateQueries` on a mutation can
+ * reach the right cache entries without the caller having to remember the
+ * tuple shape. Mirrors the backend route tree.
+ */
+
+import type { components } from "./schema";
+
+type ItemKind = components["schemas"]["ItemKind"];
+
+export const qk = {
+  all: ["docket"] as const,
+
+  setupStatus: () => [...qk.all, "setup", "status"] as const,
+  setupProviderTypes: () => [...qk.all, "setup", "providerTypes"] as const,
+
+  status: () => [...qk.all, "status"] as const,
+  whoami: () => [...qk.all, "whoami"] as const,
+  settings: () => [...qk.all, "settings"] as const,
+
+  providers: () => [...qk.all, "providers"] as const,
+  activeProvider: () => [...qk.all, "providers", "active"] as const,
+  scopes: () => [...qk.all, "scopes"] as const,
+  activeScope: () => [...qk.all, "scopes", "active"] as const,
+
+  items: (filter?: { kind?: ItemKind | null; archived?: boolean; parent_id?: string | null }) =>
+    [...qk.all, "items", filter ?? {}] as const,
+  item: (id: string) => [...qk.all, "item", id] as const,
+  comments: (id: string) => [...qk.all, "item", id, "comments"] as const,
+  linked: (id: string) => [...qk.all, "item", id, "linked"] as const,
+  conversation: (id: string) => [...qk.all, "item", id, "conversation"] as const,
+
+  pinned: () => [...qk.all, "pinned"] as const,
+  isPinned: (id: string) => [...qk.all, "item", id, "pinned"] as const,
+
+  prompts: () => [...qk.all, "prompts"] as const,
+  prompt: (key: string) => [...qk.all, "prompts", key] as const,
+};
+
+export type QueryKey = ReturnType<(typeof qk)[keyof typeof qk]>;

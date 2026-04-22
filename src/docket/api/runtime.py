@@ -24,9 +24,7 @@ class RuntimeState:
     scope_key: str
     last_sync_at: datetime | None = None
     offline: bool = False
-    _lock: RLock = field(
-        default_factory=RLock, repr=False, compare=False  # type: ignore[arg-type]
-    )
+    _lock: RLock = field(default_factory=RLock, repr=False, compare=False)
 
     @property
     def provider(self) -> WorkItemProvider:

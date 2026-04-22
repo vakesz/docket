@@ -1,18 +1,23 @@
 from __future__ import annotations
 
+import secrets
 from typing import TYPE_CHECKING
 
 import typer
 from rich.console import Console
 
-from docket.cli.context import prepare_or_wizard
+from docket.cli.context import prepare
+from docket.config import ConfigMissingError
 from docket.config.env import (
     get_foundry_api_key,
     get_foundry_api_version,
     get_foundry_deployment,
     get_foundry_endpoint,
     get_read_only,
+    get_setup_token,
+    load_project_env,
 )
+from docket.config.paths import resolve_paths
 
 if TYPE_CHECKING:
     from docket.agent.foundry_client import FoundryClient
@@ -30,16 +35,53 @@ def serve_command(
         help="Disable every mutation endpoint — reads and chat stay available.",
     ),
 ) -> None:
-    """Run the HTTP surface (FastAPI + SSE) on the configured port."""
+    """Run the HTTP surface (FastAPI + SSE) on the configured port.
+
+    When `config.toml` is missing, falls through to bootstrap mode: a tiny
+    FastAPI exposing only `/healthz` and `/setup/*`, gated by
+    `DOCKET_SETUP_TOKEN`, so the frontend wizard can write config and trigger
+    a restart."""
     import uvicorn
 
     from docket.agent.foundry_client import LlmClient
     from docket.api.app import create_app
+    from docket.api.bootstrap_app import create_bootstrap_app
     from docket.api.runtime import RuntimeState
 
     effective_read_only = read_only or get_read_only()
+    setup_token = get_setup_token()
 
-    ctx = prepare_or_wizard()
+    try:
+        ctx = prepare()
+    except ConfigMissingError:
+        load_project_env()
+        paths = resolve_paths()
+        paths.ensure()
+
+        if not setup_token:
+            setup_token = secrets.token_urlsafe(32)
+            console.print(
+                "[yellow]No config.toml found — starting setup surface.[/yellow]"
+            )
+            console.print(
+                "[yellow]DOCKET_SETUP_TOKEN was not set; generated one for this session:[/yellow]"
+            )
+            console.print(f"  [cyan]{setup_token}[/cyan]")
+        else:
+            console.print(
+                "[yellow]No config.toml found — starting setup surface[/yellow]"
+            )
+
+        bind = host or "127.0.0.1"
+        listen_port = port or 8765
+        app = create_bootstrap_app(paths=paths, setup_token=setup_token)
+        console.print(
+            f"[green]docket serve (bootstrap)[/green] listening on http://{bind}:{listen_port} "
+            f"— POST /setup/complete to finish setup"
+        )
+        uvicorn.run(app, host=bind, port=listen_port, log_level="info")
+        return
+
     try:
         if not ctx.config.http.enabled:
             console.print(
@@ -77,6 +119,7 @@ def serve_command(
             read_only=effective_read_only,
             paths=ctx.paths,
             runtime=runtime,
+            setup_token=setup_token,
         )
         mode = "read-only" if effective_read_only else "read-write"
         console.print(
