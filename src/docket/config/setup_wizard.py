@@ -334,7 +334,11 @@ def _pick_optional(
     fetch: Callable[[], list[str]],
     current: str,
 ) -> str:
-    """Offer discovered options plus 'any' and 'custom…'. Returns '' for 'any'."""
+    """Offer discovered options plus 'any' and 'custom…'. Returns '' for 'any'.
+
+    'any' is always rendered first and is the default — browsing an unfamiliar
+    org/repo almost always wants "everything", not whichever team happened to
+    sort alphabetically first."""
     options: list[str] = []
     try:
         options = [o for o in fetch() if o]
@@ -344,9 +348,6 @@ def _pick_optional(
         raw = Prompt.ask(f"{label} (blank for any)", default=current or "")
         return raw.strip()
 
-    # Put the previously-chosen value first if it's still a valid option.
-    if current and current in options:
-        options = [current] + [o for o in options if o != current]
     choice = _pick(label, options, allow_any=True, allow_custom=True)
     if choice is _ANY_SENTINEL:
         return ""
@@ -358,18 +359,19 @@ def _pick_optional(
 
 
 def _pick_assignee(state: WizardState) -> str:
-    """Offer @me, the detected email, any, and custom. Returns '' for 'any'."""
+    """Offer any, @me, the detected email, and custom. Returns '' for 'any'.
+
+    'any' is the default — defaulting to @me silently filters to the user's
+    assigned items, which looks like a broken sync on third-party repos where
+    they aren't a maintainer."""
     options: list[str] = ["@me"]
     if state.signed_in_email and state.signed_in_email not in options:
         options.append(state.signed_in_email)
-    # Put the current value first if it's already in the list.
-    current = state.scope.assignee
-    if current and current in options:
-        options = [current] + [o for o in options if o != current]
     choice = _pick("Assignee", options, allow_any=True, allow_custom=True)
     if choice is _ANY_SENTINEL:
         return ""
     if choice is _CUSTOM_SENTINEL:
+        current = state.scope.assignee
         raw = Prompt.ask("Assignee (email or @me)", default=current or "@me").strip()
         return raw
     assert isinstance(choice, int)
@@ -383,26 +385,33 @@ def _pick(
     allow_any: bool = False,
     allow_custom: bool = False,
 ) -> int | str:
-    """Render a numbered chooser. Returns an int index or a sentinel ('any' / 'custom')."""
+    """Render a numbered chooser. Returns an int index or a sentinel ('any' / 'custom').
+
+    When `allow_any` is set, 'any' is rendered as option 1 and is the default
+    on enter — prior callers defaulted to the first discovered option, which
+    silently narrowed the scope in ways users rarely wanted."""
     console.print(f"[bold]{label}:[/bold]")
-    for i, opt in enumerate(options, start=1):
-        console.print(f"  [cyan]{i}[/cyan]. {opt}")
-    extras: list[str] = []
-    any_key = str(len(options) + 1) if allow_any else None
-    custom_key = str(len(options) + (2 if allow_any else 1)) if allow_custom else None
-    if any_key is not None:
+    any_key: str | None = None
+    if allow_any:
+        any_key = "1"
         console.print(f"  [cyan]{any_key}[/cyan]. any")
-        extras.append(any_key)
-    if custom_key is not None:
+    offset = 1 if allow_any else 0
+    for i, opt in enumerate(options, start=1 + offset):
+        console.print(f"  [cyan]{i}[/cyan]. {opt}")
+    custom_key: str | None = None
+    if allow_custom:
+        custom_key = str(len(options) + 1 + offset)
         console.print(f"  [cyan]{custom_key}[/cyan]. custom…")
-        extras.append(custom_key)
-    valid_numeric = [str(i) for i in range(1, len(options) + 1)] + extras
-    raw = Prompt.ask("Choose", choices=valid_numeric, default="1", show_choices=False)
-    if any_key and raw == any_key:
+    valid_numeric = [str(i) for i in range(1, len(options) + 1 + offset)]
+    if custom_key is not None:
+        valid_numeric.append(custom_key)
+    default = any_key or "1"
+    raw = Prompt.ask("Choose", choices=valid_numeric, default=default, show_choices=False)
+    if any_key is not None and raw == any_key:
         return _ANY_SENTINEL
-    if custom_key and raw == custom_key:
+    if custom_key is not None and raw == custom_key:
         return _CUSTOM_SENTINEL
-    return int(raw) - 1
+    return int(raw) - 1 - offset
 
 
 def _count_items_for_scope(state: WizardState, scope: ScopeFilter) -> int | None:

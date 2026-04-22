@@ -45,6 +45,8 @@ from docket.providers.github.state_map import to_canonical, to_native
 _DEFAULT_BASE_URL = "https://api.github.com"
 _TIMEOUT = httpx.Timeout(20.0, connect=5.0)
 _ACCEPT = "application/vnd.github+json"
+_PER_PAGE = 100
+_MAX_PAGES = 10
 
 
 @dataclass
@@ -59,6 +61,9 @@ class GitHubProvider:
     display_name: str = "GitHub"
     base_url: str = _DEFAULT_BASE_URL
     _client: httpx.Client | None = None
+    # Cached authenticated-user login, resolved lazily for `@me` filters.
+    # Empty string is a negative cache — don't retry every sync.
+    _me_login: str | None = None
 
     def __post_init__(self) -> None:
         if "/" not in self.default_repo:
@@ -127,23 +132,50 @@ class GitHubProvider:
     def list_changes_since(
         self, watermark: datetime | None, filters: ScopeFilters
     ) -> Iterable[Item]:
-        params: dict[str, str] = {
+        # Initial sync (no watermark) sorts newest-first so page 1 is useful on
+        # big repos; incremental sync walks forward from the watermark so asc
+        # is needed for the watermark bump to be monotonic.
+        direction = "asc" if watermark is not None else "desc"
+        base_params: dict[str, str] = {
             "state": "all",
-            "per_page": "100",
+            "per_page": str(_PER_PAGE),
             "sort": "updated",
-            "direction": "asc",
+            "direction": direction,
         }
         if watermark is not None:
-            params["since"] = watermark.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-        # @me in canonical-speak means "the authenticated user".
-        if filters.assignee and filters.assignee != "@me":
-            params["assignee"] = filters.assignee
-        elif filters.assignee == "@me":
-            params["assignee"] = "*"  # GitHub has no direct @me; * means any assignee
-        payload = self._get(f"/repos/{self.default_repo}/issues", params=params)
-        if not isinstance(payload, list):
-            return []
-        return [self._issue_to_item(entry) for entry in payload if isinstance(entry, dict)]
+            base_params["since"] = watermark.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        # @me means "the authenticated user"; GitHub has no literal @me token,
+        # so resolve to the login. If resolution fails, fall through with no
+        # assignee filter rather than silently dropping every unassigned item.
+        if filters.assignee == "@me":
+            login = self._resolve_me_login()
+            if login:
+                base_params["assignee"] = login
+        elif filters.assignee:
+            base_params["assignee"] = filters.assignee
+
+        out: list[Item] = []
+        for page in range(1, _MAX_PAGES + 1):
+            params = {**base_params, "page": str(page)}
+            payload = self._get(f"/repos/{self.default_repo}/issues", params=params)
+            if not isinstance(payload, list) or not payload:
+                break
+            out.extend(self._issue_to_item(entry) for entry in payload if isinstance(entry, dict))
+            if len(payload) < _PER_PAGE:
+                break
+        return out
+
+    def _resolve_me_login(self) -> str | None:
+        if self._me_login is not None:
+            return self._me_login or None
+        try:
+            payload = self._get("/user")
+        except ProviderUnreachableError:
+            self._me_login = ""
+            return None
+        login = payload.get("login") if isinstance(payload, dict) else None
+        self._me_login = str(login) if isinstance(login, str) and login else ""
+        return self._me_login or None
 
     def get_item(self, id: str) -> Item:
         owner, repo, number = _parse_id(id)

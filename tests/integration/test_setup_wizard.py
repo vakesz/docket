@@ -131,15 +131,17 @@ def test_wizard_uses_discovery_selections_end_to_end(
         lambda *_: ["platform", "platform\\Sprint 42"],
     )
 
+    # Pickers with `allow_any=True` render 'any' as option 1, so concrete
+    # choices start at 2.
     _script_prompts(
         monkeypatch,
         prompt_answers=[
-            "1",  # pick org → contoso
-            "1",  # pick project → platform
-            "1",  # team picker → Alpha
-            "1",  # area path picker → platform
-            "2",  # iteration path picker → platform\Sprint 42
-            "1",  # assignee picker → @me
+            "1",  # pick org → contoso (no 'any' in org picker)
+            "1",  # pick project → platform (no 'any' in project picker)
+            "2",  # team picker → Alpha
+            "2",  # area path picker → platform
+            "3",  # iteration path picker → platform\Sprint 42
+            "2",  # assignee picker → @me
         ],
         confirm_answers=[True, True, True],  # scope ok; telemetry enabled; http enabled
     )
@@ -183,7 +185,7 @@ def test_wizard_falls_back_when_discovery_fails(
             "",  # team (blank)
             "",  # area
             "",  # iteration
-            "1",  # assignee picker → @me
+            "2",  # assignee picker → @me (1=any, 2=@me)
         ],
         confirm_answers=[True, True, True],  # scope ok; telemetry enabled; http enabled
     )
@@ -229,7 +231,7 @@ def test_wizard_rejects_bare_org_name_then_accepts_full_url(
             "",  # team
             "",  # area
             "",  # iteration
-            "1",  # assignee → @me
+            "2",  # assignee → @me (1=any, 2=@me)
         ],
         confirm_answers=[True, True, True],  # scope ok; telemetry enabled; http enabled
     )
@@ -260,12 +262,12 @@ def test_wizard_enables_http_and_mints_token(
     _script_prompts(
         monkeypatch,
         prompt_answers=[
-            "1",  # pick org
-            "1",  # pick project
+            "1",  # pick org (no 'any')
+            "1",  # pick project (no 'any')
             "",  # team
             "",  # area
             "",  # iteration
-            "1",  # assignee → @me
+            "2",  # assignee → @me (1=any, 2=@me)
         ],
         confirm_answers=[True, True, True],  # scope ok; telemetry; http enabled
     )
@@ -301,7 +303,7 @@ def test_wizard_http_disabled_leaves_token_empty(
             "",
             "",
             "",
-            "1",
+            "2",  # assignee → @me (1=any, 2=@me)
         ],
         confirm_answers=[True, True, False],  # scope ok; telemetry; http DISABLED
     )
@@ -313,18 +315,49 @@ def test_wizard_http_disabled_leaves_token_empty(
 
 
 def test_pick_returns_sentinels_for_any_and_custom(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Unit test for the core picker primitive."""
-    answers = deque(["2", "3", "1"])
+    """Unit test for the core picker primitive.
+
+    Layout with `allow_any=True`: 1=any, 2=Alpha, 3=Bravo, 4=custom. The
+    default (empty input → takes the `default` value) is 'any'."""
+    answers = deque(["2", "3", "1", "4", ""])
+    captured_default: list[Any] = []
 
     def fake_prompt_ask(*_a, choices=None, default=None, **_kw) -> str:
-        return answers.popleft()
+        captured_default.append(default)
+        raw = answers.popleft()
+        return raw if raw else str(default)
 
     monkeypatch.setattr(setup_wizard.Prompt, "ask", staticmethod(fake_prompt_ask))
 
-    # options=["Alpha","Bravo"], any+custom → 1:Alpha 2:Bravo 3:any 4:custom
+    assert setup_wizard._pick("Team", ["Alpha", "Bravo"], allow_any=True, allow_custom=True) == 0
     assert setup_wizard._pick("Team", ["Alpha", "Bravo"], allow_any=True, allow_custom=True) == 1
     assert (
         setup_wizard._pick("Team", ["Alpha", "Bravo"], allow_any=True, allow_custom=True)
-        == setup_wizard._ANY_SENTINEL
+        is setup_wizard._ANY_SENTINEL
     )
-    assert setup_wizard._pick("Team", ["Alpha", "Bravo"], allow_any=True, allow_custom=True) == 0
+    assert (
+        setup_wizard._pick("Team", ["Alpha", "Bravo"], allow_any=True, allow_custom=True)
+        is setup_wizard._CUSTOM_SENTINEL
+    )
+    # Empty input → uses the prompt default, which must be 'any' (the point
+    # of this whole change).
+    assert (
+        setup_wizard._pick("Team", ["Alpha", "Bravo"], allow_any=True, allow_custom=True)
+        is setup_wizard._ANY_SENTINEL
+    )
+    assert captured_default == ["1", "1", "1", "1", "1"]
+
+
+def test_pick_without_allow_any_keeps_first_option_as_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Org/project/repo pickers don't get an 'any' entry; default stays '1'."""
+    captured_default: list[Any] = []
+
+    def fake_prompt_ask(*_a, choices=None, default=None, **_kw) -> str:
+        captured_default.append(default)
+        return "1"
+
+    monkeypatch.setattr(setup_wizard.Prompt, "ask", staticmethod(fake_prompt_ask))
+    assert setup_wizard._pick("Org", ["contoso", "otherco"], allow_custom=True) == 0
+    assert captured_default == ["1"]

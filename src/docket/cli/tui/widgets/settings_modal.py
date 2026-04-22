@@ -210,7 +210,7 @@ class SettingsModal(ModalScreen[Config | None]):
                 yield Static("assignee", classes="field-label")
                 yield Input(
                     value=current_scope.assignee,
-                    placeholder="@me or email",
+                    placeholder="@me, email, or blank for any",
                     id="scope-assignee",
                 )
 
@@ -401,7 +401,7 @@ class SettingsModal(ModalScreen[Config | None]):
             "team": self.query_one("#scope-team", Input).value.strip(),
             "area_path": self.query_one("#scope-area", Input).value.strip(),
             "iteration_path": self.query_one("#scope-iteration", Input).value.strip(),
-            "assignee": self.query_one("#scope-assignee", Input).value.strip() or "@me",
+            "assignee": self.query_one("#scope-assignee", Input).value.strip(),
         }
         if self.query_one("#scope-default", Checkbox).value:
             provider_raw["active_scope"] = scope_name

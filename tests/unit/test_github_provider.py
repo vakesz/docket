@@ -128,6 +128,8 @@ def test_list_changes_since_passes_iso_watermark() -> None:
     captured: dict[str, Any] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/user":
+            return httpx.Response(200, json={"login": "me"})
         captured["params"] = dict(request.url.params)
         captured["path"] = request.url.path
         return httpx.Response(200, json=[_issue_payload()])
@@ -139,6 +141,79 @@ def test_list_changes_since_passes_iso_watermark() -> None:
     assert captured["path"] == "/repos/acme/widgets/issues"
     assert captured["params"]["since"] == "2024-01-01T12:30:00Z"
     assert captured["params"]["state"] == "all"
+    # Incremental sync walks forward from the watermark → ascending.
+    assert captured["params"]["direction"] == "asc"
+
+
+def test_list_changes_since_initial_sync_is_desc_and_resolves_me() -> None:
+    """No watermark → newest-first; @me → resolved login (not `*`)."""
+    calls: list[tuple[str, dict[str, str]]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append((request.url.path, dict(request.url.params)))
+        if request.url.path == "/user":
+            return httpx.Response(200, json={"login": "alice"})
+        return httpx.Response(200, json=[_issue_payload()])
+
+    provider = _mk_provider(handler)
+    list(provider.list_changes_since(None, ScopeFilters()))
+    issues_calls = [c for c in calls if c[0] == "/repos/acme/widgets/issues"]
+    assert issues_calls, "expected an issues request"
+    params = issues_calls[0][1]
+    assert params["direction"] == "desc"
+    assert params["assignee"] == "alice"  # NOT "*"
+    assert "since" not in params
+
+
+def test_list_changes_since_paginates_until_short_page() -> None:
+    """Full page → fetch next page; short page → stop."""
+    pages_seen: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/user":
+            return httpx.Response(200, json={"login": "alice"})
+        page = int(request.url.params.get("page", "1"))
+        pages_seen.append(page)
+        if page == 1:
+            return httpx.Response(200, json=[_issue_payload(number=i) for i in range(100)])
+        if page == 2:
+            return httpx.Response(200, json=[_issue_payload(number=200 + i) for i in range(7)])
+        raise AssertionError(f"unexpected page {page}")
+
+    provider = _mk_provider(handler)
+    items = list(provider.list_changes_since(None, ScopeFilters()))
+    assert pages_seen == [1, 2]
+    assert len(items) == 107
+
+
+def test_list_changes_since_any_assignee_when_filter_empty() -> None:
+    """Empty assignee → no `assignee` param → GitHub returns everything."""
+    captured: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/user":
+            raise AssertionError("should not resolve @me for empty assignee")
+        captured["params"] = dict(request.url.params)
+        return httpx.Response(200, json=[])
+
+    provider = _mk_provider(handler)
+    list(provider.list_changes_since(None, ScopeFilters(assignee="")))
+    assert "assignee" not in captured["params"]
+
+
+def test_list_changes_since_falls_through_when_me_unresolvable() -> None:
+    """If `/user` errors, don't silently filter to nothing — drop the filter."""
+    captured: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/user":
+            return httpx.Response(401, text="bad token")
+        captured["params"] = dict(request.url.params)
+        return httpx.Response(200, json=[])
+
+    provider = _mk_provider(handler)
+    list(provider.list_changes_since(None, ScopeFilters()))
+    assert "assignee" not in captured["params"]
 
 
 def test_transition_sends_native_state_and_reason() -> None:
