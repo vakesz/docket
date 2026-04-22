@@ -28,6 +28,7 @@ from docket.api.schemas.mutations import (
     MutationConfirmedDTO,
     ProposalDTO,
     ProposeAttachmentRequest,
+    ProposeCommentRequest,
     ProposeDescriptionRequest,
     ProposeTransitionRequest,
 )
@@ -76,6 +77,7 @@ __all__ = [
     "PromptUpdateRequest",
     "ProposalDTO",
     "ProposeAttachmentRequest",
+    "ProposeCommentRequest",
     "ProposeDescriptionRequest",
     "ProposeTransitionRequest",
     "ProviderDTO",

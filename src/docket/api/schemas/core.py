@@ -38,6 +38,7 @@ class ItemDTO(BaseModel):
     tags: list[str] = Field(default_factory=list)
     updated_at: datetime | None = None
     url: str | None = None
+    author: str | None = None
     attachments: list[AttachmentDTO] = Field(default_factory=list)
 
     @classmethod
@@ -53,6 +54,7 @@ class ItemDTO(BaseModel):
             tags=list(item.tags),
             updated_at=item.updated_at,
             url=item.url,
+            author=item.author,
             attachments=[AttachmentDTO.from_core(a) for a in item.attachments],
         )
 

@@ -171,3 +171,18 @@ def test_get_item_raises_keyerror_on_unknown() -> None:
     provider = GitHubStubProvider()
     with pytest.raises(KeyError):
         provider.get_item("nope/nope#1")
+
+
+def test_add_comment_appends_and_is_visible_via_get_comments() -> None:
+    issue = _issue("example/repo#5")
+    provider = GitHubStubProvider(issues=[issue])
+    created = provider.add_comment(issue.id, "first comment")
+    assert created.body_md == "first comment"
+    assert created.item_id == issue.id
+    assert [c.body_md for c in provider.get_comments(issue.id)] == ["first comment"]
+
+
+def test_add_comment_unknown_item_raises_keyerror() -> None:
+    provider = GitHubStubProvider()
+    with pytest.raises(KeyError):
+        provider.add_comment("nope/nope#1", "hi")

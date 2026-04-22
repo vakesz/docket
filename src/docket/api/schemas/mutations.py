@@ -6,10 +6,11 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from docket.api.schemas.core import ItemDTO
+from docket.api.schemas.core import CommentDTO, ItemDTO
 from docket.core.model import TransitionIntent
 from docket.core.mutation import (
     AttachmentUpload,
+    CommentAdd,
     DescriptionPatch,
     ItemCreate,
     Proposal,
@@ -27,7 +28,9 @@ class ProposalDTO(BaseModel):
     pre-rendered for convenience)."""
 
     id: str
-    kind: Literal["state_change", "description_patch", "attachment_upload", "item_create"]
+    kind: Literal[
+        "state_change", "description_patch", "attachment_upload", "item_create", "comment_add"
+    ]
     item_id: str | None = None
     diff: str
     details: dict[str, Any] = Field(default_factory=dict)
@@ -59,6 +62,9 @@ class ProposalDTO(BaseModel):
                 "tags": list(p.fields.tags),
                 "description_md": p.fields.description_md,
             }
+        elif isinstance(p, CommentAdd):
+            item_id = p.item.id
+            details = {"body_md": p.body_md}
         else:  # pragma: no cover - exhaustive
             raise TypeError(f"unknown proposal type: {type(p)!r}")
         return cls(id=p.id, kind=p.kind, item_id=item_id, diff=render_diff(p), details=details)
@@ -78,8 +84,13 @@ class ProposeAttachmentRequest(BaseModel):
     content_type: str = "text/markdown; charset=utf-8"
 
 
+class ProposeCommentRequest(BaseModel):
+    body_md: str
+
+
 class MutationConfirmedDTO(BaseModel):
     proposal_id: str
     dry_run: bool
     item: ItemDTO | None = None
     attachment_url: str | None = None
+    comment: CommentDTO | None = None

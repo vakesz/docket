@@ -241,6 +241,16 @@ export function useProposeAttachment() {
   });
 }
 
+export function useProposeComment() {
+  return useMutation({
+    mutationFn: ({ itemId, bodyMd }: { itemId: string; bodyMd: string }) =>
+      api.post<DTO["ProposalDTO"]>(
+        `/items/${encodeURIComponent(itemId)}/mutations/comment/propose`,
+        { body_md: bodyMd } satisfies DTO["ProposeCommentRequest"],
+      ),
+  });
+}
+
 export function useConfirmProposal() {
   const qc = useQueryClient();
   return useMutation({

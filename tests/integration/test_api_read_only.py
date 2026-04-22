@@ -121,6 +121,15 @@ def test_propose_attachment_blocked(ro_client: TestClient) -> None:
     assert resp.status_code == 403
 
 
+def test_propose_comment_blocked(ro_client: TestClient) -> None:
+    resp = ro_client.post(
+        "/items/S-1/mutations/comment/propose",
+        headers=AUTH,
+        json={"body_md": "hello"},
+    )
+    assert resp.status_code == 403
+
+
 def test_confirm_blocked(ro_client: TestClient) -> None:
     # The proposal id doesn't need to exist — the router-level guard
     # fires before the handler runs.

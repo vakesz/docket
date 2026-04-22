@@ -1,4 +1,4 @@
-import { createFileRoute, Outlet, useRouterState } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useParams } from "@tanstack/react-router";
 
 import { ChatPane } from "~/components/chat/ChatPane";
 import { ItemsList } from "~/components/items/ItemsList";
@@ -9,12 +9,7 @@ export const Route = createFileRoute("/items")({
 });
 
 function ItemsShell() {
-  const selectedId = useRouterState({
-    select: (s) => {
-      const match = s.location.pathname.match(/^\/items\/([^/]+)/);
-      return match?.[1];
-    },
-  });
+  const { itemId: selectedId } = useParams({ strict: false });
   return (
     <ThreePaneLayout
       left={<ItemsList selectedId={selectedId} />}

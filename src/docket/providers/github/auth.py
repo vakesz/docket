@@ -51,7 +51,28 @@ def get_gh_token() -> str:
 
 
 def ensure_logged_in() -> str:
-    """Return the signed-in GitHub login, or raise. Used by the wizard's gh-check step."""
+    """Return the signed-in GitHub login, or raise. Used by the wizard's gh-check step.
+
+    We probe the local `gh` session with `gh auth token` (no network required) to
+    tolerate flaky connectivity; any login name we surface afterwards is
+    best-effort and reported as "<unknown>" if the `/user` lookup fails."""
+    try:
+        subprocess.run(
+            [_gh_path(), "auth", "token"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10,
+        )
+    except subprocess.CalledProcessError as e:
+        detail = (e.stderr or e.stdout or "").strip()
+        raise ProviderAuthError(
+            "No active GitHub CLI session"
+            + (f": {detail}" if detail else "")
+            + ". Run `gh auth login` in another terminal, then retry."
+        ) from e
+    except subprocess.TimeoutExpired as e:
+        raise ProviderAuthError("`gh auth token` timed out after 10s") from e
     try:
         result = subprocess.run(
             [_gh_path(), "api", "user", "--jq", ".login"],
@@ -60,14 +81,10 @@ def ensure_logged_in() -> str:
             check=True,
             timeout=10,
         )
-    except subprocess.CalledProcessError as e:
-        raise ProviderAuthError(
-            "No active GitHub CLI session. Run `gh auth login` in another terminal, then retry."
-        ) from e
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return "<unknown>"
     login = result.stdout.strip()
-    if not login:
-        raise ProviderAuthError("`gh api user` returned no login")
-    return login
+    return login or "<unknown>"
 
 
 def signed_in_email() -> str | None:

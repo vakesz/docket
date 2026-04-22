@@ -256,6 +256,32 @@ class GitHubProvider:
             "Use a comment with an externally-hosted URL instead."
         )
 
+    def add_comment(self, id: str, body_md: str) -> Comment:
+        owner, repo, number = _parse_id(id)
+        payload = self._post(
+            f"/repos/{owner}/{repo}/issues/{number}/comments",
+            {"body": body_md},
+        )
+        if not isinstance(payload, dict):
+            raise ProviderUnreachableError(f"unexpected POST comments response for {id}")
+        comment_id = str(payload.get("id", ""))
+        author_obj = payload.get("user")
+        author = (
+            author_obj.get("login")
+            if isinstance(author_obj, dict) and isinstance(author_obj.get("login"), str)
+            else "unknown"
+        )
+        created = _parse_iso(payload.get("created_at"))
+        if not comment_id or created is None:
+            raise ProviderUnreachableError(f"comment payload missing id/created_at: {payload!r}")
+        return Comment(
+            id=comment_id,
+            item_id=id,
+            author=str(author),
+            body_md=str(payload.get("body") or body_md),
+            created_at=created,
+        )
+
     def create_item(self, kind: ItemKind, fields: CreateFields) -> Item:
         body: dict[str, Any] = {
             "title": fields.title,
@@ -281,6 +307,7 @@ class GitHubProvider:
             tags=list(item.tags),
             updated_at=item.updated_at,
             url=item.url,
+            author=item.author,
             attachments=list(item.attachments),
             provider_raw=dict(item.provider_raw),
         )
@@ -376,6 +403,12 @@ class GitHubProvider:
             if isinstance(assignee_obj, dict) and isinstance(assignee_obj.get("login"), str)
             else None
         )
+        user_obj = payload.get("user")
+        author = (
+            user_obj.get("login")
+            if isinstance(user_obj, dict) and isinstance(user_obj.get("login"), str)
+            else None
+        )
         return Item(
             id=issue_id,
             kind=kind,
@@ -387,6 +420,7 @@ class GitHubProvider:
             tags=tags,
             updated_at=_parse_iso(payload.get("updated_at")),
             url=str(url) if isinstance(url, str) else None,
+            author=cast(str | None, author),
             provider_raw={
                 "github_state": state,
                 "github_state_reason": str(reason),

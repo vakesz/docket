@@ -17,6 +17,7 @@ click. Any discovery failure transparently falls back to free-form prompts
 
 from __future__ import annotations
 
+import os
 import secrets
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -607,10 +608,17 @@ def _step_http_surface(state: WizardState) -> None:
     if not state.http_enabled:
         console.print("[dim]Skipped — `docket serve` will refuse to start until re-enabled.[/dim]")
         return
+    env_token = os.environ.get("DOCKET_API_TOKEN", "").strip()
     if state.http_token and not Confirm.ask(
         "An HTTP token is already configured — generate a new one?", default=False
     ):
         console.print("[dim]Keeping the existing token.[/dim]")
+    elif env_token:
+        state.http_token = env_token
+        console.print(
+            "[green]✓ using DOCKET_API_TOKEN from environment[/green] "
+            "[dim](mirrored into config.toml under http.token — keeps the frontend proxy in sync)[/dim]"
+        )
     else:
         state.http_token = secrets.token_urlsafe(32)
         console.print(

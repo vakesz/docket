@@ -18,7 +18,6 @@ export function TopBar() {
       <nav className="flex items-center gap-1 text-xs">
         <NavLink to="/items">Items</NavLink>
         <NavLink to="/pinned">Pinned</NavLink>
-        <NavLink to="/prompts">Prompts</NavLink>
         <NavLink to="/settings">Settings</NavLink>
       </nav>
       <div className="ml-auto flex items-center gap-2">

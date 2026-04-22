@@ -1,8 +1,9 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
 import { usePinned } from "~/api/hooks";
+import { FreshnessStamp, useStaleThreshold } from "~/components/items/ItemFreshness";
 import { StatePill } from "~/components/items/ItemsList";
-import { formatKind, formatRelative } from "~/lib/format";
+import { formatKind } from "~/lib/format";
 
 export const Route = createFileRoute("/pinned")({
   component: PinnedPage,
@@ -10,6 +11,7 @@ export const Route = createFileRoute("/pinned")({
 
 function PinnedPage() {
   const pinned = usePinned();
+  const staleThresholdDays = useStaleThreshold();
   const navigate = useNavigate();
 
   return (
@@ -41,9 +43,7 @@ function PinnedPage() {
               </span>
               <StatePill state={it.state} />
               <span className="flex-1 truncate text-sm">{it.title}</span>
-              <span className="font-mono text-[10px] text-zinc-400">
-                {formatRelative(it.updated_at)}
-              </span>
+              <FreshnessStamp updatedAt={it.updated_at} thresholdDays={staleThresholdDays} />
               <span className="font-mono text-[10px] text-zinc-400">#{it.id}</span>
             </button>
           </li>

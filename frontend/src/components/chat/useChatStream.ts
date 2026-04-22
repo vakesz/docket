@@ -5,9 +5,9 @@ import { ApiError, api, type DTO } from "~/api/client";
 import { qk } from "~/api/keys";
 
 export type ChatMessage =
-  | { kind: "user"; id: string; text: string }
-  | { kind: "assistant"; id: string; text: string; streaming: boolean }
-  | { kind: "tool"; id: string; name: string; text: string };
+  | { kind: "user"; id: string; turnId: string; text: string }
+  | { kind: "assistant"; id: string; turnId: string; text: string; streaming: boolean }
+  | { kind: "tool"; id: string; turnId: string; name: string; text: string };
 
 interface UseChatStreamOpts {
   itemId: string;
@@ -47,16 +47,19 @@ export function useChatStream({ itemId, onProposal }: UseChatStreamOpts) {
     async (text: string) => {
       if (!text.trim() || streaming) return;
       setError(null);
-      const assistantId = `assistant-${Date.now()}`;
+      const turnId = `turn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const userId = `user-${turnId}`;
+      const assistantId = `assistant-${turnId}`;
       setMessages((prev) => [
         ...prev,
-        { kind: "user", id: `user-${Date.now()}`, text },
-        { kind: "assistant", id: assistantId, text: "", streaming: true },
+        { kind: "user", id: userId, turnId, text },
+        { kind: "assistant", id: assistantId, turnId, text: "", streaming: true },
       ]);
       setStreaming(true);
 
       const ctrl = new AbortController();
       abortRef.current = ctrl;
+      let completed = false;
       try {
         for await (const ev of api.stream(
           `/items/${encodeURIComponent(itemId)}/conversation/messages`,
@@ -82,6 +85,7 @@ export function useChatStream({ itemId, onProposal }: UseChatStreamOpts) {
                 {
                   kind: "tool",
                   id: `tool-${Date.now()}-${Math.random()}`,
+                  turnId,
                   name: msg.name ?? "tool",
                   text: msg.content,
                 },
@@ -93,6 +97,7 @@ export function useChatStream({ itemId, onProposal }: UseChatStreamOpts) {
           } else if (ev.event === "error") {
             setError(parseError(ev.data));
           } else if (ev.event === "done") {
+            completed = true;
             break;
           }
         }
@@ -107,8 +112,16 @@ export function useChatStream({ itemId, onProposal }: UseChatStreamOpts) {
             m.id === assistantId && m.kind === "assistant" ? { ...m, streaming: false } : m,
           ),
         );
-        qc.invalidateQueries({ queryKey: qk.conversation(itemId) });
-        qc.invalidateQueries({ queryKey: qk.status() });
+        if (completed) {
+          // The server transcript is the source of truth once a turn finishes.
+          await Promise.allSettled([
+            qc.invalidateQueries({ queryKey: qk.conversation(itemId) }),
+            qc.invalidateQueries({ queryKey: qk.status() }),
+          ]);
+          setMessages((prev) => prev.filter((message) => message.turnId !== turnId));
+        } else {
+          await qc.invalidateQueries({ queryKey: qk.status() });
+        }
         abortRef.current = null;
       }
     },

@@ -749,6 +749,8 @@ export interface components {
             updated_at?: string | null;
             /** Url */
             url?: string | null;
+            /** Author */
+            author?: string | null;
             /** Attachments */
             attachments?: components["schemas"]["AttachmentDTO"][];
         };
@@ -771,6 +773,7 @@ export interface components {
             item?: components["schemas"]["ItemDTO"] | null;
             /** Attachment Url */
             attachment_url?: string | null;
+            comment?: components["schemas"]["CommentDTO"] | null;
         };
         /** PinnedStatusDTO */
         PinnedStatusDTO: {
@@ -824,7 +827,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "state_change" | "description_patch" | "attachment_upload" | "item_create";
+            kind: "state_change" | "description_patch" | "attachment_upload" | "item_create" | "comment_add";
             /** Item Id */
             item_id?: string | null;
             /** Diff */
@@ -850,6 +853,11 @@ export interface components {
         ProposeDescriptionRequest: {
             /** New Description Md */
             new_description_md: string;
+        };
+        /** ProposeCommentRequest */
+        ProposeCommentRequest: {
+            /** Body Md */
+            body_md: string;
         };
         /** ProposeTransitionRequest */
         ProposeTransitionRequest: {

@@ -16,9 +16,10 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from docket.core.model import CreateFields, Item, ItemKind, TransitionIntent
+from docket.core.model import Comment, CreateFields, Item, ItemKind, TransitionIntent
 from docket.core.mutation import (
     AttachmentUpload,
+    CommentAdd,
     DescriptionPatch,
     ItemCreate,
     Proposal,
@@ -27,7 +28,7 @@ from docket.core.mutation import (
 from docket.providers.base import WorkItemProvider
 from docket.storage import transaction
 from docket.storage.item_keys import item_storage_key
-from docket.storage.repos import item_repo
+from docket.storage.repos import comment_repo, item_repo
 
 
 @dataclass(frozen=True)
@@ -36,6 +37,7 @@ class MutationResult:
     dry_run: bool
     item: Item | None = None  # None for attachment_upload (use attachment_url)
     attachment_url: str | None = None
+    comment: Comment | None = None  # set for comment_add
 
 
 def propose_transition(
@@ -77,6 +79,17 @@ def propose_attachment(
 
 def propose_create(kind: ItemKind, fields: CreateFields) -> ItemCreate:
     return ItemCreate(item_kind=kind, fields=fields)
+
+
+def propose_comment(
+    conn: sqlite3.Connection,
+    item_id: str,
+    body_md: str,
+    *,
+    provider_key: str = "",
+) -> CommentAdd:
+    item = _require_cached(conn, item_id, provider_key=provider_key)
+    return CommentAdd(item=item, body_md=body_md)
 
 
 def confirm(
@@ -129,6 +142,30 @@ def confirm(
         created = provider.create_item(proposal.item_kind, proposal.fields)
         _refresh_cache(conn, created, provider_key)
         return MutationResult(proposal_id=proposal.id, dry_run=False, item=created)
+
+    if isinstance(proposal, CommentAdd):
+        comment = provider.add_comment(proposal.item.id, proposal.body_md)
+        # Refresh both the cached comments list and the item row (so its
+        # `updated_at` reflects the provider-side change). We swallow refresh
+        # failures so a slow comments fetch doesn't fail the write that already
+        # succeeded — the next read will reconcile via `?refresh=true`.
+        try:
+            fresh = provider.get_comments(proposal.item.id)
+        except Exception:
+            fresh = None
+        active_key = proposal.item.provider_key or provider_key
+        if fresh is not None:
+            with transaction(conn):
+                comment_repo.replace_comments_for_item(
+                    conn, proposal.item.id, fresh, provider_key=active_key
+                )
+        try:
+            refreshed_item = provider.get_item(proposal.item.id)
+        except Exception:
+            refreshed_item = None
+        if refreshed_item is not None:
+            _refresh_cache(conn, refreshed_item, provider_key)
+        return MutationResult(proposal_id=proposal.id, dry_run=False, comment=comment)
 
     raise TypeError(f"unknown proposal type: {type(proposal)!r}")
 

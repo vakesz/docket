@@ -62,6 +62,7 @@ class Item:
     tags: list[str] = field(default_factory=list)
     updated_at: datetime | None = None
     url: str | None = None
+    author: str | None = None
     attachments: list[Attachment] = field(default_factory=list)
     provider_raw: dict[str, Any] = field(default_factory=dict)
     # Stamped at the storage boundary (sync_service + mutation upserts) so the

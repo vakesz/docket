@@ -2,9 +2,11 @@ import { useNavigate } from "@tanstack/react-router";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useMemo, useRef, useState } from "react";
 import type { DTO } from "~/api/client";
-import { useItems, usePinned } from "~/api/hooks";
+import { useItems, usePinned, useSettings } from "~/api/hooks";
+import { FreshnessStamp, useStaleThreshold } from "~/components/items/ItemFreshness";
 import { cn } from "~/lib/cn";
-import { formatKind, formatState } from "~/lib/format";
+import { displayTag, formatKind, formatState } from "~/lib/format";
+import { freshnessTone } from "~/lib/staleness";
 
 type Item = DTO["ItemDTO"];
 type ItemKind = DTO["ItemKind"];
@@ -33,10 +35,26 @@ export function ItemsList({ selectedId }: Props) {
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [showArchived, setShowArchived] = useState(false);
+  const [tagsExpanded, setTagsExpanded] = useState(false);
+
+  const settings = useSettings();
+  const staleThresholdDays = useStaleThreshold();
+  // `ui.tag_filter_collapse_limit` in config.toml; 0 means "never collapse".
+  const tagCollapseLimit = readTagCollapseLimit(settings.data?.config);
+
   const items = useItems({
     kind: kind === "all" ? undefined : kind,
     state: STATE_BUCKETS[stateBucket] ?? undefined,
     tag: activeTag ?? undefined,
+    archived: showArchived,
+  });
+  // Unfiltered-by-kind query so the kind chip bar can adapt to the provider:
+  // Azure DevOps surfaces all five kinds; GitHub issues currently only map to
+  // `task`, so there's no point showing Epic/Feature/Story/Bug there. Counts
+  // come from the same state bucket and archived flag so the chip bar matches
+  // what the user would see after clicking.
+  const itemsForKinds = useItems({
+    state: STATE_BUCKETS[stateBucket] ?? undefined,
     archived: showArchived,
   });
   const pinned = usePinned();
@@ -45,6 +63,22 @@ export function ItemsList({ selectedId }: Props) {
   const parentRef = useRef<HTMLDivElement>(null);
 
   const pinnedIds = useMemo(() => new Set((pinned.data ?? []).map((p) => p.id)), [pinned.data]);
+
+  const kindCounts = useMemo(() => {
+    const counts = new Map<ItemKind, number>();
+    for (const it of itemsForKinds.data ?? []) {
+      counts.set(it.kind, (counts.get(it.kind) ?? 0) + 1);
+    }
+    return counts;
+  }, [itemsForKinds.data]);
+
+  // Only advertise kinds the active provider actually produces. Always keep
+  // the currently-selected kind visible so it doesn't vanish mid-interaction.
+  const visibleKinds = useMemo(() => {
+    const available = KINDS.filter((k) => k === "all" || (kindCounts.get(k) ?? 0) > 0);
+    if (kind !== "all" && !available.includes(kind)) available.push(kind);
+    return available;
+  }, [kindCounts, kind]);
 
   const tagCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -88,22 +122,28 @@ export function ItemsList({ selectedId }: Props) {
           className="w-full rounded border border-zinc-200 bg-white px-2 py-1 text-sm focus:border-accent focus:outline-none dark:border-zinc-800 dark:bg-zinc-950"
         />
         <div className="flex flex-wrap items-center gap-1">
-          {KINDS.map((k) => (
-            <button
-              type="button"
-              key={k}
-              onClick={() => setKind(k)}
-              className={cn(
-                "rounded px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider",
-                kind === k
-                  ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                  : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900",
-              )}
-            >
-              {k === "all" ? "All" : formatKind(k)}
-            </button>
-          ))}
-          <label className="ml-auto flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-zinc-500">
+          {visibleKinds.length > 2 &&
+            visibleKinds.map((k) => (
+              <button
+                type="button"
+                key={k}
+                onClick={() => setKind(k)}
+                className={cn(
+                  "rounded px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider",
+                  kind === k
+                    ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                    : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900",
+                )}
+              >
+                {k === "all" ? "All" : formatKind(k)}
+              </button>
+            ))}
+          <label
+            className={cn(
+              "flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-zinc-500",
+              visibleKinds.length > 2 && "ml-auto",
+            )}
+          >
             <input
               type="checkbox"
               checked={showArchived}
@@ -143,31 +183,54 @@ export function ItemsList({ selectedId }: Props) {
               type="button"
               onClick={() => setActiveTag(null)}
               className={cn(
-                "rounded px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider",
+                "rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition-colors",
                 activeTag === null
                   ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                  : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900",
+                  : "text-zinc-500 hover:bg-zinc-100 dark:text-zinc-500 dark:hover:bg-zinc-900",
               )}
             >
               Any tag
             </button>
-            {tagCounts.slice(0, 20).map(([t, n]) => (
+            {(tagCollapseLimit <= 0 || tagsExpanded
+              ? tagCounts
+              : tagCounts.slice(0, tagCollapseLimit)
+            ).map(([t, n]) => {
+              const label = displayTag(t);
+              const selected = activeTag === t;
+              return (
+                <button
+                  type="button"
+                  key={t}
+                  onClick={() => setActiveTag(selected ? null : t)}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[10px] lowercase tracking-wide transition-colors",
+                    selected
+                      ? "bg-accent text-white"
+                      : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800",
+                  )}
+                  title={`${t} — ${n} item${n === 1 ? "" : "s"}`}
+                >
+                  <span>{label}</span>
+                  <span
+                    className={cn(
+                      "text-[9px] tabular-nums",
+                      selected ? "text-white/75" : "text-zinc-400 dark:text-zinc-500",
+                    )}
+                  >
+                    {n}
+                  </span>
+                </button>
+              );
+            })}
+            {tagCollapseLimit > 0 && tagCounts.length > tagCollapseLimit && (
               <button
                 type="button"
-                key={t}
-                onClick={() => setActiveTag(activeTag === t ? null : t)}
-                className={cn(
-                  "rounded px-2 py-0.5 font-mono text-[10px] lowercase tracking-wider",
-                  activeTag === t
-                    ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                    : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900",
-                )}
-                title={`${n} item${n === 1 ? "" : "s"}`}
+                onClick={() => setTagsExpanded((v) => !v)}
+                className="rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900"
               >
-                {t}
-                <span className="ml-1 text-zinc-400">{n}</span>
+                {tagsExpanded ? "Show less" : `+${tagCounts.length - tagCollapseLimit} more`}
               </button>
-            ))}
+            )}
           </div>
         )}
       </div>
@@ -207,6 +270,7 @@ export function ItemsList({ selectedId }: Props) {
                     item={it}
                     pinned={pinnedIds.has(it.id)}
                     selected={selectedId === it.id}
+                    staleThresholdDays={staleThresholdDays}
                     onClick={() =>
                       navigate({
                         to: "/items/$itemId",
@@ -228,13 +292,21 @@ function ItemRow({
   item,
   pinned,
   selected,
+  staleThresholdDays,
   onClick,
 }: {
   item: Item;
   pinned: boolean;
   selected: boolean;
+  staleThresholdDays: number | null;
   onClick: () => void;
 }) {
+  const tags = item.tags ?? [];
+  const shownTags = tags.slice(0, 2);
+  const extraTags = tags.length - shownTags.length;
+  const hasMeta = Boolean(item.assignee) || tags.length > 0;
+  const tone = freshnessTone(item.updated_at, staleThresholdDays);
+
   return (
     <button
       type="button"
@@ -243,6 +315,10 @@ function ItemRow({
         "flex w-full flex-col gap-1 border-b border-zinc-100 px-3 py-2 text-left transition-colors",
         "hover:bg-zinc-50 dark:border-zinc-900 dark:hover:bg-zinc-900",
         selected && "bg-zinc-100 dark:bg-zinc-900",
+        tone === "warning" &&
+          "bg-amber-50/40 hover:bg-amber-50/70 dark:bg-amber-950/10 dark:hover:bg-amber-950/20",
+        tone === "stale" &&
+          "bg-rose-50/40 hover:bg-rose-50/70 dark:bg-rose-950/10 dark:hover:bg-rose-950/20",
       )}
     >
       <div className="flex items-center gap-2 text-xs">
@@ -255,12 +331,44 @@ function ItemRow({
             ●
           </span>
         )}
-        <span className="ml-auto font-mono text-[10px] text-zinc-400">#{item.id}</span>
+        <span className="ml-auto flex items-center gap-2 font-mono text-[10px] text-zinc-400">
+          {item.updated_at && (
+            <FreshnessStamp updatedAt={item.updated_at} thresholdDays={staleThresholdDays} />
+          )}
+          <span>#{item.id}</span>
+        </span>
       </div>
       <div className="line-clamp-2 text-sm text-zinc-900 dark:text-zinc-100">{item.title}</div>
-      {item.assignee && <div className="font-mono text-[10px] text-zinc-500">{item.assignee}</div>}
+      {hasMeta && (
+        <div className="flex flex-wrap items-center gap-1.5 font-mono text-[10px] text-zinc-500">
+          {item.assignee && <span className="truncate">{item.assignee}</span>}
+          {item.assignee && tags.length > 0 && (
+            <span aria-hidden className="text-zinc-300 dark:text-zinc-700">
+              ·
+            </span>
+          )}
+          {shownTags.map((t) => (
+            <span
+              key={t}
+              title={t}
+              className="rounded bg-zinc-100 px-1.5 py-0.5 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400"
+            >
+              {displayTag(t)}
+            </span>
+          ))}
+          {extraTags > 0 && <span className="text-zinc-400 dark:text-zinc-600">+{extraTags}</span>}
+        </div>
+      )}
     </button>
   );
+}
+
+function readTagCollapseLimit(config: Record<string, unknown> | undefined): number {
+  if (!config) return 4;
+  const ui = config.ui;
+  if (!ui || typeof ui !== "object") return 4;
+  const raw = (ui as Record<string, unknown>).tag_filter_collapse_limit;
+  return typeof raw === "number" && Number.isFinite(raw) ? Math.max(0, Math.trunc(raw)) : 4;
 }
 
 const STATE_TONE: Record<string, string> = {

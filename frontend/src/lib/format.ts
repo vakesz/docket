@@ -56,3 +56,15 @@ const INTENT_LABELS: Record<string, string> = {
 export function formatIntent(intent: string): string {
   return INTENT_LABELS[intent] ?? intent;
 }
+
+// GitHub-style labels often embed emoji shortcodes like ":chart_with_upwards_trend:"
+// inside the label name, which renders as noisy literal text. Strip them for
+// display only — the raw tag string stays authoritative for filtering.
+export function displayTag(raw: string): string {
+  return (
+    raw
+      .replace(/:[a-z0-9_+-]+:/gi, "")
+      .replace(/\s+/g, " ")
+      .trim() || raw
+  );
+}

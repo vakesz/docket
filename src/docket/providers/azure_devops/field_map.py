@@ -114,6 +114,7 @@ def to_item(work_item: Any, *, url: str | None = None) -> Item | None:
         tags=_tags(fields.get("System.Tags")),
         updated_at=_parse_azure_devops_datetime(fields.get("System.ChangedDate")),
         url=url,
+        author=_assignee(fields.get("System.CreatedBy")),
         attachments=_attachments(getattr(work_item, "relations", None)),
         provider_raw={"fields": fields, "wit": wit, "state": raw_state},
     )

@@ -75,8 +75,11 @@ def ensure_logged_in() -> str:
             timeout=10,
         )
     except subprocess.CalledProcessError as e:
+        detail = (e.stderr or e.stdout or "").strip()
         raise ProviderAuthError(
-            "No active Azure CLI session. Run `az login` in another terminal, then retry."
+            "No active Azure CLI session"
+            + (f": {detail}" if detail else "")
+            + ". Run `az login` in another terminal, then retry."
         ) from e
     account = json.loads(result.stdout)
     return str(account.get("user", {}).get("name", "<unknown>"))

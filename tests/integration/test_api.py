@@ -259,6 +259,50 @@ def test_attachment_rejects_bad_base64(client: TestClient) -> None:
     assert resp.status_code == 400
 
 
+def test_propose_comment_and_confirm(client: TestClient, env) -> None:
+    _, provider, _, _ = env
+    propose = client.post(
+        "/items/S-1/mutations/comment/propose",
+        headers=AUTH_HEADERS,
+        json={"body_md": "Looks good."},
+    )
+    assert propose.status_code == 200, propose.text
+    body = propose.json()
+    assert body["kind"] == "comment_add"
+    assert body["item_id"] == "S-1"
+    assert "Looks good." in body["diff"]
+
+    proposal_id = body["id"]
+    confirm = client.post(f"/items/S-1/mutations/{proposal_id}/confirm", headers=AUTH_HEADERS)
+    assert confirm.status_code == 200, confirm.text
+    payload = confirm.json()
+    assert payload["comment"]["body_md"] == "Looks good."
+    assert payload["comment"]["item_id"] == "S-1"
+    assert provider.comments["S-1"][-1].body_md == "Looks good."
+
+    listed = client.get("/items/S-1/comments", headers=AUTH_HEADERS)
+    assert listed.status_code == 200
+    assert [c["body_md"] for c in listed.json()] == ["Looks good."]
+
+
+def test_propose_comment_rejects_empty_body(client: TestClient) -> None:
+    resp = client.post(
+        "/items/S-1/mutations/comment/propose",
+        headers=AUTH_HEADERS,
+        json={"body_md": "   \n  "},
+    )
+    assert resp.status_code == 400
+
+
+def test_propose_comment_unknown_item_returns_404(client: TestClient) -> None:
+    resp = client.post(
+        "/items/UNKNOWN/mutations/comment/propose",
+        headers=AUTH_HEADERS,
+        json={"body_md": "hi"},
+    )
+    assert resp.status_code == 404
+
+
 # -- conversations & SSE -----------------------------------------------------
 
 

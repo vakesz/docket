@@ -63,8 +63,8 @@ export function CommandPalette() {
           >
             <PaletteItem onSelect={() => go("/items")}>All items</PaletteItem>
             <PaletteItem onSelect={() => go("/pinned")}>Pinned</PaletteItem>
-            <PaletteItem onSelect={() => go("/prompts")}>Prompts</PaletteItem>
             <PaletteItem onSelect={() => go("/settings")}>Settings</PaletteItem>
+            <PaletteItem onSelect={() => go("/settings")}>Prompts</PaletteItem>
           </Command.Group>
 
           <Command.Group

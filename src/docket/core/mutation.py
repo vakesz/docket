@@ -51,7 +51,15 @@ class ItemCreate:
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
 
-Proposal = StateChange | DescriptionPatch | AttachmentUpload | ItemCreate
+@dataclass(frozen=True)
+class CommentAdd:
+    kind: Literal["comment_add"] = field(default="comment_add", init=False)
+    item: Item
+    body_md: str
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+
+
+Proposal = StateChange | DescriptionPatch | AttachmentUpload | ItemCreate | CommentAdd
 
 
 def render_diff(proposal: Proposal) -> str:
@@ -98,4 +106,10 @@ def render_diff(proposal: Proposal) -> str:
                 preview += " …"
             lines.append(f"  description: {preview}")
         return "\n".join(lines)
+    if isinstance(proposal, CommentAdd):
+        body = proposal.body_md or ""
+        header = f"[{proposal.item.id}] add comment"
+        if not body.strip():
+            return f"{header}\n  (empty)"
+        return f"{header}\n" + "\n".join(f"  > {line}" for line in body.splitlines())
     raise TypeError(f"unknown proposal type: {type(proposal)!r}")

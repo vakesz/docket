@@ -2,10 +2,12 @@ import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import type { DTO } from "~/api/client";
 import { useComments, useItem, useLinked, useRefreshItem } from "~/api/hooks";
+import { FreshnessStamp, useStaleThreshold } from "~/components/items/ItemFreshness";
 import { StatePill } from "~/components/items/ItemsList";
 import { ProposalCard } from "~/components/mutations/ProposalCard";
 import { cn } from "~/lib/cn";
-import { formatKind, formatRelative } from "~/lib/format";
+import { displayTag, formatKind, formatRelative } from "~/lib/format";
+import { CommentComposer } from "./CommentComposer";
 import { DescriptionEditor } from "./DescriptionEditor";
 import { Markdown } from "./Markdown";
 import { PinButton } from "./PinButton";
@@ -16,9 +18,12 @@ interface Props {
   itemId: string;
 }
 
+const metaLabelClassName = "font-mono text-[10px] uppercase tracking-wider text-zinc-500";
+
 export function ItemDetail({ itemId }: Props) {
   const item = useItem(itemId);
   const refresh = useRefreshItem();
+  const staleThresholdDays = useStaleThreshold();
   const [editing, setEditing] = useState(false);
   const [proposals, setProposals] = useState<DTO["ProposalDTO"][]>([]);
 
@@ -48,8 +53,9 @@ export function ItemDetail({ itemId }: Props) {
           </span>
           <StatePill state={it.state} />
           <span className="font-mono text-[10px] text-zinc-400">#{it.id}</span>
-          <span className="font-mono text-[10px] text-zinc-400">
-            Updated {formatRelative(it.updated_at)}
+          <span className="inline-flex items-center gap-1">
+            <span className="font-mono text-[10px] text-zinc-400">Updated</span>
+            <FreshnessStamp updatedAt={it.updated_at} thresholdDays={staleThresholdDays} />
           </span>
           <div className="ml-auto flex items-center gap-2">
             <PinButton itemId={it.id} />
@@ -66,33 +72,74 @@ export function ItemDetail({ itemId }: Props) {
         <h1 className="text-lg font-semibold leading-snug text-zinc-900 dark:text-zinc-100">
           {it.title}
         </h1>
-        <div className="flex items-center gap-4 text-xs text-zinc-500">
-          {it.assignee && <span>Assignee: {it.assignee}</span>}
-          {it.parent_id && <ParentLink id={it.parent_id} />}
-          {it.url && (
-            <a
-              href={it.url}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="text-accent hover:underline"
-            >
-              Open in provider ↗
-            </a>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs text-zinc-600 dark:text-zinc-400">
+          {it.author && (
+            <>
+              <dt className={metaLabelClassName}>Opened by</dt>
+              <dd className="text-zinc-700 dark:text-zinc-300">{it.author}</dd>
+            </>
+          )}
+          <dt className={metaLabelClassName}>Assignee</dt>
+          <dd className={cn(!it.assignee && "italic text-zinc-400 dark:text-zinc-600")}>
+            {it.assignee ?? "Unassigned"}
+          </dd>
+          {it.parent_id && (
+            <>
+              <dt className={metaLabelClassName}>Parent</dt>
+              <dd>
+                <ParentLink id={it.parent_id} />
+              </dd>
+            </>
           )}
           {(it.tags?.length ?? 0) > 0 && (
-            <span className="flex gap-1">
-              {it.tags?.map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400"
-                >
-                  {tag}
-                </span>
-              ))}
-            </span>
+            <>
+              <dt className={metaLabelClassName}>Labels</dt>
+              <dd className="flex flex-wrap gap-1">
+                {it.tags?.map((tag) => (
+                  <span
+                    key={tag}
+                    title={tag}
+                    className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400"
+                  >
+                    {displayTag(tag)}
+                  </span>
+                ))}
+              </dd>
+            </>
           )}
+          {(it.attachments?.length ?? 0) > 0 && (
+            <>
+              <dt className={metaLabelClassName}>Attachments</dt>
+              <dd>{it.attachments?.length}</dd>
+            </>
+          )}
+          {it.url && (
+            <>
+              <dt className={metaLabelClassName}>Link</dt>
+              <dd>
+                <a
+                  href={it.url}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="text-accent hover:underline"
+                >
+                  Open in provider ↗
+                </a>
+              </dd>
+            </>
+          )}
+        </dl>
+        <div className="flex flex-col gap-1.5 pt-1">
+          <div className="flex items-center gap-2">
+            <h2 className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">
+              Actions
+            </h2>
+            <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+              tap to stage a proposal — nothing is written until you confirm
+            </span>
+          </div>
+          <TransitionBar itemId={it.id} onStaged={pushProposal} />
         </div>
-        <TransitionBar itemId={it.id} onStaged={pushProposal} />
       </header>
 
       {proposals.length > 0 && (
@@ -134,7 +181,7 @@ export function ItemDetail({ itemId }: Props) {
         <SuggestBlock itemId={it.id} onStaged={pushProposals} />
       </section>
 
-      <CommentsSection itemId={it.id} />
+      <CommentsSection itemId={it.id} onStaged={pushProposal} />
       <LinkedSection itemId={it.id} />
     </div>
   );
@@ -153,7 +200,13 @@ function ParentLink({ id }: { id: string }) {
   );
 }
 
-function CommentsSection({ itemId }: { itemId: string }) {
+function CommentsSection({
+  itemId,
+  onStaged,
+}: {
+  itemId: string;
+  onStaged: (proposal: DTO["ProposalDTO"]) => void;
+}) {
   const comments = useComments(itemId);
   return (
     <section className="flex flex-col gap-3 border-t border-zinc-200 p-4 dark:border-zinc-800">
@@ -175,6 +228,7 @@ function CommentsSection({ itemId }: { itemId: string }) {
           </li>
         ))}
       </ul>
+      <CommentComposer itemId={itemId} onStaged={onStaged} />
     </section>
   );
 }

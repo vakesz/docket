@@ -225,6 +225,29 @@ class AzureDevOpsProvider:
         wit.update_work_item(document=patch, id=int(id))
         return str(upload.url)
 
+    def add_comment(self, id: str, body_md: str) -> Comment:
+        # Azure DevOps stores comment bodies as HTML. We send the raw markdown
+        # text — the API renders user-supplied newlines acceptably for plain
+        # text. Callers wanting rich rendering should pre-format to HTML.
+        wit = self._wit_client()
+        request = {"text": body_md}
+        resp = wit.add_comment(request=request, project=self._project, work_item_id=int(id))
+        author = (
+            getattr(getattr(resp, "created_by", None), "unique_name", None)
+            or getattr(getattr(resp, "created_by", None), "display_name", None)
+            or "unknown"
+        )
+        created = getattr(resp, "created_date", None)
+        if created is None:
+            raise ProviderUnreachableError(f"add_comment returned no created_date for {id}")
+        return Comment(
+            id=str(getattr(resp, "id", "")),
+            item_id=id,
+            author=author,
+            body_md=html_to_md(getattr(resp, "text", "") or body_md),
+            created_at=created,
+        )
+
     def create_item(self, kind: ItemKind, fields: CreateFields) -> Item:
         from docket.providers.azure_devops.state_map import WIT_BY_KIND
 

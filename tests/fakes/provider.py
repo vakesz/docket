@@ -80,6 +80,7 @@ class FakeProvider:
             tags=list(current.tags),
             updated_at=datetime.now(UTC),
             url=current.url,
+            author=current.author,
             provider_raw={**current.provider_raw, "state": new_state.value},
         )
         self._replace(updated)
@@ -98,6 +99,7 @@ class FakeProvider:
             tags=list(current.tags),
             updated_at=datetime.now(UTC),
             url=current.url,
+            author=current.author,
             provider_raw=dict(current.provider_raw),
         )
         self._replace(updated)
@@ -106,6 +108,20 @@ class FakeProvider:
     def upload_attachment(self, id: str, filename: str, content: bytes, content_type: str) -> str:
         self.uploaded.append((id, filename, content))
         return f"https://fake/attachments/{filename}"
+
+    def add_comment(self, id: str, body_md: str) -> Comment:
+        # Verify the item exists, then append. Mirrors real-provider behavior:
+        # 404 on unknown ids, idempotent ordering by created_at.
+        self.get_item(id)
+        comment = Comment(
+            id=str(next(self._id_seq)),
+            item_id=id,
+            author="fake-user",
+            body_md=body_md,
+            created_at=datetime.now(UTC),
+        )
+        self.comments.setdefault(id, []).append(comment)
+        return comment
 
     def create_item(self, kind: ItemKind, fields: CreateFields) -> Item:
         new_id = str(next(self._id_seq))

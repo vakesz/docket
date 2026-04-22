@@ -22,10 +22,12 @@ from docket.api.deps import (
     require_not_read_only,
 )
 from docket.api.schemas import (
+    CommentDTO,
     ItemDTO,
     MutationConfirmedDTO,
     ProposalDTO,
     ProposeAttachmentRequest,
+    ProposeCommentRequest,
     ProposeDescriptionRequest,
     ProposeTransitionRequest,
 )
@@ -109,6 +111,29 @@ def propose_attachment(
     return ProposalDTO.from_core(proposal)
 
 
+@router.post("/comment/propose", response_model=ProposalDTO)
+def propose_comment(
+    item_id: str,
+    payload: ProposeCommentRequest,
+    conn: sqlite3.Connection = Depends(get_conn),
+    store: ProposalStore = Depends(get_proposals),
+    provider_key: str = Depends(get_active_provider_key),
+) -> ProposalDTO:
+    if not payload.body_md.strip():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Comment body cannot be empty")
+    try:
+        proposal = mutation_service.propose_comment(
+            conn,
+            item_id,
+            payload.body_md,
+            provider_key=provider_key,
+        )
+    except KeyError as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
+    store.add(proposal, source="api")
+    return ProposalDTO.from_core(proposal)
+
+
 @router.get("/{proposal_id}", response_model=ProposalDTO)
 def get_proposal(
     item_id: str,
@@ -146,6 +171,7 @@ def confirm_proposal(
         dry_run=result.dry_run,
         item=ItemDTO.from_core(result.item) if result.item else None,
         attachment_url=result.attachment_url,
+        comment=CommentDTO.from_core(result.comment) if result.comment else None,
     )
 
 

@@ -86,3 +86,35 @@ def test_create_item_upserts_into_cache(tmp_path: Path) -> None:
     assert result.item.kind is ItemKind.BUG
     cached = item_repo.get_item(conn, result.item.id)
     assert cached and cached.title == "New bug"
+
+
+def test_propose_comment_requires_cached_item(tmp_path: Path) -> None:
+    conn = init_db(tmp_path / "m.db")
+    with pytest.raises(KeyError):
+        mutation_service.propose_comment(conn, "missing", "hello")
+
+
+def test_comment_add_writes_to_provider_and_refreshes_cache(tmp_path: Path) -> None:
+    from docket.storage.repos import comment_repo
+
+    conn, prov = _seed(tmp_path)
+    proposal = mutation_service.propose_comment(conn, "42", "Looks good to me.")
+    diff = render_diff(proposal)
+    assert "Looks good" in diff
+    result = mutation_service.confirm(conn, prov, proposal)
+
+    assert result.comment is not None
+    assert result.comment.body_md == "Looks good to me."
+    assert prov.comments["42"][-1].body_md == "Looks good to me."
+
+    cached = comment_repo.list_comments(conn, "42")
+    assert [c.body_md for c in cached] == ["Looks good to me."]
+
+
+def test_comment_add_dry_run_does_not_call_provider(tmp_path: Path) -> None:
+    conn, prov = _seed(tmp_path)
+    proposal = mutation_service.propose_comment(conn, "42", "no-op")
+    result = mutation_service.confirm(conn, prov, proposal, dry_run=True)
+    assert result.dry_run is True
+    assert result.comment is None
+    assert prov.comments.get("42", []) == []

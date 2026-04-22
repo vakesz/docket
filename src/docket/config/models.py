@@ -74,6 +74,9 @@ class UiConfig(BaseModel):
         pattern="^(epic|feature|story|task|bug)$",
     )
     show_acceptance_criteria: bool = True
+    # Web UI only: number of tag-filter chips to show before the "+N more"
+    # toggle. 0 disables collapsing (show every tag).
+    tag_filter_collapse_limit: int = Field(default=4, ge=0, le=100)
 
 
 class SyncConfig(BaseModel):

@@ -93,6 +93,7 @@ class GitHubStubProvider:
             tags=list(current.tags),
             updated_at=datetime.now(UTC),
             url=current.url,
+            author=current.author,
             provider_raw=new_raw,
         )
         self._replace(updated)
@@ -111,6 +112,7 @@ class GitHubStubProvider:
             tags=list(current.tags),
             updated_at=datetime.now(UTC),
             url=current.url,
+            author=current.author,
             provider_raw=dict(current.provider_raw),
         )
         self._replace(updated)
@@ -123,6 +125,19 @@ class GitHubStubProvider:
         _ = content_type
         self.attachments.append((id, filename, content))
         return f"https://github.example/attachments/{id}/{filename}"
+
+    def add_comment(self, id: str, body_md: str) -> Comment:
+        # Confirm the issue exists; mirrors the real provider's 404 behavior.
+        self.get_item(id)
+        comment = Comment(
+            id=str(next(self._id_seq)),
+            item_id=id,
+            author="stub-user",
+            body_md=body_md,
+            created_at=datetime.now(UTC),
+        )
+        self.comments.setdefault(id, []).append(comment)
+        return comment
 
     def create_item(self, kind: ItemKind, fields: CreateFields) -> Item:
         number = next(self._id_seq)
