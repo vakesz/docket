@@ -1,7 +1,15 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { createRootRouteWithContext, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
+import { QueryClientProvider } from "@tanstack/react-query";
+import {
+  createRootRouteWithContext,
+  HeadContent,
+  Outlet,
+  Scripts,
+  useRouteContext,
+} from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
+import { AppShell } from "~/components/common/AppShell";
 import globalsCss from "~/styles/globals.css?url";
 
 interface RouterContext {
@@ -21,9 +29,14 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 });
 
 function RootComponent() {
+  const { queryClient } = useRouteContext({ from: "__root__" });
   return (
     <RootDocument>
-      <Outlet />
+      <QueryClientProvider client={queryClient}>
+        <AppShell>
+          <Outlet />
+        </AppShell>
+      </QueryClientProvider>
     </RootDocument>
   );
 }

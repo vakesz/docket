@@ -1,7 +1,7 @@
-import { useProposeTransition } from "~/api/hooks";
 import type { DTO } from "~/api/client";
-import { formatIntent } from "~/lib/format";
+import { useProposeTransition } from "~/api/hooks";
 import { cn } from "~/lib/cn";
+import { formatIntent } from "~/lib/format";
 
 const INTENTS: DTO["TransitionIntent"][] = [
   "start_work",

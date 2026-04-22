@@ -71,6 +71,11 @@ class Pane(Vertical):
     """
 
     allow_maximize = True
+    # Focusable so Escape from a child Input (e.g. the chat prompt) can land
+    # here instead of the App root — single-key bindings then work again and
+    # the pane's :focus-within border still lights up because the Pane itself
+    # is the focus target.
+    can_focus = True
 
     DEFAULT_CSS = """
     Pane {
@@ -78,7 +83,7 @@ class Pane(Vertical):
         border: round $panel-lighten-1;
         padding: 0;
     }
-    Pane:focus-within {
+    Pane:focus, Pane:focus-within {
         border: round $accent;
     }
     """
@@ -546,6 +551,10 @@ class ItvApp(App[None]):
     def on_key(self, event: events.Key) -> None:
         filter_input = self.query_one("#filter", Input)
         tree = self.query_one(ItemTree)
+        if event.key == "escape" and self._defocus_chat_prompt():
+            event.stop()
+            event.prevent_default()
+            return
         if event.key == "down" and self.focused is filter_input:
             self._move_from_filter_to_tree()
             event.stop()
@@ -554,6 +563,27 @@ class ItvApp(App[None]):
         if event.key == "up" and self.focused is tree and self._move_from_tree_to_filter():
             event.stop()
             event.prevent_default()
+
+    def _defocus_chat_prompt(self) -> bool:
+        """If the chat prompt has focus, move focus up to the owning Pane.
+
+        Input widgets capture single-key events, so the app's letter bindings
+        (`t`, `n`, `s`, …) silently no-op while the user is typing. Pressing
+        Escape parks focus on the outer Pane, which is focusable but has no
+        text capture, so those bindings work again. Tab from the Pane re-enters
+        the prompt (see `_cycle_pane_focus`)."""
+        try:
+            prompt = self.query_one("#prompt", Input)
+        except Exception:
+            return False
+        if self.focused is not prompt:
+            return False
+        pane = self._focused_pane()
+        if pane is not None:
+            pane.focus()
+        else:
+            self.set_focus(None)
+        return True
 
     def _apply_filter(self, raw: str) -> None:
         """Re-render the tree for the given filter query.
@@ -708,6 +738,15 @@ class ItvApp(App[None]):
         if not targets:
             return
         focused = self.focused
+        # If focus is parked on a Pane container itself (e.g. after Escape
+        # defocused the chat prompt), Tab should re-enter that pane's target
+        # rather than jump to the next pane — otherwise a single Esc+Tab would
+        # skip past the pane the user was working in.
+        if isinstance(focused, Pane) and isinstance(focused.id, str) and focused.id in self._PANE_IDS:
+            pane_idx = self._PANE_IDS.index(focused.id)
+            if 0 <= pane_idx < len(targets):
+                targets[pane_idx].focus()
+                return
         idx = -1
         for i, t in enumerate(targets):
             if focused is t or (focused is not None and t in focused.ancestors):

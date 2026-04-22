@@ -1,16 +1,37 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useRouterState } from "@tanstack/react-router";
+
+import { ChatPane } from "~/components/chat/ChatPane";
+import { ItemsList } from "~/components/items/ItemsList";
+import { ThreePaneLayout } from "~/components/shell/ThreePaneLayout";
 
 export const Route = createFileRoute("/items")({
   component: ItemsShell,
 });
 
 function ItemsShell() {
+  const selectedId = useRouterState({
+    select: (s) => {
+      const match = s.location.pathname.match(/^\/items\/([^/]+)/);
+      return match?.[1];
+    },
+  });
   return (
-    <div className="flex h-screen items-center justify-center text-zinc-500">
-      <div className="text-center">
-        <div className="font-mono text-xs uppercase tracking-wider text-zinc-400">Docket</div>
-        <div className="mt-2 text-sm">Three-pane shell lands in Phase 3.</div>
-      </div>
-    </div>
+    <ThreePaneLayout
+      left={<ItemsList selectedId={selectedId} />}
+      middle={
+        <div className="h-full overflow-hidden">
+          <Outlet />
+        </div>
+      }
+      right={
+        selectedId ? (
+          <ChatPane itemId={selectedId} />
+        ) : (
+          <div className="flex h-full items-center justify-center p-4 text-sm text-zinc-500">
+            Select an item to start a chat thread.
+          </div>
+        )
+      }
+    />
   );
 }

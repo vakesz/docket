@@ -1,5 +1,5 @@
-import { useConfirmProposal, useRejectProposal } from "~/api/hooks";
 import type { DTO } from "~/api/client";
+import { useConfirmProposal, useRejectProposal } from "~/api/hooks";
 import { cn } from "~/lib/cn";
 
 interface Props {
@@ -31,10 +31,7 @@ export function ProposalCard({ proposal, onResolved }: Props) {
           type="button"
           disabled={busy || !itemId}
           onClick={() =>
-            reject.mutate(
-              { itemId, proposalId: proposal.id },
-              { onSuccess: onResolved },
-            )
+            reject.mutate({ itemId, proposalId: proposal.id }, { onSuccess: onResolved })
           }
           className={cn(
             "rounded border border-zinc-300 px-3 py-1 text-xs hover:bg-white",
@@ -47,10 +44,7 @@ export function ProposalCard({ proposal, onResolved }: Props) {
           type="button"
           disabled={busy || !itemId}
           onClick={() =>
-            confirm.mutate(
-              { itemId, proposalId: proposal.id },
-              { onSuccess: onResolved },
-            )
+            confirm.mutate({ itemId, proposalId: proposal.id }, { onSuccess: onResolved })
           }
           className="rounded bg-emerald-600 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
         >

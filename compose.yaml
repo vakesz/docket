@@ -1,0 +1,71 @@
+## Docket — production compose
+#
+# Two services:
+#   - backend    FastAPI (uvicorn) on the compose network, no host port.
+#                Named volume `docket-data` holds /data/{config,state,cache}
+#                so config.toml, docket.db, prompts, and logs persist across
+#                container rebuilds.
+#   - frontend   Bun server that proxies /api/* to the backend and serves
+#                the built React app. Exposed on host port $DOCKET_FRONTEND_PORT.
+#
+# Shared secret: DOCKET_API_TOKEN is the bearer the frontend attaches on
+# every proxied call. The first-run wizard writes this exact value into
+# config.toml (http.token) so the backend accepts it post-setup.
+#
+# Usage:
+#   docker compose up -d --build        # first run: hits the setup wizard
+#   docker compose logs -f frontend     # watch the frontend
+#   docker compose down                 # stop; data persists in docket-data
+
+name: docket
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DOCKET_API_TOKEN: ${DOCKET_API_TOKEN:?set DOCKET_API_TOKEN in .env}
+      DOCKET_SETUP_TOKEN: ${DOCKET_SETUP_TOKEN:-${DOCKET_API_TOKEN}}
+      DOCKET_READ_ONLY: ${DOCKET_READ_ONLY:-0}
+      DOCKET_LOG_LEVEL: ${DOCKET_LOG_LEVEL:-info}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
+      AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT:-}
+      DOCKET_PRICE_INPUT_PER_1M: ${DOCKET_PRICE_INPUT_PER_1M:-1.25}
+      DOCKET_PRICE_OUTPUT_PER_1M: ${DOCKET_PRICE_OUTPUT_PER_1M:-10.0}
+    volumes:
+      - docket-data:/data
+    expose:
+      - "8765"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8765/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      DOCKET_API_URL: http://backend:8765
+      DOCKET_API_TOKEN: ${DOCKET_API_TOKEN:?set DOCKET_API_TOKEN in .env}
+      PORT: 3000
+    ports:
+      - "${DOCKET_FRONTEND_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  docket-data:

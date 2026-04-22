@@ -38,5 +38,3 @@ export const qk = {
   prompts: () => [...qk.all, "prompts"] as const,
   prompt: (key: string) => [...qk.all, "prompts", key] as const,
 };
-
-export type QueryKey = ReturnType<(typeof qk)[keyof typeof qk]>;

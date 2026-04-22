@@ -1,9 +1,8 @@
-import CodeMirror from "@uiw/react-codemirror";
 import { markdown } from "@codemirror/lang-markdown";
+import CodeMirror from "@uiw/react-codemirror";
 import { useState } from "react";
-
-import { useProposeDescription } from "~/api/hooks";
 import type { DTO } from "~/api/client";
+import { useProposeDescription } from "~/api/hooks";
 
 interface Props {
   itemId: string;

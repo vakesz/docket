@@ -27,7 +27,10 @@ async function request<T>(
   path: string,
   init: { body?: unknown; query?: Record<string, unknown>; signal?: AbortSignal } = {},
 ): Promise<T> {
-  const url = new URL(`${BASE}${path}`, typeof window !== "undefined" ? window.location.origin : "http://localhost");
+  const url = new URL(
+    `${BASE}${path}`,
+    typeof window !== "undefined" ? window.location.origin : "http://localhost",
+  );
   if (init.query) {
     for (const [k, v] of Object.entries(init.query)) {
       if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
@@ -50,7 +53,10 @@ async function request<T>(
       payload = await res.text().catch(() => null);
     }
     const detail =
-      (typeof payload === "object" && payload && "detail" in payload && String((payload as { detail: unknown }).detail)) ||
+      (typeof payload === "object" &&
+        payload &&
+        "detail" in payload &&
+        String((payload as { detail: unknown }).detail)) ||
       res.statusText;
     throw new ApiError(res.status, payload, `${method} ${path} failed (${res.status}): ${detail}`);
   }
@@ -64,8 +70,10 @@ export const api = {
     request<T>("GET", path, { query, signal }),
   post: <T>(path: string, body?: unknown, query?: Record<string, unknown>, signal?: AbortSignal) =>
     request<T>("POST", path, { body, query, signal }),
-  put: <T>(path: string, body?: unknown, signal?: AbortSignal) => request<T>("PUT", path, { body, signal }),
-  patch: <T>(path: string, body?: unknown, signal?: AbortSignal) => request<T>("PATCH", path, { body, signal }),
+  put: <T>(path: string, body?: unknown, signal?: AbortSignal) =>
+    request<T>("PUT", path, { body, signal }),
+  patch: <T>(path: string, body?: unknown, signal?: AbortSignal) =>
+    request<T>("PATCH", path, { body, signal }),
   delete: <T>(path: string, signal?: AbortSignal) => request<T>("DELETE", path, { signal }),
 
   /**
@@ -93,8 +101,9 @@ export const api = {
       const { done, value } = await reader.read();
       if (done) break;
       buf += value;
-      let idx: number;
-      while ((idx = buf.indexOf("\n\n")) !== -1) {
+      for (;;) {
+        const idx = buf.indexOf("\n\n");
+        if (idx === -1) break;
         const raw = buf.slice(0, idx);
         buf = buf.slice(idx + 2);
         const lines = raw.split("\n");

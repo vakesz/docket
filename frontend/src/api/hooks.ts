@@ -141,11 +141,9 @@ export function useSetActiveScope() {
 
 // ---------- Items ------------------------------------------------------------
 
-export function useItems(filter: {
-  kind?: ItemKind | null;
-  archived?: boolean;
-  parent_id?: string | null;
-} = {}) {
+export function useItems(
+  filter: { kind?: ItemKind | null; archived?: boolean; parent_id?: string | null } = {},
+) {
   return useQuery({
     queryKey: qk.items(filter),
     queryFn: ({ signal }) =>
@@ -201,11 +199,7 @@ export function useLinked(id: string | undefined) {
     queryKey: id ? qk.linked(id) : qk.linked("__none__"),
     enabled: Boolean(id),
     queryFn: ({ signal }) =>
-      api.get<DTO["ItemDTO"][]>(
-        `/items/${encodeURIComponent(id ?? "")}/linked`,
-        undefined,
-        signal,
-      ),
+      api.get<DTO["ItemDTO"][]>(`/items/${encodeURIComponent(id ?? "")}/linked`, undefined, signal),
   });
 }
 
@@ -246,13 +240,7 @@ export function useProposeDescription() {
 
 export function useProposeAttachment() {
   return useMutation({
-    mutationFn: ({
-      itemId,
-      body,
-    }: {
-      itemId: string;
-      body: DTO["ProposeAttachmentRequest"];
-    }) =>
+    mutationFn: ({ itemId, body }: { itemId: string; body: DTO["ProposeAttachmentRequest"] }) =>
       api.post<DTO["ProposalDTO"]>(
         `/items/${encodeURIComponent(itemId)}/mutations/attachment/propose`,
         body,
@@ -343,17 +331,8 @@ export function useSuggestion() {
 
 export function useStageSuggestion() {
   return useMutation({
-    mutationFn: ({
-      itemId,
-      body,
-    }: {
-      itemId: string;
-      body: DTO["SuggestionStageRequest"];
-    }) =>
-      api.post<DTO["ProposalDTO"][]>(
-        `/items/${encodeURIComponent(itemId)}/suggestion/stage`,
-        body,
-      ),
+    mutationFn: ({ itemId, body }: { itemId: string; body: DTO["SuggestionStageRequest"] }) =>
+      api.post<DTO["ProposalDTO"][]>(`/items/${encodeURIComponent(itemId)}/suggestion/stage`, body),
   });
 }
 
@@ -376,11 +355,8 @@ export function useStartThread() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (itemId: string) =>
-      api.post<DTO["ConversationDTO"]>(
-        `/items/${encodeURIComponent(itemId)}/conversation/thread`,
-      ),
-    onSuccess: (_data, itemId) =>
-      qc.invalidateQueries({ queryKey: qk.conversation(itemId) }),
+      api.post<DTO["ConversationDTO"]>(`/items/${encodeURIComponent(itemId)}/conversation/thread`),
+    onSuccess: (_data, itemId) => qc.invalidateQueries({ queryKey: qk.conversation(itemId) }),
   });
 }
 

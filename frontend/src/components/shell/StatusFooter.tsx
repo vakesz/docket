@@ -46,10 +46,7 @@ function Dot({ ok, label }: { ok: boolean; label: string }) {
     <span className="flex items-center gap-1.5">
       <span
         aria-hidden
-        className={cn(
-          "h-1.5 w-1.5 rounded-full",
-          ok ? "bg-emerald-500" : "bg-rose-500",
-        )}
+        className={cn("h-1.5 w-1.5 rounded-full", ok ? "bg-emerald-500" : "bg-rose-500")}
       />
       <span>{label}</span>
     </span>

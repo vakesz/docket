@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import secrets
 from typing import TYPE_CHECKING
 
@@ -23,6 +24,14 @@ if TYPE_CHECKING:
     from docket.agent.foundry_client import FoundryClient
 
 console = Console()
+
+_VALID_LOG_LEVELS = {"critical", "error", "warning", "info", "debug", "trace"}
+
+
+def _resolve_log_level() -> str:
+    """Uvicorn log level from `DOCKET_LOG_LEVEL` env, defaulting to info."""
+    raw = (os.environ.get("DOCKET_LOG_LEVEL") or "info").strip().lower()
+    return raw if raw in _VALID_LOG_LEVELS else "info"
 
 
 def serve_command(
@@ -79,7 +88,7 @@ def serve_command(
             f"[green]docket serve (bootstrap)[/green] listening on http://{bind}:{listen_port} "
             f"— POST /setup/complete to finish setup"
         )
-        uvicorn.run(app, host=bind, port=listen_port, log_level="info")
+        uvicorn.run(app, host=bind, port=listen_port, log_level=_resolve_log_level())
         return
 
     try:
@@ -126,7 +135,7 @@ def serve_command(
             f"[green]docket serve[/green] listening on http://{bind}:{listen_port} "
             f"(bearer required; chat {'disabled' if llm is None else 'enabled'}; {mode})"
         )
-        uvicorn.run(app, host=bind, port=listen_port, log_level="info")
+        uvicorn.run(app, host=bind, port=listen_port, log_level=_resolve_log_level())
     finally:
         ctx.close()
 

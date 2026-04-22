@@ -1,9 +1,8 @@
-import { useVirtualizer } from "@tanstack/react-virtual";
 import { useNavigate } from "@tanstack/react-router";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useMemo, useRef, useState } from "react";
-
-import { useItems, usePinned } from "~/api/hooks";
 import type { DTO } from "~/api/client";
+import { useItems, usePinned } from "~/api/hooks";
 import { cn } from "~/lib/cn";
 import { formatKind, formatState } from "~/lib/format";
 
@@ -169,9 +168,7 @@ function ItemRow({
         <span className="ml-auto font-mono text-[10px] text-zinc-400">#{item.id}</span>
       </div>
       <div className="line-clamp-2 text-sm text-zinc-900 dark:text-zinc-100">{item.title}</div>
-      {item.assignee && (
-        <div className="font-mono text-[10px] text-zinc-500">{item.assignee}</div>
-      )}
+      {item.assignee && <div className="font-mono text-[10px] text-zinc-500">{item.assignee}</div>}
     </button>
   );
 }
