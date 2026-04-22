@@ -1,0 +1,121 @@
+"""Prompt library CRUD — list/read/edit/reset the agent's system + per-kind
+prompts.
+
+Writes go to `$XDG_CONFIG_HOME/docket/prompts/<filename>`. The existing
+mtime-keyed loader cache in `agent/prompt.py` picks up edits on the next
+chat turn without a restart — nothing for this module to do there."""
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from docket.api.auth import require_bearer
+from docket.api.deps import get_paths, require_not_read_only
+from docket.api.schemas import PromptDTO, PromptSummaryDTO, PromptUpdateRequest
+from docket.config import prompt_templates
+from docket.config.paths import Paths
+
+router = APIRouter(
+    prefix="/prompts",
+    tags=["prompts"],
+    dependencies=[Depends(require_bearer)],
+)
+
+
+def _is_customized(paths: Paths, template: prompt_templates.PromptTemplate) -> bool:
+    target = paths.prompts_dir / template.filename
+    if target.exists():
+        return True
+    if template.legacy_filename:
+        legacy = paths.prompts_dir / template.legacy_filename
+        if legacy.exists():
+            return True
+    return False
+
+
+@router.get("", response_model=list[PromptSummaryDTO])
+def list_prompts(paths: Paths = Depends(get_paths)) -> list[PromptSummaryDTO]:
+    return [
+        PromptSummaryDTO(
+            key=t.key,
+            label=t.label,
+            filename=t.filename,
+            customized=_is_customized(paths, t),
+        )
+        for t in prompt_templates.list_templates()
+    ]
+
+
+@router.get("/{key}", response_model=PromptDTO)
+def get_prompt(key: str, paths: Paths = Depends(get_paths)) -> PromptDTO:
+    try:
+        template = prompt_templates.get_template(key)
+    except KeyError as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown prompt '{key}'") from e
+    content = prompt_templates.read_prompt(paths.prompts_dir, key)
+    return PromptDTO(
+        key=template.key,
+        label=template.label,
+        filename=template.filename,
+        content_md=content,
+        customized=_is_customized(paths, template),
+    )
+
+
+@router.put(
+    "/{key}",
+    response_model=PromptDTO,
+    dependencies=[Depends(require_not_read_only)],
+)
+def put_prompt(
+    key: str,
+    payload: PromptUpdateRequest,
+    paths: Paths = Depends(get_paths),
+) -> PromptDTO:
+    try:
+        template = prompt_templates.get_template(key)
+    except KeyError as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown prompt '{key}'") from e
+    prompt_templates.write_prompt(paths.prompts_dir, key, payload.content_md)
+    return PromptDTO(
+        key=template.key,
+        label=template.label,
+        filename=template.filename,
+        content_md=payload.content_md,
+        customized=True,
+    )
+
+
+@router.delete(
+    "/{key}",
+    response_model=PromptDTO,
+    dependencies=[Depends(require_not_read_only)],
+)
+def reset_prompt(
+    key: str,
+    paths: Paths = Depends(get_paths),
+) -> PromptDTO:
+    """Restore the canonical template and remove any legacy-named file.
+
+    After a reset we keep the customized flag `True` because the current
+    implementation rewrites the file to the default rather than deleting it.
+    Clients can distinguish by reading the content — the returned `content_md`
+    is exactly the canonical template."""
+    try:
+        template = prompt_templates.get_template(key)
+    except KeyError as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown prompt '{key}'") from e
+    prompt_templates.reset_prompt(paths.prompts_dir, key)
+    if template.legacy_filename:
+        legacy = paths.prompts_dir / template.legacy_filename
+        if legacy.exists():
+            legacy.unlink()
+    return PromptDTO(
+        key=template.key,
+        label=template.label,
+        filename=template.filename,
+        content_md=template.default_text,
+        customized=True,
+    )
+
+
+__all__ = ["router"]

@@ -20,7 +20,17 @@ from docket.api.auth import require_bearer
 from docket.api.routes import conversations as conversations_routes
 from docket.api.routes import items as items_routes
 from docket.api.routes import mutations as mutations_routes
+from docket.api.routes import pins as pins_routes
+from docket.api.routes import prompts as prompts_routes
+from docket.api.routes import providers as providers_routes
+from docket.api.routes import scopes as scopes_routes
+from docket.api.routes import settings as settings_routes
+from docket.api.routes import status as status_routes
+from docket.api.routes import suggestions as suggestions_routes
+from docket.api.routes import sync as sync_routes
+from docket.api.runtime import RuntimeState
 from docket.api.schemas import HealthDTO
+from docket.config.paths import Paths
 from docket.core.services.proposal_store import ProposalStore
 from docket.providers.base import WorkItemProvider
 
@@ -35,6 +45,8 @@ def create_app(
     active_item: Callable[[], str | None] | None = None,
     compaction_threshold_tokens: int = 0,
     read_only: bool = False,
+    paths: Paths | None = None,
+    runtime: RuntimeState | None = None,
 ) -> FastAPI:
     """Build a configured FastAPI app.
 
@@ -44,6 +56,11 @@ def create_app(
     `read_only=True` blocks every POST on the mutation surface (the router
     attaches `require_not_read_only` as a dependency) and skips registering
     mutating tools for the agent. Read endpoints keep working unchanged.
+
+    `paths` and `runtime` are optional for backwards compatibility with the
+    existing test fixtures. When omitted, the endpoints that need them return
+    503; when set (by `docket serve`), pins/suggestions/prompts/settings/
+    scopes/providers/sync/status work end-to-end.
     """
     if not bearer_token:
         raise ValueError(
@@ -63,6 +80,8 @@ def create_app(
     app.state.llm = llm
     app.state.compaction_threshold_tokens = compaction_threshold_tokens
     app.state.read_only = read_only
+    app.state.paths = paths
+    app.state.runtime = runtime
 
     if llm is not None:
         registry = ToolRegistry()
@@ -81,6 +100,14 @@ def create_app(
     app.include_router(items_routes.router)
     app.include_router(mutations_routes.router)
     app.include_router(conversations_routes.router)
+    app.include_router(pins_routes.router)
+    app.include_router(suggestions_routes.router)
+    app.include_router(prompts_routes.router)
+    app.include_router(settings_routes.router)
+    app.include_router(scopes_routes.router)
+    app.include_router(providers_routes.router)
+    app.include_router(sync_routes.router)
+    app.include_router(status_routes.router)
 
     @app.get("/healthz", response_model=HealthDTO, tags=["health"])
     def healthz() -> HealthDTO:

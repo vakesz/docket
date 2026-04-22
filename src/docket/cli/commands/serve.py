@@ -35,6 +35,7 @@ def serve_command(
 
     from docket.agent.foundry_client import LlmClient
     from docket.api.app import create_app
+    from docket.api.runtime import RuntimeState
 
     effective_read_only = read_only or get_read_only()
 
@@ -59,6 +60,14 @@ def serve_command(
         if not no_chat:
             llm = _build_llm_client()
 
+        scope_key = ctx.scope_key_for()
+        runtime = RuntimeState(
+            config=ctx.config,
+            providers=ctx.providers,
+            provider_key=ctx.active_provider,
+            scope_key=scope_key,
+        )
+
         app = create_app(
             conn=ctx.conn,
             provider=ctx.provider,
@@ -66,6 +75,8 @@ def serve_command(
             llm=llm,
             compaction_threshold_tokens=ctx.config.llm.compaction_threshold_tokens,
             read_only=effective_read_only,
+            paths=ctx.paths,
+            runtime=runtime,
         )
         mode = "read-only" if effective_read_only else "read-write"
         console.print(

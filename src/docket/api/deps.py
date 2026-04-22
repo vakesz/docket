@@ -10,7 +10,10 @@ import sqlite3
 
 from fastapi import HTTPException, Request, status
 
+from docket.agent.foundry_client import LlmClient
 from docket.agent.loop import AgentLoop
+from docket.api.runtime import RuntimeState
+from docket.config.paths import Paths
 from docket.core.services.proposal_store import ProposalStore
 from docket.providers.base import WorkItemProvider
 
@@ -26,6 +29,9 @@ def get_conn(request: Request) -> sqlite3.Connection:
 
 
 def get_provider(request: Request) -> WorkItemProvider:
+    runtime: RuntimeState | None = getattr(request.app.state, "runtime", None)
+    if runtime is not None:
+        return runtime.provider
     provider: WorkItemProvider | None = getattr(request.app.state, "provider", None)
     if provider is None:
         raise HTTPException(
@@ -55,6 +61,16 @@ def require_agent(request: Request) -> AgentLoop:
     return agent
 
 
+def require_llm(request: Request) -> LlmClient:
+    llm: LlmClient | None = getattr(request.app.state, "llm", None)
+    if llm is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="LLM is not configured — feature unavailable on this server.",
+        )
+    return llm
+
+
 def require_not_read_only(request: Request) -> None:
     if getattr(request.app.state, "read_only", False):
         raise HTTPException(
@@ -63,10 +79,33 @@ def require_not_read_only(request: Request) -> None:
         )
 
 
+def get_paths(request: Request) -> Paths:
+    paths: Paths | None = getattr(request.app.state, "paths", None)
+    if paths is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Paths are not wired — this endpoint requires `docket serve`.",
+        )
+    return paths
+
+
+def get_runtime(request: Request) -> RuntimeState:
+    runtime: RuntimeState | None = getattr(request.app.state, "runtime", None)
+    if runtime is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Runtime state is not wired — this endpoint requires `docket serve`.",
+        )
+    return runtime
+
+
 __all__ = [
     "get_conn",
+    "get_paths",
     "get_proposals",
     "get_provider",
+    "get_runtime",
     "require_agent",
+    "require_llm",
     "require_not_read_only",
 ]
