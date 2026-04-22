@@ -55,9 +55,7 @@ def test_provider_neutral_layers_do_not_import_concrete_providers() -> None:
     for pkg in ("core", "storage", "agent", "api"):
         for f in _python_files_under(pkg):
             bad.extend(_forbidden_imports(f))
-    assert not bad, (
-        "Concrete provider leaked into provider-neutral layer:\n" + "\n".join(bad)
-    )
+    assert not bad, "Concrete provider leaked into provider-neutral layer:\n" + "\n".join(bad)
 
 
 def test_sentinel_concrete_providers_present() -> None:

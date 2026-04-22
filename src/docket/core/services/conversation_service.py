@@ -33,7 +33,9 @@ class TurnResult:
 
 
 def open_thread(conn: sqlite3.Connection, item_id: str, *, provider_key: str = "") -> Conversation:
-    existing = conversation_repo.get_active_for_item(conn, item_id, provider_key=provider_key or None)
+    existing = conversation_repo.get_active_for_item(
+        conn, item_id, provider_key=provider_key or None
+    )
     if existing is not None:
         return existing
     return conversation_repo.create(conn, item_id, provider_key=provider_key)

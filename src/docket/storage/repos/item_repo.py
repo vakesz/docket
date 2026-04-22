@@ -149,9 +149,7 @@ def list_items(
     return [_row_to_item(r) for r in rows]
 
 
-def iter_items(
-    conn: sqlite3.Connection, *, provider_key: str | None = None
-) -> Iterator[Item]:
+def iter_items(conn: sqlite3.Connection, *, provider_key: str | None = None) -> Iterator[Item]:
     if provider_key:
         cur = conn.execute(
             "SELECT * FROM items WHERE provider_key = ? ORDER BY updated_at DESC",

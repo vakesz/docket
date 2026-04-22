@@ -52,7 +52,7 @@ def _message_dto(m: ChatMessage) -> ChatRoleDTO:
         ],
         tool_call_id=m.tool_call_id,
         name=m.name,
-)
+    )
 
 
 def _active_provider_key(request: Request) -> str:

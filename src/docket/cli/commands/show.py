@@ -27,7 +27,9 @@ def show_command(id: str = typer.Argument(..., help="Work item ID.")) -> None:
         console.print(Panel.fit(header, title=f"Docket {item.id}"))
         if item.description_md.strip():
             console.print(Markdown(item.description_md))
-        comments = comment_repo.list_comments(ctx.conn, id, provider_key=ctx.active_provider or None)
+        comments = comment_repo.list_comments(
+            ctx.conn, id, provider_key=ctx.active_provider or None
+        )
         if comments:
             console.print("\n[bold]Comments[/bold]")
             for c in comments:

@@ -49,7 +49,9 @@ def _find_duplicates(
     match *any* word in `title`, best-match first. Empty list if nothing
     plausible exists. Uses OR-matching so "Login redesign" catches an existing
     "Login" item that the tight AND-match would miss."""
-    ids = search_repo.search_similar(conn, title, provider_key=provider_key or None)[:_DUPLICATE_LIMIT]
+    ids = search_repo.search_similar(conn, title, provider_key=provider_key or None)[
+        :_DUPLICATE_LIMIT
+    ]
     out: list[dict[str, str]] = []
     for iid in ids:
         item = item_repo.get_item(conn, iid, provider_key=provider_key or None)

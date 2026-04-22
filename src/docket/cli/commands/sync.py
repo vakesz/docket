@@ -30,9 +30,7 @@ def sync_command(
         scope_key = scope or ctx.scope_key_for(provider_key)
         with console.status(f"Syncing scope '{scope_key}' on '{provider_key}'..."):
             fn = sync_service.full_refresh if full else sync_service.refresh
-            summary = fn(
-                ctx.conn, ctx.provider, scope_key, filters, provider_key=provider_key
-            )
+            summary = fn(ctx.conn, ctx.provider, scope_key, filters, provider_key=provider_key)
         console.print(
             f"[green]✓[/green] synced {summary.upserted} item(s), "
             f"archived {summary.archived}, watermark → {summary.watermark}"
