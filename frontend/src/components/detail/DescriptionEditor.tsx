@@ -3,6 +3,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { useState } from "react";
 import type { DTO } from "~/api/client";
 import { useProposeDescription } from "~/api/hooks";
+import { docketCodeMirrorTheme } from "~/lib/cmTheme";
 
 interface Props {
   itemId: string;
@@ -22,8 +23,8 @@ export function DescriptionEditor({ itemId, initial, onStaged, onClose }: Props)
         <CodeMirror
           value={value}
           height="240px"
-          theme="dark"
-          extensions={[markdown()]}
+          theme="none"
+          extensions={[markdown(), ...docketCodeMirrorTheme()]}
           onChange={setValue}
           basicSetup={{ lineNumbers: false, foldGutter: false }}
         />

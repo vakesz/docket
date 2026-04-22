@@ -19,16 +19,30 @@ interface RouterContext {
 // Applied before React hydrates so <html data-theme> and the `dark` class
 // match the user's saved theme on first paint. Mirrors lib/theme.ts logic
 // (kept inline + duplicated because this script runs before any module
-// loads). Keep the THEMES_DARK list in sync with `THEMES` in lib/theme.ts.
+// loads). Keep the DARK / ADAPTIVE / VALID lists in sync with `THEMES`
+// and `ADAPTIVE_VARIANTS` in lib/theme.ts.
 const THEME_BOOTSTRAP = `(() => {
   try {
-    var DARK = ["dark","nord","dracula","gruvbox-dark","tokyo-night","catppuccin-mocha"];
-    var VALID = ["system","light","dark","nord","dracula","gruvbox-dark","gruvbox-light","tokyo-night","catppuccin-mocha","catppuccin-latte","solarized-light"];
+    var DARK = ["dark","nord","dracula","gruvbox-dark","tokyo-night","monokai","catppuccin-mocha","catppuccin-frappe","catppuccin-macchiato","solarized-dark","rose-pine","rose-pine-moon","atom-one-dark","flexoki-dark"];
+    var ADAPTIVE = {
+      "system": ["light","dark"],
+      "catppuccin": ["catppuccin-latte","catppuccin-mocha"],
+      "gruvbox": ["gruvbox-light","gruvbox-dark"],
+      "solarized": ["solarized-light","solarized-dark"],
+      "rose-pine-auto": ["rose-pine-dawn","rose-pine"],
+      "atom-one": ["atom-one-light","atom-one-dark"],
+      "flexoki": ["flexoki-light","flexoki-dark"]
+    };
+    var VALID = ["system","catppuccin","gruvbox","solarized","rose-pine-auto","atom-one","flexoki","light","gruvbox-light","catppuccin-latte","solarized-light","rose-pine-dawn","atom-one-light","flexoki-light","dark","nord","dracula","gruvbox-dark","tokyo-night","monokai","catppuccin-mocha","catppuccin-frappe","catppuccin-macchiato","solarized-dark","rose-pine","rose-pine-moon","atom-one-dark","flexoki-dark"];
     var s = localStorage.getItem("docket.theme");
     var id = (s && VALID.indexOf(s) !== -1) ? s : "system";
-    var resolved = id === "system"
-      ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
-      : id;
+    var resolved;
+    if (ADAPTIVE[id]) {
+      var prefersDark = matchMedia("(prefers-color-scheme: dark)").matches;
+      resolved = prefersDark ? ADAPTIVE[id][1] : ADAPTIVE[id][0];
+    } else {
+      resolved = id;
+    }
     var root = document.documentElement;
     root.setAttribute("data-theme", resolved);
     root.classList.toggle("dark", DARK.indexOf(resolved) !== -1);

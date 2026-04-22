@@ -43,6 +43,7 @@ import {
 } from "~/api/hooks";
 import type { components } from "~/api/schema";
 import { ThemePicker } from "~/components/shell/ThemePicker";
+import { docketCodeMirrorTheme } from "~/lib/cmTheme";
 import { cn } from "~/lib/cn";
 
 type PromptSummary = components["schemas"]["PromptSummaryDTO"];
@@ -123,7 +124,33 @@ const SECTIONS: SectionMeta[] = [
 ];
 
 const ITEM_KINDS = ["epic", "feature", "story", "task", "bug"] as const;
-const THEME_OPTIONS = ["textual-dark", "textual-light", "system"] as const;
+// Mirrors Textual's built-in available_themes keys (+ the meta "system"
+// sentinel the TUI treats as "follow OS"). Kept in sync with the TUI's
+// theme_picker widget; the Select allows custom entries so a user can point
+// at a theme registered by a future plugin.
+const THEME_OPTIONS = [
+  "system",
+  "textual-dark",
+  "textual-light",
+  "textual-ansi",
+  "nord",
+  "gruvbox",
+  "catppuccin-mocha",
+  "catppuccin-latte",
+  "catppuccin-frappe",
+  "catppuccin-macchiato",
+  "dracula",
+  "tokyo-night",
+  "monokai",
+  "flexoki",
+  "solarized-light",
+  "solarized-dark",
+  "rose-pine",
+  "rose-pine-moon",
+  "rose-pine-dawn",
+  "atom-one-dark",
+  "atom-one-light",
+] as const;
 const MODE_STORAGE_KEY = "docket.settings.mode";
 
 // ---------- Route -----------------------------------------------------------
@@ -436,7 +463,7 @@ function SettingsPage() {
                     type="button"
                     onClick={revertAll}
                     disabled={!dirty}
-                    className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-medium text-fg hover:bg-bg disabled:cursor-not-allowed disabled:opacity-40-muted-alt"
+                    className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-medium text-fg hover:bg-bg disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <RotateCcw className="h-4 w-4" />
                     Revert
@@ -1003,8 +1030,8 @@ function ModeButton({
       className={cn(
         "flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors",
         active
-          ? "bg-surface text-fg shadow-sm-alt"
-          : "text-fg-muted hover:text-fg disabled:cursor-not-allowed disabled:opacity-40-faint",
+          ? "bg-surface text-fg shadow-sm"
+          : "text-fg-muted hover:text-fg disabled:cursor-not-allowed disabled:opacity-40",
       )}
     >
       <Icon className="h-3.5 w-3.5" />
@@ -1735,18 +1762,6 @@ function PromptEditor({ promptKey }: { promptKey: string }) {
   const reset = useResetPrompt();
   const [draft, setDraft] = useState<string>("");
   const [savedFlash, setSavedFlash] = useState(false);
-  const [isDark, setIsDark] = useState<boolean>(() =>
-    typeof document === "undefined" ? true : document.documentElement.classList.contains("dark"),
-  );
-
-  // Match the editor theme to the app-wide dark mode toggle.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const target = document.documentElement;
-    const obs = new MutationObserver(() => setIsDark(target.classList.contains("dark")));
-    obs.observe(target, { attributes: true, attributeFilter: ["class"] });
-    return () => obs.disconnect();
-  }, []);
 
   // Refresh the draft when the upstream content changes (initial load + after
   // a save / reset round-trip).
@@ -1868,7 +1883,7 @@ function PromptEditor({ promptKey }: { promptKey: string }) {
                   ? "This prompt is already the bundled default"
                   : "Restore the bundled default content"
             }
-            className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-medium text-fg hover:bg-bg disabled:cursor-not-allowed disabled:opacity-40-muted-alt"
+            className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-medium text-fg hover:bg-bg disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Sparkles className="h-4 w-4" />
             {reset.isPending ? "Resetting…" : "Reset to default"}
@@ -1877,7 +1892,7 @@ function PromptEditor({ promptKey }: { promptKey: string }) {
             type="button"
             onClick={revert}
             disabled={!dirty}
-            className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-medium text-fg hover:bg-bg disabled:cursor-not-allowed disabled:opacity-40-muted-alt"
+            className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-medium text-fg hover:bg-bg disabled:cursor-not-allowed disabled:opacity-40"
           >
             <RotateCcw className="h-4 w-4" />
             Revert
@@ -1907,8 +1922,8 @@ function PromptEditor({ promptKey }: { promptKey: string }) {
         <CodeMirror
           value={draft}
           height="100%"
-          theme={isDark ? "dark" : "light"}
-          extensions={[markdown(), EditorView.lineWrapping]}
+          theme="none"
+          extensions={[markdown(), EditorView.lineWrapping, ...docketCodeMirrorTheme()]}
           onChange={setDraft}
           basicSetup={{
             lineNumbers: true,

@@ -3,6 +3,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { useState } from "react";
 import type { DTO } from "~/api/client";
 import { useProposeComment } from "~/api/hooks";
+import { docketCodeMirrorTheme } from "~/lib/cmTheme";
 
 interface Props {
   itemId: string;
@@ -39,8 +40,8 @@ export function CommentComposer({ itemId, onStaged }: Props) {
         <CodeMirror
           value={value}
           height="140px"
-          theme="dark"
-          extensions={[markdown()]}
+          theme="none"
+          extensions={[markdown(), ...docketCodeMirrorTheme()]}
           onChange={setValue}
           placeholder="Write a comment in markdown…"
           basicSetup={{ lineNumbers: false, foldGutter: false }}
