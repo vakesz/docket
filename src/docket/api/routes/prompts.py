@@ -22,14 +22,7 @@ router = APIRouter(
 
 
 def _is_customized(paths: Paths, template: prompt_templates.PromptTemplate) -> bool:
-    target = paths.prompts_dir / template.filename
-    if target.exists():
-        return True
-    if template.legacy_filename:
-        legacy = paths.prompts_dir / template.legacy_filename
-        if legacy.exists():
-            return True
-    return False
+    return (paths.prompts_dir / template.filename).exists()
 
 
 @router.get("", response_model=list[PromptSummaryDTO])
@@ -94,21 +87,16 @@ def reset_prompt(
     key: str,
     paths: Paths = Depends(get_paths),
 ) -> PromptDTO:
-    """Restore the canonical template and remove any legacy-named file.
+    """Restore the canonical template.
 
-    After a reset we keep the customized flag `True` because the current
-    implementation rewrites the file to the default rather than deleting it.
-    Clients can distinguish by reading the content — the returned `content_md`
-    is exactly the canonical template."""
+    The customized flag stays `True` because reset rewrites the file to the
+    default rather than deleting it. Clients can distinguish by reading the
+    content — the returned `content_md` is exactly the canonical template."""
     try:
         template = prompt_templates.get_template(key)
     except KeyError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown prompt '{key}'") from e
     prompt_templates.reset_prompt(paths.prompts_dir, key)
-    if template.legacy_filename:
-        legacy = paths.prompts_dir / template.legacy_filename
-        if legacy.exists():
-            legacy.unlink()
     return PromptDTO(
         key=template.key,
         label=template.label,

@@ -14,7 +14,6 @@ from docket.config import (
     ScopeFilter,
     load_config,
     load_env,
-    load_project_env,
     resolve_paths,
 )
 from docket.core.model import ScopeFilters
@@ -82,7 +81,6 @@ def prepare() -> Context:
     Raises ConfigMissingError if no config.toml is present — callers should catch and
     dispatch to the setup wizard instead of failing.
     """
-    load_project_env()  # honor repo-local .env overrides (XDG_*, keys) before resolving
     paths = resolve_paths()
     paths.ensure()
     load_env(paths)

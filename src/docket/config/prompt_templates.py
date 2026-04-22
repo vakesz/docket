@@ -26,7 +26,7 @@ You are helping refine an **Epic** — a large initiative spanning multiple feat
 quarters. Your job across the conversation is to:
 
 - Clarify the underlying goal and the user / stakeholder it serves.
-- Surface scope boundaries: what's in, what's out, what's a phase 2.
+- Surface scope boundaries: what's in, what's out, what's deferred.
 - Identify the shape of child features that would deliver the epic.
 - Flag assumptions, dependencies, and unknowns that block breakdown.
 
@@ -97,7 +97,6 @@ class PromptTemplate:
     label: str
     filename: str
     default_text: str
-    legacy_filename: str | None = None
 
 
 PROMPT_TEMPLATES: tuple[PromptTemplate, ...] = (
@@ -112,35 +111,30 @@ PROMPT_TEMPLATES: tuple[PromptTemplate, ...] = (
         label="Epic",
         filename="kind_epic.md",
         default_text=DEFAULT_KIND_GUIDANCE["epic"],
-        legacy_filename="epic.md",
     ),
     PromptTemplate(
         key="feature",
         label="Feature",
         filename="kind_feature.md",
         default_text=DEFAULT_KIND_GUIDANCE["feature"],
-        legacy_filename="feature.md",
     ),
     PromptTemplate(
         key="story",
         label="Story",
         filename="kind_story.md",
         default_text=DEFAULT_KIND_GUIDANCE["story"],
-        legacy_filename="story.md",
     ),
     PromptTemplate(
         key="task",
         label="Task",
         filename="kind_task.md",
         default_text=DEFAULT_KIND_GUIDANCE["task"],
-        legacy_filename="task.md",
     ),
     PromptTemplate(
         key="bug",
         label="Bug",
         filename="kind_bug.md",
         default_text=DEFAULT_KIND_GUIDANCE["bug"],
-        legacy_filename="bug.md",
     ),
 )
 
@@ -158,12 +152,9 @@ def list_templates() -> tuple[PromptTemplate, ...]:
 
 def read_prompt(prompts_dir: Path, key: str) -> str:
     template = get_template(key)
-    for filename in (template.filename, template.legacy_filename):
-        if not filename:
-            continue
-        target = prompts_dir / filename
-        if target.exists():
-            return target.read_text(encoding="utf-8")
+    target = prompts_dir / template.filename
+    if target.exists():
+        return target.read_text(encoding="utf-8")
     return template.default_text
 
 
@@ -181,23 +172,13 @@ def reset_prompt(prompts_dir: Path, key: str) -> Path:
 
 
 def scaffold(prompts_dir: Path) -> list[str]:
-    """Write any missing prompt templates without overwriting edits.
-
-    Canonical filenames are `system_base.md` and `kind_<kind>.md`. If a legacy
-    `<kind>.md` file exists from an older wizard run, seed the new canonical
-    file from that content so existing customizations keep working.
-    """
+    """Write any missing prompt templates without overwriting existing files."""
     prompts_dir.mkdir(parents=True, exist_ok=True)
     created: list[str] = []
     for template in PROMPT_TEMPLATES:
         target = prompts_dir / template.filename
         if target.exists():
             continue
-        body = template.default_text
-        if template.legacy_filename:
-            legacy = prompts_dir / template.legacy_filename
-            if legacy.exists():
-                body = legacy.read_text(encoding="utf-8")
-        target.write_text(body, encoding="utf-8")
+        target.write_text(template.default_text, encoding="utf-8")
         created.append(template.filename)
     return created

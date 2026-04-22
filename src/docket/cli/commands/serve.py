@@ -16,7 +16,6 @@ from docket.config.env import (
     get_foundry_endpoint,
     get_read_only,
     get_setup_token,
-    load_project_env,
 )
 from docket.config.paths import resolve_paths
 
@@ -63,7 +62,6 @@ def serve_command(
     try:
         ctx = prepare()
     except ConfigMissingError:
-        load_project_env()
         paths = resolve_paths()
         paths.ensure()
 

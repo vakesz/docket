@@ -59,12 +59,6 @@ def test_override_file_is_used(tmp_path: Path) -> None:
     assert loader.kind_guidance("bug") == DEFAULT_KIND_GUIDANCE["bug"]
 
 
-def test_legacy_kind_override_is_still_loaded(tmp_path: Path) -> None:
-    (tmp_path / "story.md").write_text("LEGACY STORY", encoding="utf-8")
-    loader = PromptLoader(prompts_dir=tmp_path)
-    assert loader.kind_guidance("story") == "LEGACY STORY"
-
-
 def test_hot_reload_picks_up_edits(tmp_path: Path) -> None:
     path = tmp_path / "system_base.md"
     path.write_text("version 1", encoding="utf-8")
@@ -131,13 +125,6 @@ def test_scaffold_creates_canonical_prompt_files(tmp_path: Path) -> None:
     assert "kind_story.md" in created
     assert (tmp_path / "system_base.md").exists()
     assert (tmp_path / "kind_bug.md").exists()
-
-
-def test_scaffold_migrates_legacy_kind_content_into_canonical_file(tmp_path: Path) -> None:
-    legacy = tmp_path / "story.md"
-    legacy.write_text("legacy story body", encoding="utf-8")
-    scaffold(tmp_path)
-    assert (tmp_path / "kind_story.md").read_text(encoding="utf-8") == "legacy story body"
 
 
 @pytest.fixture(autouse=True)

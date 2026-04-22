@@ -58,20 +58,13 @@ class PromptLoader:
         if not default:
             return ""
         template = prompt_templates.get_template(kind)
-        return self._load(template.filename, default, legacy_filename=template.legacy_filename)
+        return self._load(template.filename, default)
 
-    def _load(self, filename: str, default: str, *, legacy_filename: str | None = None) -> str:
+    def _load(self, filename: str, default: str) -> str:
         if self._prompts_dir is None:
             return default
-        path: Path | None = None
-        for candidate_name in (filename, legacy_filename):
-            if not candidate_name:
-                continue
-            candidate = self._prompts_dir / candidate_name
-            if candidate.exists():
-                path = candidate
-                break
-        if path is None:
+        path = self._prompts_dir / filename
+        if not path.exists():
             with self._lock:
                 self._cache.pop(filename, None)
             return default

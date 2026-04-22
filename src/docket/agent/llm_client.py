@@ -1,15 +1,15 @@
-"""Azure AI Foundry client.
+"""LLM client.
 
-Azure AI Foundry exposes an OpenAI-compatible endpoint, so we use the `openai`
-SDK pointed at it. We wrap it in a narrow typed surface so the agent loop and
-tests can work against a structural Protocol rather than raw openai types.
+Concrete impl targets Azure OpenAI (OpenAI-compatible endpoints), wrapped
+behind a narrow `LlmClient` Protocol so the agent loop and tests can work
+against a structural interface rather than raw openai types.
 
-Prompt caching: Foundry caches based on exact prefix match. The agent builds
-messages with the stable prefix (system + tools + item snapshot) at the front
-so repeated turns on the same ticket get cached. We do not need to pass any
-explicit cache flag for OpenAI-compatible endpoints; the service hashes the
-prefix automatically. What matters is that we keep message ordering and the
-tool schema deterministic between calls.
+Prompt caching: OpenAI-compatible endpoints cache based on exact prefix
+match. The agent builds messages with the stable prefix (system + tools +
+item snapshot) at the front so repeated turns on the same ticket get
+cached. No explicit cache flag is needed; the service hashes the prefix
+automatically. What matters is that message ordering and tool schema stay
+deterministic between calls.
 """
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ DEFAULT_AZURE_API_VERSION = "2025-01-01-preview"
 class LlmClient(Protocol):
     """Structural interface every LLM client must satisfy.
 
-    The agent depends on this Protocol, not on FoundryClient concretely, so
+    The agent depends on this Protocol, not on the concrete client, so
     tests can substitute a scripted fake."""
 
     def complete(
@@ -55,8 +55,8 @@ class LlmClient(Protocol):
     ) -> Iterator[StreamDelta]: ...
 
 
-class FoundryClient:
-    """Azure OpenAI client pointed at a Foundry deployment.
+class AzureOpenAIClient:
+    """Azure OpenAI client satisfying the `LlmClient` protocol.
 
     We accept either the bare resource URL the portal shows
     (`https://<resource>.cognitiveservices.azure.com/`) or the full deployment
@@ -296,9 +296,9 @@ def accumulate_stream(stream: Iterable[StreamDelta]) -> CompletionResult:
 
 
 __all__ = [
+    "AzureOpenAIClient",
     "ChatMessage",
     "CompletionResult",
-    "FoundryClient",
     "LlmClient",
     "StreamDelta",
     "ToolCall",

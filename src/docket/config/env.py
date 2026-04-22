@@ -6,6 +6,8 @@ from dotenv import find_dotenv, load_dotenv
 
 from docket.config.paths import Paths
 
+_project_env_loaded = False
+
 
 def load_project_env() -> None:
     """Load a project-local `.env` found by walking up from CWD.
@@ -14,10 +16,27 @@ def load_project_env() -> None:
     per-project dev overrides. Without this, a shell that already exports
     XDG_CONFIG_HOME (common on Linux and some macOS setups) would drown
     out the `.docket-dev/` redirect users actually wrote in the repo's `.env`.
+
+    Idempotent: the first call loads `.env`, subsequent calls no-op. This
+    lets `resolve_paths()` call it unconditionally so every entry point —
+    Typer CLI, uvicorn workers, FastAPI bootstrap, tests, REPL — picks up
+    the override without each entry needing its own gate.
     """
+    global _project_env_loaded
+    if _project_env_loaded:
+        return
     path = find_dotenv(usecwd=True)
     if path:
         load_dotenv(path, override=True)
+    _project_env_loaded = True
+
+
+def reset_project_env_cache() -> None:
+    """Re-enable `load_project_env()` for the next call. Test-only helper:
+    CWD-dependent tests that want to re-evaluate the `.env` lookup can call
+    this between cases."""
+    global _project_env_loaded
+    _project_env_loaded = False
 
 
 def load_env(paths: Paths) -> None:

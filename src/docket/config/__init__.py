@@ -1,4 +1,4 @@
-from docket.config.env import get_foundry_api_key, load_env, load_project_env
+from docket.config.env import get_foundry_api_key, load_env
 from docket.config.loader import ConfigMissingError, load_config, save_config
 from docket.config.models import (
     AdoConfig,
@@ -31,7 +31,6 @@ __all__ = [
     "get_foundry_api_key",
     "load_config",
     "load_env",
-    "load_project_env",
     "resolve_paths",
     "save_config",
 ]

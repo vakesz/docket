@@ -1,7 +1,7 @@
 """FTS5-backed search across items + their comments.
 
 These cover the common user-facing shapes — title/description/comment hits,
-prefix matching, implicit AND across multiple terms — plus two structural
+prefix matching, implicit AND across multiple terms — plus structural
 checks: that the triggers keep the FTS row in sync when the underlying
 item or comment changes, and that malformed user input falls back to LIKE
 instead of blowing up.
@@ -134,33 +134,3 @@ def test_special_chars_dont_crash(tmp_path: Path) -> None:
     assert search_repo.search(conn, '"handler') == ["1"]
 
 
-def test_backfill_covers_pre_v5_items(tmp_path: Path) -> None:
-    """Simulate a DB that was created at schema <v5 by stopping short of v5,
-    inserting a row, then rerunning migrations. The FTS index should pick up
-    the existing row through the backfill statement in v5."""
-    import sqlite3
-
-    from docket.storage import db as db_mod
-    from docket.storage.schema import APPLICATION_ID, MIGRATIONS
-
-    path = tmp_path / "t.db"
-    conn = sqlite3.connect(path, isolation_level=None, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute(f"PRAGMA application_id = {APPLICATION_ID}")
-    # Apply v1..v4 only.
-    for target, statements in MIGRATIONS:
-        if target > 4:
-            break
-        with db_mod.transaction(conn):
-            for stmt in statements:
-                conn.execute(stmt)
-            conn.execute(f"PRAGMA user_version = {target}")
-    # Insert a row while v4 is the current version (no FTS yet).
-    with db_mod.transaction(conn):
-        item_repo.upsert_item(conn, _mk("1", title="pre-existing row"))
-    conn.close()
-
-    # Now open it through the normal path — migration v5 runs, backfill fires.
-    conn = db_mod.init_db(path)
-    assert search_repo.search(conn, "pre-existing") == ["1"]

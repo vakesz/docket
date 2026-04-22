@@ -53,6 +53,11 @@ class Paths:
 
 
 def resolve_paths() -> Paths:
+    # Seed repo-local `.env` into os.environ before reading XDG_* so the
+    # override always takes effect, regardless of entry point. Idempotent.
+    from docket.config.env import load_project_env
+
+    load_project_env()
     return Paths(
         config_dir=_xdg_or("XDG_CONFIG_HOME", Path(_dirs.user_config_dir)),
         state_dir=_xdg_or("XDG_STATE_HOME", Path(_dirs.user_state_dir)),

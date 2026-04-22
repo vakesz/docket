@@ -25,7 +25,6 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 
-from docket.config.env import load_project_env
 from docket.config.loader import load_config, save_config
 from docket.config.models import (
     Config,
@@ -73,7 +72,6 @@ class WizardState:
 
 def run_wizard(start_at: str | None = None) -> None:
     """Drive the wizard interactively. Writes config.toml atomically at the end."""
-    load_project_env()  # repo-local .env must win before paths resolve
     paths = resolve_paths()
     paths.ensure()
     state = _load_existing_state(paths)
