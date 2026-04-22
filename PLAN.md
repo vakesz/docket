@@ -31,7 +31,7 @@ Six new route modules (or additions to existing modules where they make more sen
 ### Endpoint summary
 
 | Method + Path | Purpose | Mutating | Module |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `GET /items/{id}/pinned` | Is this item pinned? | no | `pins.py` |
 | `POST /items/{id}/pin` | Pin it | yes | `pins.py` |
 | `DELETE /items/{id}/pin` | Unpin | yes | `pins.py` |
@@ -81,7 +81,7 @@ See original plan for all router signatures, DTOs, and RuntimeState shape.
 
 ### Directory layout
 
-```
+```tree
 frontend/
   package.json
   bun.lock
@@ -148,7 +148,7 @@ frontend/
 
 ### Dependencies (pin minors)
 
-```
+```text
 "@tanstack/react-start": "^1.0",
 "@tanstack/react-router": "^1.0",
 "@tanstack/react-query": "^5.99",
@@ -189,33 +189,43 @@ Scripts: `dev`, `build`, `start`, `gen:api` (openapi-typescript against backend 
 Feature clusters (one logical unit each). Routes are TanStack Router file-based paths.
 
 ### 3.1 Items list & detail
+
 `/items`, `/items/$itemId`. Virtualized list (`react-virtual`), filter debounced 150ms, pinned section at top. Keys: `j`/`k`, `Enter`, `w` (pin), `/` (filter focus), `r` (sync), `o` (open in browser), `s` (suggest), `t` (new thread), `d` (review proposals). Acceptance-criteria sidebar parses `- [ ]`/`- [x]` lines; editing stages a description_patch proposal.
 
 ### 3.2 New item
+
 `/items/new` (sheet overlay). TanStack Form. Two-step: `POST /items?dry_run=true` for preview → `POST /items` on confirm.
 
 ### 3.3 Mutation review
+
 Inline `ProposalCard` in chat + standalone `/items/$itemId/mutations/$proposalId` route. Batch review when ≥2 pending. Uses existing `/items/{id}/mutations/{pid}/{confirm,reject}` endpoints.
 
 ### 3.4 Chat streaming
+
 Right pane on `/items/$itemId`. `fetch`+`ReadableStream` parser. Events: `delta` → append, `message` → persist, `proposal` → render card, `done` → update usage, `error` → toast. Abort on route change.
 
 ### 3.5 Pins
+
 Pin icon on `ItemRow` + `ItemDetail`. `PinnedSection` at list top. Optimistic toggle, rollback on error. Key `w`.
 
 ### 3.6 Suggest next
+
 `SuggestionSheet` opened by `s`. `POST /items/{id}/suggestion` → edit in sheet → `POST /items/{id}/suggestion/stage` → route to review.
 
 ### 3.7 Prompt library
+
 `/prompts`, `/prompts/$key`. CodeMirror + markdown. Save (Cmd+S), Restore default.
 
 ### 3.8 Settings
+
 `/settings`. Section-grouped form (Foundry, HTTP, LLM, UI, Sync, Stale). Each section `PATCH`es its slice. `requires_restart` banner.
 
 ### 3.9 Scope + provider switchers
+
 Top-bar dropdowns + `/settings` + palette. Switch invalidates `qk.items.all`, `qk.pinned`, `qk.status`.
 
 ### 3.10 Command palette (Cmd+K)
+
 `cmdk`. Commands: navigate, item actions (pin, open, suggest, new thread, transitions), global (sync, toggle theme, new item, review pending, help), scope/provider switches. Chords: `g i`, `g p`, `g s`.
 
 ---
@@ -223,6 +233,7 @@ Top-bar dropdowns + `/settings` + palette. Switch invalidates `qk.items.all`, `q
 ## Phase 4 — Docker
 
 Files:
+
 - `Dockerfile.backend` (python:3.12-slim + uv, `CMD docket serve --host 0.0.0.0 --port 8000`)
 - `frontend/Dockerfile` (oven/bun:1.3 multi-stage → slim runtime)
 - `compose.yaml` (prod, two services, backend has no ports, frontend on `DOCKET_FRONTEND_PORT`, volumes `docket-config`/`docket-state`)
