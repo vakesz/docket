@@ -5,7 +5,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from docket.cli.confirm import prompt_confirm
+from docket.cli.confirm import apply_mutation
 from docket.cli.context import prepare_or_wizard
 from docket.cli.guard import abort_if_read_only
 from docket.core.services import mutation_service
@@ -30,15 +30,13 @@ def patch_command(
     ctx = prepare_or_wizard()
     try:
         proposal = mutation_service.propose_description_patch(ctx.conn, id, new_md)
-        if dry_run:
-            result = mutation_service.confirm(ctx.conn, ctx.provider, proposal, dry_run=True)
-            console.print(f"[dim]dry-run — would apply proposal {result.proposal_id}[/dim]")
-            return
-        if not prompt_confirm(proposal, title=f"Patch description of {id}"):
-            console.print("[yellow]cancelled[/yellow]")
-            raise typer.Exit(1)
-        result = mutation_service.confirm(ctx.conn, ctx.provider, proposal)
-        assert result.item is not None
-        console.print(f"[green]✓ {id} description updated[/green]")
+        apply_mutation(
+            ctx.conn,
+            ctx.provider,
+            proposal,
+            confirm_title=f"Patch description of {id}",
+            dry_run=dry_run,
+            on_success=lambda _r: f"[green]✓ {id} description updated[/green]",
+        )
     finally:
         ctx.close()

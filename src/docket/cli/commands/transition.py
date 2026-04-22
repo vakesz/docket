@@ -3,7 +3,7 @@ from __future__ import annotations
 import typer
 from rich.console import Console
 
-from docket.cli.confirm import prompt_confirm
+from docket.cli.confirm import apply_mutation
 from docket.cli.context import prepare_or_wizard
 from docket.cli.guard import abort_if_read_only
 from docket.core.model import TransitionIntent
@@ -30,15 +30,13 @@ def transition_command(
     ctx = prepare_or_wizard()
     try:
         proposal = mutation_service.propose_transition(ctx.conn, id, ti)
-        if dry_run:
-            result = mutation_service.confirm(ctx.conn, ctx.provider, proposal, dry_run=True)
-            console.print(f"[dim]dry-run — would apply proposal {result.proposal_id}[/dim]")
-            return
-        if not prompt_confirm(proposal, title=f"Transition {id} ({ti.value})"):
-            console.print("[yellow]cancelled[/yellow]")
-            raise typer.Exit(1)
-        result = mutation_service.confirm(ctx.conn, ctx.provider, proposal)
-        assert result.item is not None
-        console.print(f"[green]✓ {id} → {result.item.state.value}[/green]")
+        apply_mutation(
+            ctx.conn,
+            ctx.provider,
+            proposal,
+            confirm_title=f"Transition {id} ({ti.value})",
+            dry_run=dry_run,
+            on_success=lambda r: f"[green]✓ {id} → {r.item.state.value}[/green]",  # type: ignore[union-attr]
+        )
     finally:
         ctx.close()

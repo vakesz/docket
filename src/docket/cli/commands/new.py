@@ -5,7 +5,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from docket.cli.confirm import prompt_confirm
+from docket.cli.confirm import apply_mutation
 from docket.cli.context import prepare_or_wizard
 from docket.cli.guard import abort_if_read_only
 from docket.core.model import CreateFields, ItemKind
@@ -45,15 +45,13 @@ def new_command(
     ctx = prepare_or_wizard()
     try:
         proposal = mutation_service.propose_create(ik, fields)
-        if dry_run:
-            result = mutation_service.confirm(ctx.conn, ctx.provider, proposal, dry_run=True)
-            console.print(f"[dim]dry-run — would create (proposal {result.proposal_id})[/dim]")
-            return
-        if not prompt_confirm(proposal, title=f"Create {ik.value}"):
-            console.print("[yellow]cancelled[/yellow]")
-            raise typer.Exit(1)
-        result = mutation_service.confirm(ctx.conn, ctx.provider, proposal)
-        assert result.item is not None
-        console.print(f"[green]✓ created[/green] {result.item.id}  {result.item.title}")
+        apply_mutation(
+            ctx.conn,
+            ctx.provider,
+            proposal,
+            confirm_title=f"Create {ik.value}",
+            dry_run=dry_run,
+            on_success=lambda r: f"[green]✓ created[/green] {r.item.id}  {r.item.title}",  # type: ignore[union-attr]
+        )
     finally:
         ctx.close()
