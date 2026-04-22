@@ -29,6 +29,7 @@ from docket.cli.tui.widgets.diff_modal import DiffModal
 from docket.cli.tui.widgets.help_modal import HelpModal
 from docket.cli.tui.widgets.item_detail import ItemDetail
 from docket.cli.tui.widgets.item_tree import ItemSelected, ItemTree
+from docket.cli.tui.widgets.mcp_pane import MCPPane
 from docket.cli.tui.widgets.memory_pane import MemoryPane
 from docket.cli.tui.widgets.new_item_modal import NewItemModal, NewItemRequest
 from docket.cli.tui.widgets.prompt_library import PromptLibraryModal
@@ -258,6 +259,7 @@ class DocketApp(App[None]):
         Binding("p", "edit_prompts", "Prompts"),
         Binding("m", "open_memory", "Memory", show=False),
         Binding("u", "open_source", "Sources", show=False),
+        Binding("M", "open_mcp", "MCP", show=False),
         Binding("ctrl+f", "toggle_fullscreen", "Fullscreen pane", show=False),
         Binding("ctrl+left", "shrink_pane", "Shrink pane", show=False),
         Binding("ctrl+right", "grow_pane", "Grow pane", show=False),
@@ -753,9 +755,7 @@ class DocketApp(App[None]):
                 on_message=on_message,
                 compaction_threshold_tokens=self.tui_ctx.compaction_threshold_tokens or None,
                 provider_key=self.tui_ctx.provider_key,
-                project_id=project_id_for(
-                    self.tui_ctx.provider_key, self.tui_ctx.scope_key
-                ),
+                project_id=project_id_for(self.tui_ctx.provider_key, self.tui_ctx.scope_key),
             )
         except Exception as e:
             log.exception("chat turn failed")
@@ -1199,6 +1199,47 @@ class DocketApp(App[None]):
             )
         )
 
+    def action_open_mcp(self) -> None:
+        """Open the per-project MCP server editor for the active project.
+
+        On dismiss, if the modal committed any change (Save / Delete), the
+        live `MCPManager` has already been rebound — but the agent's tool
+        registry was baked at build time, so rebuild the agent here so the
+        next turn sees the fresh `mcp__<name>__*` set."""
+        cfg = self.tui_ctx.config
+        paths = self.tui_ctx.paths
+        if cfg is None or paths is None:
+            self.notify("MCP is unavailable in this session.", severity="warning")
+            return
+        project_id = project_id_for(self.tui_ctx.provider_key, self.tui_ctx.scope_key)
+        project_name = self._resolve_project_name() or project_id
+
+        def on_dismiss(changed: bool | None) -> None:
+            if changed and self.tui_ctx.llm is not None:
+                self._agent = build_agent(
+                    llm=self.tui_ctx.llm,
+                    conn=self.tui_ctx.conn,
+                    provider=self.tui_ctx.provider,
+                    store=self._proposals,
+                    active_item=lambda: self._selected_item_id,
+                    read_only=self.tui_ctx.read_only,
+                    provider_key=self.tui_ctx.provider_key,
+                    project_id=project_id_for(self.tui_ctx.provider_key, self.tui_ctx.scope_key),
+                    mcp_manager=self.tui_ctx.mcp_manager,
+                )
+
+        self.push_screen(
+            MCPPane(
+                paths=paths,
+                config=cfg,
+                project_id=project_id,
+                project_name=project_name,
+                mcp_manager=self.tui_ctx.mcp_manager,
+                read_only=self.tui_ctx.read_only,
+            ),
+            on_dismiss,
+        )
+
     def action_transition(self, intent_value: str) -> None:
         """Stage a transition for the selected item and open the diff modal.
 
@@ -1260,9 +1301,7 @@ class DocketApp(App[None]):
                 active_item=lambda: self._selected_item_id,
                 read_only=self.tui_ctx.read_only,
                 provider_key=self.tui_ctx.provider_key,
-                project_id=project_id_for(
-                    self.tui_ctx.provider_key, self.tui_ctx.scope_key
-                ),
+                project_id=project_id_for(self.tui_ctx.provider_key, self.tui_ctx.scope_key),
                 mcp_manager=self.tui_ctx.mcp_manager,
             )
         with contextlib.suppress(Exception):
@@ -1318,9 +1357,7 @@ class DocketApp(App[None]):
                 active_item=lambda: self._selected_item_id,
                 read_only=self.tui_ctx.read_only,
                 provider_key=self.tui_ctx.provider_key,
-                project_id=project_id_for(
-                    self.tui_ctx.provider_key, self.tui_ctx.scope_key
-                ),
+                project_id=project_id_for(self.tui_ctx.provider_key, self.tui_ctx.scope_key),
                 mcp_manager=self.tui_ctx.mcp_manager,
             )
         # The detail and chat panes were rendered for an item from the previous

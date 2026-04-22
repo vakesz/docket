@@ -22,6 +22,9 @@ _HELP_MARKDOWN = """\
 - `:` quick-open by item id
 - `,` settings editor
 - `p` prompt library
+- `m` project memory
+- `u` project sources
+- `Shift+M` MCP servers
 - `Ctrl+T` theme picker
 - `Ctrl+F` maximize the focused pane
 - `Ctrl+Left` / `Ctrl+Right` resize the focused pane
