@@ -175,14 +175,13 @@ def message_from_json(payload: dict[str, object]) -> ChatMessage:
                 )
             )
     role_val = str(payload.get("role", "user"))
+    tool_call_id = payload.get("tool_call_id")
+    name = payload.get("name")
     # Narrow to the Literal via constructor — ChatMessage accepts the string.
-    msg = ChatMessage(
+    return ChatMessage(
         role=role_val,  # type: ignore[arg-type]
-        content=str(payload.get("content", "") or ""),
+        content=str(payload.get("content") or ""),
         tool_calls=tool_calls,
-        tool_call_id=payload.get("tool_call_id")
-        if isinstance(payload.get("tool_call_id"), str)
-        else None,  # type: ignore[arg-type]
-        name=payload.get("name") if isinstance(payload.get("name"), str) else None,  # type: ignore[arg-type]
+        tool_call_id=tool_call_id if isinstance(tool_call_id, str) else None,
+        name=name if isinstance(name, str) else None,
     )
-    return msg
