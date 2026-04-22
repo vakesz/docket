@@ -10,6 +10,7 @@ home for behavior.
 from __future__ import annotations
 
 from collections.abc import Callable
+from functools import partial
 from typing import TYPE_CHECKING
 
 from textual.command import DiscoveryHit, Hit, Hits, Provider
@@ -106,7 +107,7 @@ class DocketCommands(Provider):
                     (
                         f"Transition → {label}",
                         f"Stage a '{intent.value}' transition for the selected item.",
-                        _make_transition_callback(app, intent),
+                        partial(app.action_transition, intent.value),
                     )
                 )
 
@@ -126,7 +127,7 @@ class DocketCommands(Provider):
                         (
                             f"Switch view → {name}",
                             f"Load the '{name}' saved view.",
-                            _make_switch_view_callback(app, name),
+                            partial(app.action_switch_view, name),
                         )
                     )
             # Providers: one "Switch provider → <display>" per configured
@@ -142,7 +143,7 @@ class DocketCommands(Provider):
                     (
                         f"Switch provider → {display}",
                         f"Activate the '{key}' provider for this session.",
-                        _make_switch_provider_callback(app, key),
+                        partial(app.action_switch_provider, key),
                     )
                 )
             # Pin current provider as default — writes `active_provider` to
@@ -164,17 +165,3 @@ class DocketCommands(Provider):
                     )
                 )
         return commands
-
-
-def _make_transition_callback(app: DocketApp, intent: TransitionIntent) -> Callable[[], None]:
-    """Bind the intent into a zero-arg closure so the palette's command slot
-    (which only accepts `Callable[[], None]`) can still reach the right one."""
-    return lambda: app.action_transition(intent.value)
-
-
-def _make_switch_view_callback(app: DocketApp, name: str) -> Callable[[], None]:
-    return lambda: app.action_switch_view(name)
-
-
-def _make_switch_provider_callback(app: DocketApp, name: str) -> Callable[[], None]:
-    return lambda: app.action_switch_provider(name)
