@@ -8,13 +8,15 @@
 # Runtime port is PORT (default 3000); upstream is DOCKET_API_URL (default
 # http://backend:8765 inside compose).
 
-FROM oven/bun:1.3-alpine AS build
+FROM oven/bun:1.3-alpine AS install
 WORKDIR /app
 
 COPY package.json bun.lock ./
 RUN --mount=type=cache,target=/root/.bun/install/cache \
     bun install --frozen-lockfile
 
+
+FROM install AS build
 COPY tsconfig.json vite.config.ts biome.json ./
 COPY src ./src
 RUN bun run build

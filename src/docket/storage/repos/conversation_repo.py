@@ -5,12 +5,14 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from docket.core.model import Conversation
+from docket.storage.item_keys import item_storage_key, split_item_storage_key
 
 
 def _row_to_conversation(row: sqlite3.Row) -> Conversation:
+    _, item_id = split_item_storage_key(row["item_id"])
     return Conversation(
         id=row["id"],
-        item_id=row["item_id"],
+        item_id=item_id,
         started_at=datetime.fromisoformat(row["started_at"]),
         archived_at=datetime.fromisoformat(row["archived_at"]) if row["archived_at"] else None,
         tokens_in=row["tokens_in"],
@@ -19,7 +21,7 @@ def _row_to_conversation(row: sqlite3.Row) -> Conversation:
     )
 
 
-def create(conn: sqlite3.Connection, item_id: str) -> Conversation:
+def create(conn: sqlite3.Connection, item_id: str, *, provider_key: str = "") -> Conversation:
     convo = Conversation(
         id=str(uuid4()),
         item_id=item_id,
@@ -30,7 +32,7 @@ def create(conn: sqlite3.Connection, item_id: str) -> Conversation:
         INSERT INTO conversations (id, item_id, started_at, archived_at, tokens_in, tokens_out, cost_cents)
         VALUES (?, ?, ?, NULL, 0, 0, 0)
         """,
-        (convo.id, convo.item_id, convo.started_at.isoformat()),
+        (convo.id, item_storage_key(provider_key, convo.item_id), convo.started_at.isoformat()),
     )
     return convo
 
@@ -40,24 +42,53 @@ def get(conn: sqlite3.Connection, convo_id: str) -> Conversation | None:
     return _row_to_conversation(row) if row else None
 
 
-def get_active_for_item(conn: sqlite3.Connection, item_id: str) -> Conversation | None:
-    row = conn.execute(
-        """
-        SELECT * FROM conversations
-        WHERE item_id = ? AND archived_at IS NULL
-        ORDER BY started_at DESC
-        LIMIT 1
-        """,
-        (item_id,),
-    ).fetchone()
+def get_active_for_item(
+    conn: sqlite3.Connection, item_id: str, *, provider_key: str | None = None
+) -> Conversation | None:
+    if provider_key:
+        row = conn.execute(
+            """
+            SELECT * FROM conversations
+            WHERE item_id = ? AND archived_at IS NULL
+            ORDER BY started_at DESC
+            LIMIT 1
+            """,
+            (item_storage_key(provider_key, item_id),),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            """
+            SELECT c.*
+            FROM conversations c
+            JOIN items i ON i.id = c.item_id
+            WHERE i.provider_item_id = ? AND c.archived_at IS NULL
+            ORDER BY c.started_at DESC
+            LIMIT 1
+            """,
+            (item_id,),
+        ).fetchone()
     return _row_to_conversation(row) if row else None
 
 
-def list_for_item(conn: sqlite3.Connection, item_id: str) -> list[Conversation]:
-    rows = conn.execute(
-        "SELECT * FROM conversations WHERE item_id = ? ORDER BY started_at ASC",
-        (item_id,),
-    ).fetchall()
+def list_for_item(
+    conn: sqlite3.Connection, item_id: str, *, provider_key: str | None = None
+) -> list[Conversation]:
+    if provider_key:
+        rows = conn.execute(
+            "SELECT * FROM conversations WHERE item_id = ? ORDER BY started_at ASC",
+            (item_storage_key(provider_key, item_id),),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT c.*
+            FROM conversations c
+            JOIN items i ON i.id = c.item_id
+            WHERE i.provider_item_id = ?
+            ORDER BY c.started_at ASC
+            """,
+            (item_id,),
+        ).fetchall()
     return [_row_to_conversation(r) for r in rows]
 
 

@@ -22,6 +22,7 @@ from docket.agent.loop import AgentLoop
 from docket.agent.types import ChatMessage, StreamDelta
 from docket.api.auth import require_bearer
 from docket.api.deps import get_conn, get_proposals, require_agent
+from docket.api.runtime import RuntimeState
 from docket.api.schemas import (
     ChatRoleDTO,
     ConversationDTO,
@@ -51,17 +52,24 @@ def _message_dto(m: ChatMessage) -> ChatRoleDTO:
         ],
         tool_call_id=m.tool_call_id,
         name=m.name,
-    )
+)
+
+
+def _active_provider_key(request: Request) -> str:
+    runtime: RuntimeState | None = getattr(request.app.state, "runtime", None)
+    return runtime.provider_key if runtime is not None else ""
 
 
 @router.get("", response_model=ConversationHistoryDTO)
 def get_history(
     item_id: str,
+    request: Request,
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> ConversationHistoryDTO:
-    if item_repo.get_item(conn, item_id) is None:
+    provider_key = _active_provider_key(request)
+    if item_repo.get_item(conn, item_id, provider_key=provider_key or None) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown item '{item_id}'")
-    convo = conversation_repo.get_active_for_item(conn, item_id)
+    convo = conversation_repo.get_active_for_item(conn, item_id, provider_key=provider_key or None)
     if convo is None:
         return ConversationHistoryDTO(conversation=None, messages=[])
     history = conversation_service.history(conn, convo.id)
@@ -74,11 +82,13 @@ def get_history(
 @router.post("/thread", response_model=ConversationDTO)
 def start_thread(
     item_id: str,
+    request: Request,
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> ConversationDTO:
-    if item_repo.get_item(conn, item_id) is None:
+    provider_key = _active_provider_key(request)
+    if item_repo.get_item(conn, item_id, provider_key=provider_key or None) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown item '{item_id}'")
-    convo = conversation_service.new_thread(conn, item_id)
+    convo = conversation_service.new_thread(conn, item_id, provider_key=provider_key)
     return ConversationDTO.from_core(convo)
 
 
@@ -101,7 +111,8 @@ async def send_message(
       - `done` — terminal, carries usage totals
       - `error` — terminal, carries a human-readable detail
     """
-    if item_repo.get_item(conn, item_id) is None:
+    provider_key = _active_provider_key(request)
+    if item_repo.get_item(conn, item_id, provider_key=provider_key or None) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown item '{item_id}'")
 
     generator = _stream_turn(
@@ -111,6 +122,7 @@ async def send_message(
         item_id=item_id,
         text=payload.text,
         request=request,
+        provider_key=provider_key,
     )
     return EventSourceResponse(generator)
 
@@ -126,6 +138,7 @@ async def _stream_turn(
     item_id: str,
     text: str,
     request: Request,
+    provider_key: str,
 ) -> AsyncIterator[ServerSentEvent]:
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue[ServerSentEvent | None] = asyncio.Queue()
@@ -173,6 +186,7 @@ async def _stream_turn(
                 on_delta=on_delta,
                 on_message=on_message,
                 compaction_threshold_tokens=threshold,
+                provider_key=provider_key,
             )
             _put_threadsafe(
                 ServerSentEvent(event="done", data=json.dumps({"usage": asdict(result.usage)}))

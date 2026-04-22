@@ -6,6 +6,7 @@ from pathlib import Path
 from docket.core import Item, ItemKind, ItemState, ScopeFilters
 from docket.core.services import sync_service
 from docket.storage import init_db
+from docket.storage.item_keys import scope_storage_key
 from docket.storage.repos import item_repo, sync_repo
 from tests.fakes.provider import FakeProvider
 
@@ -68,3 +69,19 @@ def test_full_refresh_resets_watermark(tmp_path: Path) -> None:
     # (note: after full_refresh we re-set the watermark to the newest seen item)
     watermarks_seen_by_provider = prov.list_calls
     assert None in watermarks_seen_by_provider[-2:]
+
+
+def test_provider_scoped_refresh_namespaces_watermarks(tmp_path: Path) -> None:
+    conn = init_db(tmp_path / "t.db")
+    t_ado = datetime(2026, 4, 21, 10, 0, tzinfo=UTC)
+    t_gh = datetime(2026, 4, 22, 10, 0, tzinfo=UTC)
+    ado = FakeProvider(items=[_item("42", t_ado)])
+    github = FakeProvider(items=[_item("42", t_gh)])
+
+    sync_service.refresh(conn, ado, "default", ScopeFilters(), provider_key="ado")
+    sync_service.refresh(conn, github, "default", ScopeFilters(), provider_key="github")
+
+    assert ado.list_calls == [None]
+    assert github.list_calls == [None]
+    assert sync_repo.get_watermark(conn, scope_storage_key("ado", "default")) == t_ado
+    assert sync_repo.get_watermark(conn, scope_storage_key("github", "default")) == t_gh

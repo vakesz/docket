@@ -42,14 +42,18 @@ def check_and_inject(
     conn: sqlite3.Connection,
     provider: WorkItemProvider,
     item_id: str,
+    *,
+    provider_key: str = "",
 ) -> ExternalUpdateResult:
     """Re-fetch `item_id` from the provider; if it moved since our cache, persist
     the new copy and drop a system message into the active conversation.
 
     Safe to call on a cadence — if the provider errors, raise; if nothing
     changed, return a no-op result so the caller can cheaply poll."""
-    cached = item_repo.get_item(conn, item_id)
+    cached = item_repo.get_item(conn, item_id, provider_key=provider_key or None)
     fresh = provider.get_item(item_id)
+    if provider_key:
+        fresh.provider_key = provider_key
 
     if not _has_advanced(cached, fresh):
         return ExternalUpdateResult(
@@ -66,7 +70,7 @@ def check_and_inject(
         item_repo.upsert_item(conn, fresh)
 
     injected_id: str | None = None
-    active = conversation_repo.get_active_for_item(conn, item_id)
+    active = conversation_repo.get_active_for_item(conn, item_id, provider_key=provider_key or None)
     if active is not None and diff:
         msg = ChatMessage(
             role="system",

@@ -11,6 +11,8 @@ from __future__ import annotations
 import re
 import sqlite3
 
+from docket.storage.item_keys import split_item_storage_key
+
 _WORD = re.compile(r"\w+", flags=re.UNICODE)
 
 
@@ -31,7 +33,11 @@ def _build_fts_query(raw: str) -> str:
     return " ".join(_terms(raw))
 
 
-def search(conn: sqlite3.Connection, query: str) -> list[str]:
+def _decode_ids(rows: list[sqlite3.Row]) -> list[str]:
+    return [split_item_storage_key(row[0])[1] for row in rows]
+
+
+def search(conn: sqlite3.Connection, query: str, *, provider_key: str | None = None) -> list[str]:
     """Return item ids matching `query`, ranked best-first.
 
     Empty/blank query returns []. On FTS5 syntax or tokenizer failure we fall
@@ -43,28 +49,54 @@ def search(conn: sqlite3.Connection, query: str) -> list[str]:
     fts_query = _build_fts_query(stripped)
     if fts_query:
         try:
-            rows = conn.execute(
-                "SELECT item_id FROM items_fts WHERE items_fts MATCH ? ORDER BY rank",
-                (fts_query,),
-            ).fetchall()
-            return [r[0] for r in rows]
+            if provider_key:
+                rows = conn.execute(
+                    """
+                    SELECT f.item_id
+                    FROM items_fts f
+                    JOIN items i ON i.id = f.item_id
+                    WHERE items_fts MATCH ? AND i.provider_key = ?
+                    ORDER BY rank
+                    """,
+                    (fts_query, provider_key),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT item_id FROM items_fts WHERE items_fts MATCH ? ORDER BY rank",
+                    (fts_query,),
+                ).fetchall()
+            return _decode_ids(rows)
         except sqlite3.OperationalError:
             # FTS5 can reject things its tokenizer doesn't like; fall through
             # to the LIKE branch rather than hiding the result set entirely.
             pass
     like = f"%{stripped}%"
-    rows = conn.execute(
-        """
-        SELECT DISTINCT item_id
-        FROM items_fts
-        WHERE title LIKE ? OR description_md LIKE ? OR comments_concat LIKE ?
-        """,
-        (like, like, like),
-    ).fetchall()
-    return [r[0] for r in rows]
+    if provider_key:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT f.item_id
+            FROM items_fts f
+            JOIN items i ON i.id = f.item_id
+            WHERE i.provider_key = ?
+              AND (f.title LIKE ? OR f.description_md LIKE ? OR f.comments_concat LIKE ?)
+            """,
+            (provider_key, like, like, like),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT item_id
+            FROM items_fts
+            WHERE title LIKE ? OR description_md LIKE ? OR comments_concat LIKE ?
+            """,
+            (like, like, like),
+        ).fetchall()
+    return _decode_ids(rows)
 
 
-def search_similar(conn: sqlite3.Connection, title: str) -> list[str]:
+def search_similar(
+    conn: sqlite3.Connection, title: str, *, provider_key: str | None = None
+) -> list[str]:
     """Return item ids whose indexed content matches *any* word in `title`.
 
     Use this for duplicate detection during create — the AND semantics of
@@ -81,10 +113,22 @@ def search_similar(conn: sqlite3.Connection, title: str) -> list[str]:
     # FTS5 OR: `a* OR b* OR c*`
     fts_query = " OR ".join(terms)
     try:
-        rows = conn.execute(
-            "SELECT item_id FROM items_fts WHERE items_fts MATCH ? ORDER BY rank",
-            (fts_query,),
-        ).fetchall()
+        if provider_key:
+            rows = conn.execute(
+                """
+                SELECT f.item_id
+                FROM items_fts f
+                JOIN items i ON i.id = f.item_id
+                WHERE items_fts MATCH ? AND i.provider_key = ?
+                ORDER BY rank
+                """,
+                (fts_query, provider_key),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT item_id FROM items_fts WHERE items_fts MATCH ? ORDER BY rank",
+                (fts_query,),
+            ).fetchall()
     except sqlite3.OperationalError:
         return []
-    return [r[0] for r in rows]
+    return _decode_ids(rows)

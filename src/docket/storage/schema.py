@@ -1,18 +1,20 @@
 """SQLite schema for the local cache.
 
-Single-file schema. `init_db()` runs every statement under `IF NOT EXISTS`
-so reopening an existing database is a no-op; creating a new one installs
-the full shape in one transaction.
+Single-file schema. Docket supports one cache schema version at a time; if
+an older cache is detected, `init_db()` recreates it instead of migrating.
 """
 
 from __future__ import annotations
 
 APPLICATION_ID = 0x49545600
+SCHEMA_VERSION = 1
 
 STATEMENTS: tuple[str, ...] = (
     """
     CREATE TABLE IF NOT EXISTS items (
         id              TEXT PRIMARY KEY,
+        provider_key    TEXT NOT NULL,
+        provider_item_id TEXT NOT NULL,
         kind            TEXT NOT NULL,
         title           TEXT NOT NULL,
         description_md  TEXT NOT NULL DEFAULT '',
@@ -27,16 +29,18 @@ STATEMENTS: tuple[str, ...] = (
         url             TEXT
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_items_updated_at ON items(updated_at)",
-    "CREATE INDEX IF NOT EXISTS idx_items_kind_archived ON items(kind, archived)",
-    "CREATE INDEX IF NOT EXISTS idx_items_parent ON items(parent_id)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_items_provider_item ON items(provider_key, provider_item_id)",
+    "CREATE INDEX IF NOT EXISTS idx_items_provider_updated_at ON items(provider_key, updated_at)",
+    "CREATE INDEX IF NOT EXISTS idx_items_provider_kind_archived ON items(provider_key, kind, archived)",
+    "CREATE INDEX IF NOT EXISTS idx_items_provider_parent ON items(provider_key, parent_id)",
     """
     CREATE TABLE IF NOT EXISTS comments (
-        id           TEXT PRIMARY KEY,
+        id           TEXT NOT NULL,
         item_id      TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
         author       TEXT NOT NULL,
         body_md      TEXT NOT NULL,
-        created_at   TEXT NOT NULL
+        created_at   TEXT NOT NULL,
+        PRIMARY KEY (item_id, id)
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_comments_item ON comments(item_id, created_at)",

@@ -28,20 +28,26 @@ def build_agent(
     store: ProposalStore,
     active_item: Callable[[], str | None],
     read_only: bool,
+    provider_key: str = "",
 ) -> AgentLoop:
     """Assemble an `AgentLoop` with the standard tool registry.
+
+    `provider_key` scopes cache reads (list/search) to the active provider
+    so the agent doesn't reason over items that belong to a different
+    backend configured in the same DB.
 
     Read-only mode keeps every readonly tool so the agent can still answer
     questions; it just strips every `propose_*` tool so the agent can't
     stage writes."""
     registry = ToolRegistry()
-    register_readonly_tools(registry, conn=conn, provider=provider)
+    register_readonly_tools(registry, conn=conn, provider=provider, provider_key=provider_key)
     if not read_only:
         register_mutating_tools(
             registry,
             conn=conn,
             store=store,
             active_item=active_item,
+            provider_key=provider_key,
         )
     return AgentLoop(client=llm, tools=registry)
 

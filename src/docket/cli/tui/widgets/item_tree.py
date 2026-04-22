@@ -68,6 +68,8 @@ class ItemTree(Tree[str]):
         padding: 0 2 1 2;
         background: transparent;
         color: $text;
+        overflow-x: hidden;
+        scrollbar-size-vertical: 1;
     }
     ItemTree > .item-tree--state-new { color: $text-secondary; }
     ItemTree > .item-tree--state-active { color: $text-success; }
@@ -202,7 +204,9 @@ class ItemTree(Tree[str]):
         if row is None:
             return super().render_label(node, base_style, style)
 
-        available_width = max(1, self.size.width - self._guide_width_for_node(node))
+        available_width = max(
+            1, self.size.width - self._guide_width_for_node(node) - self._scrollbar_reserve()
+        )
         prefix = Text()
         if node.allow_expand:
             prefix.append(
@@ -244,8 +248,24 @@ class ItemTree(Tree[str]):
         return Strip(segments, strip.cell_length)
 
     def get_label_width(self, node: TreeNode[str]) -> int:
-        available_width = max(1, self.size.width - self._guide_width_for_node(node))
+        available_width = max(
+            1, self.size.width - self._guide_width_for_node(node) - self._scrollbar_reserve()
+        )
         return min(super().get_label_width(node), available_width)
+
+    def _scrollbar_reserve(self) -> int:
+        """Cells reserved on the right for the vertical scrollbar.
+
+        `self.size.width` includes the scrollbar column when one is visible;
+        drawing into that column gets covered by the bar. Reserve it so
+        trailing characters (e.g. the "d" on "13d") stay visible when the
+        scrollbar is up, and reclaim the column when the list is short enough
+        that no scrollbar is drawn — otherwise the tree would look 1 col
+        narrower than the search box above it even in that case."""
+        if not self.show_vertical_scrollbar:
+            return 0
+        size = self.styles.scrollbar_size_vertical
+        return int(size) if size is not None else 1
 
     def on_tree_node_selected(self, event: Tree.NodeSelected[str]) -> None:
         data = event.node.data

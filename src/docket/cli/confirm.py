@@ -37,6 +37,7 @@ def apply_mutation(
     confirm_title: str,
     dry_run: bool,
     on_success: Callable[[MutationResult], str],
+    provider_key: str = "",
 ) -> None:
     """Run the propose → confirm → apply loop shared by every mutating CLI command.
 
@@ -49,5 +50,5 @@ def apply_mutation(
     if not prompt_confirm(proposal, title=confirm_title):
         console.print("[yellow]cancelled[/yellow]")
         raise typer.Exit(1)
-    result = mutation_service.confirm(conn, provider, proposal)
+    result = mutation_service.confirm(conn, provider, proposal, provider_key=provider_key)
     console.print(on_success(result))

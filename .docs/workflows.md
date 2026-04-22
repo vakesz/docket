@@ -37,5 +37,5 @@
 
 ## Cache and Storage Work
 
-- SQLite migrations, FTS query building, watermarks, and watchlist semantics are easy to get subtly wrong.
+- Cache-schema resets, FTS query building, watermarks, and watchlist semantics are easy to get subtly wrong.
 - Read [Storage Cache](playbooks/storage-cache.md).

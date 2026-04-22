@@ -42,15 +42,17 @@ def _payload(proposal: Proposal, *, extra: dict[str, Any] | None = None) -> str:
     return json.dumps(body)
 
 
-def _find_duplicates(conn: sqlite3.Connection, title: str) -> list[dict[str, str]]:
+def _find_duplicates(
+    conn: sqlite3.Connection, title: str, *, provider_key: str = ""
+) -> list[dict[str, str]]:
     """Return up to _DUPLICATE_LIMIT cached items whose title/description/comments
     match *any* word in `title`, best-match first. Empty list if nothing
     plausible exists. Uses OR-matching so "Login redesign" catches an existing
     "Login" item that the tight AND-match would miss."""
-    ids = search_repo.search_similar(conn, title)[:_DUPLICATE_LIMIT]
+    ids = search_repo.search_similar(conn, title, provider_key=provider_key or None)[:_DUPLICATE_LIMIT]
     out: list[dict[str, str]] = []
     for iid in ids:
-        item = item_repo.get_item(conn, iid)
+        item = item_repo.get_item(conn, iid, provider_key=provider_key or None)
         if item is None:
             continue
         out.append({"id": item.id, "title": item.title, "state": item.state.value})
@@ -63,6 +65,7 @@ def register_mutating_tools(
     conn: sqlite3.Connection,
     store: ProposalStore,
     active_item: Callable[[], str | None],
+    provider_key: str = "",
 ) -> None:
     """Register write tools.
 
@@ -81,7 +84,9 @@ def register_mutating_tools(
             allowed = [i.value for i in TransitionIntent]
             return json.dumps({"error": f"unknown intent '{intent_raw}'", "allowed": allowed})
         try:
-            proposal = mutation_service.propose_transition(conn, item_id, intent)
+            proposal = mutation_service.propose_transition(
+                conn, item_id, intent, provider_key=provider_key
+            )
         except KeyError as e:
             return json.dumps({"error": str(e)})
         store.add(proposal)
@@ -93,7 +98,9 @@ def register_mutating_tools(
         if not item_id or not isinstance(new_md, str):
             return json.dumps({"error": "id and new_description_md are required"})
         try:
-            proposal = mutation_service.propose_description_patch(conn, item_id, new_md)
+            proposal = mutation_service.propose_description_patch(
+                conn, item_id, new_md, provider_key=provider_key
+            )
         except KeyError as e:
             return json.dumps({"error": str(e)})
         store.add(proposal)
@@ -120,7 +127,7 @@ def register_mutating_tools(
         store.add(proposal)
         # Surface potential duplicates so the agent can reconsider — still
         # stage the proposal so the human has final say in the diff modal.
-        similar = _find_duplicates(conn, title)
+        similar = _find_duplicates(conn, title, provider_key=provider_key)
         extra = {"similar": similar} if similar else None
         return _payload(proposal, extra=extra)
 
@@ -128,16 +135,18 @@ def register_mutating_tools(
         item_id = str(args.get("id") or active_item() or "").strip()
         if not item_id:
             return json.dumps({"error": "no item in focus and none provided"})
-        convo = conversation_repo.get_active_for_item(conn, item_id)
+        convo = conversation_repo.get_active_for_item(
+            conn, item_id, provider_key=provider_key or None
+        )
         if convo is None:
             return json.dumps({"error": f"no active conversation for {item_id}"})
         messages = message_repo.list_for_conversation(conn, convo.id)
         if not messages:
             return json.dumps({"error": "conversation is empty"})
-        item = item_repo.get_item(conn, item_id)
+        item = item_repo.get_item(conn, item_id, provider_key=provider_key or None)
         if item is None:
             return json.dumps({"error": f"unknown item {item_id}"})
-        version = next_version(conn, item_id)
+        version = next_version(conn, item_id, provider_key=provider_key)
         filename = filename_for(version)
         md = render_markdown(
             item_id=item_id,
@@ -155,6 +164,7 @@ def register_mutating_tools(
                 filename=filename,
                 content=md.encode("utf-8"),
                 content_type="text/markdown; charset=utf-8",
+                provider_key=provider_key,
             )
         except KeyError as e:
             return json.dumps({"error": str(e)})

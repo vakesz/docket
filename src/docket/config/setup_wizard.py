@@ -440,7 +440,13 @@ def _step_db_and_sync(state: WizardState) -> None:
             project=state.ado_project,
         )
         console.print("Running initial full sync...")
-        summary = sync_service.full_refresh(conn, provider, "default", state.scope.to_core())
+        summary = sync_service.full_refresh(
+            conn,
+            provider,
+            "default",
+            state.scope.to_core(),
+            provider_key=_DEFAULT_PROVIDER_KEY,
+        )
         console.print(
             f"[green]✓ synced {summary.upserted} item(s)[/green] "
             f"(archived {summary.archived}, watermark {summary.watermark})"

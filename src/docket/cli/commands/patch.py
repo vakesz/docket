@@ -29,7 +29,9 @@ def patch_command(
 
     ctx = prepare_or_wizard()
     try:
-        proposal = mutation_service.propose_description_patch(ctx.conn, id, new_md)
+        proposal = mutation_service.propose_description_patch(
+            ctx.conn, id, new_md, provider_key=ctx.active_provider
+        )
         apply_mutation(
             ctx.conn,
             ctx.provider,
@@ -37,6 +39,7 @@ def patch_command(
             confirm_title=f"Patch description of {id}",
             dry_run=dry_run,
             on_success=lambda _r: f"[green]✓ {id} description updated[/green]",
+            provider_key=ctx.active_provider,
         )
     finally:
         ctx.close()

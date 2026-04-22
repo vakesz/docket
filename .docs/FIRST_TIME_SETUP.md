@@ -11,7 +11,7 @@ A friendly walkthrough from a clean clone to a working Docket install, covering 
   - [Azure DevOps](#azure-devops)
   - [GitHub](#github)
   - [github_stub (demo / tests)](#github_stub-demo--tests)
-- [Wire up the LLM (Azure AI Foundry)](#wire-up-the-llm-azure-ai-foundry)
+- [Wire up the LLM (Azure OpenAI)](#wire-up-the-llm-azure-openai)
 - [Optional: add more providers later](#optional-add-more-providers-later)
 - [Files Docket creates](#files-docket-creates)
 - [Troubleshooting](#troubleshooting)
@@ -26,9 +26,9 @@ A friendly walkthrough from a clean clone to a working Docket install, covering 
 | [`uv`](https://docs.astral.sh/uv/) | Packaging + venv manager | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 | A true-color terminal | The TUI leans on theme colors | Any modern terminal (iTerm2, Alacritty, WezTerm, Windows Terminal) |
 | Provider credentials | See the per-provider sections below | — |
-| Azure AI Foundry deployment | For chat / suggestions | Endpoint + deployment name + API key |
+| Azure OpenAI deployment | For chat / suggestions | Endpoint + deployment name + API key |
 
-You can skip Foundry entirely — Docket launches without it, you just lose chat. Pass `--no-chat` to `docket open` to silence the "chat disabled" toast.
+You can skip the LLM entirely — Docket launches without it, you just lose chat. Pass `--no-chat` to `docket open` to silence the "chat disabled" toast.
 
 ---
 
@@ -61,14 +61,14 @@ uv run docket setup
 The wizard is idempotent — re-running it overwrites only the fields you confirm. You can also resume at a specific step:
 
 ```bash
-uv run docket setup --step=foundry
+uv run docket setup --step=ado
 ```
 
 The top-level wizard is a small orchestrator that:
 
 1. Discovers which providers already exist in `config.toml`.
 2. Offers **add / remove / set-active** for them.
-3. Falls through to the shared steps: Foundry (LLM), optional telemetry, prompt templates, database init, first smoke sync.
+3. Falls through to the shared steps: optional telemetry, prompt templates, database init, first smoke sync. LLM credentials are configured via environment variables — see [Wire up the LLM](#wire-up-the-llm-azure-openai).
 
 Provider add is where the per-backend questions live. If you just want to get going with a single Azure DevOps project, the wizard will do that end-to-end with no extra flags.
 
@@ -153,29 +153,31 @@ The wizard will ask for a `default_repo` (any `owner/name` string works — it's
 
 ---
 
-## Wire up the LLM (Azure AI Foundry)
+## Wire up the LLM (Azure OpenAI)
 
-The setup wizard's Foundry step prompts for:
+LLM credentials live in `.env` only — never in `config.toml`. Set:
 
-1. **Endpoint** — your deployment's base URL (`https://<resource>.openai.azure.com/`)
-2. **Deployment name** — the GPT-5 (or equivalent) deployment
-3. **API key** — written to `.env`, never `config.toml`
-4. **API version** — defaults to the latest published version
+| Variable | Purpose |
+| --- | --- |
+| `AZURE_OPENAI_ENDPOINT` | Deployment base URL (`https://<resource>.openai.azure.com/`) |
+| `AZURE_OPENAI_DEPLOYMENT` | Deployment name (the GPT-5 / equivalent model) |
+| `AZURE_OPENAI_API_KEY` | API key |
+| `AZURE_OPENAI_API_VERSION` | Optional; defaults to the latest published version |
 
 `.env` resolution order (first hit wins):
 
 1. Repo-local `.env` in `$PWD`
 2. User-level `.env` under `$XDG_CONFIG_HOME/docket/.env`
 
-Both are gitignored — Docket writes them atomically.
+Both are gitignored.
 
-You can skip Foundry entirely. The TUI launches without chat; `docket open --no-chat` silences the warning if you want it quiet.
+You can skip the LLM entirely. The TUI launches without chat; `docket open --no-chat` silences the warning if you want it quiet.
 
 ### Prompt templates
 
 Docket scaffolds `system_base.md` and `kind_<kind>.md` under `prompts/`. Edit them at any time — the loader keeps an mtime cache, so saved changes take effect on the next turn without restarting the app. The in-app Prompt Library (`p`) opens an editor backed by the same files.
 
-The prompt prefix `[system + kind template] → [ticket snapshot] → ---` is byte-stable on purpose so Foundry prompt caching hits on every follow-up turn. Don't interpolate timestamps or scope into the prefix; those go after the `---` divider.
+The prompt prefix `[system + kind template] → [ticket snapshot] → ---` is byte-stable on purpose so Azure OpenAI prompt caching hits on every follow-up turn. Don't interpolate timestamps or scope into the prefix; those go after the `---` divider.
 
 ---
 
@@ -211,13 +213,15 @@ Resolved via `platformdirs` → XDG on Linux, Application Support on macOS, `%AP
 | Path (macOS shown) | Purpose |
 | --- | --- |
 | `~/Library/Application Support/docket/config.toml` | Providers, scopes, LLM settings, UI preferences |
-| `~/Library/Application Support/docket/.env` | Foundry key + optional provider secrets |
+| `~/Library/Application Support/docket/.env` | Azure OpenAI key + optional provider secrets |
 | `~/Library/Application Support/docket/prompts/system_base.md` | System prompt, editable from the app |
 | `~/Library/Application Support/docket/prompts/kind_<kind>.md` | Per-kind prompt (one per `ItemKind`) |
 | `~/Library/Caches/docket/docket.db` | SQLite cache (items, comments, messages, watchlist, FTS5) |
 | `~/Library/Logs/docket/docket.log` | Structlog output |
 
-The SQLite schema is versioned via `PRAGMA user_version`; migrations live in `src/docket/storage/schema/v<N>.py` and run automatically when you open an older database.
+The SQLite cache keeps a `PRAGMA user_version`, but Docket intentionally supports
+one cache schema at a time right now. If the on-disk schema is older, startup
+drops the cached tables and re-pulls items instead of running migrations.
 
 ---
 
@@ -240,9 +244,8 @@ Re-run `docket setup --step=ado`.
 - If you only want public repos, any `GITHUB_TOKEN` with `public_repo` scope works — set it in `.env` and skip the `gh` step.
 
 ### "Chat disabled: set AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT …"
-The TUI didn't find Foundry credentials. Either:
-- Re-run `docket setup --step=foundry` and the wizard will write them to `.env`, or
-- Set the env vars yourself (`AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`), or
+The TUI didn't find Azure OpenAI credentials. Either:
+- Add the env vars (`AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT`) to your `.env`, or
 - Launch with `docket open --no-chat` to silence the warning entirely.
 
 ### "Read-only mode — mutations disabled"

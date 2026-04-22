@@ -54,7 +54,7 @@ Forbidden edges:
 ### Adapter Layer
 
 - `src/docket/providers/` owns remote API calls, native field/state translation, and provider registration.
-- `src/docket/storage/` owns SQLite connection policy, migrations, and repositories.
+- `src/docket/storage/` owns SQLite connection policy, destructive cache-schema reset logic, and repositories.
 - `src/docket/config/` owns XDG paths, `.env` loading, config schema, prompt template files, and setup entrypoints.
 
 ## Mutation and Confirmation
@@ -76,7 +76,7 @@ Forbidden edges:
 - `src/docket/storage/db.py` enables WAL and `check_same_thread=False` because the TUI and SSE chat path use worker threads.
 - `src/docket/core/services/sync_service.py` reads by watermark and bulk-upserts cached items.
 - `src/docket/storage/repos/search_repo.py` uses FTS5 for search and a separate OR query for duplicate detection.
-- `src/docket/storage/schema/v6.py` intentionally keeps watchlist rows independent from cached-item FK constraints.
+- `src/docket/storage/schema.py` intentionally keeps watchlist rows independent from cached-item FK constraints.
 
 ## Setup and Runtime Switching
 

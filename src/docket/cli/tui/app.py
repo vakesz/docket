@@ -35,6 +35,7 @@ from docket.cli.tui.widgets.settings_modal import SettingsModal
 from docket.cli.tui.widgets.status_bar import StatusBar
 from docket.cli.tui.widgets.suggestion_modal import SuggestionModal
 from docket.cli.tui.widgets.theme_picker import ThemePicker
+from docket.config import save_config
 from docket.config.models import Config, ProviderEntry
 from docket.config.paths import Paths
 from docket.core.model import ItemKind, ScopeFilters, TransitionIntent
@@ -281,6 +282,7 @@ class DocketApp(App[None]):
                 store=self._proposals,
                 active_item=lambda: self._selected_item_id,
                 read_only=tui_ctx.read_only,
+                provider_key=tui_ctx.provider_key,
             )
 
     def compose(self) -> ComposeResult:
@@ -357,6 +359,7 @@ class DocketApp(App[None]):
                 self.tui_ctx.provider,
                 self.tui_ctx.scope_key,
                 self.tui_ctx.scope,
+                provider_key=self.tui_ctx.provider_key,
             )
         except Exception:
             # Background sync is best-effort; a provider hiccup shouldn't
@@ -399,6 +402,7 @@ class DocketApp(App[None]):
                 self.tui_ctx.conn,
                 self.tui_ctx.provider,
                 item_id,
+                provider_key=self.tui_ctx.provider_key,
             )
         except Exception:
             # External updates are a nice-to-have; a provider hiccup shouldn't
@@ -413,8 +417,12 @@ class DocketApp(App[None]):
             # starting and this callback firing.
             if self._selected_item_id != item_id:
                 return
-            fresh_item = item_repo.get_item(self.tui_ctx.conn, item_id)
-            fresh_comments = comment_repo.list_comments(self.tui_ctx.conn, item_id)
+            fresh_item = item_repo.get_item(
+                self.tui_ctx.conn, item_id, provider_key=self.tui_ctx.provider_key or None
+            )
+            fresh_comments = comment_repo.list_comments(
+                self.tui_ctx.conn, item_id, provider_key=self.tui_ctx.provider_key or None
+            )
             self.query_one(ItemDetail).show(fresh_item, fresh_comments)
             chat = self.query_one(ChatPane)
             chat.note(
@@ -429,8 +437,12 @@ class DocketApp(App[None]):
         self.call_from_thread(apply)
 
     def _reload_tree(self) -> None:
-        items = item_repo.list_items(self.tui_ctx.conn)
-        pinned = watchlist_repo.list_pinned_items(self.tui_ctx.conn)
+        items = item_repo.list_items(
+            self.tui_ctx.conn, provider_key=self.tui_ctx.provider_key or None
+        )
+        pinned = watchlist_repo.list_pinned_items(
+            self.tui_ctx.conn, provider_key=self.tui_ctx.provider_key or None
+        )
         self.query_one(ItemTree).load_items(items, pinned=pinned)
 
     def _provider_key(self) -> str:
@@ -488,15 +500,23 @@ class DocketApp(App[None]):
             toggle.tooltip = "Maximize or restore this pane."
 
     def on_item_selected(self, message: ItemSelected) -> None:
-        item = item_repo.get_item(self.tui_ctx.conn, message.item_id)
-        comments = comment_repo.list_comments(self.tui_ctx.conn, message.item_id)
+        item = item_repo.get_item(
+            self.tui_ctx.conn, message.item_id, provider_key=self.tui_ctx.provider_key or None
+        )
+        comments = comment_repo.list_comments(
+            self.tui_ctx.conn, message.item_id, provider_key=self.tui_ctx.provider_key or None
+        )
         self.query_one(ItemDetail).show(item, comments)
         chat = self.query_one(ChatPane)
         chat.bind_item(item)
         self._selected_item_id = item.id if item else None
         self._reset_cost_display()
         if item is not None:
-            active = conversation_repo.get_active_for_item(self.tui_ctx.conn, item.id)
+            active = conversation_repo.get_active_for_item(
+                self.tui_ctx.conn,
+                item.id,
+                provider_key=self.tui_ctx.provider_key or None,
+            )
             if active is None:
                 chat.show_history([])
             else:
@@ -519,8 +539,15 @@ class DocketApp(App[None]):
         except Exception:
             log.exception("detail hydrate failed for %s", item_id)
             return
+        if self.tui_ctx.provider_key:
+            fresh.provider_key = self.tui_ctx.provider_key
         item_repo.upsert_item(self.tui_ctx.conn, fresh)
-        comment_repo.replace_comments_for_item(self.tui_ctx.conn, item_id, fresh_comments)
+        comment_repo.replace_comments_for_item(
+            self.tui_ctx.conn,
+            item_id,
+            fresh_comments,
+            provider_key=self.tui_ctx.provider_key,
+        )
 
         # Only repaint if the user hasn't moved on to another item.
         def paint() -> None:
@@ -587,15 +614,26 @@ class DocketApp(App[None]):
         match, returning items in bm25 rank order."""
         query = raw.strip()
         tree = self.query_one(ItemTree)
-        pinned = watchlist_repo.list_pinned_items(self.tui_ctx.conn)
+        pinned = watchlist_repo.list_pinned_items(
+            self.tui_ctx.conn, provider_key=self.tui_ctx.provider_key or None
+        )
+        provider_key = self.tui_ctx.provider_key or None
         if not query:
-            tree.load_items(item_repo.list_items(self.tui_ctx.conn), pinned=pinned)
+            tree.load_items(
+                item_repo.list_items(self.tui_ctx.conn, provider_key=provider_key),
+                pinned=pinned,
+            )
             return
-        ids = search_repo.search(self.tui_ctx.conn, query)
+        ids = search_repo.search(
+            self.tui_ctx.conn, query, provider_key=self.tui_ctx.provider_key or None
+        )
         if not ids:
             tree.load_items([], pinned=pinned)
             return
-        by_id = {i.id: i for i in item_repo.list_items(self.tui_ctx.conn)}
+        by_id = {
+            i.id: i
+            for i in item_repo.list_items(self.tui_ctx.conn, provider_key=provider_key)
+        }
         tree.load_items([by_id[iid] for iid in ids if iid in by_id], pinned=pinned)
 
     def _move_from_filter_to_tree(self) -> None:
@@ -661,6 +699,7 @@ class DocketApp(App[None]):
                 on_delta=on_delta,
                 on_message=on_message,
                 compaction_threshold_tokens=self.tui_ctx.compaction_threshold_tokens or None,
+                provider_key=self.tui_ctx.provider_key,
             )
         except Exception as e:
             log.exception("chat turn failed")
@@ -686,6 +725,7 @@ class DocketApp(App[None]):
                 self.tui_ctx.provider,
                 self.tui_ctx.scope_key,
                 self.tui_ctx.scope,
+                provider_key=self.tui_ctx.provider_key,
             )
         except Exception as e:  # provider failure → toast, not crash
             self.notify(f"Sync failed: {e}", severity="error")
@@ -855,14 +895,19 @@ class DocketApp(App[None]):
         def on_result(result: QuickOpenResult | None) -> None:
             if result is None or result.item_id is None:
                 return
-            item = item_repo.get_item(self.tui_ctx.conn, result.item_id)
+            item = item_repo.get_item(
+                self.tui_ctx.conn, result.item_id, provider_key=self.tui_ctx.provider_key or None
+            )
             if item is None:
                 self.notify(f"No item '{result.item_id}' in cache.", severity="warning")
                 return
             # Reuse the tree's message path so on_item_selected runs unchanged.
             self.post_message(ItemSelected(item.id))
 
-        self.push_screen(QuickOpenModal(conn=self.tui_ctx.conn), on_result)
+        self.push_screen(
+            QuickOpenModal(conn=self.tui_ctx.conn, provider_key=self.tui_ctx.provider_key),
+            on_result,
+        )
 
     def action_pick_theme(self) -> None:
         """Open the theme picker modal."""
@@ -889,7 +934,11 @@ class DocketApp(App[None]):
         if self._selected_item_id is None:
             self.notify("Select an item first.", severity="warning")
             return
-        item = item_repo.get_item(self.tui_ctx.conn, self._selected_item_id)
+        item = item_repo.get_item(
+            self.tui_ctx.conn,
+            self._selected_item_id,
+            provider_key=self.tui_ctx.provider_key or None,
+        )
         if item is None or not item.url:
             self.notify("This item has no URL on file.", severity="warning")
             return
@@ -899,7 +948,11 @@ class DocketApp(App[None]):
     def action_new_thread(self) -> None:
         if self._selected_item_id is None:
             return
-        conversation_service.new_thread(self.tui_ctx.conn, self._selected_item_id)
+        conversation_service.new_thread(
+            self.tui_ctx.conn,
+            self._selected_item_id,
+            provider_key=self.tui_ctx.provider_key,
+        )
         chat = self.query_one(ChatPane)
         chat.show_history([])
         chat.set_status("")
@@ -926,12 +979,18 @@ class DocketApp(App[None]):
             self.notify("Select an item first.", severity="warning")
             return
         item_id = self._selected_item_id
-        if watchlist_repo.is_pinned(self.tui_ctx.conn, item_id):
-            watchlist_repo.unpin(self.tui_ctx.conn, item_id)
+        if watchlist_repo.is_pinned(
+            self.tui_ctx.conn, item_id, provider_key=self.tui_ctx.provider_key
+        ):
+            watchlist_repo.unpin(
+                self.tui_ctx.conn, item_id, provider_key=self.tui_ctx.provider_key
+            )
             self.tui_ctx.conn.commit()
             self.notify(f"Unpinned {item_id}.", severity="information")
         else:
-            watchlist_repo.pin(self.tui_ctx.conn, item_id)
+            watchlist_repo.pin(
+                self.tui_ctx.conn, item_id, provider_key=self.tui_ctx.provider_key
+            )
             self.tui_ctx.conn.commit()
             self.notify(f"Pinned {item_id}.", severity="information")
         self._reload_tree()
@@ -953,7 +1012,9 @@ class DocketApp(App[None]):
         )
 
     def _run_suggestion(self, item_id: str) -> None:
-        item = item_repo.get_item(self.tui_ctx.conn, item_id)
+        item = item_repo.get_item(
+            self.tui_ctx.conn, item_id, provider_key=self.tui_ctx.provider_key or None
+        )
         if item is None:
             self.call_from_thread(self.notify, f"Item {item_id} is gone.", severity="error")
             return
@@ -987,6 +1048,7 @@ class DocketApp(App[None]):
                 staged = suggestion_service.stage_suggestion(
                     self.tui_ctx.conn,
                     suggestion,
+                    provider_key=self.tui_ctx.provider_key,
                 )
             except Exception as e:
                 self.notify(f"Failed to stage: {e}", severity="error")
@@ -1028,6 +1090,7 @@ class DocketApp(App[None]):
             NewItemModal(
                 self.tui_ctx.conn,
                 default_kind=self.tui_ctx.default_new_item_kind,
+                provider_key=self.tui_ctx.provider_key,
             ),
             on_result,
         )
@@ -1071,6 +1134,7 @@ class DocketApp(App[None]):
                 self.tui_ctx.conn,
                 self._selected_item_id,
                 intent,
+                provider_key=self.tui_ctx.provider_key,
             )
         except KeyError as e:
             self.notify(f"Cannot stage: {e}", severity="error")
@@ -1135,6 +1199,18 @@ class DocketApp(App[None]):
         self.tui_ctx.scope_key = scope_name
         self.tui_ctx.scope = sf.to_core()
         self._selected_item_id = None
+        # The agent holds tool closures bound to the old provider + provider_key.
+        # Rebuild so `search_items` and `get_item` target the new backend.
+        if self.tui_ctx.llm is not None:
+            self._agent = build_agent(
+                llm=self.tui_ctx.llm,
+                conn=self.tui_ctx.conn,
+                provider=self.tui_ctx.provider,
+                store=self._proposals,
+                active_item=lambda: self._selected_item_id,
+                read_only=self.tui_ctx.read_only,
+                provider_key=self.tui_ctx.provider_key,
+            )
         with contextlib.suppress(Exception):
             bar = self.query_one(StatusBar)
             bar.provider_name = entry.display_name
@@ -1158,6 +1234,43 @@ class DocketApp(App[None]):
             return None
         key = self.tui_ctx.provider_key or self.tui_ctx.scope_key
         return config.providers.get(key) if key else None
+
+    def action_set_default_provider(self) -> None:
+        """Persist the current provider as `config.active_provider`.
+
+        Writes the full config back to `config.toml` via `save_config` so the
+        choice sticks across launches. Pilot tests that mount the TUI without
+        `paths`/`config` get a warning toast instead of a crash."""
+        config = self.tui_ctx.config
+        paths = self.tui_ctx.paths
+        key = self.tui_ctx.provider_key
+        if config is None or paths is None:
+            self.notify(
+                "Can't persist default provider — config paths not wired.",
+                severity="warning",
+            )
+            return
+        if not key or key not in config.providers:
+            self.notify("No active provider to pin as default.", severity="warning")
+            return
+        if config.active_provider == key:
+            entry = config.providers[key]
+            self.notify(
+                f"'{entry.display_name}' is already the default provider.",
+                severity="information",
+            )
+            return
+        config.active_provider = key
+        try:
+            save_config(paths, config)
+        except Exception as e:
+            self.notify(f"Couldn't write config.toml: {e}", severity="error")
+            return
+        entry = config.providers[key]
+        self.notify(
+            f"Default provider set to '{entry.display_name}'. Opens here on next launch.",
+            severity="information",
+        )
 
     def action_review_pending(self) -> None:
         if len(self._proposals) == 0:
@@ -1196,6 +1309,7 @@ class DocketApp(App[None]):
                     self.tui_ctx.conn,
                     self.tui_ctx.provider,
                     edited,
+                    provider_key=self.tui_ctx.provider_key,
                 )
             except Exception as e:
                 self.notify(f"Apply failed: {e}", severity="error")
@@ -1272,6 +1386,7 @@ class DocketApp(App[None]):
                         self.tui_ctx.conn,
                         self.tui_ctx.provider,
                         popped.proposal,
+                        provider_key=self.tui_ctx.provider_key,
                     )
                     applied += 1
                 except Exception as e:

@@ -54,9 +54,10 @@ class QuickOpenModal(ModalScreen[QuickOpenResult]):
         ("escape", "cancel", "Cancel"),
     ]
 
-    def __init__(self, conn: sqlite3.Connection) -> None:
+    def __init__(self, conn: sqlite3.Connection, *, provider_key: str = "") -> None:
         super().__init__()
         self._conn = conn
+        self._provider_key = provider_key
         self.tooltip = "Jump straight to a cached work item by id."
 
     def compose(self) -> ComposeResult:
@@ -77,7 +78,7 @@ class QuickOpenModal(ModalScreen[QuickOpenResult]):
         if not raw:
             status.update("")
             return
-        item = item_repo.get_item(self._conn, raw)
+        item = item_repo.get_item(self._conn, raw, provider_key=self._provider_key or None)
         status.update("found" if item is not None else "not in cache — press Enter anyway to try")
 
     def on_input_submitted(self, event: Input.Submitted) -> None:

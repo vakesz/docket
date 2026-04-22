@@ -29,7 +29,9 @@ def transition_command(
 
     ctx = prepare_or_wizard()
     try:
-        proposal = mutation_service.propose_transition(ctx.conn, id, ti)
+        proposal = mutation_service.propose_transition(
+            ctx.conn, id, ti, provider_key=ctx.active_provider
+        )
         apply_mutation(
             ctx.conn,
             ctx.provider,
@@ -37,6 +39,7 @@ def transition_command(
             confirm_title=f"Transition {id} ({ti.value})",
             dry_run=dry_run,
             on_success=lambda r: f"[green]✓ {id} → {r.item.state.value}[/green]",  # type: ignore[union-attr]
+            provider_key=ctx.active_provider,
         )
     finally:
         ctx.close()

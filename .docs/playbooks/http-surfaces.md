@@ -60,7 +60,7 @@ Derived from `src/docket/api/routes/conversations.py`.
 
 - `/setup/status` is intentionally auth-free so a frontend can detect bootstrap mode before it knows which token to send.
 - The full app also mounts setup routes so an operator can re-run setup after config exists.
-- `create_app(...)` and `ItvApp` currently duplicate agent runtime assembly; check [Exception Audit](../exception-audit.md) before expanding either copy.
+- `create_app(...)` and `DocketApp` share agent runtime assembly through `agent/factory.build_agent` — do not rebuild the tool registry or read-only gating inline in either surface.
 
 ## Validation Checklist
 

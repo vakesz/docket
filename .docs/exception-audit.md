@@ -18,10 +18,6 @@
   What is wrong: config and prompt-file mutations are spread across widgets and route modules instead of flowing through one config/prompt service.
   Proposed fix: centralize file-backed config and prompt mutations behind dedicated services so hot-reload and validation rules live once.
 
-- `tests/unit/test_import_boundary.py`
-  What is wrong: the architectural test only scans for `docket.providers.azure_devops`, while the documented rule covers every concrete provider.
-  Proposed fix: expand the test to reject imports of any `docket.providers.*` package except `base` and `registry`.
-
 ## Recently Normalized
 
 - `api/schemas.py` → split into `api/schemas/` package (`core`, `mutations`, `tui_parity`, `setup`).
@@ -29,6 +25,7 @@
 - Agent runtime assembly extracted to `agent/factory.build_agent` — HTTP and TUI can no longer drift on read-only gating or tool-registration order.
 - Per-provider setup metadata (display name, required CLIs, config fields) moved onto `ProviderSpec` in the registry; `api/routes/setup.py` iterates specs instead of maintaining parallel dicts.
 - `ScopeFilter.to_core()` collapsed 7 identical `ScopeFilter → ScopeFilters` conversion sites.
+- `tests/unit/test_import_boundary.py` now scans every `core/`, `storage/`, `agent/`, `api/` file against all concrete provider packages (auto-discovered from `src/docket/providers/`), and a sentinel test catches the silent-empty-scan regression that previously made the guard a no-op.
 
 ## Guidelines
 

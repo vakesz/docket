@@ -52,6 +52,7 @@ def new_command(
             confirm_title=f"Create {ik.value}",
             dry_run=dry_run,
             on_success=lambda r: f"[green]✓ created[/green] {r.item.id}  {r.item.title}",  # type: ignore[union-attr]
+            provider_key=ctx.active_provider,
         )
     finally:
         ctx.close()

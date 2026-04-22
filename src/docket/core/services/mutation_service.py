@@ -26,6 +26,7 @@ from docket.core.mutation import (
 )
 from docket.providers.base import WorkItemProvider
 from docket.storage import transaction
+from docket.storage.item_keys import item_storage_key
 from docket.storage.repos import item_repo
 
 
@@ -38,16 +39,24 @@ class MutationResult:
 
 
 def propose_transition(
-    conn: sqlite3.Connection, item_id: str, intent: TransitionIntent
+    conn: sqlite3.Connection,
+    item_id: str,
+    intent: TransitionIntent,
+    *,
+    provider_key: str = "",
 ) -> StateChange:
-    item = _require_cached(conn, item_id)
+    item = _require_cached(conn, item_id, provider_key=provider_key)
     return StateChange(item=item, intent=intent)
 
 
 def propose_description_patch(
-    conn: sqlite3.Connection, item_id: str, new_md: str
+    conn: sqlite3.Connection,
+    item_id: str,
+    new_md: str,
+    *,
+    provider_key: str = "",
 ) -> DescriptionPatch:
-    item = _require_cached(conn, item_id)
+    item = _require_cached(conn, item_id, provider_key=provider_key)
     return DescriptionPatch(item=item, new_md=new_md)
 
 
@@ -57,8 +66,10 @@ def propose_attachment(
     filename: str,
     content: bytes,
     content_type: str = "text/markdown; charset=utf-8",
+    *,
+    provider_key: str = "",
 ) -> AttachmentUpload:
-    item = _require_cached(conn, item_id)
+    item = _require_cached(conn, item_id, provider_key=provider_key)
     return AttachmentUpload(
         item=item, filename=filename, content=content, content_type=content_type
     )
@@ -74,18 +85,26 @@ def confirm(
     proposal: Proposal,
     *,
     dry_run: bool = False,
+    provider_key: str = "",
 ) -> MutationResult:
+    """Execute a proposal.
+
+    `provider_key` is stamped onto the refreshed cache row so the shared
+    items cache stays filterable by provider. Pass it whenever the caller
+    knows which provider is active; otherwise the existing row's key is
+    preserved by the UPSERT (new items created without it land unscoped and
+    get stamped on the next sync)."""
     if dry_run:
         return MutationResult(proposal_id=proposal.id, dry_run=True)
 
     if isinstance(proposal, StateChange):
         updated = provider.transition(proposal.item.id, proposal.intent)
-        _refresh_cache(conn, updated)
+        _refresh_cache(conn, updated, provider_key)
         return MutationResult(proposal_id=proposal.id, dry_run=False, item=updated)
 
     if isinstance(proposal, DescriptionPatch):
         updated = provider.patch_description(proposal.item.id, proposal.new_md)
-        _refresh_cache(conn, updated)
+        _refresh_cache(conn, updated, provider_key)
         return MutationResult(proposal_id=proposal.id, dry_run=False, item=updated)
 
     if isinstance(proposal, AttachmentUpload):
@@ -98,7 +117,7 @@ def confirm(
                 "VALUES (?, ?, NULL, ?, ?, ?)",
                 (
                     str(uuid.uuid4()),
-                    proposal.item.id,
+                    item_storage_key(proposal.item.provider_key or provider_key, proposal.item.id),
                     proposal.filename,
                     url,
                     datetime.now(UTC).isoformat(),
@@ -108,14 +127,14 @@ def confirm(
 
     if isinstance(proposal, ItemCreate):
         created = provider.create_item(proposal.item_kind, proposal.fields)
-        _refresh_cache(conn, created)
+        _refresh_cache(conn, created, provider_key)
         return MutationResult(proposal_id=proposal.id, dry_run=False, item=created)
 
     raise TypeError(f"unknown proposal type: {type(proposal)!r}")
 
 
-def _require_cached(conn: sqlite3.Connection, item_id: str) -> Item:
-    item = item_repo.get_item(conn, item_id)
+def _require_cached(conn: sqlite3.Connection, item_id: str, *, provider_key: str = "") -> Item:
+    item = item_repo.get_item(conn, item_id, provider_key=provider_key or None)
     if item is None:
         raise KeyError(
             f"no cached item with id={item_id}; run `docket sync` or open it first to load context"
@@ -123,6 +142,8 @@ def _require_cached(conn: sqlite3.Connection, item_id: str) -> Item:
     return item
 
 
-def _refresh_cache(conn: sqlite3.Connection, item: Item) -> None:
+def _refresh_cache(conn: sqlite3.Connection, item: Item, provider_key: str) -> None:
+    if provider_key:
+        item.provider_key = provider_key
     with transaction(conn):
         item_repo.upsert_item(conn, item)

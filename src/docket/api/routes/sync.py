@@ -33,10 +33,20 @@ def manual_sync(
     try:
         if full:
             summary = sync_service.full_refresh(
-                conn, runtime.provider, runtime.scope_key, runtime.scope
+                conn,
+                runtime.provider,
+                runtime.scope_key,
+                runtime.scope,
+                provider_key=runtime.provider_key,
             )
         else:
-            summary = sync_service.refresh(conn, runtime.provider, runtime.scope_key, runtime.scope)
+            summary = sync_service.refresh(
+                conn,
+                runtime.provider,
+                runtime.scope_key,
+                runtime.scope,
+                provider_key=runtime.provider_key,
+            )
     except Exception as e:
         runtime.offline = True
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Sync failed: {e}") from e

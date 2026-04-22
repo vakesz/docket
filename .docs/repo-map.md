@@ -16,7 +16,7 @@
 - `agent/`: prompt assembly, tool registry, agent turn loop, Azure OpenAI client integration, transcript rendering, and `factory.build_agent` used by both surfaces.
 - `core/`: canonical model types, proposal types, acceptance extraction, redaction, and workflow services.
 - `providers/`: provider protocol, registry, and concrete Azure DevOps, GitHub, and stub adapters.
-- `storage/`: SQLite connection setup, schema migrations, and repo helpers.
+- `storage/`: SQLite connection setup, cache-schema reset logic, and repo helpers.
 - `config/`: XDG paths, env loading, config schema, config persistence, prompt template scaffolding, interactive setup wizard.
 - `telemetry/`: logging bootstrap.
 

@@ -11,10 +11,11 @@ import base64
 import binascii
 import sqlite3
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from docket.api.auth import require_bearer
 from docket.api.deps import get_conn, get_proposals, get_provider, require_not_read_only
+from docket.api.runtime import RuntimeState
 from docket.api.schemas import (
     ItemDTO,
     MutationConfirmedDTO,
@@ -34,15 +35,26 @@ router = APIRouter(
 )
 
 
+def _active_provider_key(request: Request) -> str:
+    runtime: RuntimeState | None = getattr(request.app.state, "runtime", None)
+    return runtime.provider_key if runtime is not None else ""
+
+
 @router.post("/transition/propose", response_model=ProposalDTO)
 def propose_transition(
     item_id: str,
     payload: ProposeTransitionRequest,
+    request: Request,
     conn: sqlite3.Connection = Depends(get_conn),
     store: ProposalStore = Depends(get_proposals),
 ) -> ProposalDTO:
     try:
-        proposal = mutation_service.propose_transition(conn, item_id, payload.intent)
+        proposal = mutation_service.propose_transition(
+            conn,
+            item_id,
+            payload.intent,
+            provider_key=_active_provider_key(request),
+        )
     except KeyError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
     store.add(proposal, source="api")
@@ -53,12 +65,16 @@ def propose_transition(
 def propose_description(
     item_id: str,
     payload: ProposeDescriptionRequest,
+    request: Request,
     conn: sqlite3.Connection = Depends(get_conn),
     store: ProposalStore = Depends(get_proposals),
 ) -> ProposalDTO:
     try:
         proposal = mutation_service.propose_description_patch(
-            conn, item_id, payload.new_description_md
+            conn,
+            item_id,
+            payload.new_description_md,
+            provider_key=_active_provider_key(request),
         )
     except KeyError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
@@ -70,6 +86,7 @@ def propose_description(
 def propose_attachment(
     item_id: str,
     payload: ProposeAttachmentRequest,
+    request: Request,
     conn: sqlite3.Connection = Depends(get_conn),
     store: ProposalStore = Depends(get_proposals),
 ) -> ProposalDTO:
@@ -84,6 +101,7 @@ def propose_attachment(
             filename=payload.filename,
             content=content,
             content_type=payload.content_type,
+            provider_key=_active_provider_key(request),
         )
     except KeyError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
@@ -107,6 +125,7 @@ def get_proposal(
 def confirm_proposal(
     item_id: str,
     proposal_id: str,
+    request: Request,
     conn: sqlite3.Connection = Depends(get_conn),
     provider: WorkItemProvider = Depends(get_provider),
     store: ProposalStore = Depends(get_proposals),
@@ -114,8 +133,11 @@ def confirm_proposal(
     pending = store.pop(proposal_id)
     if pending is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown proposal '{proposal_id}'")
+    provider_key = _active_provider_key(request)
     try:
-        result = mutation_service.confirm(conn, provider, pending.proposal)
+        result = mutation_service.confirm(
+            conn, provider, pending.proposal, provider_key=provider_key
+        )
     except Exception as e:
         # Re-stage so caller can retry or inspect.
         store.add(pending.proposal, source=pending.source)

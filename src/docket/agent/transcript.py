@@ -14,12 +14,16 @@ from datetime import UTC, datetime
 from textwrap import dedent
 
 from docket.agent.types import ChatMessage
+from docket.storage.item_keys import item_storage_key
 
 _FILENAME_RE = re.compile(r"^convo-(\d{3,})\.md$")
 
 
-def next_version(conn: sqlite3.Connection, item_id: str) -> int:
-    rows = conn.execute("SELECT filename FROM attachments WHERE item_id = ?", (item_id,)).fetchall()
+def next_version(conn: sqlite3.Connection, item_id: str, *, provider_key: str = "") -> int:
+    rows = conn.execute(
+        "SELECT filename FROM attachments WHERE item_id = ?",
+        (item_storage_key(provider_key, item_id),),
+    ).fetchall()
     used = 0
     for row in rows:
         m = _FILENAME_RE.match(row["filename"] or "")

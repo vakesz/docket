@@ -77,10 +77,17 @@ class NewItemModal(ModalScreen["NewItemRequest | None"]):
     NewItemModal #footer-hint { color: $text-muted; padding-top: 1; height: auto; }
     """
 
-    def __init__(self, conn: sqlite3.Connection, *, default_kind: ItemKind = ItemKind.TASK) -> None:
+    def __init__(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        default_kind: ItemKind = ItemKind.TASK,
+        provider_key: str = "",
+    ) -> None:
         super().__init__()
         self._conn = conn
         self._default_kind = default_kind
+        self._provider_key = provider_key
 
     def compose(self) -> ComposeResult:
         with Vertical():
@@ -134,12 +141,14 @@ class NewItemModal(ModalScreen["NewItemRequest | None"]):
         if len(stripped) < 3:
             # Typing ahead — don't spam the user with noise matches.
             return
-        ids = search_repo.search_similar(self._conn, stripped)[:_DUPLICATE_LIMIT]
+        ids = search_repo.search_similar(
+            self._conn, stripped, provider_key=self._provider_key or None
+        )[:_DUPLICATE_LIMIT]
         if not ids:
             return
         container.mount(Static(f"[b]possible duplicates[/b] ({len(ids)}):"))
         for iid in ids:
-            item = item_repo.get_item(self._conn, iid)
+            item = item_repo.get_item(self._conn, iid, provider_key=self._provider_key or None)
             if item is None:
                 continue
             # Escape id in brackets so Rich doesn't treat it as markup.

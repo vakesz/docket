@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from docket.agent.llm_client import LlmClient
 from docket.api.auth import require_bearer
@@ -22,6 +22,7 @@ from docket.api.deps import (
     require_llm,
     require_not_read_only,
 )
+from docket.api.runtime import RuntimeState
 from docket.api.schemas import ProposalDTO, SuggestionDTO, SuggestionStageRequest
 from docket.core.services import mutation_service, suggestion_service
 from docket.core.services.proposal_store import ProposalStore
@@ -35,13 +36,19 @@ router = APIRouter(
 )
 
 
+def _active_provider_key(request: Request) -> str:
+    runtime: RuntimeState | None = getattr(request.app.state, "runtime", None)
+    return runtime.provider_key if runtime is not None else ""
+
+
 @router.post("", response_model=SuggestionDTO)
 def get_suggestion(
     item_id: str,
+    request: Request,
     conn: sqlite3.Connection = Depends(get_conn),
     llm: LlmClient = Depends(require_llm),
 ) -> SuggestionDTO:
-    item = item_repo.get_item(conn, item_id)
+    item = item_repo.get_item(conn, item_id, provider_key=_active_provider_key(request) or None)
     if item is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown item '{item_id}'")
     try:
@@ -64,6 +71,7 @@ def get_suggestion(
 def stage_suggestion(
     item_id: str,
     payload: SuggestionStageRequest,
+    request: Request,
     conn: sqlite3.Connection = Depends(get_conn),
     store: ProposalStore = Depends(get_proposals),
 ) -> list[ProposalDTO]:
@@ -73,7 +81,9 @@ def stage_suggestion(
         description_patch_md=payload.description_patch_md,
     )
     try:
-        staged = suggestion_service.stage_suggestion(conn, suggestion)
+        staged = suggestion_service.stage_suggestion(
+            conn, suggestion, provider_key=_active_provider_key(request)
+        )
     except KeyError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
     out: list[ProposalDTO] = []

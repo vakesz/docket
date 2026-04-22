@@ -64,6 +64,10 @@ class Item:
     url: str | None = None
     attachments: list[Attachment] = field(default_factory=list)
     provider_raw: dict[str, Any] = field(default_factory=dict)
+    # Stamped at the storage boundary (sync_service + mutation upserts) so the
+    # shared items cache can be filtered to the active provider. Empty string
+    # means "unscoped" (legacy rows before the column existed).
+    provider_key: str = ""
 
 
 @dataclass

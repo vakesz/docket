@@ -38,8 +38,8 @@ Validated exception:
 
 ## `src/docket/storage/`
 
-- Owns SQLite connection policy, migrations, and repositories.
-- Schema changes belong in versioned migration files under `src/docket/storage/schema/` and should be consumed through `src/docket/storage/schema/__init__.py`.
+- Owns SQLite connection policy, destructive schema-reset rules, and repositories.
+- Schema changes belong in `src/docket/storage/schema.py`; bump the cache schema version and let `init_db(...)` rebuild incompatible caches instead of adding migrations.
 - Repo helpers should carry row-shape knowledge so surfaces and services do not write ad hoc SQL unless there is a clear, narrow reason.
 - FTS behavior and watchlist semantics are storage concerns, not TUI concerns.
 

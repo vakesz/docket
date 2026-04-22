@@ -37,5 +37,5 @@
 - Provider changes: `uv run pytest tests/test_github_stub_provider.py tests/test_state_map_reverse.py tests/test_import_boundary.py`
 - TUI changes: `uv run pytest tests/test_tui_pilot.py tests/test_read_only_mode.py tests/test_diff_modal_pilot.py tests/test_batch_review_pilot.py`
 - Setup or config changes: `uv run pytest tests/test_setup_wizard.py tests/test_api_setup.py tests/test_config.py`
-- Storage or sync changes: `uv run pytest tests/test_repos.py tests/test_search_repo.py tests/test_migrations.py tests/test_sync_service.py tests/test_watchlist_repo.py`
+- Storage or sync changes: `uv run pytest tests/integration/test_repos.py tests/integration/test_search_repo.py tests/integration/test_db_reset.py tests/integration/test_sync_service.py tests/integration/test_watchlist_repo.py`
 - Full safety pass: `uv run ruff check . && uv run mypy src && uv run pytest`

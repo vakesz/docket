@@ -86,7 +86,7 @@ def suggest_next_action(
 
     Raises SuggestionError if the response is malformed — callers surface that
     to the UI as a toast rather than retrying silently."""
-    comments = comment_repo.list_comments(conn, item.id)
+    comments = comment_repo.list_comments(conn, item.id, provider_key=item.provider_key or None)
     prefix = build_prefix(item, comments)
     messages: list[ChatMessage] = [*prefix, ChatMessage(role="user", content=_USER_PROMPT)]
     result = llm.complete(messages, [])
@@ -97,15 +97,19 @@ def suggest_next_action(
 def stage_suggestion(
     conn: sqlite3.Connection,
     suggestion: Suggestion,
+    *,
+    provider_key: str = "",
 ) -> StagedSuggestion:
     """Turn an accepted Suggestion into ready-to-confirm proposals. The caller
     is responsible for pushing them into the ProposalStore."""
-    state_change = mutation_service.propose_transition(conn, suggestion.item_id, suggestion.intent)
+    state_change = mutation_service.propose_transition(
+        conn, suggestion.item_id, suggestion.intent, provider_key=provider_key
+    )
     desc_patch: DescriptionPatch | None = None
     patch_text = suggestion.description_patch_md.strip()
     if patch_text:
         desc_patch = mutation_service.propose_description_patch(
-            conn, suggestion.item_id, patch_text
+            conn, suggestion.item_id, patch_text, provider_key=provider_key
         )
     return StagedSuggestion(state_change=state_change, description_patch=desc_patch)
 

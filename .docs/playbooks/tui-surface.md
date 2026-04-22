@@ -13,7 +13,7 @@
 TuiContext
    |
    v
-ItvApp
+DocketApp
   +--> ItemTree
   +--> ItemDetail
   +--> ChatPane
@@ -41,7 +41,7 @@ ItvApp
 
 ## Non-Obvious Patterns
 
-- Pane maximize/minimize, provider switching, and background sync are all app-level behaviors in `ItvApp`; adding another one increases the size and coupling of that file.
+- Pane maximize/minimize, provider switching, and background sync are all app-level behaviors in `DocketApp`; adding another one increases the size and coupling of that file.
 - Background sync uses a global interval clamped by per-provider floors.
 - The app strips mutating tools from the agent registry when read-only, not just from visible UI affordances.
 
@@ -49,14 +49,14 @@ ItvApp
 
 ### Add a new TUI action
 
-- Keep the action small in `ItvApp`.
+- Keep the action small in `DocketApp`.
 - Delegate provider or persistence work to an existing service or a new helper.
 - Use a modal or notification for user-facing confirmation or failure.
 
 ### Add a new widget
 
 - Put focused rendering logic in `src/docket/cli/tui/widgets/`.
-- Feed it data from `ItvApp` or a service rather than opening new DB or provider seams in the widget.
+- Feed it data from `DocketApp` or a service rather than opening new DB or provider seams in the widget.
 
 ## Validation Checklist
 

@@ -36,15 +36,18 @@ def register_readonly_tools(
     *,
     conn: sqlite3.Connection,
     provider: WorkItemProvider,
+    provider_key: str = "",
 ) -> None:
     def get_item(args: dict[str, Any]) -> str:
         id_ = str(args.get("id", "")).strip()
         if not id_:
             return json.dumps({"error": "id is required"})
-        item = item_repo.get_item(conn, id_)
+        item = item_repo.get_item(conn, id_, provider_key=provider_key or None)
         if item is None:
             try:
                 item = provider.get_item(id_)
+                if provider_key:
+                    item.provider_key = provider_key
             except Exception as e:
                 return json.dumps({"error": f"provider lookup failed: {e}"})
         payload = _item_summary(item)
@@ -55,7 +58,7 @@ def register_readonly_tools(
         id_ = str(args.get("id", "")).strip()
         if not id_:
             return json.dumps({"error": "id is required"})
-        comments = comment_repo.list_comments(conn, id_)
+        comments = comment_repo.list_comments(conn, id_, provider_key=provider_key or None)
         if not comments:
             try:
                 comments = provider.get_comments(id_)
@@ -90,7 +93,7 @@ def register_readonly_tools(
             return json.dumps({"error": "query is required"})
         matches = [
             i
-            for i in item_repo.list_items(conn)
+            for i in item_repo.list_items(conn, provider_key=provider_key or None)
             if query in i.title.lower() or query in (i.description_md or "").lower()
         ][:limit]
         return json.dumps([_item_summary(i) for i in matches])

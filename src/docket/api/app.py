@@ -92,6 +92,7 @@ def create_app(
             store=app.state.proposals,
             active_item=active_item or (lambda: None),
             read_only=read_only,
+            provider_key=runtime.provider_key if runtime is not None else "",
         )
     else:
         app.state.agent = None

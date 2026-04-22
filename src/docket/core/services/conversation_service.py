@@ -32,22 +32,22 @@ class TurnResult:
     usage: Usage
 
 
-def open_thread(conn: sqlite3.Connection, item_id: str) -> Conversation:
-    existing = conversation_repo.get_active_for_item(conn, item_id)
+def open_thread(conn: sqlite3.Connection, item_id: str, *, provider_key: str = "") -> Conversation:
+    existing = conversation_repo.get_active_for_item(conn, item_id, provider_key=provider_key or None)
     if existing is not None:
         return existing
-    return conversation_repo.create(conn, item_id)
+    return conversation_repo.create(conn, item_id, provider_key=provider_key)
 
 
 def archive_thread(conn: sqlite3.Connection, convo_id: str) -> None:
     conversation_repo.archive(conn, convo_id)
 
 
-def new_thread(conn: sqlite3.Connection, item_id: str) -> Conversation:
-    active = conversation_repo.get_active_for_item(conn, item_id)
+def new_thread(conn: sqlite3.Connection, item_id: str, *, provider_key: str = "") -> Conversation:
+    active = conversation_repo.get_active_for_item(conn, item_id, provider_key=provider_key or None)
     if active is not None:
         archive_thread(conn, active.id)
-    return conversation_repo.create(conn, item_id)
+    return conversation_repo.create(conn, item_id, provider_key=provider_key)
 
 
 def history(conn: sqlite3.Connection, convo_id: str) -> list[ChatMessage]:
@@ -63,11 +63,12 @@ def send_user_message(
     on_delta: Callable[[StreamDelta], None] | None = None,
     on_message: Callable[[ChatMessage], None] | None = None,
     compaction_threshold_tokens: int | None = None,
+    provider_key: str = "",
 ) -> TurnResult:
-    item = item_repo.get_item(conn, item_id)
+    item = item_repo.get_item(conn, item_id, provider_key=provider_key or None)
     if item is None:
         raise KeyError(f"unknown item '{item_id}'")
-    convo = open_thread(conn, item_id)
+    convo = open_thread(conn, item_id, provider_key=provider_key)
     # Compact BEFORE building the prompt so the history we feed the model is
     # already trimmed. A just-crossed threshold collapses on this turn, not the
     # next.
@@ -122,5 +123,5 @@ def send_user_message(
 
 
 def _build_prefix(conn: sqlite3.Connection, item: Item) -> list[ChatMessage]:
-    comments = comment_repo.list_comments(conn, item.id)
+    comments = comment_repo.list_comments(conn, item.id, provider_key=item.provider_key or None)
     return build_prefix(item, comments)

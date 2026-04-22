@@ -21,7 +21,12 @@ def list_command(
     ctx = prepare_or_wizard()
     try:
         kind_filter = ItemKind(kind) if kind else None
-        items = item_repo.list_items(ctx.conn, kind=kind_filter, include_archived=show_archived)
+        items = item_repo.list_items(
+            ctx.conn,
+            kind=kind_filter,
+            include_archived=show_archived,
+            provider_key=ctx.active_provider or None,
+        )
         table = Table(title=f"Docket ({len(items)} items)")
         table.add_column("ID", style="cyan", no_wrap=True)
         table.add_column("Kind", style="magenta")

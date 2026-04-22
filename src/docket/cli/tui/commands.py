@@ -145,6 +145,24 @@ class DocketCommands(Provider):
                         _make_switch_provider_callback(app, key),
                     )
                 )
+            # Pin current provider as default — writes `active_provider` to
+            # config.toml so the next launch opens here. Hidden when already
+            # the default or when pilot-mounts haven't wired paths/config.
+            active_entry = (
+                config.providers.get(active_key) if active_key in config.providers else None
+            )
+            if (
+                active_entry is not None
+                and config.active_provider != active_key
+                and app.tui_ctx.paths is not None
+            ):
+                commands.append(
+                    (
+                        f"Set default provider → {active_entry.display_name}",
+                        "Persist this provider as the default in config.toml.",
+                        app.action_set_default_provider,
+                    )
+                )
         return commands
 
 
