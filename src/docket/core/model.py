@@ -153,6 +153,47 @@ class Project:
     archived_at: datetime | None = None
 
 
+@dataclass
+class MemoryEntry:
+    """A single per-project memory note.
+
+    Memory is the agent's durable knowledge of a project (glossary terms,
+    design decisions, conventions). Bodies are plain Markdown so a human
+    can read and edit them. `source` distinguishes user-authored ("user")
+    from agent-staged-and-confirmed ("agent") entries — both are equally
+    durable, the field is just informational."""
+
+    id: str
+    project_id: str
+    title: str
+    body_md: str
+    tags: list[str] = field(default_factory=list)
+    source: str = "user"
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass
+class Source:
+    """A single per-project reference document.
+
+    Sources are human-curated long-form material the agent can read on
+    demand (requirements, runbooks, design docs). The agent has read-only
+    access — there is no `propose_source_*` flow. `kind` is free-text
+    ("requirements", "runbook", …) and `uri` is optional metadata; neither
+    is interpreted by docket itself."""
+
+    id: str
+    project_id: str
+    title: str
+    body_md: str
+    kind: str = ""
+    uri: str = ""
+    tags: list[str] = field(default_factory=list)
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
 def project_id_for(provider_key: str, scope_key: str) -> str:
     """Deterministic project id for a (provider_key, scope_key) pair.
 

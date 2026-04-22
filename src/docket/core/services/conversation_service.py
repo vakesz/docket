@@ -18,8 +18,8 @@ from dataclasses import dataclass
 from docket.agent.loop import AgentLoop
 from docket.agent.prompt import build_prefix
 from docket.agent.types import ChatMessage, StreamDelta, Usage
-from docket.core.model import Conversation, Item
-from docket.core.services import compaction_service
+from docket.core.model import Conversation, Item, MemoryEntry
+from docket.core.services import compaction_service, memory_service
 from docket.storage.db import transaction
 from docket.storage.repos import comment_repo, conversation_repo, item_repo, message_repo
 
@@ -64,6 +64,7 @@ def send_user_message(
     on_message: Callable[[ChatMessage], None] | None = None,
     compaction_threshold_tokens: int | None = None,
     provider_key: str = "",
+    project_id: str = "",
 ) -> TurnResult:
     item = item_repo.get_item(conn, item_id, provider_key=provider_key)
     if item is None:
@@ -81,7 +82,7 @@ def send_user_message(
         )
     past = history(conn, convo.id)
 
-    prefix = _build_prefix(conn, item)
+    prefix = _build_prefix(conn, item, project_id=project_id)
     user_msg = ChatMessage(role="user", content=text)
 
     turn = loop.run_turn(
@@ -122,6 +123,19 @@ def send_user_message(
     )
 
 
-def _build_prefix(conn: sqlite3.Connection, item: Item) -> list[ChatMessage]:
+def _build_prefix(
+    conn: sqlite3.Connection, item: Item, *, project_id: str = ""
+) -> list[ChatMessage]:
     comments = comment_repo.list_comments(conn, item.id, provider_key=item.provider_key)
-    return build_prefix(item, comments)
+    memory: list[MemoryEntry] = []
+    revision = 0
+    if project_id:
+        # Best-effort: a missing project (fresh DB, mid-onboarding) just means
+        # no memory yet. Don't fail the chat turn over it.
+        try:
+            memory = memory_service.list_entries(conn, project_id)
+            revision = memory_service.get_revision(conn, project_id)
+        except KeyError:
+            memory = []
+            revision = 0
+    return build_prefix(item, comments, memory=memory, memory_revision=revision)

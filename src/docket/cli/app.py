@@ -5,6 +5,7 @@ from rich.console import Console
 
 from docket.cli.commands.help import help_command
 from docket.cli.commands.list import list_command
+from docket.cli.commands.memory import memory_app
 from docket.cli.commands.new import new_command
 from docket.cli.commands.open import open_command, run_open_tui
 from docket.cli.commands.patch import patch_command
@@ -42,6 +43,7 @@ def _root(ctx: typer.Context) -> None:
 
 app.add_typer(setup_app, name="setup")
 app.add_typer(project_app, name="project")
+app.add_typer(memory_app, name="memory")
 app.command("sync")(sync_command)
 app.command("list")(list_command)
 app.command("show")(show_command)

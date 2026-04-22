@@ -59,7 +59,46 @@ class CommentAdd:
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
 
-Proposal = StateChange | DescriptionPatch | AttachmentUpload | ItemCreate | CommentAdd
+@dataclass(frozen=True)
+class MemoryWrite:
+    """Stage a create-or-update of a per-project memory entry.
+
+    `memory_id is None` means create; otherwise update. For updates, the
+    `previous_*` fields are populated by `mutation_service.propose_memory_write`
+    so `render_diff` can show a real before/after — without them the UI
+    would only ever show "what's about to land", which doesn't read like a
+    diff for a human reviewer."""
+
+    kind: Literal["memory_write"] = field(default="memory_write", init=False)
+    project_id: str = ""
+    title: str = ""
+    body_md: str = ""
+    tags: tuple[str, ...] = ()
+    source: str = "agent"
+    memory_id: str | None = None
+    previous_title: str = ""
+    previous_body_md: str = ""
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+
+
+@dataclass(frozen=True)
+class MemoryDelete:
+    kind: Literal["memory_delete"] = field(default="memory_delete", init=False)
+    project_id: str = ""
+    memory_id: str = ""
+    title: str = ""  # snapshot at propose time so the diff is human-readable
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+
+
+Proposal = (
+    StateChange
+    | DescriptionPatch
+    | AttachmentUpload
+    | ItemCreate
+    | CommentAdd
+    | MemoryWrite
+    | MemoryDelete
+)
 
 
 def render_diff(proposal: Proposal) -> str:
@@ -112,4 +151,27 @@ def render_diff(proposal: Proposal) -> str:
         if not body.strip():
             return f"{header}\n  (empty)"
         return f"{header}\n" + "\n".join(f"  > {line}" for line in body.splitlines())
+    if isinstance(proposal, MemoryWrite):
+        action = "update" if proposal.memory_id else "create"
+        header = f"memory {action}: {proposal.title}"
+        if not proposal.memory_id:
+            new_lines = (proposal.body_md or "").splitlines()
+            return header + "\n" + "\n".join(f"  + {line}" for line in new_lines[:20])
+        old = (proposal.previous_body_md or "").splitlines()
+        new = (proposal.body_md or "").splitlines()
+        diff = difflib.unified_diff(
+            old,
+            new,
+            fromfile=f"memory:{proposal.memory_id} (current)",
+            tofile=f"memory:{proposal.memory_id} (proposed)",
+            lineterm="",
+        )
+        body_diff = "\n".join(diff)
+        title_line = ""
+        if proposal.previous_title and proposal.previous_title != proposal.title:
+            title_line = f"  title: {proposal.previous_title!r} → {proposal.title!r}\n"
+        return header + "\n" + title_line + (body_diff or "  (body unchanged)")
+    if isinstance(proposal, MemoryDelete):
+        suffix = f" — '{proposal.title}'" if proposal.title else ""
+        return f"memory delete: {proposal.memory_id}{suffix}"
     raise TypeError(f"unknown proposal type: {type(proposal)!r}")

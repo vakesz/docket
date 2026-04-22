@@ -17,6 +17,7 @@ from docket.agent.llm_client import LlmClient
 from docket.api.auth import require_bearer
 from docket.api.routes import conversations as conversations_routes
 from docket.api.routes import items as items_routes
+from docket.api.routes import memory as memory_routes
 from docket.api.routes import mutations as mutations_routes
 from docket.api.routes import pins as pins_routes
 from docket.api.routes import projects as projects_routes
@@ -97,6 +98,7 @@ def create_app(
             active_item=active_item or (lambda: None),
             read_only=read_only,
             provider_key=runtime.provider_key if runtime is not None else "",
+            project_id=runtime.project_id if runtime is not None else "",
         )
     else:
         app.state.agent = None
@@ -114,6 +116,10 @@ def create_app(
     app.include_router(settings_routes.router)
     app.include_router(scopes_routes.router)
     app.include_router(providers_routes.router)
+    # Memory routes must come before `projects_routes` because the catch-all
+    # `/projects/{project_id:path}` greedy-matches and would swallow
+    # `/projects/{project_id}/memory` into the project_id.
+    app.include_router(memory_routes.router)
     app.include_router(projects_routes.router)
     app.include_router(sync_routes.router)
     app.include_router(status_routes.router)

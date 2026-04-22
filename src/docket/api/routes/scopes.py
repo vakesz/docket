@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
+from docket.api.agent_rebuild import rebuild_agent
 from docket.api.auth import require_bearer
 from docket.api.deps import get_runtime, require_not_read_only
 from docket.api.runtime import RuntimeState
@@ -57,6 +58,7 @@ def active_scope(runtime: RuntimeState = Depends(get_runtime)) -> ScopeDTO:
 )
 def set_active_scope(
     payload: ScopeSwitchRequest,
+    request: Request,
     runtime: RuntimeState = Depends(get_runtime),
 ) -> ScopeDTO:
     try:
@@ -66,6 +68,9 @@ def set_active_scope(
             status.HTTP_404_NOT_FOUND,
             f"Unknown scope '{payload.name}' on provider '{runtime.provider_key}'",
         ) from e
+    # Scope switch changes the project_id (= provider_key + scope_key), so the
+    # agent's memory/sources tools captured the wrong project. Rebuild.
+    rebuild_agent(request, runtime)
     entry = runtime.config.providers[runtime.provider_key]
     sf = entry.scopes[runtime.scope_key]
     return ScopeDTO(

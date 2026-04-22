@@ -16,19 +16,21 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from docket.core.model import Comment, CreateFields, Item, ItemKind, TransitionIntent
+from docket.core.model import Comment, CreateFields, Item, ItemKind, MemoryEntry, TransitionIntent
 from docket.core.mutation import (
     AttachmentUpload,
     CommentAdd,
     DescriptionPatch,
     ItemCreate,
+    MemoryDelete,
+    MemoryWrite,
     Proposal,
     StateChange,
 )
 from docket.providers.base import WorkItemProvider
 from docket.storage import transaction
 from docket.storage.item_keys import item_storage_key
-from docket.storage.repos import comment_repo, item_repo
+from docket.storage.repos import comment_repo, item_repo, memory_repo
 
 
 @dataclass(frozen=True)
@@ -38,6 +40,8 @@ class MutationResult:
     item: Item | None = None  # None for attachment_upload (use attachment_url)
     attachment_url: str | None = None
     comment: Comment | None = None  # set for comment_add
+    memory: MemoryEntry | None = None  # set for memory_write
+    memory_deleted_id: str | None = None  # set for memory_delete
 
 
 def propose_transition(
@@ -90,6 +94,72 @@ def propose_comment(
 ) -> CommentAdd:
     item = _require_cached(conn, item_id, provider_key=provider_key)
     return CommentAdd(item=item, body_md=body_md)
+
+
+def propose_memory_write(
+    conn: sqlite3.Connection,
+    *,
+    project_id: str,
+    title: str,
+    body_md: str,
+    tags: list[str] | None = None,
+    source: str = "agent",
+    memory_id: str | None = None,
+) -> MemoryWrite:
+    """Build a `MemoryWrite` proposal.
+
+    Validates: project exists; on edit, target memory entry exists and
+    actually belongs to `project_id` (rejects cross-project edits)."""
+    from docket.core.services import memory_service
+
+    memory_service._require_project(conn, project_id)  # KeyError on unknown project
+    previous_title = ""
+    previous_body_md = ""
+    if memory_id:
+        existing = memory_repo.get(conn, memory_id)
+        if existing is None:
+            raise ValueError(f"unknown memory entry '{memory_id}'")
+        if existing.project_id != project_id:
+            raise ValueError(
+                f"memory entry '{memory_id}' belongs to project "
+                f"'{existing.project_id}', not '{project_id}'"
+            )
+        previous_title = existing.title
+        previous_body_md = existing.body_md
+    return MemoryWrite(
+        project_id=project_id,
+        title=title,
+        body_md=body_md,
+        tags=tuple(tags or ()),
+        source=source,
+        memory_id=memory_id,
+        previous_title=previous_title,
+        previous_body_md=previous_body_md,
+    )
+
+
+def propose_memory_delete(
+    conn: sqlite3.Connection,
+    *,
+    project_id: str,
+    memory_id: str,
+) -> MemoryDelete:
+    from docket.core.services import memory_service
+
+    memory_service._require_project(conn, project_id)
+    existing = memory_repo.get(conn, memory_id)
+    if existing is None:
+        raise ValueError(f"unknown memory entry '{memory_id}'")
+    if existing.project_id != project_id:
+        raise ValueError(
+            f"memory entry '{memory_id}' belongs to project "
+            f"'{existing.project_id}', not '{project_id}'"
+        )
+    return MemoryDelete(
+        project_id=project_id,
+        memory_id=memory_id,
+        title=existing.title,
+    )
 
 
 def confirm(
@@ -166,6 +236,30 @@ def confirm(
         if refreshed_item is not None:
             _refresh_cache(conn, refreshed_item, provider_key)
         return MutationResult(proposal_id=proposal.id, dry_run=False, comment=comment)
+
+    if isinstance(proposal, MemoryWrite):
+        from docket.core.services import memory_service
+
+        entry = memory_service.apply_memory_write(
+            conn,
+            project_id=proposal.project_id,
+            title=proposal.title,
+            body_md=proposal.body_md,
+            tags=list(proposal.tags),
+            source=proposal.source,
+            memory_id=proposal.memory_id,
+        )
+        return MutationResult(proposal_id=proposal.id, dry_run=False, memory=entry)
+
+    if isinstance(proposal, MemoryDelete):
+        from docket.core.services import memory_service
+
+        ok = memory_service.apply_memory_delete(conn, proposal.memory_id)
+        return MutationResult(
+            proposal_id=proposal.id,
+            dry_run=False,
+            memory_deleted_id=proposal.memory_id if ok else None,
+        )
 
     raise TypeError(f"unknown proposal type: {type(proposal)!r}")
 

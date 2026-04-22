@@ -25,7 +25,7 @@ from threading import Lock
 
 from docket.agent.types import ChatMessage
 from docket.config import prompt_templates
-from docket.core.model import Comment, Item
+from docket.core.model import Comment, Item, MemoryEntry
 
 DEFAULT_SYSTEM_BASE = prompt_templates.DEFAULT_SYSTEM_BASE
 DEFAULT_KIND_GUIDANCE = prompt_templates.DEFAULT_KIND_GUIDANCE
@@ -122,6 +122,46 @@ def build_snapshot_message(item: Item, comments: list[Comment]) -> ChatMessage:
     return ChatMessage(role="system", content="\n".join(lines))
 
 
-def build_prefix(item: Item, comments: list[Comment]) -> list[ChatMessage]:
-    """Cacheable prefix. Everything after this is turn-specific."""
-    return [build_system_message(item), build_snapshot_message(item, comments)]
+def build_memory_message(entries: list[MemoryEntry]) -> ChatMessage | None:
+    """Render the project's memory entries as a single system message.
+
+    Returns None when there are no entries — callers should drop the slot
+    entirely so the prompt prefix stays byte-stable across projects that
+    happen to have empty memory. The message is plain Markdown sections;
+    the model treats it as authoritative reference material."""
+    if not entries:
+        return None
+    lines = [f"PROJECT MEMORY ({len(entries)})"]
+    for e in entries:
+        header = f"## {e.title}"
+        if e.tags:
+            header += f"  [{', '.join(e.tags)}]"
+        lines.append("")
+        lines.append(header)
+        if e.body_md:
+            lines.append(e.body_md.rstrip())
+    return ChatMessage(role="system", content="\n".join(lines))
+
+
+def build_prefix(
+    item: Item,
+    comments: list[Comment],
+    *,
+    memory: list[MemoryEntry] | None = None,
+    memory_revision: int = 0,
+) -> list[ChatMessage]:
+    """Cacheable prefix. Everything after this is turn-specific.
+
+    Memory is inserted between the system base and the snapshot when
+    non-empty; an empty memory list collapses to the same two-message
+    prefix the original implementation produced, preserving cache hits
+    for projects without notes. `memory_revision` is intentionally NOT
+    interpolated into any message — it's accepted here so the calling
+    layer can pass it through for documentation/cache-key purposes
+    without altering the byte stream."""
+    messages: list[ChatMessage] = [build_system_message(item)]
+    memory_msg = build_memory_message(memory or [])
+    if memory_msg is not None:
+        messages.append(memory_msg)
+    messages.append(build_snapshot_message(item, comments))
+    return messages

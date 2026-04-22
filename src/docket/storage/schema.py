@@ -7,7 +7,7 @@ an older cache is detected, `init_db()` recreates it instead of migrating.
 from __future__ import annotations
 
 APPLICATION_ID = 0x49545600
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 3
 
 STATEMENTS: tuple[str, ...] = (
     """
@@ -209,6 +209,110 @@ STATEMENTS: tuple[str, ...] = (
                 ''
             )
         FROM items i WHERE i.id = old.item_id;
+    END
+    """,
+    # ---------------------------------------------------------------------
+    # Per-project memory: durable agent knowledge (glossary, decisions,
+    # conventions). Rows belong to a project; deleting the project cascades.
+    # `memory_revisions` carries a per-project counter that the prompt
+    # prefix builder reads — same revision → same bytes → prompt cache hit.
+    # ---------------------------------------------------------------------
+    """
+    CREATE TABLE IF NOT EXISTS memory (
+        id          TEXT PRIMARY KEY,
+        project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        title       TEXT NOT NULL,
+        body_md     TEXT NOT NULL DEFAULT '',
+        tags_json   TEXT NOT NULL DEFAULT '[]',
+        source      TEXT NOT NULL DEFAULT 'user',
+        created_at  TEXT NOT NULL,
+        updated_at  TEXT NOT NULL
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_memory_project_updated ON memory(project_id, updated_at DESC)",
+    """
+    CREATE TABLE IF NOT EXISTS memory_revisions (
+        project_id  TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+        revision    INTEGER NOT NULL DEFAULT 0,
+        updated_at  TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
+        memory_id UNINDEXED,
+        project_id UNINDEXED,
+        title,
+        body_md,
+        tags_concat,
+        tokenize = 'unicode61 remove_diacritics 2'
+    )
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS memory_fts_ai AFTER INSERT ON memory BEGIN
+        INSERT INTO memory_fts (memory_id, project_id, title, body_md, tags_concat)
+        VALUES (new.id, new.project_id, new.title, new.body_md, COALESCE(new.tags_json, ''));
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS memory_fts_au AFTER UPDATE ON memory BEGIN
+        DELETE FROM memory_fts WHERE memory_id = old.id;
+        INSERT INTO memory_fts (memory_id, project_id, title, body_md, tags_concat)
+        VALUES (new.id, new.project_id, new.title, new.body_md, COALESCE(new.tags_json, ''));
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS memory_fts_ad AFTER DELETE ON memory BEGIN
+        DELETE FROM memory_fts WHERE memory_id = old.id;
+    END
+    """,
+    # ---------------------------------------------------------------------
+    # Per-project sources: human-curated reference documents. Agent has
+    # read-only access; no revision counter because sources don't ride
+    # in the prompt prefix on every turn. Optional `kind` (free-text)
+    # is FTS-indexed so search can be narrowed by category.
+    # ---------------------------------------------------------------------
+    """
+    CREATE TABLE IF NOT EXISTS sources (
+        id          TEXT PRIMARY KEY,
+        project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        title       TEXT NOT NULL,
+        kind        TEXT NOT NULL DEFAULT '',
+        uri         TEXT NOT NULL DEFAULT '',
+        body_md     TEXT NOT NULL DEFAULT '',
+        tags_json   TEXT NOT NULL DEFAULT '[]',
+        created_at  TEXT NOT NULL,
+        updated_at  TEXT NOT NULL
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_sources_project_updated ON sources(project_id, updated_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_sources_project_kind ON sources(project_id, kind)",
+    """
+    CREATE VIRTUAL TABLE IF NOT EXISTS sources_fts USING fts5(
+        source_id UNINDEXED,
+        project_id UNINDEXED,
+        title,
+        kind,
+        body_md,
+        tags_concat,
+        tokenize = 'unicode61 remove_diacritics 2'
+    )
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS sources_fts_ai AFTER INSERT ON sources BEGIN
+        INSERT INTO sources_fts (source_id, project_id, title, kind, body_md, tags_concat)
+        VALUES (new.id, new.project_id, new.title, new.kind, new.body_md, COALESCE(new.tags_json, ''));
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS sources_fts_au AFTER UPDATE ON sources BEGIN
+        DELETE FROM sources_fts WHERE source_id = old.id;
+        INSERT INTO sources_fts (source_id, project_id, title, kind, body_md, tags_concat)
+        VALUES (new.id, new.project_id, new.title, new.kind, new.body_md, COALESCE(new.tags_json, ''));
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS sources_fts_ad AFTER DELETE ON sources BEGIN
+        DELETE FROM sources_fts WHERE source_id = old.id;
     END
     """,
 )

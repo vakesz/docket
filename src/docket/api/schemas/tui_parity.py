@@ -126,3 +126,84 @@ class SyncSummaryDTO(BaseModel):
     archived: int
     watermark: datetime | None = None
     offline: bool = False
+
+
+# -- memory ------------------------------------------------------------------
+
+
+class MemoryDTO(BaseModel):
+    """One memory entry as exposed over HTTP. Bodies are full markdown —
+    list endpoints include them so a frontend can render previews without
+    a per-row follow-up call."""
+
+    id: str
+    project_id: str
+    title: str
+    body_md: str = ""
+    tags: list[str] = Field(default_factory=list)
+    source: str = "user"
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class MemoryListDTO(BaseModel):
+    """List response carries the project's memory `revision` so a frontend
+    can compare against a cached value and skip re-rendering when nothing
+    has changed. The same revision is keyed into the LLM prompt prefix."""
+
+    project_id: str
+    revision: int = 0
+    entries: list[MemoryDTO] = Field(default_factory=list)
+
+
+class MemoryCreateRequest(BaseModel):
+    title: str
+    body_md: str = ""
+    tags: list[str] = Field(default_factory=list)
+
+
+class MemoryUpdateRequest(BaseModel):
+    title: str | None = None
+    body_md: str | None = None
+    tags: list[str] | None = None
+
+
+# -- sources -----------------------------------------------------------------
+
+
+class SourceDTO(BaseModel):
+    """One source document. Like memory, list endpoints include the body
+    so a frontend can render previews in one round-trip."""
+
+    id: str
+    project_id: str
+    title: str
+    body_md: str = ""
+    kind: str = ""
+    uri: str = ""
+    tags: list[str] = Field(default_factory=list)
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class SourceListDTO(BaseModel):
+    """No revision counter: sources are not part of the prompt prefix."""
+
+    project_id: str
+    entries: list[SourceDTO] = Field(default_factory=list)
+
+
+class SourceCreateRequest(BaseModel):
+    title: str
+    body_md: str = ""
+    kind: str = ""
+    uri: str = ""
+    tags: list[str] = Field(default_factory=list)
+
+
+class SourceUpdateRequest(BaseModel):
+    title: str | None = None
+    body_md: str | None = None
+    kind: str | None = None
+    uri: str | None = None
+    tags: list[str] | None = None

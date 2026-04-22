@@ -74,6 +74,12 @@ def _reset_cache_schema(conn: sqlite3.Connection) -> None:
     """Drop cache-backed tables in place so the next init installs the current schema."""
     with transaction(conn):
         for stmt in (
+            # FTS virtual tables and child tables first so FK cascades don't fight us.
+            "DROP TABLE IF EXISTS sources_fts",
+            "DROP TABLE IF EXISTS sources",
+            "DROP TABLE IF EXISTS memory_fts",
+            "DROP TABLE IF EXISTS memory_revisions",
+            "DROP TABLE IF EXISTS memory",
             "DROP TABLE IF EXISTS items_fts",
             "DROP TABLE IF EXISTS messages",
             "DROP TABLE IF EXISTS attachments",
@@ -82,6 +88,7 @@ def _reset_cache_schema(conn: sqlite3.Connection) -> None:
             "DROP TABLE IF EXISTS items",
             "DROP TABLE IF EXISTS sync_state",
             "DROP TABLE IF EXISTS watchlist",
+            "DROP TABLE IF EXISTS projects",
         ):
             conn.execute(stmt)
         conn.execute("PRAGMA user_version = 0")

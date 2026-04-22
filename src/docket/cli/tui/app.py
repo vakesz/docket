@@ -28,6 +28,7 @@ from docket.cli.tui.widgets.diff_modal import DiffModal
 from docket.cli.tui.widgets.help_modal import HelpModal
 from docket.cli.tui.widgets.item_detail import ItemDetail
 from docket.cli.tui.widgets.item_tree import ItemSelected, ItemTree
+from docket.cli.tui.widgets.memory_pane import MemoryPane
 from docket.cli.tui.widgets.new_item_modal import NewItemModal, NewItemRequest
 from docket.cli.tui.widgets.prompt_library import PromptLibraryModal
 from docket.cli.tui.widgets.quick_open import QuickOpenModal, QuickOpenResult
@@ -38,7 +39,7 @@ from docket.cli.tui.widgets.theme_picker import ThemePicker
 from docket.config import save_config
 from docket.config.models import Config, ProviderEntry
 from docket.config.paths import Paths
-from docket.core.model import ItemKind, ScopeFilters, TransitionIntent
+from docket.core.model import ItemKind, ScopeFilters, TransitionIntent, project_id_for
 from docket.core.services import (
     conversation_service,
     external_update_service,
@@ -250,6 +251,7 @@ class DocketApp(App[None]):
         Binding("w", "toggle_pin", "Pin/unpin item", show=False),
         Binding("comma", "open_settings", "Settings"),
         Binding("p", "edit_prompts", "Prompts"),
+        Binding("m", "open_memory", "Memory", show=False),
         Binding("ctrl+f", "toggle_fullscreen", "Fullscreen pane", show=False),
         Binding("ctrl+left", "shrink_pane", "Shrink pane", show=False),
         Binding("ctrl+right", "grow_pane", "Grow pane", show=False),
@@ -283,6 +285,7 @@ class DocketApp(App[None]):
                 active_item=lambda: self._selected_item_id,
                 read_only=tui_ctx.read_only,
                 provider_key=tui_ctx.provider_key,
+                project_id=project_id_for(tui_ctx.provider_key, tui_ctx.scope_key),
             )
 
     def compose(self) -> ComposeResult:
@@ -516,8 +519,6 @@ class DocketApp(App[None]):
         cfg = self.tui_ctx.config
         if cfg is None:
             return ""
-        from docket.core.model import project_id_for
-
         pid = project_id_for(self.tui_ctx.provider_key, self.tui_ctx.scope_key)
         entry = cfg.projects.get(pid)
         return entry.name if entry else ""
@@ -728,6 +729,9 @@ class DocketApp(App[None]):
                 on_message=on_message,
                 compaction_threshold_tokens=self.tui_ctx.compaction_threshold_tokens or None,
                 provider_key=self.tui_ctx.provider_key,
+                project_id=project_id_for(
+                    self.tui_ctx.provider_key, self.tui_ctx.scope_key
+                ),
             )
         except Exception as e:
             log.exception("chat turn failed")
@@ -1137,6 +1141,23 @@ class DocketApp(App[None]):
             return
         self.push_screen(PromptLibraryModal(self.tui_ctx.paths))
 
+    def action_open_memory(self) -> None:
+        """Open the per-project memory editor for the active project."""
+        cfg = self.tui_ctx.config
+        if cfg is None:
+            self.notify("Memory is unavailable in this session.", severity="warning")
+            return
+        project_id = project_id_for(self.tui_ctx.provider_key, self.tui_ctx.scope_key)
+        project_name = self._resolve_project_name() or project_id
+        self.push_screen(
+            MemoryPane(
+                conn=self.tui_ctx.conn,
+                project_id=project_id,
+                project_name=project_name,
+                read_only=self.tui_ctx.read_only,
+            )
+        )
+
     def action_transition(self, intent_value: str) -> None:
         """Stage a transition for the selected item and open the diff modal.
 
@@ -1184,6 +1205,21 @@ class DocketApp(App[None]):
             return
         self.tui_ctx.scope_key = name
         self.tui_ctx.scope = entry.scopes[name].to_core()
+        # Active project changed (project_id = provider_key + scope_key) → the
+        # agent's memory/sources tools captured the previous one.
+        if self.tui_ctx.llm is not None:
+            self._agent = build_agent(
+                llm=self.tui_ctx.llm,
+                conn=self.tui_ctx.conn,
+                provider=self.tui_ctx.provider,
+                store=self._proposals,
+                active_item=lambda: self._selected_item_id,
+                read_only=self.tui_ctx.read_only,
+                provider_key=self.tui_ctx.provider_key,
+                project_id=project_id_for(
+                    self.tui_ctx.provider_key, self.tui_ctx.scope_key
+                ),
+            )
         with contextlib.suppress(Exception):
             bar = self.query_one(StatusBar)
             bar.scope_label = name
@@ -1235,6 +1271,9 @@ class DocketApp(App[None]):
                 active_item=lambda: self._selected_item_id,
                 read_only=self.tui_ctx.read_only,
                 provider_key=self.tui_ctx.provider_key,
+                project_id=project_id_for(
+                    self.tui_ctx.provider_key, self.tui_ctx.scope_key
+                ),
             )
         # The detail and chat panes were rendered for an item from the previous
         # provider. Wipe them so the user doesn't chat against a ticket that no

@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import sqlite3
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
+from docket.api.agent_rebuild import rebuild_agent
 from docket.api.auth import require_bearer
 from docket.api.deps import get_config, get_conn, get_paths, get_runtime, require_not_read_only
 from docket.api.runtime import RuntimeState
@@ -177,6 +178,7 @@ def update_project(
 )
 def activate_project(
     project_id: str,
+    request: Request,
     config: Config = Depends(get_config),
     runtime: RuntimeState = Depends(get_runtime),
 ) -> ProjectDTO:
@@ -197,6 +199,8 @@ def activate_project(
             f"Scope '{entry.scope_key}' is no longer defined on provider "
             f"'{entry.provider_key}'.",
         ) from e
+    # Active project changed → memory/sources tools captured the previous one.
+    rebuild_agent(request, runtime)
     return _to_dto(
         project_id=project_id,
         name=entry.name,

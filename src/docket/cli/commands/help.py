@@ -43,6 +43,11 @@ COMMANDS: tuple[CommandHelp, ...] = (
         "List, rename, describe, archive named projects.",
         "docket project list",
     ),
+    CommandHelp(
+        "memory",
+        "Manage per-project agent memory entries.",
+        "docket memory list",
+    ),
     CommandHelp("help", "Show commands and examples.", "docket help"),
 )
 

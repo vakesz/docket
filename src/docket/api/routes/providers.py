@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from docket.agent.factory import build_agent
+from docket.api.agent_rebuild import rebuild_agent
 from docket.api.auth import require_bearer
 from docket.api.deps import get_runtime, require_not_read_only
 from docket.api.runtime import RuntimeState
@@ -63,23 +63,8 @@ def set_active_provider(
     # The agent's tool closures captured the previous provider + provider_key
     # at create_app time. Rebuild so tool calls hit the new backend; otherwise
     # chat in the same session keeps reasoning over the old provider's items.
-    _rebuild_agent(request, runtime)
+    rebuild_agent(request, runtime)
     return _to_dto(runtime, runtime.provider_key)
-
-
-def _rebuild_agent(request: Request, runtime: RuntimeState) -> None:
-    state = request.app.state
-    if state.llm is None:
-        return
-    state.agent = build_agent(
-        llm=state.llm,
-        conn=state.conn,
-        provider=runtime.provider,
-        store=state.proposals,
-        active_item=lambda: None,
-        read_only=bool(getattr(state, "read_only", False)),
-        provider_key=runtime.provider_key,
-    )
 
 
 __all__ = ["router"]
