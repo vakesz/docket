@@ -7,8 +7,8 @@
  *   - Everything else is handed to the TanStack Start SSR handler in
  *     `dist/server/server.js` (which re-renders the React app).
  *
- * Start with `bun run server.ts` (see package.json "start"). The Dockerfile
- * runs exactly this after `bun install --production` + copying `dist/`.
+ * Start with `bun run server.ts` (see package.json "start") after
+ * `bun run build` has produced `dist/`.
  */
 import { statSync } from "node:fs";
 import { join, normalize } from "node:path";
@@ -17,7 +17,7 @@ import { join, normalize } from "node:path";
 import ssrHandler from "./dist/server/server.js";
 
 const PORT = Number.parseInt(process.env.PORT ?? "3000", 10);
-const API_TARGET = process.env.DOCKET_API_URL ?? "http://backend:8765";
+const API_TARGET = process.env.DOCKET_API_URL ?? "http://127.0.0.1:8765";
 const API_TOKEN = process.env.DOCKET_API_TOKEN ?? "";
 const CLIENT_DIR = join(import.meta.dir, "dist", "client");
 

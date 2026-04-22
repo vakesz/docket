@@ -43,7 +43,7 @@ def refresh(
 
     with transaction(conn):
         upserted = item_repo.upsert_items(conn, items)
-        archived = item_repo.mark_archived(conn, archived_ids, provider_key=provider_key or None)
+        archived = item_repo.mark_archived(conn, archived_ids, provider_key=provider_key)
         new_watermark = max_seen or datetime.now(UTC)
         sync_repo.set_watermark(conn, storage_scope_key, new_watermark)
 

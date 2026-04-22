@@ -33,9 +33,7 @@ class TurnResult:
 
 
 def open_thread(conn: sqlite3.Connection, item_id: str, *, provider_key: str = "") -> Conversation:
-    existing = conversation_repo.get_active_for_item(
-        conn, item_id, provider_key=provider_key or None
-    )
+    existing = conversation_repo.get_active_for_item(conn, item_id, provider_key=provider_key)
     if existing is not None:
         return existing
     return conversation_repo.create(conn, item_id, provider_key=provider_key)
@@ -46,7 +44,7 @@ def archive_thread(conn: sqlite3.Connection, convo_id: str) -> None:
 
 
 def new_thread(conn: sqlite3.Connection, item_id: str, *, provider_key: str = "") -> Conversation:
-    active = conversation_repo.get_active_for_item(conn, item_id, provider_key=provider_key or None)
+    active = conversation_repo.get_active_for_item(conn, item_id, provider_key=provider_key)
     if active is not None:
         archive_thread(conn, active.id)
     return conversation_repo.create(conn, item_id, provider_key=provider_key)
@@ -67,7 +65,7 @@ def send_user_message(
     compaction_threshold_tokens: int | None = None,
     provider_key: str = "",
 ) -> TurnResult:
-    item = item_repo.get_item(conn, item_id, provider_key=provider_key or None)
+    item = item_repo.get_item(conn, item_id, provider_key=provider_key)
     if item is None:
         raise KeyError(f"unknown item '{item_id}'")
     convo = open_thread(conn, item_id, provider_key=provider_key)
@@ -125,5 +123,5 @@ def send_user_message(
 
 
 def _build_prefix(conn: sqlite3.Connection, item: Item) -> list[ChatMessage]:
-    comments = comment_repo.list_comments(conn, item.id, provider_key=item.provider_key or None)
+    comments = comment_repo.list_comments(conn, item.id, provider_key=item.provider_key)
     return build_prefix(item, comments)

@@ -42,7 +42,7 @@ def register_readonly_tools(
         id_ = str(args.get("id", "")).strip()
         if not id_:
             return json.dumps({"error": "id is required"})
-        item = item_repo.get_item(conn, id_, provider_key=provider_key or None)
+        item = item_repo.get_item(conn, id_, provider_key=provider_key)
         if item is None:
             try:
                 item = provider.get_item(id_)
@@ -58,7 +58,7 @@ def register_readonly_tools(
         id_ = str(args.get("id", "")).strip()
         if not id_:
             return json.dumps({"error": "id is required"})
-        comments = comment_repo.list_comments(conn, id_, provider_key=provider_key or None)
+        comments = comment_repo.list_comments(conn, id_, provider_key=provider_key)
         if not comments:
             try:
                 comments = provider.get_comments(id_)
@@ -93,7 +93,7 @@ def register_readonly_tools(
             return json.dumps({"error": "query is required"})
         matches = [
             i
-            for i in item_repo.list_items(conn, provider_key=provider_key or None)
+            for i in item_repo.list_items(conn, provider_key=provider_key)
             if query in i.title.lower() or query in (i.description_md or "").lower()
         ][:limit]
         return json.dumps([_item_summary(i) for i in matches])

@@ -67,9 +67,9 @@ def get_history(
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> ConversationHistoryDTO:
     provider_key = _active_provider_key(request)
-    if item_repo.get_item(conn, item_id, provider_key=provider_key or None) is None:
+    if item_repo.get_item(conn, item_id, provider_key=provider_key) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown item '{item_id}'")
-    convo = conversation_repo.get_active_for_item(conn, item_id, provider_key=provider_key or None)
+    convo = conversation_repo.get_active_for_item(conn, item_id, provider_key=provider_key)
     if convo is None:
         return ConversationHistoryDTO(conversation=None, messages=[])
     history = conversation_service.history(conn, convo.id)
@@ -86,7 +86,7 @@ def start_thread(
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> ConversationDTO:
     provider_key = _active_provider_key(request)
-    if item_repo.get_item(conn, item_id, provider_key=provider_key or None) is None:
+    if item_repo.get_item(conn, item_id, provider_key=provider_key) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown item '{item_id}'")
     convo = conversation_service.new_thread(conn, item_id, provider_key=provider_key)
     return ConversationDTO.from_core(convo)
@@ -112,7 +112,7 @@ async def send_message(
       - `error` — terminal, carries a human-readable detail
     """
     provider_key = _active_provider_key(request)
-    if item_repo.get_item(conn, item_id, provider_key=provider_key or None) is None:
+    if item_repo.get_item(conn, item_id, provider_key=provider_key) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown item '{item_id}'")
 
     generator = _stream_turn(

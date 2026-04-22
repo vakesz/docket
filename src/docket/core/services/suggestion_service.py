@@ -86,7 +86,7 @@ def suggest_next_action(
 
     Raises SuggestionError if the response is malformed — callers surface that
     to the UI as a toast rather than retrying silently."""
-    comments = comment_repo.list_comments(conn, item.id, provider_key=item.provider_key or None)
+    comments = comment_repo.list_comments(conn, item.id, provider_key=item.provider_key)
     prefix = build_prefix(item, comments)
     messages: list[ChatMessage] = [*prefix, ChatMessage(role="user", content=_USER_PROMPT)]
     result = llm.complete(messages, [])
@@ -120,7 +120,7 @@ def _parse(item_id: str, raw: str) -> Suggestion:
         intent = TransitionIntent(payload["intent"])
     except (KeyError, ValueError) as e:
         raise SuggestionError(f"model returned unknown intent: {payload.get('intent')!r}") from e
-    description_patch = payload.get("description_patch_md", "") or ""
+    description_patch = payload.get("description_patch_md") or ""
     if not isinstance(description_patch, str):
         raise SuggestionError("description_patch_md must be a string")
     questions_raw = payload.get("open_questions") or []

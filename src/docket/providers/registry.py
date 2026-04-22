@@ -71,11 +71,7 @@ def load_entry_points() -> None:
     if _ENTRY_POINTS_LOADED:
         return
     _ENTRY_POINTS_LOADED = True
-    try:
-        eps = importlib.metadata.entry_points(group="docket.providers")
-    except TypeError:
-        # Python < 3.10 compat — not a supported runtime, but harmless fallback.
-        eps = importlib.metadata.entry_points().get("docket.providers", [])  # type: ignore[attr-defined]
+    eps = importlib.metadata.entry_points(group="docket.providers")
     for ep in eps:
         try:
             loader = ep.load()

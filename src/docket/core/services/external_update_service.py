@@ -50,7 +50,7 @@ def check_and_inject(
 
     Safe to call on a cadence — if the provider errors, raise; if nothing
     changed, return a no-op result so the caller can cheaply poll."""
-    cached = item_repo.get_item(conn, item_id, provider_key=provider_key or None)
+    cached = item_repo.get_item(conn, item_id, provider_key=provider_key)
     fresh = provider.get_item(item_id)
     if provider_key:
         fresh.provider_key = provider_key
@@ -70,7 +70,7 @@ def check_and_inject(
         item_repo.upsert_item(conn, fresh)
 
     injected_id: str | None = None
-    active = conversation_repo.get_active_for_item(conn, item_id, provider_key=provider_key or None)
+    active = conversation_repo.get_active_for_item(conn, item_id, provider_key=provider_key)
     if active is not None and diff:
         msg = ChatMessage(
             role="system",

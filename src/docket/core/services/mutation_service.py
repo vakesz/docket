@@ -134,7 +134,7 @@ def confirm(
 
 
 def _require_cached(conn: sqlite3.Connection, item_id: str, *, provider_key: str = "") -> Item:
-    item = item_repo.get_item(conn, item_id, provider_key=provider_key or None)
+    item = item_repo.get_item(conn, item_id, provider_key=provider_key)
     if item is None:
         raise KeyError(
             f"no cached item with id={item_id}; run `docket sync` or open it first to load context"

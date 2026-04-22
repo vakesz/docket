@@ -6,8 +6,7 @@ import tsconfigPaths from "vite-tsconfig-paths";
 
 /**
  * Dev proxy attaches the bearer token so the browser can talk to `/api/*`
- * without ever seeing the credential. Prod serving is wrapped by `server.ts`
- * (added in Phase 4 alongside the Dockerfile).
+ * without ever seeing the credential. Prod serving is wrapped by `server.ts`.
  */
 const apiTarget = process.env.DOCKET_API_URL ?? "http://127.0.0.1:8765";
 const apiToken = process.env.DOCKET_API_TOKEN ?? "";

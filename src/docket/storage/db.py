@@ -63,15 +63,11 @@ def _needs_reset(conn: sqlite3.Connection) -> bool:
 
     Docket intentionally supports a single cache schema version at a time while
     the app is still early in development. Opening an older cache recreates it
-    instead of running migrations."""
+    instead of running migrations; a fresh database (user_version = 0) also
+    takes the reset path, since DROP TABLE IF EXISTS makes it a no-op."""
     row = conn.execute("PRAGMA user_version").fetchone()
     version = int(row[0]) if row else 0
-    if version == SCHEMA_VERSION:
-        return False
-    has_items = conn.execute(
-        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'items'"
-    ).fetchone()
-    return bool(has_items)
+    return version != SCHEMA_VERSION
 
 
 def _reset_cache_schema(conn: sqlite3.Connection) -> None:

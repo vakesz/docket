@@ -32,7 +32,7 @@ def is_pinned(
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> PinnedStatusDTO:
     provider_key = _active_provider_key(request)
-    if item_repo.get_item(conn, item_id, provider_key=provider_key or None) is None:
+    if item_repo.get_item(conn, item_id, provider_key=provider_key) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown item '{item_id}'")
     return PinnedStatusDTO(
         item_id=item_id,

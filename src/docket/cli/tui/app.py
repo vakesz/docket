@@ -418,10 +418,10 @@ class DocketApp(App[None]):
             if self._selected_item_id != item_id:
                 return
             fresh_item = item_repo.get_item(
-                self.tui_ctx.conn, item_id, provider_key=self.tui_ctx.provider_key or None
+                self.tui_ctx.conn, item_id, provider_key=self.tui_ctx.provider_key
             )
             fresh_comments = comment_repo.list_comments(
-                self.tui_ctx.conn, item_id, provider_key=self.tui_ctx.provider_key or None
+                self.tui_ctx.conn, item_id, provider_key=self.tui_ctx.provider_key
             )
             self.query_one(ItemDetail).show(fresh_item, fresh_comments)
             chat = self.query_one(ChatPane)
@@ -437,11 +437,9 @@ class DocketApp(App[None]):
         self.call_from_thread(apply)
 
     def _reload_tree(self) -> None:
-        items = item_repo.list_items(
-            self.tui_ctx.conn, provider_key=self.tui_ctx.provider_key or None
-        )
+        items = item_repo.list_items(self.tui_ctx.conn, provider_key=self.tui_ctx.provider_key)
         pinned = watchlist_repo.list_pinned_items(
-            self.tui_ctx.conn, provider_key=self.tui_ctx.provider_key or None
+            self.tui_ctx.conn, provider_key=self.tui_ctx.provider_key
         )
         self.query_one(ItemTree).load_items(items, pinned=pinned)
 
@@ -501,10 +499,10 @@ class DocketApp(App[None]):
 
     def on_item_selected(self, message: ItemSelected) -> None:
         item = item_repo.get_item(
-            self.tui_ctx.conn, message.item_id, provider_key=self.tui_ctx.provider_key or None
+            self.tui_ctx.conn, message.item_id, provider_key=self.tui_ctx.provider_key
         )
         comments = comment_repo.list_comments(
-            self.tui_ctx.conn, message.item_id, provider_key=self.tui_ctx.provider_key or None
+            self.tui_ctx.conn, message.item_id, provider_key=self.tui_ctx.provider_key
         )
         self.query_one(ItemDetail).show(item, comments)
         chat = self.query_one(ChatPane)
@@ -515,7 +513,7 @@ class DocketApp(App[None]):
             active = conversation_repo.get_active_for_item(
                 self.tui_ctx.conn,
                 item.id,
-                provider_key=self.tui_ctx.provider_key or None,
+                provider_key=self.tui_ctx.provider_key,
             )
             if active is None:
                 chat.show_history([])
@@ -615,23 +613,21 @@ class DocketApp(App[None]):
         query = raw.strip()
         tree = self.query_one(ItemTree)
         pinned = watchlist_repo.list_pinned_items(
-            self.tui_ctx.conn, provider_key=self.tui_ctx.provider_key or None
+            self.tui_ctx.conn, provider_key=self.tui_ctx.provider_key
         )
-        provider_key = self.tui_ctx.provider_key or None
         if not query:
             tree.load_items(
-                item_repo.list_items(self.tui_ctx.conn, provider_key=provider_key),
+                item_repo.list_items(self.tui_ctx.conn, provider_key=self.tui_ctx.provider_key),
                 pinned=pinned,
             )
             return
-        ids = search_repo.search(
-            self.tui_ctx.conn, query, provider_key=self.tui_ctx.provider_key or None
-        )
+        ids = search_repo.search(self.tui_ctx.conn, query, provider_key=self.tui_ctx.provider_key)
         if not ids:
             tree.load_items([], pinned=pinned)
             return
         by_id = {
-            i.id: i for i in item_repo.list_items(self.tui_ctx.conn, provider_key=provider_key)
+            i.id: i
+            for i in item_repo.list_items(self.tui_ctx.conn, provider_key=self.tui_ctx.provider_key)
         }
         tree.load_items([by_id[iid] for iid in ids if iid in by_id], pinned=pinned)
 
@@ -895,7 +891,7 @@ class DocketApp(App[None]):
             if result is None or result.item_id is None:
                 return
             item = item_repo.get_item(
-                self.tui_ctx.conn, result.item_id, provider_key=self.tui_ctx.provider_key or None
+                self.tui_ctx.conn, result.item_id, provider_key=self.tui_ctx.provider_key
             )
             if item is None:
                 self.notify(f"No item '{result.item_id}' in cache.", severity="warning")
@@ -936,7 +932,7 @@ class DocketApp(App[None]):
         item = item_repo.get_item(
             self.tui_ctx.conn,
             self._selected_item_id,
-            provider_key=self.tui_ctx.provider_key or None,
+            provider_key=self.tui_ctx.provider_key,
         )
         if item is None or not item.url:
             self.notify("This item has no URL on file.", severity="warning")
@@ -1008,7 +1004,7 @@ class DocketApp(App[None]):
 
     def _run_suggestion(self, item_id: str) -> None:
         item = item_repo.get_item(
-            self.tui_ctx.conn, item_id, provider_key=self.tui_ctx.provider_key or None
+            self.tui_ctx.conn, item_id, provider_key=self.tui_ctx.provider_key
         )
         if item is None:
             self.call_from_thread(self.notify, f"Item {item_id} is gone.", severity="error")

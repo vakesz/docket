@@ -78,7 +78,7 @@ class QuickOpenModal(ModalScreen[QuickOpenResult]):
         if not raw:
             status.update("")
             return
-        item = item_repo.get_item(self._conn, raw, provider_key=self._provider_key or None)
+        item = item_repo.get_item(self._conn, raw, provider_key=self._provider_key)
         status.update("found" if item is not None else "not in cache — press Enter anyway to try")
 
     def on_input_submitted(self, event: Input.Submitted) -> None:

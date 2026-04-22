@@ -1,14 +1,12 @@
 # Docket — developer shortcuts
 #
 # Run `make` or `make help` to see available targets. Everything delegates to
-# `uv`, `bun`, or `docker compose` so the underlying tools stay discoverable.
+# `uv` or `bun` so the underlying tools stay discoverable.
 
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
 FRONTEND := frontend
-COMPOSE := docker compose
-COMPOSE_DEV := docker compose -f compose.yaml -f compose.dev.yaml
 ENV_FILE := .env
 
 ## ---------- host (no containers) ----------
@@ -28,7 +26,16 @@ tui: ## run the Textual TUI on the host
 
 .PHONY: frontend
 frontend: ## run frontend dev server on the host (vite → localhost:3000)
-	cd $(FRONTEND) && bun run dev
+	@set -a; [ -f $(ENV_FILE) ] && . ./$(ENV_FILE); set +a; \
+	 cd $(FRONTEND) && bun run dev
+
+.PHONY: dev
+dev: ## run backend + frontend concurrently (Ctrl-C stops both)
+	@set -a; [ -f $(ENV_FILE) ] && . ./$(ENV_FILE); set +a; \
+	 trap 'kill 0' EXIT INT TERM; \
+	 uv run docket serve & \
+	 (cd $(FRONTEND) && bun run dev) & \
+	 wait
 
 .PHONY: frontend-build
 frontend-build: ## build the production frontend bundle
@@ -65,47 +72,6 @@ check: lint typecheck test ## lint + typecheck + test across both trees
 .PHONY: gen-api
 gen-api: ## regenerate frontend OpenAPI types from the running backend
 	cd $(FRONTEND) && bun run gen:api
-
-## ---------- docker (dev) ----------
-
-.PHONY: docker-dev
-docker-dev: ## build + start the dev stack (vite HMR + uvicorn bind-mount)
-	$(COMPOSE_DEV) up --build
-
-.PHONY: docker-dev-detached
-docker-dev-detached: ## dev stack in the background
-	$(COMPOSE_DEV) up --build -d
-
-.PHONY: docker-dev-logs
-docker-dev-logs: ## follow dev stack logs
-	$(COMPOSE_DEV) logs -f
-
-## ---------- docker (prod) ----------
-
-.PHONY: docker-build
-docker-build: ## build both prod images without starting them
-	$(COMPOSE) build
-
-.PHONY: docker-up
-docker-up: ## build + start the prod stack detached
-	$(COMPOSE) up -d --build
-
-.PHONY: docker-logs
-docker-logs: ## follow prod stack logs
-	$(COMPOSE) logs -f
-
-.PHONY: docker-ps
-docker-ps: ## list running services
-	$(COMPOSE) ps
-
-.PHONY: docker-down
-docker-down: ## stop both stacks (data volume persists)
-	$(COMPOSE_DEV) down --remove-orphans
-	$(COMPOSE) down --remove-orphans
-
-.PHONY: docker-reset
-docker-reset: ## stop + wipe the `docket-data` named volume (destructive)
-	$(COMPOSE) down -v --remove-orphans
 
 ## ---------- maintenance ----------
 

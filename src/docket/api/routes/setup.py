@@ -3,8 +3,8 @@
 Mounted on both the full `create_app` and the bootstrap app spun up when
 `config.toml` doesn't exist yet. In bootstrap mode only `/setup/*` and
 `/health` are exposed, gated by `DOCKET_SETUP_TOKEN`. Once setup completes
-the server writes config and exits so the supervisor (docker compose,
-`docket serve` rerun) can restart with real wiring.
+the server writes config and exits so the user can re-run `docket serve`
+with real wiring.
 
 `GET /setup/status` is the one endpoint that stays auth-free — the frontend
 needs to probe which mode it's in before it knows which token to send."""
@@ -312,9 +312,8 @@ def _write_env_key(paths: Paths, api_key: str) -> None:
 def _schedule_restart() -> None:
     """Fire SIGTERM on self after a short delay so the response can flush first.
 
-    Docker compose restart policy (`unless-stopped`) will bring the backend back
-    up with the freshly-written config. Locally, the user's `docket serve`
-    process exits and they re-run it."""
+    The user's `docket serve` process exits and they re-run it with the
+    freshly-written config."""
 
     def _die() -> None:
         time.sleep(0.5)

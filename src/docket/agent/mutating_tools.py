@@ -49,12 +49,10 @@ def _find_duplicates(
     match *any* word in `title`, best-match first. Empty list if nothing
     plausible exists. Uses OR-matching so "Login redesign" catches an existing
     "Login" item that the tight AND-match would miss."""
-    ids = search_repo.search_similar(conn, title, provider_key=provider_key or None)[
-        :_DUPLICATE_LIMIT
-    ]
+    ids = search_repo.search_similar(conn, title, provider_key=provider_key)[:_DUPLICATE_LIMIT]
     out: list[dict[str, str]] = []
     for iid in ids:
-        item = item_repo.get_item(conn, iid, provider_key=provider_key or None)
+        item = item_repo.get_item(conn, iid, provider_key=provider_key)
         if item is None:
             continue
         out.append({"id": item.id, "title": item.title, "state": item.state.value})
@@ -137,15 +135,13 @@ def register_mutating_tools(
         item_id = str(args.get("id") or active_item() or "").strip()
         if not item_id:
             return json.dumps({"error": "no item in focus and none provided"})
-        convo = conversation_repo.get_active_for_item(
-            conn, item_id, provider_key=provider_key or None
-        )
+        convo = conversation_repo.get_active_for_item(conn, item_id, provider_key=provider_key)
         if convo is None:
             return json.dumps({"error": f"no active conversation for {item_id}"})
         messages = message_repo.list_for_conversation(conn, convo.id)
         if not messages:
             return json.dumps({"error": "conversation is empty"})
-        item = item_repo.get_item(conn, item_id, provider_key=provider_key or None)
+        item = item_repo.get_item(conn, item_id, provider_key=provider_key)
         if item is None:
             return json.dumps({"error": f"unknown item {item_id}"})
         version = next_version(conn, item_id, provider_key=provider_key)
