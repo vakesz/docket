@@ -31,6 +31,7 @@ from docket.api.schemas import (
     ProposeDescriptionRequest,
     ProposeTransitionRequest,
 )
+from docket.core.mutation import Proposal
 from docket.core.services import mutation_service
 from docket.core.services.proposal_store import ProposalStore
 from docket.providers.base import WorkItemProvider
@@ -40,6 +41,11 @@ router = APIRouter(
     tags=["mutations"],
     dependencies=[Depends(require_bearer), Depends(require_not_read_only)],
 )
+
+
+def _stage(store: ProposalStore, proposal: Proposal) -> ProposalDTO:
+    store.add(proposal, source="api")
+    return ProposalDTO.from_core(proposal)
 
 
 @router.post("/transition/propose", response_model=ProposalDTO)
@@ -59,8 +65,7 @@ def propose_transition(
         )
     except KeyError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
-    store.add(proposal, source="api")
-    return ProposalDTO.from_core(proposal)
+    return _stage(store, proposal)
 
 
 @router.post("/description/propose", response_model=ProposalDTO)
@@ -80,8 +85,7 @@ def propose_description(
         )
     except KeyError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
-    store.add(proposal, source="api")
-    return ProposalDTO.from_core(proposal)
+    return _stage(store, proposal)
 
 
 @router.post("/attachment/propose", response_model=ProposalDTO)
@@ -107,8 +111,7 @@ def propose_attachment(
         )
     except KeyError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
-    store.add(proposal, source="api")
-    return ProposalDTO.from_core(proposal)
+    return _stage(store, proposal)
 
 
 @router.post("/comment/propose", response_model=ProposalDTO)
@@ -130,8 +133,7 @@ def propose_comment(
         )
     except KeyError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
-    store.add(proposal, source="api")
-    return ProposalDTO.from_core(proposal)
+    return _stage(store, proposal)
 
 
 @router.get("/{proposal_id}", response_model=ProposalDTO)

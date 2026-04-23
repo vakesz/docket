@@ -56,7 +56,7 @@ def memory_list(
                 entry.title,
                 ", ".join(entry.tags),
                 entry.source,
-                _format_updated(entry.updated_at),
+                format_updated(entry.updated_at),
             )
         console.print(table)
     finally:
@@ -75,7 +75,7 @@ def memory_show(
             f"[bold cyan]{entry.title}[/bold cyan]\n"
             f"[dim]id:[/dim] {entry.id}    "
             f"[dim]source:[/dim] {entry.source}    "
-            f"[dim]updated:[/dim] {_format_updated(entry.updated_at)}\n"
+            f"[dim]updated:[/dim] {format_updated(entry.updated_at)}\n"
             f"[dim]tags:[/dim] {', '.join(entry.tags) or '—'}"
         )
         console.print(Panel.fit(meta, border_style="cyan"))
@@ -97,13 +97,13 @@ def memory_add(
     ctx = prepare_or_wizard()
     try:
         project = ctx.active_project()
-        body_md = _read_body(body, from_file)
+        body_md = read_body(body, from_file)
         entry = memory_repo.create(
             ctx.conn,
             project_id=project.id,
             title=title,
             body_md=body_md,
-            tags=_split_tags(tags),
+            tags=split_tags(tags),
             source="user",
         )
         console.print(
@@ -131,7 +131,7 @@ def memory_edit(
     try:
         existing = _resolve(ctx, memory_id)
         body_md: str | None = (
-            _read_body(body, from_file) if body is not None or from_file is not None else None
+            read_body(body, from_file) if body is not None or from_file is not None else None
         )
         if title is None and body_md is None and tags is None:
             console.print("[yellow]Nothing to update[/yellow] — pass --title, --body, or --tags.")
@@ -141,7 +141,7 @@ def memory_edit(
             existing.id,
             title=title,
             body_md=body_md,
-            tags=_split_tags(tags) if tags is not None else None,
+            tags=split_tags(tags) if tags is not None else None,
         )
         if updated is None:
             console.print(f"[red]Memory entry vanished:[/red] {existing.id}")
@@ -202,7 +202,7 @@ def memory_search(
                 entry.id[:8],
                 entry.title,
                 ", ".join(entry.tags),
-                _format_updated(entry.updated_at),
+                format_updated(entry.updated_at),
             )
         console.print(table)
     finally:

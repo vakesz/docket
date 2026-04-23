@@ -8,15 +8,13 @@ human-curated reference material (requirements, design notes, runbooks).
 
 from __future__ import annotations
 
-import sys
-from datetime import datetime
-
 import typer
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
+from docket.cli.commands._utils import format_updated, read_body, split_tags
 from docket.cli.context import Context, prepare_or_wizard
 from docket.core.model import Source
 from docket.storage.repos import source_repo
@@ -28,29 +26,6 @@ source_app = typer.Typer(
     help="List, search, add, edit, remove project source documents.",
     no_args_is_help=True,
 )
-
-
-def _split_tags(raw: str | None) -> list[str]:
-    if not raw:
-        return []
-    return [t.strip() for t in raw.split(",") if t.strip()]
-
-
-def _format_updated(value: datetime | None) -> str:
-    if value is None:
-        return "—"
-    return value.strftime("%Y-%m-%d %H:%M")
-
-
-def _read_body(body: str | None, from_file: str | None) -> str:
-    if from_file == "-":
-        return sys.stdin.read()
-    if from_file:
-        with open(from_file, encoding="utf-8") as fh:
-            return fh.read()
-    if body is not None:
-        return body
-    raise typer.BadParameter("provide --body or --from-file (use '-' for stdin)")
 
 
 @source_app.command("list")
@@ -81,7 +56,7 @@ def source_list(
                 entry.title,
                 entry.kind or "—",
                 ", ".join(entry.tags),
-                _format_updated(entry.updated_at),
+                format_updated(entry.updated_at),
             )
         console.print(table)
     finally:
@@ -100,7 +75,7 @@ def source_show(
             f"[bold cyan]{entry.title}[/bold cyan]\n"
             f"[dim]id:[/dim] {entry.id}    "
             f"[dim]kind:[/dim] {entry.kind or '—'}    "
-            f"[dim]updated:[/dim] {_format_updated(entry.updated_at)}\n"
+            f"[dim]updated:[/dim] {format_updated(entry.updated_at)}\n"
             f"[dim]uri:[/dim] {entry.uri or '—'}\n"
             f"[dim]tags:[/dim] {', '.join(entry.tags) or '—'}"
         )
@@ -125,7 +100,7 @@ def source_add(
     ctx = prepare_or_wizard()
     try:
         project = ctx.active_project()
-        body_md = _read_body(body, from_file)
+        body_md = read_body(body, from_file)
         entry = source_repo.create(
             ctx.conn,
             project_id=project.id,
@@ -133,7 +108,7 @@ def source_add(
             body_md=body_md,
             kind=kind,
             uri=uri,
-            tags=_split_tags(tags),
+            tags=split_tags(tags),
         )
         console.print(
             f"[green]Added[/green] source [cyan]{entry.title}[/cyan] "
@@ -162,7 +137,7 @@ def source_edit(
     try:
         existing = _resolve(ctx, source_id)
         body_md: str | None = (
-            _read_body(body, from_file) if body is not None or from_file is not None else None
+            read_body(body, from_file) if body is not None or from_file is not None else None
         )
         if title is None and body_md is None and kind is None and uri is None and tags is None:
             console.print(
@@ -176,7 +151,7 @@ def source_edit(
             body_md=body_md,
             kind=kind,
             uri=uri,
-            tags=_split_tags(tags) if tags is not None else None,
+            tags=split_tags(tags) if tags is not None else None,
         )
         if updated is None:
             console.print(f"[red]Source vanished:[/red] {existing.id}")
@@ -240,7 +215,7 @@ def source_search(
                 entry.title,
                 entry.kind or "—",
                 ", ".join(entry.tags),
-                _format_updated(entry.updated_at),
+                format_updated(entry.updated_at),
             )
         console.print(table)
     finally:
