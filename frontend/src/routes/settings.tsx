@@ -34,8 +34,8 @@ import {
 } from "react";
 
 import {
-  usePatchSettings,
   useManualSync,
+  usePatchSettings,
   usePrompt,
   usePrompts,
   usePutPrompt,
@@ -967,9 +967,7 @@ function SyncForm({
             {fullSyncPending ? "Running full sync…" : "Run full sync"}
           </button>
         </div>
-        {fullSyncError && (
-          <p className="mt-3 text-sm text-danger-fg">{fullSyncError}</p>
-        )}
+        {fullSyncError && <p className="mt-3 text-sm text-danger-fg">{fullSyncError}</p>}
       </div>
     </>
   );

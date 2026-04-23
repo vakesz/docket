@@ -85,9 +85,7 @@ def test_memory_edit_and_rm(tmp_xdg: Path) -> None:
     else:
         raise AssertionError(f"could not parse list output:\n{listed.stdout}")
 
-    edited = runner.invoke(
-        app, ["memory", "edit", mem_prefix, "--title", "Renamed"]
-    )
+    edited = runner.invoke(app, ["memory", "edit", mem_prefix, "--title", "Renamed"])
     assert edited.exit_code == 0, edited.stdout
     assert "Updated" in edited.stdout
 

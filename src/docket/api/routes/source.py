@@ -50,17 +50,13 @@ def _to_dto(entry: Source) -> SourceDTO:
 
 def _require_project(config: Config, project_id: str) -> None:
     if project_id not in config.projects:
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND, f"Unknown project '{project_id}'"
-        )
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown project '{project_id}'")
 
 
 def _require_entry(conn: sqlite3.Connection, source_id: str) -> Source:
     entry = source_service.get_entry(conn, source_id)
     if entry is None:
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND, f"Unknown source '{source_id}'"
-        )
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown source '{source_id}'")
     return entry
 
 
@@ -96,9 +92,7 @@ def search_sources(
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> SourceListDTO:
     _require_project(config, project_id)
-    entries = source_service.search_entries(
-        conn, project_id, q, kind=kind, limit=limit
-    )
+    entries = source_service.search_entries(conn, project_id, q, kind=kind, limit=limit)
     return SourceListDTO(
         project_id=project_id,
         entries=[_to_dto(e) for e in entries],
@@ -176,9 +170,7 @@ def update_source(
     if updated is None:
         # Lost a race with another writer — surface as 404 so the frontend
         # refetches and reconciles.
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND, f"Source '{source_id}' vanished"
-        )
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Source '{source_id}' vanished")
     return _to_dto(updated)
 
 

@@ -21,9 +21,7 @@ from docket.storage import init_db
 def _seed_project(conn, project_id: str = "main") -> str:
     from docket.config import Config, ProjectEntry
 
-    cfg = Config(
-        projects={project_id: ProjectEntry(provider_key=project_id, name="Main")}
-    )
+    cfg = Config(projects={project_id: ProjectEntry(provider_key=project_id, name="Main")})
     project_service.mirror_into_db(cfg, conn)
     return project_id
 

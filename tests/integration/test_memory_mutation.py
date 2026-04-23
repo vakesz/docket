@@ -15,9 +15,7 @@ from tests.fakes.provider import FakeProvider
 def _seed_project(conn, project_id: str = "main") -> str:
     from docket.config import Config, ProjectEntry
 
-    cfg = Config(
-        projects={project_id: ProjectEntry(provider_key=project_id, name="Main")}
-    )
+    cfg = Config(projects={project_id: ProjectEntry(provider_key=project_id, name="Main")})
     project_service.mirror_into_db(cfg, conn)
     return project_id
 
@@ -47,9 +45,7 @@ def test_propose_memory_write_create_and_confirm(tmp_path: Path) -> None:
 def test_propose_memory_write_edit_carries_previous(tmp_path: Path) -> None:
     conn = init_db(tmp_path / "docket.db")
     pid = _seed_project(conn)
-    existing = memory_service.add_entry(
-        conn, project_id=pid, title="Old title", body_md="Old body"
-    )
+    existing = memory_service.add_entry(conn, project_id=pid, title="Old title", body_md="Old body")
     proposal = mutation_service.propose_memory_write(
         conn,
         project_id=pid,
@@ -91,9 +87,7 @@ def test_confirm_memory_delete_removes_row(tmp_path: Path) -> None:
     conn = init_db(tmp_path / "docket.db")
     pid = _seed_project(conn)
     entry = memory_service.add_entry(conn, project_id=pid, title="Tmp", body_md="x")
-    proposal = mutation_service.propose_memory_delete(
-        conn, project_id=pid, memory_id=entry.id
-    )
+    proposal = mutation_service.propose_memory_delete(conn, project_id=pid, memory_id=entry.id)
     assert isinstance(proposal, MemoryDelete)
 
     result = mutation_service.confirm(conn, FakeProvider(), proposal)
@@ -105,9 +99,7 @@ def test_confirm_memory_delete_removes_row(tmp_path: Path) -> None:
 def test_confirm_memory_write_dry_run(tmp_path: Path) -> None:
     conn = init_db(tmp_path / "docket.db")
     pid = _seed_project(conn)
-    proposal = mutation_service.propose_memory_write(
-        conn, project_id=pid, title="x", body_md="y"
-    )
+    proposal = mutation_service.propose_memory_write(conn, project_id=pid, title="x", body_md="y")
     result = mutation_service.confirm(conn, FakeProvider(), proposal, dry_run=True)
     assert result.dry_run is True
     assert result.memory is None

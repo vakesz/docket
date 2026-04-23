@@ -83,9 +83,9 @@ def upsert(
     creates a default-named entry if missing and is a no-op otherwise."""
     project_id = project_id_for(provider_key)
     existing = config.projects.get(project_id)
-    final_name = (name if name is not None else (existing.name if existing else None)) or _default_name(
-        provider_key
-    )
+    final_name = (
+        name if name is not None else (existing.name if existing else None)
+    ) or _default_name(provider_key)
     final_description = (
         description if description is not None else (existing.description if existing else "")
     )
@@ -177,9 +177,7 @@ def describe(
     return get(conn, project_id)
 
 
-def archive(
-    config: Config, paths: Paths, conn: sqlite3.Connection, project_id: str
-) -> None:
+def archive(config: Config, paths: Paths, conn: sqlite3.Connection, project_id: str) -> None:
     entry = config.projects.get(project_id)
     if entry is None:
         return
@@ -188,9 +186,7 @@ def archive(
     mirror_into_db(config, conn)
 
 
-def unarchive(
-    config: Config, paths: Paths, conn: sqlite3.Connection, project_id: str
-) -> None:
+def unarchive(config: Config, paths: Paths, conn: sqlite3.Connection, project_id: str) -> None:
     entry = config.projects.get(project_id)
     if entry is None:
         return

@@ -186,9 +186,7 @@ def test_delete_source(client: TestClient) -> None:
     ).json()
     resp = client.delete(f"/sources/{created['id']}", headers=AUTH_HEADERS)
     assert resp.status_code == 204
-    assert (
-        client.get(f"/sources/{created['id']}", headers=AUTH_HEADERS).status_code == 404
-    )
+    assert client.get(f"/sources/{created['id']}", headers=AUTH_HEADERS).status_code == 404
 
 
 def test_search_sources(client: TestClient) -> None:

@@ -21,9 +21,7 @@ from docket.storage import init_db
 def _seed_project(conn, project_id: str = "main") -> str:
     from docket.config import Config, ProjectEntry
 
-    cfg = Config(
-        projects={project_id: ProjectEntry(provider_key=project_id, name="Main")}
-    )
+    cfg = Config(projects={project_id: ProjectEntry(provider_key=project_id, name="Main")})
     project_service.mirror_into_db(cfg, conn)
     return project_id
 
@@ -79,9 +77,7 @@ def test_read_source_blocks_cross_project(tmp_path: Path) -> None:
     conn = init_db(tmp_path / "docket.db")
     pid_a = _seed_project(conn, "p1")
     pid_b = _seed_project(conn, "p2")
-    other = source_service.add_entry(
-        conn, project_id=pid_b, title="Secret", body_md="hush"
-    )
+    other = source_service.add_entry(conn, project_id=pid_b, title="Secret", body_md="hush")
     reg = ToolRegistry()
     register_source_readonly_tools(reg, conn=conn, project_id=pid_a)
     out = json.loads(reg.dispatch("read_source", {"source_id": other.id}))
@@ -91,12 +87,8 @@ def test_read_source_blocks_cross_project(tmp_path: Path) -> None:
 
 def test_search_sources_full_text(env) -> None:
     conn, pid, reg = env
-    source_service.add_entry(
-        conn, project_id=pid, title="Auth", body_md="OAuth tokens"
-    )
-    source_service.add_entry(
-        conn, project_id=pid, title="Other", body_md="unrelated"
-    )
+    source_service.add_entry(conn, project_id=pid, title="Auth", body_md="OAuth tokens")
+    source_service.add_entry(conn, project_id=pid, title="Other", body_md="unrelated")
     out = json.loads(reg.dispatch("search_sources", {"query": "OAuth"}))
     assert [e["title"] for e in out] == ["Auth"]
     # Body included in search hits so the agent doesn't need a follow-up call.

@@ -22,11 +22,7 @@ def _seed_project(conn, project_id: str = "main") -> str:
 def _minimal_config(project_id: str):
     from docket.config import Config, ProjectEntry
 
-    return Config(
-        projects={
-            project_id: ProjectEntry(provider_key=project_id, name="Main")
-        }
-    )
+    return Config(projects={project_id: ProjectEntry(provider_key=project_id, name="Main")})
 
 
 def test_add_entry_persists_and_bumps_revision(tmp_path: Path) -> None:

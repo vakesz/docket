@@ -219,9 +219,7 @@ async def test_closed_items_hidden_by_default_and_toggle_reveals_them(tui_setup)
     """`hide_done` defaults to True so the backlog matches the frontend's
     "open" bucket; `c` flips it and the tree repaints with the closed rows."""
     ctx, _ = tui_setup
-    closed = _mk_item(
-        "C-1", kind=ItemKind.TASK, title="Old and done", state=ItemState.CLOSED
-    )
+    closed = _mk_item("C-1", kind=ItemKind.TASK, title="Old and done", state=ItemState.CLOSED)
     item_repo.upsert_item(ctx.conn, closed)
     ctx.provider.items.append(closed)
     app = DocketApp(ctx)

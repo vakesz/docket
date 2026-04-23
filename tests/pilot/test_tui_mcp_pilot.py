@@ -37,9 +37,7 @@ def _seeded_config(paths_dir: Path) -> Config:
             )
         },
         active_provider="main",
-        projects={
-            project_id_for("main"): ProjectEntry(provider_key="main", name="Main")
-        },
+        projects={project_id_for("main"): ProjectEntry(provider_key="main", name="Main")},
     )
 
 

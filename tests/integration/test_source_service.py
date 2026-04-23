@@ -25,11 +25,7 @@ def _seed_project(conn, project_id: str = "main") -> str:
 def _minimal_config(project_id: str):
     from docket.config import Config, ProjectEntry
 
-    return Config(
-        projects={
-            project_id: ProjectEntry(provider_key=project_id, name="Main")
-        }
-    )
+    return Config(projects={project_id: ProjectEntry(provider_key=project_id, name="Main")})
 
 
 def test_add_entry_persists(tmp_path: Path) -> None:
@@ -60,9 +56,7 @@ def test_add_entry_persists(tmp_path: Path) -> None:
 def test_edit_entry_updates_only_supplied_fields(tmp_path: Path) -> None:
     conn = init_db(tmp_path / "docket.db")
     pid = _seed_project(conn)
-    entry = source_service.add_entry(
-        conn, project_id=pid, title="A", body_md="x", kind="design"
-    )
+    entry = source_service.add_entry(conn, project_id=pid, title="A", body_md="x", kind="design")
 
     updated = source_service.edit_entry(conn, entry.id, body_md="y")
     assert updated is not None
@@ -83,15 +77,9 @@ def test_search_uses_fts_and_scopes_to_project(tmp_path: Path) -> None:
     conn = init_db(tmp_path / "docket.db")
     pid_a = _seed_project(conn, "p1")
     pid_b = _seed_project(conn, "p2")
-    source_service.add_entry(
-        conn, project_id=pid_a, title="Auth flow", body_md="OAuth tokens"
-    )
-    source_service.add_entry(
-        conn, project_id=pid_a, title="Other", body_md="unrelated"
-    )
-    source_service.add_entry(
-        conn, project_id=pid_b, title="Auth notes", body_md="OAuth"
-    )
+    source_service.add_entry(conn, project_id=pid_a, title="Auth flow", body_md="OAuth tokens")
+    source_service.add_entry(conn, project_id=pid_a, title="Other", body_md="unrelated")
+    source_service.add_entry(conn, project_id=pid_b, title="Auth notes", body_md="OAuth")
 
     matches = source_service.search_entries(conn, pid_a, "OAuth")
     assert {m.title for m in matches} == {"Auth flow"}
@@ -112,12 +100,8 @@ def test_search_quotes_user_punctuation(tmp_path: Path) -> None:
 def test_kind_filter(tmp_path: Path) -> None:
     conn = init_db(tmp_path / "docket.db")
     pid = _seed_project(conn)
-    source_service.add_entry(
-        conn, project_id=pid, title="Spec", body_md="x", kind="requirements"
-    )
-    source_service.add_entry(
-        conn, project_id=pid, title="Diag", body_md="y", kind="design"
-    )
+    source_service.add_entry(conn, project_id=pid, title="Spec", body_md="x", kind="requirements")
+    source_service.add_entry(conn, project_id=pid, title="Diag", body_md="y", kind="design")
 
     only_design = source_service.list_entries(conn, pid, kind="design")
     assert {e.title for e in only_design} == {"Diag"}

@@ -159,9 +159,7 @@ def test_delete_memory(client: TestClient) -> None:
     ).json()
     resp = client.delete(f"/memory/{created['id']}", headers=AUTH_HEADERS)
     assert resp.status_code == 204
-    assert (
-        client.get(f"/memory/{created['id']}", headers=AUTH_HEADERS).status_code == 404
-    )
+    assert client.get(f"/memory/{created['id']}", headers=AUTH_HEADERS).status_code == 404
 
 
 def test_search_memory(client: TestClient) -> None:
@@ -177,9 +175,7 @@ def test_search_memory(client: TestClient) -> None:
         json={"title": "Other", "body_md": "unrelated"},
         headers=AUTH_HEADERS,
     )
-    resp = client.get(
-        f"/projects/{pid}/memory/search", params={"q": "OAuth"}, headers=AUTH_HEADERS
-    )
+    resp = client.get(f"/projects/{pid}/memory/search", params={"q": "OAuth"}, headers=AUTH_HEADERS)
     assert resp.status_code == 200
     body = resp.json()
     assert [e["title"] for e in body["entries"]] == ["Auth"]
