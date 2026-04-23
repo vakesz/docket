@@ -1,4 +1,4 @@
-"""Tests for the phase-1 API additions:
+"""HTTP coverage for the runtime/admin endpoints:
 
 - pins (GET/POST/DELETE /items/{id}/pin, GET /pinned)
 - suggestions (POST /items/{id}/suggestion, /stage)

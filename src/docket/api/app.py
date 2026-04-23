@@ -81,10 +81,11 @@ def create_app(
     attaches `require_not_read_only` as a dependency) and skips registering
     mutating tools for the agent. Read endpoints keep working unchanged.
 
-    `paths` and `runtime` are optional for backwards compatibility with the
-    existing test fixtures. When omitted, the endpoints that need them return
-    503; when set (by `docket serve`), pins/suggestions/prompts/settings/
-    scopes/providers/sync/status work end-to-end.
+    `paths` and `runtime` are optional so lightweight test fixtures can
+    spin up an app without wiring the whole runtime. When omitted, the
+    endpoints that need them return 503; when set (by `docket serve`),
+    pins/suggestions/prompts/settings/scopes/providers/sync/status work
+    end-to-end.
     """
     if not bearer_token:
         raise ValueError(

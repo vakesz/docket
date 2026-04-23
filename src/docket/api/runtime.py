@@ -2,8 +2,9 @@
 
 A single instance is built by `docket serve` and stored as `app.state.runtime`.
 Scope/provider-switch endpoints mutate it under a lock; read endpoints snapshot
-the fields they need. The existing routes still read `app.state.provider` for
-backwards compatibility; `switch_provider` keeps that attribute in sync.
+the fields they need. Routes that predate the runtime read `app.state.provider`
+directly; `switch_provider` keeps that attribute in sync so both reader styles
+see the same active provider.
 """
 
 from __future__ import annotations

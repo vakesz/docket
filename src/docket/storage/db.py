@@ -26,11 +26,16 @@ def connect(db_path: Path) -> sqlite3.Connection:
 
 
 def init_db(db_path: Path) -> sqlite3.Connection:
+    """Open the cache database and ensure the v1 schema is installed.
+
+    The cache is a derived view of provider state. There is no migration
+    path: if you have an old database, delete the file and re-sync. This
+    function only validates `application_id` to refuse non-docket files
+    and runs the `CREATE TABLE IF NOT EXISTS` statements so a fresh file
+    gets the full schema."""
     conn = connect(db_path)
     try:
         _validate_application_id(conn)
-        if _needs_reset(conn):
-            _reset_cache_schema(conn)
         _init_schema(conn)
         return conn
     except Exception:
@@ -56,42 +61,6 @@ def _init_schema(conn: sqlite3.Connection) -> None:
         for stmt in STATEMENTS:
             conn.execute(stmt)
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
-
-
-def _needs_reset(conn: sqlite3.Connection) -> bool:
-    """Return True when the on-disk cache is from an older incompatible schema.
-
-    Docket intentionally supports a single cache schema version at a time while
-    the app is still early in development. Opening an older cache recreates it
-    instead of running migrations; a fresh database (user_version = 0) also
-    takes the reset path, since DROP TABLE IF EXISTS makes it a no-op."""
-    row = conn.execute("PRAGMA user_version").fetchone()
-    version = int(row[0]) if row else 0
-    return version != SCHEMA_VERSION
-
-
-def _reset_cache_schema(conn: sqlite3.Connection) -> None:
-    """Drop cache-backed tables in place so the next init installs the current schema."""
-    with transaction(conn):
-        for stmt in (
-            # FTS virtual tables and child tables first so FK cascades don't fight us.
-            "DROP TABLE IF EXISTS sources_fts",
-            "DROP TABLE IF EXISTS sources",
-            "DROP TABLE IF EXISTS memory_fts",
-            "DROP TABLE IF EXISTS memory_revisions",
-            "DROP TABLE IF EXISTS memory",
-            "DROP TABLE IF EXISTS items_fts",
-            "DROP TABLE IF EXISTS messages",
-            "DROP TABLE IF EXISTS attachments",
-            "DROP TABLE IF EXISTS conversations",
-            "DROP TABLE IF EXISTS comments",
-            "DROP TABLE IF EXISTS items",
-            "DROP TABLE IF EXISTS sync_state",
-            "DROP TABLE IF EXISTS watchlist",
-            "DROP TABLE IF EXISTS projects",
-        ):
-            conn.execute(stmt)
-        conn.execute("PRAGMA user_version = 0")
 
 
 @contextmanager

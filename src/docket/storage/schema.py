@@ -1,13 +1,15 @@
 """SQLite schema for the local cache.
 
-Single-file schema. Docket supports one cache schema version at a time; if
-an older cache is detected, `init_db()` recreates it instead of migrating.
+Single v1 schema. The cache is a derived view of provider state — when the
+schema needs to change, the on-disk file is deleted and re-synced from the
+provider. `init_db()` only validates `application_id` and installs the
+schema; it does not attempt to upgrade older databases.
 """
 
 from __future__ import annotations
 
 APPLICATION_ID = 0x49545600
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 1
 
 STATEMENTS: tuple[str, ...] = (
     """

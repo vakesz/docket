@@ -1,4 +1,4 @@
-"""Phase B: project service + repo, plus CLI/HTTP wiring smoke tests."""
+"""Project service + repo, plus CLI/HTTP wiring smoke tests."""
 
 from __future__ import annotations
 
