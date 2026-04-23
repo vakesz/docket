@@ -11,26 +11,38 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
+import typer
 from rich.console import Console
 from rich.table import Table
 
 from docket.cli.context import Context, prepare_or_wizard
 from docket.core.services import mcp_service, project_service
+from docket.telemetry.log_reader import tail_events
 
 console = Console()
 
+_VERBOSE_EVENT_TYPES: tuple[str, ...] = ("tool_call", "proposal_confirm", "mcp_bind")
 
-def status_command() -> None:
+
+def status_command(
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="Also show the last few tool / proposal / MCP events from the log.",
+    ),
+) -> None:
     """Print a health snapshot of the active install (paths, cache, sync, MCP)."""
     ctx = prepare_or_wizard()
     try:
-        _render(ctx)
+        _render(ctx, verbose=verbose)
     finally:
         ctx.close()
 
 
-def _render(ctx: Context) -> None:
+def _render(ctx: Context, *, verbose: bool = False) -> None:
     cfg = ctx.config
     active_provider = ctx.active_provider or "—"
     provider_entry = cfg.providers.get(active_provider) if active_provider != "—" else None
@@ -167,6 +179,79 @@ def _render(ctx: Context) -> None:
     http.add_row("Bind", f"{cfg.http.bind}:{cfg.http.port}")
     http.add_row("Token", "set" if cfg.http.token else "unset")
     console.print(http)
+
+    if verbose:
+        console.print()
+        _render_recent_events(ctx.paths.log_dir / "docket.log")
+
+
+def _render_recent_events(log_file: Path) -> None:
+    console.print("[bold]Recent events[/bold]")
+    if not log_file.exists():
+        console.print("[dim]No log file yet.[/dim]")
+        return
+    events = tail_events(log_file, event_types=_VERBOSE_EVENT_TYPES, limit=5)
+    if not events:
+        console.print("[dim]No tool / proposal / MCP events in the recent log window.[/dim]")
+        return
+    table = Table(show_header=True, box=None, pad_edge=False, header_style="dim")
+    table.add_column("Time", style="dim", no_wrap=True)
+    table.add_column("Event", style="cyan")
+    table.add_column("Target")
+    table.add_column("Outcome")
+    table.add_column("ms", justify="right", style="dim")
+    for evt in events:
+        table.add_row(
+            _fmt_event_ts(evt.get("timestamp")),
+            str(evt.get("event", "—")),
+            _event_target(evt),
+            _event_outcome(evt),
+            _fmt_latency(evt.get("latency_ms")),
+        )
+    console.print(table)
+
+
+def _event_target(evt: dict[str, Any]) -> str:
+    kind = evt.get("event")
+    if kind == "tool_call":
+        return str(evt.get("tool_name", "—"))
+    if kind == "proposal_confirm":
+        return str(evt.get("proposal_type", "—"))
+    if kind == "mcp_bind":
+        name = evt.get("tool_name") or evt.get("project") or "—"
+        return str(name)
+    return "—"
+
+
+def _event_outcome(evt: dict[str, Any]) -> str:
+    outcome = str(evt.get("outcome", "—"))
+    err = evt.get("error_type")
+    if err:
+        return f"[red]{outcome}[/red] [dim]({err})[/dim]"
+    if outcome == "ok":
+        return f"[green]{outcome}[/green]"
+    if outcome in {"error", "timeout", "denied"}:
+        return f"[red]{outcome}[/red]"
+    return outcome
+
+
+def _fmt_event_ts(value: Any) -> str:
+    if not isinstance(value, str):
+        return "—"
+    # structlog emits ISO-8601 with trailing 'Z'; keep the HH:MM:SS portion.
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).strftime("%H:%M:%S")
+    except ValueError:
+        return value[:19] if len(value) >= 19 else value
+
+
+def _fmt_latency(value: Any) -> str:
+    if value is None:
+        return "—"
+    try:
+        return f"{int(float(value))}"
+    except (TypeError, ValueError):
+        return str(value)
 
 
 def _cache_counts(conn: sqlite3.Connection) -> dict[str, int]:
