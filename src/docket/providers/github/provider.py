@@ -1,4 +1,4 @@
-"""Real GitHub Issues + Pull-Requests provider.
+"""Real GitHub Issues provider with pull-request discovery.
 
 Talks to `api.github.com` over httpx. Auth rides on `gh auth token` — the
 same short-lived session the user has for their local CLI — so we never
@@ -6,9 +6,11 @@ prompt for a PAT. Read paths are fully implemented; write paths cover
 transition + patch_description + comment-as-attachment-fallback + create.
 
 Mapping:
-- An Issue or PR becomes an `Item`. ItemKind is guessed from labels
-  (`bug` → BUG, `enhancement|feature` → STORY, else TASK). PRs always
-  come back as TASK.
+- Only GitHub Issues enter the work-item cache. Pull requests share the
+  `/issues` REST surface, but they are discovered separately through
+  `find_related_prs(...)` and do not become `Item`s.
+- Issue `ItemKind` is guessed from labels (`bug` → BUG,
+  `enhancement|feature` → STORY, else TASK).
 - `updated_at` drives sync watermarks. `list_changes_since(wm, ...)` uses
   the REST `since=<iso>` query param.
 - State mapping lives in `state_map.py` (shared with the stub).
@@ -164,7 +166,11 @@ class GitHubProvider:
             payload = self._get(f"/repos/{self.default_repo}/issues", params=params)
             if not isinstance(payload, list) or not payload:
                 break
-            out.extend(self._issue_to_item(entry) for entry in payload if isinstance(entry, dict))
+            out.extend(
+                self._issue_to_item(entry)
+                for entry in payload
+                if isinstance(entry, dict) and not _is_pull_request_payload(entry)
+            )
             if len(payload) < _PER_PAGE:
                 break
         return out
@@ -185,6 +191,8 @@ class GitHubProvider:
         owner, repo, number = _parse_id(id)
         payload = self._get(f"/repos/{owner}/{repo}/issues/{number}")
         if not isinstance(payload, dict):
+            raise KeyError(id)
+        if _is_pull_request_payload(payload):
             raise KeyError(id)
         return self._issue_to_item(payload)
 
@@ -396,7 +404,7 @@ class GitHubProvider:
                     tags.append(name)
             elif isinstance(label, str):
                 tags.append(label)
-        is_pr = "pull_request" in payload
+        is_pr = _is_pull_request_payload(payload)
         kind = _guess_kind(tags, is_pr=is_pr)
         state = str(payload.get("state", ""))
         reason = payload.get("state_reason") or ""
@@ -455,6 +463,10 @@ def _parse_iso(value: Any) -> datetime | None:
         return datetime.fromisoformat(text)
     except ValueError:
         return None
+
+
+def _is_pull_request_payload(payload: dict[str, Any]) -> bool:
+    return "pull_request" in payload
 
 
 def _guess_kind(tags: list[str], *, is_pr: bool) -> ItemKind:

@@ -8,6 +8,10 @@ from datetime import UTC, datetime
 from docket.core.model import Item, ItemKind, ItemState
 from docket.storage.item_keys import item_storage_key
 
+# GitHub PRs are cached with `provider_raw.is_pr=true` by older builds.
+# Keep them out of the shared work-item queries even before a fresh sync scrubs them.
+_VISIBLE_ITEM_SQL = "COALESCE(json_extract(items.provider_raw, '$.is_pr'), 0) = 0"
+
 
 def _row_to_item(row: sqlite3.Row) -> Item:
     return Item(
@@ -121,7 +125,7 @@ def list_items(
     `assignee` is the post-cache visual filter's "who" — callers resolve
     `@me` via `visual_filter.resolve` and pass the concrete identity here.
     An empty or `None` assignee means "don't narrow on this axis"."""
-    clauses: list[str] = []
+    clauses: list[str] = [_VISIBLE_ITEM_SQL]
     params: list[object] = []
     if kind is not None:
         clauses.append("kind = ?")
@@ -164,11 +168,11 @@ def list_items(
 def iter_items(conn: sqlite3.Connection, *, provider_key: str | None = None) -> Iterator[Item]:
     if provider_key:
         cur = conn.execute(
-            "SELECT * FROM items WHERE provider_key = ? ORDER BY updated_at DESC",
+            f"SELECT * FROM items WHERE provider_key = ? AND {_VISIBLE_ITEM_SQL} ORDER BY updated_at DESC",
             (provider_key,),
         )
     else:
-        cur = conn.execute("SELECT * FROM items ORDER BY updated_at DESC")
+        cur = conn.execute(f"SELECT * FROM items WHERE {_VISIBLE_ITEM_SQL} ORDER BY updated_at DESC")
     for row in cur:
         yield _row_to_item(row)
 

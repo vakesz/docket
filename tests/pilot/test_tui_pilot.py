@@ -19,6 +19,7 @@ from docket.cli.tui.widgets.chat_pane import ChatPane
 from docket.cli.tui.widgets.item_detail import ItemDetail
 from docket.cli.tui.widgets.item_tree import ItemTree
 from docket.cli.tui.widgets.status_bar import StatusBar
+from docket.config import Config, ProjectEntry
 from docket.core.model import Comment, Item, ItemKind, ItemState, ScopeFilters
 from docket.storage import init_db
 from docket.storage.repos import comment_repo, item_repo
@@ -126,6 +127,34 @@ async def test_layout_has_status_bar_and_no_header(tui_setup) -> None:
         assert isinstance(bar, StatusBar)
         assert bar.size.height == 1
         assert "FakeProvider" in str(bar.render())
+
+
+async def test_tree_rows_show_short_ids_and_status_bar_shows_project_name(tui_setup) -> None:
+    ctx, _ = tui_setup
+    pid = "FakeProvider"
+    ctx.provider_key = pid
+    short_id_item = _mk_item("Ericsson/CodeChecker#1", title="Upgrade Vue")
+    short_id_item.provider_key = pid
+    item_repo.upsert_item(ctx.conn, short_id_item)
+    ctx.provider.items.append(short_id_item)
+    ctx.config = Config(
+        providers={},
+        active_provider=pid,
+        projects={pid: ProjectEntry(provider_key=pid, name="Ericsson/CodeChecker")},
+    )
+    app = DocketApp(ctx)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tree = app.query_one(ItemTree)
+        node = _find_node(tree.root, "Ericsson/CodeChecker#1")
+        assert node is not None
+        label = str(node.label)
+        assert "#1" in label
+        assert "Ericsson/CodeChecker#1" not in label
+
+        bar = app.query_one(StatusBar)
+        assert bar.project_name == "Ericsson/CodeChecker"
+        assert "Ericsson/CodeChecker" in str(bar.render())
 
 
 async def test_refresh_action_invokes_sync(tui_setup) -> None:

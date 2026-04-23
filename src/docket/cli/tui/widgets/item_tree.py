@@ -222,7 +222,7 @@ class ItemTree(Tree[str]):
         state_style = style + self.get_component_rich_style(_STATE_STYLE[row.state], partial=True)
         title = Text()
         title.append(f"{_STATE_DOT[row.state]} ", style=state_style)
-        title.append(row.item_id, style=style + Style(dim=True))
+        title.append(_display_item_id(row.item_id), style=style + Style(dim=True))
         title.append(" ")
         title.append(row.title, style=style)
         title.truncate(main_width, overflow="ellipsis")
@@ -304,11 +304,17 @@ class ItemTree(Tree[str]):
         return walk(self.root)
 
     def _plain_row_label(self, item: Item) -> str:
-        parts = [item.id, item.title]
+        parts = [_display_item_id(item.id), item.title]
         age_days = _age_days(item.updated_at)
         if age_days is not None:
             parts.append(f"{age_days}d")
         return "  ".join(parts)
+
+
+def _display_item_id(item_id: str) -> str:
+    if "#" in item_id:
+        return f"#{item_id.rsplit('#', 1)[1]}"
+    return item_id
 
 
 def _age_days(updated_at: datetime | None) -> int | None:

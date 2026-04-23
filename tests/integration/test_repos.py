@@ -81,6 +81,15 @@ def test_mark_archived_hides_from_default_list(tmp_path: Path) -> None:
     assert {i.id for i in item_repo.list_items(conn, include_archived=True)} == {"1", "2"}
 
 
+def test_list_items_hides_cached_pull_requests(tmp_path: Path) -> None:
+    conn = init_db(tmp_path / "t.db")
+    with transaction(conn):
+        item_repo.upsert_item(conn, _make_item("1", provider_raw={"is_pr": True}))
+        item_repo.upsert_item(conn, _make_item("2"))
+    assert [i.id for i in item_repo.list_items(conn)] == ["2"]
+    assert [i.id for i in item_repo.list_items(conn, include_archived=True)] == ["2"]
+
+
 def test_comments_replace_and_list(tmp_path: Path) -> None:
     conn = init_db(tmp_path / "t.db")
     with transaction(conn):

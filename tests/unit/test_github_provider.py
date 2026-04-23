@@ -103,11 +103,10 @@ def test_kind_guessing_prefers_bug_then_story_then_task() -> None:
     assert item.kind is ItemKind.TASK
 
 
-def test_pull_requests_map_to_task_regardless_of_labels() -> None:
-    item = _mk_provider(_static_handler(_issue_payload(labels=["bug"], is_pr=True))).get_item(
-        "acme/widgets#1"
-    )
-    assert item.kind is ItemKind.TASK
+def test_get_item_rejects_pull_requests() -> None:
+    provider = _mk_provider(_static_handler(_issue_payload(labels=["bug"], is_pr=True)))
+    with pytest.raises(KeyError):
+        provider.get_item("acme/widgets#1")
 
 
 def test_closed_completed_maps_to_resolved() -> None:
@@ -184,6 +183,23 @@ def test_list_changes_since_paginates_until_short_page() -> None:
     items = list(provider.list_changes_since(None, ScopeFilters()))
     assert pages_seen == [1, 2]
     assert len(items) == 107
+
+
+def test_list_changes_since_skips_pull_requests() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/user":
+            return httpx.Response(200, json={"login": "alice"})
+        return httpx.Response(
+            200,
+            json=[
+                _issue_payload(number=1, title="Issue"),
+                _issue_payload(number=2, title="PR", is_pr=True),
+            ],
+        )
+
+    provider = _mk_provider(handler)
+    items = list(provider.list_changes_since(None, ScopeFilters()))
+    assert [item.id for item in items] == ["acme/widgets#1"]
 
 
 def test_list_changes_since_any_assignee_when_filter_empty() -> None:
