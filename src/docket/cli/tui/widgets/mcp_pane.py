@@ -308,6 +308,9 @@ class MCPPane(ModalScreen[bool]):
         except mcp_service.DuplicateServerError:
             self.app.notify(f"'{name}' already exists.", severity="error")
             return
+        except mcp_service.InvalidServerConfigError as exc:
+            self.app.notify(str(exc), severity="error")
+            return
         except mcp_service.UnknownServerError:
             self.app.notify(f"'{name}' vanished — refreshing.", severity="warning")
             self._reload_entries(select_name=None)
@@ -354,6 +357,11 @@ class MCPPane(ModalScreen[bool]):
             enabled=enabled,
             startup_timeout_seconds=timeout,
         )
+        try:
+            entry = mcp_service.validate_entry(entry)
+        except mcp_service.InvalidServerConfigError as exc:
+            self.app.notify(str(exc), severity="error")
+            return
         self.app.notify(f"Starting MCP server '{name}'…", severity="information")
         self.run_worker(
             lambda: self._test_worker(name, entry),

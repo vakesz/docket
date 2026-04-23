@@ -7,7 +7,7 @@ export function SyncButton() {
     <button
       type="button"
       disabled={sync.isPending}
-      onClick={() => sync.mutate()}
+      onClick={() => sync.mutate({})}
       title={
         sync.data
           ? `Upserted ${sync.data.upserted}, archived ${sync.data.archived}`

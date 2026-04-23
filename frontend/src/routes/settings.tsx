@@ -35,6 +35,7 @@ import {
 
 import {
   usePatchSettings,
+  useManualSync,
   usePrompt,
   usePrompts,
   usePutPrompt,
@@ -162,6 +163,7 @@ export const Route = createFileRoute("/settings")({
 function SettingsPage() {
   const settings = useSettings();
   const patch = usePatchSettings();
+  const manualSync = useManualSync();
 
   const initialConfig = useMemo<ConfigMap>(
     () => asRecord(settings.data?.config) ?? {},
@@ -504,6 +506,9 @@ function SettingsPage() {
                       isDirty={dirtySectionKeys.has(activeMeta.key)}
                       onChange={(updater) => updateSection(activeMeta.key, updater)}
                       onResetSection={() => resetSection(activeMeta.key)}
+                      onFullSync={() => manualSync.mutate({ full: true })}
+                      fullSyncPending={manualSync.isPending}
+                      fullSyncError={manualSync.error?.message ?? null}
                     />
                   ) : (
                     <RawEditor value={rawDraft} onChange={setRawDraft} error={rawParsed.error} />
@@ -527,6 +532,9 @@ function FormPanel({
   isDirty,
   onChange,
   onResetSection,
+  onFullSync,
+  fullSyncPending,
+  fullSyncError,
 }: {
   section: SectionMeta;
   initialConfig: ConfigMap;
@@ -534,6 +542,9 @@ function FormPanel({
   isDirty: boolean;
   onChange: (updater: (current: ConfigMap) => ConfigMap) => void;
   onResetSection: () => void;
+  onFullSync: () => void;
+  fullSyncPending: boolean;
+  fullSyncError: string | null;
 }) {
   const value = draft ?? asRecord(initialConfig[section.key]) ?? {};
 
@@ -580,7 +591,14 @@ function FormPanel({
         {section.key === "ui" && <UiForm value={value} onChange={onChange} />}
         {section.key === "telemetry" && <TelemetryForm value={value} onChange={onChange} />}
         {section.key === "sync" && (
-          <SyncForm initialConfig={initialConfig} value={value} onChange={onChange} />
+          <SyncForm
+            initialConfig={initialConfig}
+            value={value}
+            onChange={onChange}
+            onFullSync={onFullSync}
+            fullSyncPending={fullSyncPending}
+            fullSyncError={fullSyncError}
+          />
         )}
         {section.key === "stale" && (
           <StaleForm initialConfig={initialConfig} value={value} onChange={onChange} />
@@ -889,10 +907,16 @@ function SyncForm({
   initialConfig,
   value,
   onChange,
+  onFullSync,
+  fullSyncPending,
+  fullSyncError,
 }: {
   initialConfig: ConfigMap;
   value: ConfigMap;
   onChange: (updater: (current: ConfigMap) => ConfigMap) => void;
+  onFullSync: () => void;
+  fullSyncPending: boolean;
+  fullSyncError: string | null;
 }) {
   const interval = getNumberValue(value, "background_interval_seconds");
   const map = (asRecord(value.min_interval_seconds_by_provider) ?? {}) as Record<string, unknown>;
@@ -921,6 +945,32 @@ function SyncForm({
         suffix="s"
         onChange={(next) => onChange((cur) => ({ ...cur, min_interval_seconds_by_provider: next }))}
       />
+
+      <div className="rounded-2xl border border-warning/30 bg-warning-bg/40 p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <Label>Maintenance</Label>
+            <div className="mt-1 text-sm font-medium text-fg">Full sync</div>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-fg-muted">
+              Resets the active provider&apos;s sync watermark and fetches everything it currently
+              exposes again. Use this when cached items look incomplete or a prior filtered sync
+              left the local cache in a bad state.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onFullSync}
+            disabled={fullSyncPending}
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-warning/40 bg-warning-bg px-4 py-2 text-sm font-semibold text-warning-fg hover:bg-warning-bg/80 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <RefreshCw className={cn("h-4 w-4", fullSyncPending && "animate-spin")} />
+            {fullSyncPending ? "Running full sync…" : "Run full sync"}
+          </button>
+        </div>
+        {fullSyncError && (
+          <p className="mt-3 text-sm text-danger-fg">{fullSyncError}</p>
+        )}
+      </div>
     </>
   );
 }

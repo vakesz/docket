@@ -19,7 +19,7 @@ def refresh(
     for this provider, upsert into the cache, and bump the watermark to the
     newest item seen.
 
-    We always pass `ScopeFilters()` (no filter) to the provider so the cache
+    We always pass an explicit empty `ScopeFilters` to the provider so the cache
     holds every ticket the provider exposes; the TUI/CLI/HTTP layers narrow
     the view at query time. This matters because items assigned to the user
     can link to items assigned to someone else — both need to be cached so
@@ -32,7 +32,7 @@ def refresh(
     Per plan §13: offline is fail-fast. Provider errors propagate out so the
     caller (CLI / TUI / API) can surface them immediately."""
     watermark = sync_repo.get_watermark(conn, provider_key)
-    items = list(provider.list_changes_since(watermark, ScopeFilters()))
+    items = list(provider.list_changes_since(watermark, ScopeFilters(assignee="")))
 
     max_seen: datetime | None = watermark
     archived_ids: list[str] = []

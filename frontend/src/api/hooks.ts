@@ -412,7 +412,8 @@ export function useResetPrompt() {
 export function useManualSync() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => api.post<DTO["SyncSummaryDTO"]>("/sync"),
+    mutationFn: ({ full = false }: { full?: boolean } = {}) =>
+      api.post<DTO["SyncSummaryDTO"]>("/sync", undefined, full ? { full: true } : undefined),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [...qk.all, "items"] });
       qc.invalidateQueries({ queryKey: qk.pinned() });

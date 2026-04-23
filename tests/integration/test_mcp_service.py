@@ -102,6 +102,28 @@ def test_update_can_clear_args_and_env(tmp_xdg: Path) -> None:
     assert entry.env == {}
 
 
+def test_add_rejects_unsupported_transport(tmp_xdg: Path) -> None:
+    config, pid = _seeded(tmp_xdg)
+    paths = resolve_paths()
+    with pytest.raises(mcp_service.InvalidServerConfigError):
+        mcp_service.add_server(
+            config,
+            paths,
+            pid,
+            "fake",
+            command="/bin/true",
+            transport="sse",
+        )
+
+
+def test_update_rejects_nonpositive_timeout(tmp_xdg: Path) -> None:
+    config, pid = _seeded(tmp_xdg)
+    paths = resolve_paths()
+    mcp_service.add_server(config, paths, pid, "fake", command="/bin/true")
+    with pytest.raises(mcp_service.InvalidServerConfigError):
+        mcp_service.update_server(config, paths, pid, "fake", startup_timeout_seconds=0.0)
+
+
 def test_remove_then_list_is_empty(tmp_xdg: Path) -> None:
     config, pid = _seeded(tmp_xdg)
     paths = resolve_paths()

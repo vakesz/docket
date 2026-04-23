@@ -61,6 +61,11 @@ class DocketCommands(Provider):
                 app.action_edit_prompts,
             ),
             ("Sync now", "Pull the latest items from the active provider.", app.action_refresh),
+            (
+                "Full sync",
+                "Reset the watermark and re-pull everything the active provider exposes.",
+                app.action_full_refresh,
+            ),
             ("Pick theme", "Switch the TUI theme with live preview.", app.action_pick_theme),
             (
                 "Fullscreen pane",

@@ -22,6 +22,7 @@ from typing import Any
 from docket.agent.mcp.client import MCPClient
 from docket.agent.tools import ToolHandler, ToolRegistry
 from docket.config.models import MCPServerEntry
+from docket.core.services import mcp_service
 from docket.telemetry.logging import get_logger
 
 log = logging.getLogger(__name__)
@@ -65,6 +66,18 @@ class MCPManager:
         if not project_id:
             return
         for name, entry in servers.items():
+            try:
+                entry = mcp_service.validate_entry(entry)
+            except mcp_service.InvalidServerConfigError as exc:
+                log.warning("mcp.%s: invalid config (%s); skipping", name, exc)
+                _event_log.warning(
+                    "mcp_bind",
+                    project=project_id,
+                    tool_name=name,
+                    outcome="error",
+                    error_type="invalid_config",
+                )
+                continue
             if not entry.enabled:
                 _event_log.debug(
                     "mcp_bind",

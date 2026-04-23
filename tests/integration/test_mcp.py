@@ -157,6 +157,24 @@ def test_mcp_manager_skips_entry_without_command() -> None:
         manager.close_all()
 
 
+def test_mcp_manager_skips_unsupported_transport() -> None:
+    manager = MCPManager()
+    try:
+        manager.bind_project(
+            "p1",
+            {
+                "oops": MCPServerEntry(
+                    transport="sse",
+                    command=sys.executable,
+                    args=["-m", "tests.fakes.mcp_server"],
+                )
+            },
+        )
+        assert manager.clients == {}
+    finally:
+        manager.close_all()
+
+
 def test_mcp_manager_bind_project_swap_closes_old_clients() -> None:
     """Switching projects tears down the previous fleet."""
     manager = MCPManager()

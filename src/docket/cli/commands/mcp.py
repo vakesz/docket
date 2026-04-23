@@ -119,6 +119,9 @@ def mcp_add(
                 "[dim](use `docket mcp rm` first, or edit `config.toml`).[/dim]"
             )
             raise typer.Exit(1) from exc
+        except mcp_service.InvalidServerConfigError as exc:
+            console.print(f"[red]Invalid MCP config:[/red] {exc}")
+            raise typer.Exit(1) from exc
         console.print(
             f"[green]Added[/green] MCP server [cyan]{name}[/cyan] to "
             f"[cyan]{project.name}[/cyan]. [dim]Restart `docket serve`/the TUI to load it.[/dim]"
@@ -183,6 +186,9 @@ def _set_enabled(name: str, enabled: bool) -> None:
                 f"[red]No MCP server named '{name}' on[/red] [cyan]{project.name}[/cyan]."
             )
             raise typer.Exit(1) from exc
+        except mcp_service.InvalidServerConfigError as exc:
+            console.print(f"[red]Invalid MCP config:[/red] {exc}")
+            raise typer.Exit(1) from exc
         verb = "[green]Enabled[/green]" if enabled else "[yellow]Disabled[/yellow]"
         console.print(f"{verb} MCP server [cyan]{name}[/cyan] on [cyan]{project.name}[/cyan].")
     finally:
@@ -207,6 +213,11 @@ def mcp_test(
             console.print(
                 f"[red]No MCP server named '{name}' on[/red] [cyan]{project.name}[/cyan]."
             )
+            raise typer.Exit(1) from exc
+        try:
+            entry = mcp_service.validate_entry(entry)
+        except mcp_service.InvalidServerConfigError as exc:
+            console.print(f"[red]Invalid MCP config:[/red] {exc}")
             raise typer.Exit(1) from exc
         if not entry.command:
             console.print(f"[red]Server '{name}' has no `command` configured.[/red]")

@@ -174,6 +174,25 @@ def test_test_endpoint_starts_real_server(client: TestClient) -> None:
     body = resp.json()
     assert body["ok"] is True
     assert "mcp__fake__echo" in body["tools"]
+    assert any(tool["name"] == "echo" for tool in body["tool_details"])
+    echo_tool = next(tool for tool in body["tool_details"] if tool["name"] == "echo")
+    assert echo_tool["description"]
+    assert echo_tool["input_schema"]["type"] == "object"
+
+
+def test_draft_test_endpoint_validates_without_persisting(client: TestClient) -> None:
+    pid = _pid()
+    resp = client.post(
+        f"/projects/{pid}/mcp/test",
+        json=_server_payload(name="draft"),
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["ok"] is True
+    assert "mcp__draft__echo" in body["tools"]
+    listed = client.get(f"/projects/{pid}/mcp", headers=AUTH_HEADERS)
+    assert listed.json()["entries"] == []
 
 
 def test_test_endpoint_reports_failure_for_broken_command(client: TestClient) -> None:
@@ -195,6 +214,17 @@ def test_test_endpoint_reports_failure_for_broken_command(client: TestClient) ->
     assert body["error"]
 
 
+def test_draft_test_endpoint_reports_invalid_transport(client: TestClient) -> None:
+    pid = _pid()
+    payload = _server_payload(name="draft")
+    payload["transport"] = "sse"
+    resp = client.post(f"/projects/{pid}/mcp/test", json=payload, headers=AUTH_HEADERS)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["ok"] is False
+    assert "Only 'stdio' is supported" in body["error"]
+
+
 def test_unknown_project_returns_404(client: TestClient) -> None:
     resp = client.get("/projects/ghost/mcp", headers=AUTH_HEADERS)
     assert resp.status_code == 404
@@ -209,6 +239,7 @@ def test_unknown_server_returns_404(client: TestClient) -> None:
 def test_routes_require_auth(client: TestClient) -> None:
     pid = _pid()
     assert client.get(f"/projects/{pid}/mcp").status_code == 401
+    assert client.post(f"/projects/{pid}/mcp/test", json=_server_payload()).status_code == 401
 
 
 def test_create_rebinds_active_runtime_manager(client: TestClient) -> None:
@@ -220,6 +251,15 @@ def test_create_rebinds_active_runtime_manager(client: TestClient) -> None:
     assert resp.status_code == 201, resp.text
     assert "fake" in manager.clients
     assert manager.active_project_id == pid
+
+
+def test_create_rejects_unsupported_transport(client: TestClient) -> None:
+    pid = _pid()
+    payload = _server_payload()
+    payload["transport"] = "sse"
+    resp = client.post(f"/projects/{pid}/mcp", json=payload, headers=AUTH_HEADERS)
+    assert resp.status_code == 400
+    assert "Only 'stdio' is supported" in resp.text
 
 
 def test_disable_via_patch_drops_running_client(client: TestClient) -> None:

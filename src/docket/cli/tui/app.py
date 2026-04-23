@@ -821,7 +821,7 @@ class DocketApp(App[None]):
             self.call_from_thread(self._open_next_pending)
 
     def action_refresh(self) -> None:
-        self.notify("Syncing from Azure DevOps…")
+        self.notify(f"Syncing from {self.tui_ctx.provider_key or 'active provider'}…")
         try:
             summary = sync_service.refresh(
                 self.tui_ctx.conn,
@@ -840,6 +840,30 @@ class DocketApp(App[None]):
         self._reload_tree()
         self.notify(
             f"Synced {summary.upserted}, archived {summary.archived}",
+            severity="information",
+        )
+
+    def action_full_refresh(self) -> None:
+        provider_label = self.tui_ctx.provider_key or "active provider"
+        self.notify(f"Running full sync for {provider_label}…")
+        try:
+            summary = sync_service.full_refresh(
+                self.tui_ctx.conn,
+                self.tui_ctx.provider,
+                provider_key=self.tui_ctx.provider_key,
+            )
+        except Exception as e:  # provider failure → toast, not crash
+            self.notify(
+                f"{humanize_error(e, action='Full sync')} {retry_hint('r', 'sync')}",
+                severity="error",
+            )
+            self._set_offline(True)
+            return
+        self._set_offline(False)
+        self._mark_sync_now()
+        self._reload_tree()
+        self.notify(
+            f"Full sync complete: {summary.upserted} cached, archived {summary.archived}",
             severity="information",
         )
 

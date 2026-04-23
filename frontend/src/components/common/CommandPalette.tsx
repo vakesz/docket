@@ -72,7 +72,7 @@ export function CommandPalette() {
           >
             <PaletteItem
               onSelect={() => {
-                sync.mutate();
+                sync.mutate({});
                 setOpen(false);
               }}
             >

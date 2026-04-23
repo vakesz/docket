@@ -29,11 +29,39 @@ class DuplicateServerError(ValueError):
     """Raised when `add` is called with a name that already exists for the project."""
 
 
+class InvalidServerConfigError(ValueError):
+    """Raised when an MCP server entry uses unsupported or invalid settings."""
+
+
 def _project(config: Config, project_id: str) -> ProjectEntry:
     entry = config.projects.get(project_id)
     if entry is None:
         raise UnknownProjectError(project_id)
     return entry
+
+
+def validate_entry(entry: MCPServerEntry) -> MCPServerEntry:
+    """Normalize and validate one server entry.
+
+    Today only `stdio` is supported; keep the check centralized so CLI,
+    TUI, HTTP, and runtime rebinding all enforce the same contract.
+    """
+    transport = (entry.transport or "stdio").strip() or "stdio"
+    if transport != "stdio":
+        raise InvalidServerConfigError(
+            f"Unsupported MCP transport '{transport}'. Only 'stdio' is supported."
+        )
+    timeout = float(entry.startup_timeout_seconds)
+    if timeout <= 0:
+        raise InvalidServerConfigError("startup_timeout_seconds must be > 0.")
+    return MCPServerEntry(
+        transport=transport,
+        command=entry.command,
+        args=list(entry.args),
+        env=dict(entry.env),
+        enabled=entry.enabled,
+        startup_timeout_seconds=timeout,
+    )
 
 
 def list_servers(config: Config, project_id: str) -> dict[str, MCPServerEntry]:
@@ -67,13 +95,15 @@ def add_server(
     project = _project(config, project_id)
     if name in project.mcp:
         raise DuplicateServerError(name)
-    entry = MCPServerEntry(
-        transport=transport,
-        command=command,
-        args=list(args or []),
-        env=dict(env or {}),
-        enabled=enabled,
-        startup_timeout_seconds=startup_timeout_seconds,
+    entry = validate_entry(
+        MCPServerEntry(
+            transport=transport,
+            command=command,
+            args=list(args or []),
+            env=dict(env or {}),
+            enabled=enabled,
+            startup_timeout_seconds=startup_timeout_seconds,
+        )
     )
     project.mcp[name] = entry
     save_config(paths, config)
@@ -97,17 +127,19 @@ def update_server(
     are written; pass `args=[]` or `env={}` to explicitly clear those lists.
     """
     existing = get_server(config, project_id, name)
-    entry = MCPServerEntry(
-        transport=transport if transport is not None else existing.transport,
-        command=command if command is not None else existing.command,
-        args=list(args) if args is not None else list(existing.args),
-        env=dict(env) if env is not None else dict(existing.env),
-        enabled=enabled if enabled is not None else existing.enabled,
-        startup_timeout_seconds=(
-            startup_timeout_seconds
-            if startup_timeout_seconds is not None
-            else existing.startup_timeout_seconds
-        ),
+    entry = validate_entry(
+        MCPServerEntry(
+            transport=transport if transport is not None else existing.transport,
+            command=command if command is not None else existing.command,
+            args=list(args) if args is not None else list(existing.args),
+            env=dict(env) if env is not None else dict(existing.env),
+            enabled=enabled if enabled is not None else existing.enabled,
+            startup_timeout_seconds=(
+                startup_timeout_seconds
+                if startup_timeout_seconds is not None
+                else existing.startup_timeout_seconds
+            ),
+        )
     )
     config.projects[project_id].mcp[name] = entry
     save_config(paths, config)
@@ -125,6 +157,7 @@ def remove_server(config: Config, paths: Paths, project_id: str, name: str) -> N
 
 __all__ = [
     "DuplicateServerError",
+    "InvalidServerConfigError",
     "UnknownProjectError",
     "UnknownServerError",
     "add_server",
@@ -132,4 +165,5 @@ __all__ = [
     "list_servers",
     "remove_server",
     "update_server",
+    "validate_entry",
 ]

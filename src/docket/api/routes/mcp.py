@@ -13,6 +13,8 @@ in `api/app.py` because `:path` matches greedily across slashes."""
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from docket.agent.mcp import MCPClient
@@ -24,8 +26,10 @@ from docket.api.schemas import (
     MCPServerCreateRequest,
     MCPServerDTO,
     MCPServerListDTO,
+    MCPServerTestRequest,
     MCPServerTestResultDTO,
     MCPServerUpdateRequest,
+    MCPToolDTO,
 )
 from docket.config.models import Config, MCPServerEntry
 from docket.config.paths import Paths
@@ -66,6 +70,46 @@ def _refresh_runtime(runtime: RuntimeState, project_id: str, request: Request) -
     servers = dict(project.mcp) if project is not None else {}
     runtime.mcp_manager.bind_project(project_id, servers)
     rebuild_agent(request, runtime)
+
+
+def _tool_dto(server_name: str, tool: Any) -> MCPToolDTO:
+    return MCPToolDTO(
+        id=f"mcp__{server_name}__{tool.name}",
+        server_name=server_name,
+        name=tool.name,
+        description=tool.description or "",
+        input_schema=dict(tool.inputSchema) if tool.inputSchema else {},
+    )
+
+
+def _test_result(name: str, entry: MCPServerEntry) -> MCPServerTestResultDTO:
+    try:
+        entry = mcp_service.validate_entry(entry)
+    except mcp_service.InvalidServerConfigError as exc:
+        return MCPServerTestResultDTO(name=name, ok=False, error=str(exc))
+    if not entry.command:
+        return MCPServerTestResultDTO(
+            name=name, ok=False, error="Server entry has no `command` configured."
+        )
+    client = MCPClient(name, entry)
+    try:
+        client.start()
+    except Exception as exc:
+        client.close()
+        return MCPServerTestResultDTO(name=name, ok=False, error=str(exc))
+    try:
+        tool_details = sorted(
+            (_tool_dto(name, tool) for tool in client.list_tools()),
+            key=lambda tool: tool.name,
+        )
+    finally:
+        client.close()
+    return MCPServerTestResultDTO(
+        name=name,
+        ok=True,
+        tools=[tool.id for tool in tool_details],
+        tool_details=tool_details,
+    )
 
 
 @router.get(
@@ -134,6 +178,8 @@ def create_mcp_server(
             status.HTTP_409_CONFLICT,
             f"MCP server '{payload.name}' already exists for project '{project_id}'.",
         ) from exc
+    except mcp_service.InvalidServerConfigError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     _refresh_runtime(runtime, project_id, request)
     return _to_dto(project_id, payload.name, entry)
 
@@ -181,6 +227,8 @@ def update_mcp_server(
         )
     except mcp_service.UnknownServerError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown MCP server '{name}'") from exc
+    except mcp_service.InvalidServerConfigError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     _refresh_runtime(runtime, project_id, request)
     return _to_dto(project_id, name, entry)
 
@@ -207,6 +255,31 @@ def delete_mcp_server(
 
 
 @router.post(
+    "/projects/{project_id:path}/mcp/test",
+    response_model=MCPServerTestResultDTO,
+    dependencies=[Depends(require_not_read_only)],
+)
+def test_mcp_server_draft(
+    project_id: str,
+    payload: MCPServerTestRequest,
+    config: Config = Depends(get_config),
+) -> MCPServerTestResultDTO:
+    """Validate a draft MCP server config without saving it."""
+    _require_project(config, project_id)
+    return _test_result(
+        payload.name,
+        MCPServerEntry(
+            transport=payload.transport,
+            command=payload.command,
+            args=list(payload.args),
+            env=dict(payload.env),
+            enabled=payload.enabled,
+            startup_timeout_seconds=payload.startup_timeout_seconds,
+        ),
+    )
+
+
+@router.post(
     "/projects/{project_id:path}/mcp/{name}/test",
     response_model=MCPServerTestResultDTO,
     dependencies=[Depends(require_not_read_only)],
@@ -224,21 +297,7 @@ def test_mcp_server(
         entry = mcp_service.get_server(config, project_id, name)
     except mcp_service.UnknownServerError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown MCP server '{name}'") from exc
-    if not entry.command:
-        return MCPServerTestResultDTO(
-            name=name, ok=False, error="Server entry has no `command` configured."
-        )
-    client = MCPClient(name, entry)
-    try:
-        client.start()
-    except Exception as exc:
-        client.close()
-        return MCPServerTestResultDTO(name=name, ok=False, error=str(exc))
-    try:
-        tools = sorted(f"mcp__{name}__{tool.name}" for tool in client.list_tools())
-    finally:
-        client.close()
-    return MCPServerTestResultDTO(name=name, ok=True, tools=tools)
+    return _test_result(name, entry)
 
 
 __all__ = ["router"]

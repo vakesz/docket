@@ -211,6 +211,14 @@ class SourceUpdateRequest(BaseModel):
 # -- mcp ---------------------------------------------------------------------
 
 
+class MCPToolDTO(BaseModel):
+    id: str
+    server_name: str
+    name: str
+    description: str = ""
+    input_schema: dict[str, Any] = Field(default_factory=dict)
+
+
 class MCPServerDTO(BaseModel):
     """One MCP server attached to a project, as exposed over HTTP.
 
@@ -255,6 +263,18 @@ class MCPServerUpdateRequest(BaseModel):
     startup_timeout_seconds: float | None = None
 
 
+class MCPServerTestRequest(BaseModel):
+    """Draft MCP server config to validate without persisting it."""
+
+    name: str
+    command: str
+    args: list[str] = Field(default_factory=list)
+    env: dict[str, str] = Field(default_factory=dict)
+    transport: str = "stdio"
+    enabled: bool = True
+    startup_timeout_seconds: float = 10.0
+
+
 class MCPServerTestResultDTO(BaseModel):
     """Outcome of `POST /projects/{id}/mcp/{name}/test`.
 
@@ -264,4 +284,5 @@ class MCPServerTestResultDTO(BaseModel):
     name: str
     ok: bool
     tools: list[str] = Field(default_factory=list)
+    tool_details: list[MCPToolDTO] = Field(default_factory=list)
     error: str = ""

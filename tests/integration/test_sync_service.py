@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from docket.core import Item, ItemKind, ItemState
+from docket.core.model import ScopeFilters
 from docket.core.services import sync_service
 from docket.storage import init_db
 from docket.storage.repos import item_repo, sync_repo
@@ -84,3 +85,21 @@ def test_provider_scoped_refresh_namespaces_watermarks(tmp_path: Path) -> None:
     assert github.list_calls == [None]
     assert sync_repo.get_watermark(conn, "azure_devops") == t_azure_devops
     assert sync_repo.get_watermark(conn, "github") == t_gh
+
+
+def test_refresh_uses_unfiltered_scope_for_cache_fill(tmp_path: Path) -> None:
+    conn = init_db(tmp_path / "t.db")
+    seen_filters: list[ScopeFilters] = []
+
+    class RecordingProvider(FakeProvider):
+        def list_changes_since(
+            self, watermark: datetime | None, filters: ScopeFilters
+        ) -> list[Item]:
+            seen_filters.append(filters)
+            return super().list_changes_since(watermark, filters)
+
+    prov = RecordingProvider(items=[_item("1", datetime(2026, 4, 21, 10, 0, tzinfo=UTC))])
+
+    sync_service.refresh(conn, prov)
+
+    assert seen_filters == [ScopeFilters(assignee="")]
