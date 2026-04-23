@@ -13,7 +13,9 @@ Two tables back this:
   revision → same bytes → cache hit.
 
 Writes always go through `bump_revision` so the prefix invalidates on
-exactly the same boundary the model sees the change.
+exactly the same boundary the model sees the change. Each mutating
+function wraps the row write + FTS triggers + revision bump in one
+transaction so they land atomically.
 """
 
 from __future__ import annotations
@@ -24,6 +26,16 @@ import uuid
 from datetime import UTC, datetime
 
 from docket.core.model import MemoryEntry
+from docket.storage.db import transaction
+from docket.storage.repos import project_repo
+
+
+def _require_project(conn: sqlite3.Connection, project_id: str) -> None:
+    if project_repo.get(conn, project_id) is None:
+        raise KeyError(
+            f"unknown project '{project_id}' "
+            "— call project_service.activate() before writing memory"
+        )
 
 
 def _row_to_entry(row: sqlite3.Row) -> MemoryEntry:
@@ -71,28 +83,32 @@ def create(
     tags: list[str] | None = None,
     source: str = "user",
 ) -> MemoryEntry:
-    """Insert a new memory row and bump the project's revision."""
+    """Insert a new memory row and bump the project's revision.
+
+    Raises `KeyError` if the project is unknown."""
+    _require_project(conn, project_id)
     now = datetime.now(UTC)
     memory_id = str(uuid.uuid4())
     tags_clean = [t.strip() for t in (tags or []) if t and t.strip()]
-    conn.execute(
-        """
-        INSERT INTO memory
-            (id, project_id, title, body_md, tags_json, source, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            memory_id,
-            project_id,
-            title.strip() or "(untitled)",
-            body_md,
-            json.dumps(tags_clean),
-            source,
-            now.isoformat(),
-            now.isoformat(),
-        ),
-    )
-    bump_revision(conn, project_id)
+    with transaction(conn):
+        conn.execute(
+            """
+            INSERT INTO memory
+                (id, project_id, title, body_md, tags_json, source, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                memory_id,
+                project_id,
+                title.strip() or "(untitled)",
+                body_md,
+                json.dumps(tags_clean),
+                source,
+                now.isoformat(),
+                now.isoformat(),
+            ),
+        )
+        bump_revision(conn, project_id)
     return MemoryEntry(
         id=memory_id,
         project_id=project_id,
@@ -134,8 +150,9 @@ def update(
     fields.append("updated_at = ?")
     params.append(datetime.now(UTC).isoformat())
     params.append(memory_id)
-    conn.execute(f"UPDATE memory SET {', '.join(fields)} WHERE id = ?", params)
-    bump_revision(conn, existing.project_id)
+    with transaction(conn):
+        conn.execute(f"UPDATE memory SET {', '.join(fields)} WHERE id = ?", params)
+        bump_revision(conn, existing.project_id)
     return get(conn, memory_id)
 
 
@@ -143,9 +160,53 @@ def delete(conn: sqlite3.Connection, memory_id: str) -> bool:
     existing = get(conn, memory_id)
     if existing is None:
         return False
-    conn.execute("DELETE FROM memory WHERE id = ?", (memory_id,))
-    bump_revision(conn, existing.project_id)
+    with transaction(conn):
+        conn.execute("DELETE FROM memory WHERE id = ?", (memory_id,))
+        bump_revision(conn, existing.project_id)
     return True
+
+
+def upsert_for_proposal(
+    conn: sqlite3.Connection,
+    *,
+    project_id: str,
+    title: str,
+    body_md: str,
+    tags: list[str],
+    source: str,
+    memory_id: str | None,
+) -> MemoryEntry:
+    """Apply a confirmed `MemoryWrite` proposal: create-or-update by id.
+
+    If `memory_id` is None, create a new row. Otherwise update the row in
+    place. If the edit target vanished between proposal and confirm, fall
+    through to a fresh create rather than failing silently."""
+    if memory_id is None:
+        return create(
+            conn,
+            project_id=project_id,
+            title=title,
+            body_md=body_md,
+            tags=tags,
+            source=source,
+        )
+    updated = update(
+        conn,
+        memory_id,
+        title=title,
+        body_md=body_md,
+        tags=tags,
+    )
+    if updated is None:
+        return create(
+            conn,
+            project_id=project_id,
+            title=title,
+            body_md=body_md,
+            tags=tags,
+            source=source,
+        )
+    return updated
 
 
 def search(
@@ -215,4 +276,5 @@ __all__ = [
     "list_for_project",
     "search",
     "update",
+    "upsert_for_proposal",
 ]

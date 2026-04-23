@@ -2,28 +2,26 @@ from __future__ import annotations
 
 import contextlib
 import logging
-import sqlite3
 import webbrowser
 from collections.abc import Callable
-from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
 from typing import ClassVar
 
 from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.command import Provider
-from textual.containers import Horizontal, Vertical
-from textual.widget import Widget
+from textual.containers import Horizontal
 from textual.widgets import Input, Static
 
 from docket.agent.factory import build_agent
-from docket.agent.llm_client import LlmClient
 from docket.agent.loop import AgentLoop
-from docket.agent.mcp import MCPManager
 from docket.agent.types import ChatMessage, StreamDelta
+from docket.cli.tui.background_tasks import BackgroundTasksMixin
 from docket.cli.tui.errors import humanize as humanize_error
 from docket.cli.tui.errors import retry_hint
+from docket.cli.tui.pane_layout import PaneLayoutMixin
+from docket.cli.tui.panes import FullscreenToggle, Pane
+from docket.cli.tui.tui_context import TuiContext
 from docket.cli.tui.widgets.batch_diff_modal import BatchDecision, BatchDiffModal
 from docket.cli.tui.widgets.chat_pane import ChatPane, TurnFinished, UserTurnRequest
 from docket.cli.tui.widgets.diff_modal import DiffModal
@@ -42,17 +40,14 @@ from docket.cli.tui.widgets.suggestion_modal import SuggestionModal
 from docket.cli.tui.widgets.theme_picker import ThemePicker
 from docket.config import save_config
 from docket.config.models import Config, ProviderEntry
-from docket.config.paths import Paths
 from docket.core.model import (
     ItemKind,
     ItemState,
-    ScopeFilters,
     TransitionIntent,
     project_id_for,
 )
 from docket.core.services import (
     conversation_service,
-    external_update_service,
     mutation_service,
     suggestion_service,
     sync_service,
@@ -61,7 +56,7 @@ from docket.core.services import (
 from docket.core.services.proposal_store import ProposalStore
 from docket.core.services.suggestion_service import Suggestion, SuggestionError
 from docket.providers import registry
-from docket.providers.base import GroupingStrategy, WorkItemProvider
+from docket.providers.base import GroupingStrategy
 from docket.storage.repos import (
     comment_repo,
     conversation_repo,
@@ -71,129 +66,6 @@ from docket.storage.repos import (
 )
 
 log = logging.getLogger(__name__)
-
-
-class Pane(Vertical):
-    """A resizable/maximizable container used for each of the three panes.
-
-    `Vertical.allow_maximize` is a read-only property in this Textual version,
-    so we subclass to flip the class-level flag rather than assign per-instance.
-    Every pane shares a single muted border; the `:focus-within` pseudo-class
-    swaps it for an accent border so the active pane is obvious when tabbing.
-    """
-
-    allow_maximize = True
-    # Focusable so Escape from a child Input (e.g. the chat prompt) can land
-    # here instead of the App root — single-key bindings then work again and
-    # the pane's :focus-within border still lights up because the Pane itself
-    # is the focus target.
-    can_focus = True
-
-    DEFAULT_CSS = """
-    Pane {
-        background: $panel;
-        border: round $panel-lighten-1;
-        padding: 0;
-    }
-    Pane:focus, Pane:focus-within {
-        border: round $accent;
-    }
-    """
-
-
-class FullscreenToggle(Static):
-    """Clickable ⤢ affordance docked at the top of each Pane.
-
-    Mirrors the Ctrl+F keybinding: click toggles maximize/minimize on the
-    owning Pane. Glyph flips to ⤡ while that pane is maximized so the
-    action is discoverable and its state is visible.
-    """
-
-    DEFAULT_CSS = """
-    FullscreenToggle {
-        height: auto;
-        background: transparent;
-        color: $text-muted;
-        content-align-horizontal: right;
-        padding: 1 1 0 0;
-    }
-    FullscreenToggle:hover {
-        color: $text;
-        text-style: bold;
-    }
-    """
-
-    GLYPH_MAXIMIZE = "⤢"
-    GLYPH_MINIMIZE = "⤡"
-
-    def __init__(self) -> None:
-        super().__init__(self.GLYPH_MAXIMIZE)
-
-    def on_click(self) -> None:
-        pane: Widget | None = self.parent if isinstance(self.parent, Widget) else None
-        while pane is not None and not isinstance(pane, Pane):
-            pane = pane.parent if isinstance(pane.parent, Widget) else None
-        if pane is None:
-            return
-        app = self.app
-        screen = self.screen
-        if screen.maximized is not None:
-            screen.minimize()
-            if isinstance(app, DocketApp):
-                app.restore_pane_widths()
-        else:
-            if isinstance(app, DocketApp):
-                app.clear_pane_width_override(pane)
-            screen.maximize(pane)
-        if isinstance(app, DocketApp):
-            app.sync_fullscreen_icons()
-
-
-@dataclass
-class TuiContext:
-    """What the TUI needs from the caller to run. Kept small so the app can be mounted
-    from production code (via Context) and from pilot-style tests (via fakes).
-
-    Multi-provider shape: `providers` is the full set, `provider_key` selects
-    the active one, and `provider` is a convenience alias that always points at
-    `providers[provider_key]`. Callers that only have one backend can pass
-    `provider=...` alone and a single-entry mapping is synthesized."""
-
-    conn: sqlite3.Connection
-    provider: WorkItemProvider
-    scope: ScopeFilters
-    scope_key: str = "default"
-    providers: dict[str, WorkItemProvider] | None = None
-    provider_key: str = ""
-    llm: LlmClient | None = None  # None disables chat
-    compaction_threshold_tokens: int = 0  # 0 disables — passed to conversation_service
-    external_watch_interval_seconds: float = 60.0  # 0 disables external-update watcher
-    # Read-only mode: agent mutating tools are not registered, TUI mutation
-    # actions toast and bail, status bar shows a visible READ-ONLY badge.
-    read_only: bool = False
-    # Background list sync: 0 disables; the palette "Sync now" action still
-    # works regardless. A per-provider floor (seconds) clamps very short
-    # intervals — the resolver below takes the max of the configured global
-    # and the floor for the active provider.
-    background_sync_interval_seconds: float = 0.0
-    background_sync_min_interval_by_provider: dict[str, float] | None = None
-    # Stale marker: append `STALE - Xd` to list rows once `updated_at` is
-    # older than N days. 0/negative disables. Per-provider override wins.
-    stale_threshold_days: int = 0
-    stale_threshold_by_provider: dict[str, int] | None = None
-    default_new_item_kind: ItemKind = ItemKind.TASK
-    show_acceptance_criteria: bool = True
-    # Hide resolved/closed items from the backlog tree by default. Matches the
-    # frontend's "open" state bucket; `c` toggles it at runtime. In-memory only —
-    # not persisted — so a relaunch starts back at "hide done" on every provider.
-    hide_done: bool = True
-    # Optional handles for features that persist to config (theme picker, etc).
-    # Pilot tests can leave these as None; persistence becomes a no-op.
-    paths: Paths | None = None
-    config: Config | None = None
-    # Per-project MCP fleet. Built by `serve`/`open`; pilot tests leave it
-    # `None` and the agent skips MCP tool registration entirely.
-    mcp_manager: MCPManager | None = None
 
 
 def _docket_commands_provider() -> type[Provider]:
@@ -206,7 +78,7 @@ def _docket_commands_provider() -> type[Provider]:
     return DocketCommands
 
 
-class DocketApp(App[None]):
+class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
     """Three-pane terminal UI for browsing and triaging work items."""
 
     # Replace the default palette providers entirely: Textual's built-in theme
@@ -357,129 +229,6 @@ class DocketApp(App[None]):
                 self._tick_background_sync,
                 name="background-sync",
             )
-
-    def _schedule_next_sync(self, interval: float) -> None:
-        """Publish the next-sync timestamp to the status bar. Called at
-        startup (once `on_mount` resolves the interval) and after each tick
-        so the countdown stays roughly accurate without its own repaint."""
-        target = datetime.now(UTC) + timedelta(seconds=interval)
-        with contextlib.suppress(Exception):
-            self.query_one(StatusBar).next_sync_at = target
-
-    def _tick_background_sync(self) -> None:
-        """Kick off an incremental sync in the background.
-
-        Provider calls block on the network, so we spawn a thread worker —
-        the UI stays responsive while the sync runs. `exclusive=True` means
-        a slow sync never stacks up behind itself.
-
-        We snapshot the provider on the event-loop thread and close the
-        worker over it; a mid-sync provider switch must not swap the target
-        out from under an in-flight refresh. Sync pulls every item for the
-        provider — views are applied at render time, not sync time."""
-        interval = self._resolved_sync_interval()
-        if interval <= 0:
-            return  # Disabled mid-session — nothing to do.
-        # Push the next target *now* so the countdown keeps moving even if
-        # the worker is still chewing on the last one.
-        self._schedule_next_sync(interval)
-        provider = self.tui_ctx.provider
-        provider_key = self.tui_ctx.provider_key
-        self.run_worker(
-            lambda: self._background_sync_once(provider, provider_key),
-            group="background-sync",
-            exclusive=True,
-            thread=True,
-        )
-
-    def _background_sync_once(
-        self,
-        provider: WorkItemProvider,
-        provider_key: str,
-    ) -> None:
-        try:
-            summary = sync_service.refresh(
-                self.tui_ctx.conn,
-                provider,
-                provider_key=provider_key,
-            )
-        except Exception:
-            # Background sync is best-effort; a provider hiccup shouldn't
-            # interrupt the session. Flip the offline flag so the user has
-            # some signal that their list may be stale.
-            log.exception("background sync failed for provider %s", provider_key)
-            self.call_from_thread(self._set_offline, True)
-            return
-
-        def apply() -> None:
-            self._set_offline(False)
-            self._mark_sync_now()
-            self._reload_tree()
-            if summary.upserted or summary.archived:
-                self.notify(
-                    f"Auto-sync · {summary.upserted} updated, {summary.archived} archived",
-                    severity="information",
-                    timeout=3,
-                )
-
-        self.call_from_thread(apply)
-
-    def _tick_external_watch(self) -> None:
-        """Runs on the Textual event loop every N seconds. Spawns a worker per
-        tick so the provider call doesn't block the UI. No-op when no item is
-        selected."""
-        item_id = self._selected_item_id
-        if item_id is None:
-            return
-        provider = self.tui_ctx.provider
-        provider_key = self.tui_ctx.provider_key
-        self.run_worker(
-            lambda: self._external_watch_once(item_id, provider, provider_key),
-            group=f"external-watch-{item_id}",
-            exclusive=True,
-            thread=True,
-        )
-
-    def _external_watch_once(
-        self, item_id: str, provider: WorkItemProvider, provider_key: str
-    ) -> None:
-        try:
-            result = external_update_service.check_and_inject(
-                self.tui_ctx.conn,
-                provider,
-                item_id,
-                provider_key=provider_key,
-            )
-        except Exception:
-            # External updates are a nice-to-have; a provider hiccup shouldn't
-            # break the session. We log and move on.
-            log.exception("external-update poll failed for %s", item_id)
-            return
-        if not result.changed:
-            return
-
-        def apply() -> None:
-            # Guard: the user may have switched items or providers between
-            # the worker starting and this callback firing; only repaint if
-            # both the item and its owning provider still match.
-            if self._selected_item_id != item_id or self.tui_ctx.provider_key != provider_key:
-                return
-            fresh_item = item_repo.get_item(self.tui_ctx.conn, item_id, provider_key=provider_key)
-            fresh_comments = comment_repo.list_comments(
-                self.tui_ctx.conn, item_id, provider_key=provider_key
-            )
-            self.query_one(ItemDetail).show(fresh_item, fresh_comments)
-            chat = self.query_one(ChatPane)
-            chat.note(
-                f"external update · {result.diff.splitlines()[0] if result.diff else 'metadata changed'}",
-                cls="msg-system",
-            )
-            self.notify(
-                f"{item_id} updated externally",
-                severity="information",
-            )
-
-        self.call_from_thread(apply)
 
     def _active_view_filter(self) -> visual_filter.ResolvedFilter:
         """Resolve the active saved view into a post-cache filter.
@@ -719,27 +468,6 @@ class DocketApp(App[None]):
             event.stop()
             event.prevent_default()
 
-    def _defocus_chat_prompt(self) -> bool:
-        """If the chat prompt has focus, move focus up to the owning Pane.
-
-        Input widgets capture single-key events, so the app's letter bindings
-        (`t`, `n`, `s`, …) silently no-op while the user is typing. Pressing
-        Escape parks focus on the outer Pane, which is focusable but has no
-        text capture, so those bindings work again. Tab from the Pane re-enters
-        the prompt (see `_cycle_pane_focus`)."""
-        try:
-            prompt = self.query_one("#prompt", Input)
-        except Exception:
-            return False
-        if self.focused is not prompt:
-            return False
-        pane = self._focused_pane()
-        if pane is not None:
-            pane.focus()
-        else:
-            self.set_focus(None)
-        return True
-
     def _apply_filter(self, raw: str) -> None:
         """Re-render the tree for the given filter query.
 
@@ -925,153 +653,8 @@ class DocketApp(App[None]):
             severity="information",
         )
 
-    def _mark_sync_now(self) -> None:
-        with contextlib.suppress(Exception):
-            self.query_one(StatusBar).set_last_sync_now()
-
-    def _set_offline(self, offline: bool) -> None:
-        with contextlib.suppress(Exception):
-            self.query_one(StatusBar).offline = offline
-
     def action_focus_filter(self) -> None:
         self.query_one("#filter", Input).focus()
-
-    def _pane_focus_targets(self) -> list[Widget]:
-        """Return the widget that Tab should land on for each pane — the
-        item tree on the left, detail scroll in the middle, chat prompt on
-        the right. Missing panes drop out silently."""
-        targets: list[Widget] = []
-        for pid in self._PANE_IDS:
-            target: Widget | None = None
-            with contextlib.suppress(Exception):
-                pane = self.query_one(f"#{pid}", Widget)
-                if pid == "left":
-                    target = pane.query_one("#tree", Widget)
-                elif pid == "mid":
-                    target = pane.query_one("#mid-detail", Widget)
-                else:  # right
-                    target = pane.query_one("#prompt", Widget)
-            if target is not None:
-                targets.append(target)
-        return targets
-
-    def _cycle_pane_focus(self, direction: int) -> None:
-        targets = self._pane_focus_targets()
-        if not targets:
-            return
-        focused = self.focused
-        # If focus is parked on a Pane container itself (e.g. after Escape
-        # defocused the chat prompt), Tab should re-enter that pane's target
-        # rather than jump to the next pane — otherwise a single Esc+Tab would
-        # skip past the pane the user was working in.
-        if (
-            isinstance(focused, Pane)
-            and isinstance(focused.id, str)
-            and focused.id in self._PANE_IDS
-        ):
-            pane_idx = self._PANE_IDS.index(focused.id)
-            if 0 <= pane_idx < len(targets):
-                targets[pane_idx].focus()
-                return
-        idx = -1
-        for i, t in enumerate(targets):
-            if focused is t or (focused is not None and t in focused.ancestors):
-                idx = i
-                break
-        next_idx = (idx + direction) % len(targets) if idx >= 0 else 0
-        targets[next_idx].focus()
-
-    def action_focus_next_pane(self) -> None:
-        self._cycle_pane_focus(1)
-
-    def action_focus_prev_pane(self) -> None:
-        self._cycle_pane_focus(-1)
-
-    def action_toggle_fullscreen(self) -> None:
-        """Maximize the pane that holds the currently-focused widget; if a
-        pane is already maximized, minimize back to the three-pane layout."""
-        screen = self.screen
-        if screen.maximized is not None:
-            screen.minimize()
-            self.restore_pane_widths()
-            self.sync_fullscreen_icons()
-            return
-        pane = self._focused_pane()
-        if pane is None:
-            self.notify("Focus a pane first.", severity="warning")
-            return
-        self.clear_pane_width_override(pane)
-        screen.maximize(pane)
-        self.sync_fullscreen_icons()
-
-    def clear_pane_width_override(self, pane: Widget) -> None:
-        """Drop any inline width set by ctrl+[/] resizes so the pane can
-        actually expand to fill the maximize layer."""
-        pane.styles.width = None
-
-    def restore_pane_widths(self) -> None:
-        """Re-apply the user's resize preferences after leaving fullscreen."""
-        for pid, pct in self._pane_pct.items():
-            with contextlib.suppress(Exception):
-                self.query_one(f"#{pid}", Widget).styles.width = f"{pct}%"
-
-    def sync_fullscreen_icons(self) -> None:
-        """Flip each pane's ⤢ glyph to ⤡ while that pane is maximized.
-
-        Called after Ctrl+F and after clicking a FullscreenToggle so the
-        visible button reflects the current screen state."""
-        maximized = self.screen.maximized
-        for toggle in self.query(FullscreenToggle):
-            owner: Widget | None = toggle.parent if isinstance(toggle.parent, Widget) else None
-            while owner is not None and not isinstance(owner, Pane):
-                owner = owner.parent if isinstance(owner.parent, Widget) else None
-            if owner is not None and owner is maximized:
-                toggle.update(FullscreenToggle.GLYPH_MINIMIZE)
-            else:
-                toggle.update(FullscreenToggle.GLYPH_MAXIMIZE)
-
-    def action_shrink_pane(self) -> None:
-        self._resize_focused_pane(-5)
-
-    def action_grow_pane(self) -> None:
-        self._resize_focused_pane(+5)
-
-    def _focused_pane(self) -> Widget | None:
-        """Walk up the focused widget's ancestors until we hit one of the
-        three named panes. Returns None if nothing is focused."""
-        node: Widget | None = self.focused
-        while node is not None:
-            if isinstance(node.id, str) and node.id in self._PANE_IDS:
-                return node
-            node = node.parent if isinstance(node.parent, Widget) else None
-        return None
-
-    def _resize_focused_pane(self, delta_pct: int) -> None:
-        """Bump the focused pane's width by delta_pct, taking the offset from
-        its right neighbor (or left, if it's the rightmost pane). Each pane
-        is clamped to 10-80% so nothing can collapse to zero or monopolize
-        the layout."""
-        pane = self._focused_pane()
-        if pane is None:
-            return
-        pane_id = pane.id
-        if pane_id not in self._pane_pct:
-            return
-        order = list(self._PANE_IDS)
-        idx = order.index(pane_id)
-        neighbor_id = order[idx + 1] if idx + 1 < len(order) else order[idx - 1]
-
-        cur = self._pane_pct[pane_id]
-        neighbor_cur = self._pane_pct[neighbor_id]
-        new_cur = max(10, min(80, cur + delta_pct))
-        applied = new_cur - cur
-        new_neighbor = neighbor_cur - applied
-        if new_neighbor < 10 or new_neighbor > 80:
-            return
-        self._pane_pct[pane_id] = new_cur
-        self._pane_pct[neighbor_id] = new_neighbor
-        self.query_one(f"#{pane_id}", Widget).styles.width = f"{new_cur}%"
-        self.query_one(f"#{neighbor_id}", Widget).styles.width = f"{new_neighbor}%"
 
     def action_quick_open(self) -> None:
         """Prompt for a ticket id; on submit, route through the normal
@@ -1703,3 +1286,6 @@ class DocketApp(App[None]):
                 self._open_next_pending()
 
         self.push_screen(BatchDiffModal(pendings), on_batch_decision)
+
+
+__all__ = ["DocketApp", "Pane", "TuiContext"]

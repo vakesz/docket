@@ -26,7 +26,7 @@ from docket.api.schemas import (
 )
 from docket.config.models import Config
 from docket.core.model import Source
-from docket.core.services import source_service
+from docket.storage.repos import source_repo
 
 router = APIRouter(
     tags=["sources"],
@@ -54,7 +54,7 @@ def _require_project(config: Config, project_id: str) -> None:
 
 
 def _require_entry(conn: sqlite3.Connection, source_id: str) -> Source:
-    entry = source_service.get_entry(conn, source_id)
+    entry = source_repo.get(conn, source_id)
     if entry is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown source '{source_id}'")
     return entry
@@ -72,7 +72,7 @@ def list_sources(
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> SourceListDTO:
     _require_project(config, project_id)
-    entries = source_service.list_entries(conn, project_id, kind=kind, limit=limit)
+    entries = source_repo.list_for_project(conn, project_id, kind=kind, limit=limit)
     return SourceListDTO(
         project_id=project_id,
         entries=[_to_dto(e) for e in entries],
@@ -92,7 +92,7 @@ def search_sources(
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> SourceListDTO:
     _require_project(config, project_id)
-    entries = source_service.search_entries(conn, project_id, q, kind=kind, limit=limit)
+    entries = source_repo.search(conn, project_id, q, kind=kind, limit=limit)
     return SourceListDTO(
         project_id=project_id,
         entries=[_to_dto(e) for e in entries],
@@ -113,7 +113,7 @@ def create_source(
 ) -> SourceDTO:
     _require_project(config, project_id)
     try:
-        entry = source_service.add_entry(
+        entry = source_repo.create(
             conn,
             project_id=project_id,
             title=payload.title,
@@ -158,7 +158,7 @@ def update_source(
             status.HTTP_400_BAD_REQUEST,
             "At least one of title, body_md, kind, uri, tags must be set.",
         )
-    updated = source_service.edit_entry(
+    updated = source_repo.update(
         conn,
         source_id,
         title=payload.title,
@@ -184,7 +184,7 @@ def delete_source(
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> None:
     _require_entry(conn, source_id)
-    source_service.remove_entry(conn, source_id)
+    source_repo.delete(conn, source_id)
 
 
 __all__ = ["router"]

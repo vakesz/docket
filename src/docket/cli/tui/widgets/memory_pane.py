@@ -5,7 +5,7 @@ editor on the right. Users can pick, edit, save, or delete entries. Add
 opens a fresh row in the editor; Save creates or updates depending on
 whether the row has an id yet.
 
-This is the user-driven path — writes go straight through `memory_service`
+This is the user-driven path — writes go straight through `memory_repo`
 without staging proposals. Agent-initiated writes use the proposal/confirm
 flow elsewhere."""
 
@@ -21,7 +21,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Input, ListItem, ListView, Static, TextArea
 
 from docket.core.model import MemoryEntry
-from docket.core.services import memory_service
+from docket.storage.repos import memory_repo
 
 
 class _EntryRow(ListItem):
@@ -128,7 +128,7 @@ class MemoryPane(ModalScreen[None]):
     # -- list management ---------------------------------------------------
 
     def _reload_entries(self, *, select_id: str | None) -> None:
-        self._entries = memory_service.list_entries(self._conn, self._project_id, limit=500)
+        self._entries = memory_repo.list_for_project(self._conn, self._project_id, limit=500)
         view = self.query_one("#entries", ListView)
         view.clear()
         for entry in self._entries:
@@ -202,7 +202,7 @@ class MemoryPane(ModalScreen[None]):
             return
         try:
             if self._current_id is None:
-                entry = memory_service.add_entry(
+                entry = memory_repo.create(
                     self._conn,
                     project_id=self._project_id,
                     title=title,
@@ -213,7 +213,7 @@ class MemoryPane(ModalScreen[None]):
                 self.app.notify(f"Added '{entry.title}'.", severity="information")
                 self._reload_entries(select_id=entry.id)
             else:
-                updated = memory_service.edit_entry(
+                updated = memory_repo.update(
                     self._conn,
                     self._current_id,
                     title=title,
@@ -232,7 +232,7 @@ class MemoryPane(ModalScreen[None]):
     def action_delete(self) -> None:
         if self._read_only or self._current_id is None:
             return
-        ok = memory_service.remove_entry(self._conn, self._current_id)
+        ok = memory_repo.delete(self._conn, self._current_id)
         if ok:
             self.app.notify("Removed entry.", severity="information")
         self._reload_entries(select_id=None)

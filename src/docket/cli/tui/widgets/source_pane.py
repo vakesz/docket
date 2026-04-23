@@ -21,7 +21,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Input, ListItem, ListView, Static, TextArea
 
 from docket.core.model import Source
-from docket.core.services import source_service
+from docket.storage.repos import source_repo
 
 
 class _EntryRow(ListItem):
@@ -134,7 +134,7 @@ class SourcePane(ModalScreen[None]):
     # -- list management ---------------------------------------------------
 
     def _reload_entries(self, *, select_id: str | None) -> None:
-        self._entries = source_service.list_entries(self._conn, self._project_id, limit=500)
+        self._entries = source_repo.list_for_project(self._conn, self._project_id, limit=500)
         view = self.query_one("#entries", ListView)
         view.clear()
         for entry in self._entries:
@@ -214,7 +214,7 @@ class SourcePane(ModalScreen[None]):
             return
         try:
             if self._current_id is None:
-                entry = source_service.add_entry(
+                entry = source_repo.create(
                     self._conn,
                     project_id=self._project_id,
                     title=title,
@@ -226,7 +226,7 @@ class SourcePane(ModalScreen[None]):
                 self.app.notify(f"Added '{entry.title}'.", severity="information")
                 self._reload_entries(select_id=entry.id)
             else:
-                updated = source_service.edit_entry(
+                updated = source_repo.update(
                     self._conn,
                     self._current_id,
                     title=title,
@@ -247,7 +247,7 @@ class SourcePane(ModalScreen[None]):
     def action_delete(self) -> None:
         if self._read_only or self._current_id is None:
             return
-        ok = source_service.remove_entry(self._conn, self._current_id)
+        ok = source_repo.delete(self._conn, self._current_id)
         if ok:
             self.app.notify("Removed source.", severity="information")
         self._reload_entries(select_id=None)

@@ -19,7 +19,7 @@ from rich.table import Table
 
 from docket.cli.context import Context, prepare_or_wizard
 from docket.core.model import Source
-from docket.core.services import source_service
+from docket.storage.repos import source_repo
 
 console = Console()
 
@@ -62,7 +62,7 @@ def source_list(
     ctx = prepare_or_wizard()
     try:
         project = ctx.active_project()
-        rows = source_service.list_entries(ctx.conn, project.id, kind=kind, limit=limit)
+        rows = source_repo.list_for_project(ctx.conn, project.id, kind=kind, limit=limit)
         if not rows:
             console.print(
                 f"[dim]No source documents for[/dim] [cyan]{project.name}[/cyan] "
@@ -126,7 +126,7 @@ def source_add(
     try:
         project = ctx.active_project()
         body_md = _read_body(body, from_file)
-        entry = source_service.add_entry(
+        entry = source_repo.create(
             ctx.conn,
             project_id=project.id,
             title=title,
@@ -169,7 +169,7 @@ def source_edit(
                 "[yellow]Nothing to update[/yellow] — pass --title, --body, --kind, --uri, or --tags."
             )
             raise typer.Exit(2)
-        updated = source_service.edit_entry(
+        updated = source_repo.update(
             ctx.conn,
             existing.id,
             title=title,
@@ -205,7 +205,7 @@ def source_rm(
             if not confirmed:
                 console.print("[dim]Cancelled.[/dim]")
                 raise typer.Exit(1)
-        ok = source_service.remove_entry(ctx.conn, existing.id)
+        ok = source_repo.delete(ctx.conn, existing.id)
         if not ok:
             console.print(f"[red]Source vanished:[/red] {existing.id}")
             raise typer.Exit(1)
@@ -224,7 +224,7 @@ def source_search(
     ctx = prepare_or_wizard()
     try:
         project = ctx.active_project()
-        rows = source_service.search_entries(ctx.conn, project.id, query, kind=kind, limit=limit)
+        rows = source_repo.search(ctx.conn, project.id, query, kind=kind, limit=limit)
         if not rows:
             console.print(f"[dim]No matches in[/dim] [cyan]{project.name}[/cyan].")
             return
@@ -249,12 +249,12 @@ def source_search(
 
 def _resolve(ctx: Context, source_id: str) -> Source:
     """Look up by full id; on miss, fall back to a unique 8-char prefix match."""
-    direct = source_service.get_entry(ctx.conn, source_id)
+    direct = source_repo.get(ctx.conn, source_id)
     if direct is not None:
         return direct
     project = ctx.active_project()
     candidates = [
-        e for e in source_service.list_entries(ctx.conn, project.id) if e.id.startswith(source_id)
+        e for e in source_repo.list_for_project(ctx.conn, project.id) if e.id.startswith(source_id)
     ]
     if not candidates:
         console.print(f"[red]No source matching:[/red] {source_id}")

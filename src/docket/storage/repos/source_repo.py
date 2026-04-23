@@ -7,7 +7,8 @@ cannot modify them — writes only flow from human users via CLI/TUI/HTTP.
 Unlike `memory`, sources are NOT shipped in the prompt prefix on every
 turn, so there is no revision counter: the prompt cache key does not
 depend on source content. FTS5 indexing is driven by triggers in
-`schema.py`; this module just runs CRUD and search.
+`schema.py`; mutating functions wrap the row write + FTS triggers in
+one transaction so they land atomically.
 """
 
 from __future__ import annotations
@@ -18,6 +19,16 @@ import uuid
 from datetime import UTC, datetime
 
 from docket.core.model import Source
+from docket.storage.db import transaction
+from docket.storage.repos import project_repo
+
+
+def _require_project(conn: sqlite3.Connection, project_id: str) -> None:
+    if project_repo.get(conn, project_id) is None:
+        raise KeyError(
+            f"unknown project '{project_id}' "
+            "— call project_service.activate() before writing sources"
+        )
 
 
 def _row_to_entry(row: sqlite3.Row) -> Source:
@@ -75,28 +86,30 @@ def create(
     uri: str = "",
     tags: list[str] | None = None,
 ) -> Source:
-    """Insert a new source row."""
+    """Insert a new source row. Raises `KeyError` if the project is unknown."""
+    _require_project(conn, project_id)
     now = datetime.now(UTC)
     source_id = str(uuid.uuid4())
     tags_clean = [t.strip() for t in (tags or []) if t and t.strip()]
-    conn.execute(
-        """
-        INSERT INTO sources
-            (id, project_id, title, kind, uri, body_md, tags_json, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            source_id,
-            project_id,
-            title.strip() or "(untitled)",
-            kind.strip(),
-            uri.strip(),
-            body_md,
-            json.dumps(tags_clean),
-            now.isoformat(),
-            now.isoformat(),
-        ),
-    )
+    with transaction(conn):
+        conn.execute(
+            """
+            INSERT INTO sources
+                (id, project_id, title, kind, uri, body_md, tags_json, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                source_id,
+                project_id,
+                title.strip() or "(untitled)",
+                kind.strip(),
+                uri.strip(),
+                body_md,
+                json.dumps(tags_clean),
+                now.isoformat(),
+                now.isoformat(),
+            ),
+        )
     return Source(
         id=source_id,
         project_id=project_id,
@@ -147,7 +160,8 @@ def update(
     fields.append("updated_at = ?")
     params.append(datetime.now(UTC).isoformat())
     params.append(source_id)
-    conn.execute(f"UPDATE sources SET {', '.join(fields)} WHERE id = ?", params)
+    with transaction(conn):
+        conn.execute(f"UPDATE sources SET {', '.join(fields)} WHERE id = ?", params)
     return get(conn, source_id)
 
 
@@ -155,7 +169,8 @@ def delete(conn: sqlite3.Connection, source_id: str) -> bool:
     existing = get(conn, source_id)
     if existing is None:
         return False
-    conn.execute("DELETE FROM sources WHERE id = ?", (source_id,))
+    with transaction(conn):
+        conn.execute("DELETE FROM sources WHERE id = ?", (source_id,))
     return True
 
 

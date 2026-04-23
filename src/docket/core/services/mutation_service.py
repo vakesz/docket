@@ -118,9 +118,7 @@ def propose_memory_write(
 
     Validates: project exists; on edit, target memory entry exists and
     actually belongs to `project_id` (rejects cross-project edits)."""
-    from docket.core.services import memory_service
-
-    memory_service._require_project(conn, project_id)  # KeyError on unknown project
+    memory_repo._require_project(conn, project_id)  # KeyError on unknown project
     previous_title = ""
     previous_body_md = ""
     if memory_id:
@@ -152,9 +150,7 @@ def propose_memory_delete(
     project_id: str,
     memory_id: str,
 ) -> MemoryDelete:
-    from docket.core.services import memory_service
-
-    memory_service._require_project(conn, project_id)
+    memory_repo._require_project(conn, project_id)
     existing = memory_repo.get(conn, memory_id)
     if existing is None:
         raise ValueError(f"unknown memory entry '{memory_id}'")
@@ -287,9 +283,7 @@ def _execute(
         return MutationResult(proposal_id=proposal.id, dry_run=False, comment=comment)
 
     if isinstance(proposal, MemoryWrite):
-        from docket.core.services import memory_service
-
-        entry = memory_service.apply_memory_write(
+        entry = memory_repo.upsert_for_proposal(
             conn,
             project_id=proposal.project_id,
             title=proposal.title,
@@ -301,9 +295,7 @@ def _execute(
         return MutationResult(proposal_id=proposal.id, dry_run=False, memory=entry)
 
     if isinstance(proposal, MemoryDelete):
-        from docket.core.services import memory_service
-
-        ok = memory_service.apply_memory_delete(conn, proposal.memory_id)
+        ok = memory_repo.delete(conn, proposal.memory_id)
         return MutationResult(
             proposal_id=proposal.id,
             dry_run=False,

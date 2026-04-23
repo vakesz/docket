@@ -19,9 +19,15 @@ from docket.agent.loop import AgentLoop
 from docket.agent.prompt import build_prefix
 from docket.agent.types import ChatMessage, StreamDelta, Usage
 from docket.core.model import Conversation, Item, MemoryEntry
-from docket.core.services import compaction_service, memory_service
+from docket.core.services import compaction_service
 from docket.storage.db import transaction
-from docket.storage.repos import comment_repo, conversation_repo, item_repo, message_repo
+from docket.storage.repos import (
+    comment_repo,
+    conversation_repo,
+    item_repo,
+    memory_repo,
+    message_repo,
+)
 
 
 @dataclass
@@ -133,8 +139,8 @@ def _build_prefix(
         # Best-effort: a missing project (fresh DB, mid-onboarding) just means
         # no memory yet. Don't fail the chat turn over it.
         try:
-            memory = memory_service.list_entries(conn, project_id)
-            revision = memory_service.get_revision(conn, project_id)
+            memory = memory_repo.list_for_project(conn, project_id)
+            revision = memory_repo.get_revision(conn, project_id)
         except KeyError:
             memory = []
             revision = 0

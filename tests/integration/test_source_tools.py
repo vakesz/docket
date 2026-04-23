@@ -14,8 +14,9 @@ import pytest
 
 from docket.agent.source_tools import register_source_readonly_tools
 from docket.agent.tools import ToolRegistry
-from docket.core.services import project_service, source_service
+from docket.core.services import project_service
 from docket.storage import init_db
+from docket.storage.repos import source_repo
 
 
 def _seed_project(conn, project_id: str = "main") -> str:
@@ -38,7 +39,7 @@ def env(tmp_path: Path):
 
 def test_list_sources_returns_summaries(env) -> None:
     conn, pid, reg = env
-    source_service.add_entry(
+    source_repo.create(
         conn, project_id=pid, title="Spec", body_md="big body", kind="requirements"
     )
     out = json.loads(reg.dispatch("list_sources", {}))
@@ -51,15 +52,15 @@ def test_list_sources_returns_summaries(env) -> None:
 
 def test_list_sources_kind_filter(env) -> None:
     conn, pid, reg = env
-    source_service.add_entry(conn, project_id=pid, title="A", body_md="", kind="design")
-    source_service.add_entry(conn, project_id=pid, title="B", body_md="", kind="runbook")
+    source_repo.create(conn, project_id=pid, title="A", body_md="", kind="design")
+    source_repo.create(conn, project_id=pid, title="B", body_md="", kind="runbook")
     out = json.loads(reg.dispatch("list_sources", {"kind": "design"}))
     assert [e["title"] for e in out] == ["A"]
 
 
 def test_read_source_returns_body(env) -> None:
     conn, pid, reg = env
-    entry = source_service.add_entry(
+    entry = source_repo.create(
         conn, project_id=pid, title="Doc", body_md="full text", kind="design"
     )
     out = json.loads(reg.dispatch("read_source", {"source_id": entry.id}))
@@ -77,7 +78,7 @@ def test_read_source_blocks_cross_project(tmp_path: Path) -> None:
     conn = init_db(tmp_path / "docket.db")
     pid_a = _seed_project(conn, "p1")
     pid_b = _seed_project(conn, "p2")
-    other = source_service.add_entry(conn, project_id=pid_b, title="Secret", body_md="hush")
+    other = source_repo.create(conn, project_id=pid_b, title="Secret", body_md="hush")
     reg = ToolRegistry()
     register_source_readonly_tools(reg, conn=conn, project_id=pid_a)
     out = json.loads(reg.dispatch("read_source", {"source_id": other.id}))
@@ -87,8 +88,8 @@ def test_read_source_blocks_cross_project(tmp_path: Path) -> None:
 
 def test_search_sources_full_text(env) -> None:
     conn, pid, reg = env
-    source_service.add_entry(conn, project_id=pid, title="Auth", body_md="OAuth tokens")
-    source_service.add_entry(conn, project_id=pid, title="Other", body_md="unrelated")
+    source_repo.create(conn, project_id=pid, title="Auth", body_md="OAuth tokens")
+    source_repo.create(conn, project_id=pid, title="Other", body_md="unrelated")
     out = json.loads(reg.dispatch("search_sources", {"query": "OAuth"}))
     assert [e["title"] for e in out] == ["Auth"]
     # Body included in search hits so the agent doesn't need a follow-up call.

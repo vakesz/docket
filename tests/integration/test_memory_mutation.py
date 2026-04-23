@@ -7,8 +7,9 @@ from pathlib import Path
 import pytest
 
 from docket.core.mutation import MemoryDelete, MemoryWrite, render_diff
-from docket.core.services import memory_service, mutation_service, project_service
+from docket.core.services import mutation_service, project_service
 from docket.storage import init_db
+from docket.storage.repos import memory_repo
 from tests.fakes.provider import FakeProvider
 
 
@@ -37,7 +38,7 @@ def test_propose_memory_write_create_and_confirm(tmp_path: Path) -> None:
     assert result.memory.source == "agent"  # default for proposed writes
 
     # And it's actually persisted.
-    rows = memory_service.list_entries(conn, pid)
+    rows = memory_repo.list_for_project(conn, pid)
     assert len(rows) == 1
     conn.close()
 
@@ -45,7 +46,7 @@ def test_propose_memory_write_create_and_confirm(tmp_path: Path) -> None:
 def test_propose_memory_write_edit_carries_previous(tmp_path: Path) -> None:
     conn = init_db(tmp_path / "docket.db")
     pid = _seed_project(conn)
-    existing = memory_service.add_entry(conn, project_id=pid, title="Old title", body_md="Old body")
+    existing = memory_repo.create(conn, project_id=pid, title="Old title", body_md="Old body")
     proposal = mutation_service.propose_memory_write(
         conn,
         project_id=pid,
@@ -71,7 +72,7 @@ def test_propose_memory_write_rejects_cross_project(tmp_path: Path) -> None:
     conn = init_db(tmp_path / "docket.db")
     pid_a = _seed_project(conn, "a")
     pid_b = _seed_project(conn, "b")
-    entry_b = memory_service.add_entry(conn, project_id=pid_b, title="B", body_md="")
+    entry_b = memory_repo.create(conn, project_id=pid_b, title="B", body_md="")
     with pytest.raises(ValueError, match="belongs to project"):
         mutation_service.propose_memory_write(
             conn,
@@ -86,13 +87,13 @@ def test_propose_memory_write_rejects_cross_project(tmp_path: Path) -> None:
 def test_confirm_memory_delete_removes_row(tmp_path: Path) -> None:
     conn = init_db(tmp_path / "docket.db")
     pid = _seed_project(conn)
-    entry = memory_service.add_entry(conn, project_id=pid, title="Tmp", body_md="x")
+    entry = memory_repo.create(conn, project_id=pid, title="Tmp", body_md="x")
     proposal = mutation_service.propose_memory_delete(conn, project_id=pid, memory_id=entry.id)
     assert isinstance(proposal, MemoryDelete)
 
     result = mutation_service.confirm(conn, FakeProvider(), proposal)
     assert result.memory_deleted_id == entry.id
-    assert memory_service.get_entry(conn, entry.id) is None
+    assert memory_repo.get(conn, entry.id) is None
     conn.close()
 
 
@@ -104,5 +105,5 @@ def test_confirm_memory_write_dry_run(tmp_path: Path) -> None:
     assert result.dry_run is True
     assert result.memory is None
     # No row was created.
-    assert memory_service.list_entries(conn, pid) == []
+    assert memory_repo.list_for_project(conn, pid) == []
     conn.close()

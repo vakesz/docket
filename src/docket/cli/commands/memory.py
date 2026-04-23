@@ -18,7 +18,7 @@ from rich.table import Table
 
 from docket.cli.context import Context, prepare_or_wizard
 from docket.core.model import MemoryEntry
-from docket.core.services import memory_service
+from docket.storage.repos import memory_repo
 
 console = Console()
 
@@ -62,7 +62,7 @@ def memory_list(
         # Ensure the project row exists so the command works on a fresh DB
         # before any memory has been written.
         project = ctx.active_project()
-        rows = memory_service.list_entries(ctx.conn, project.id, limit=limit)
+        rows = memory_repo.list_for_project(ctx.conn, project.id, limit=limit)
         if not rows:
             console.print(
                 f"[dim]No memory entries for[/dim] [cyan]{project.name}[/cyan] "
@@ -123,7 +123,7 @@ def memory_add(
     try:
         project = ctx.active_project()
         body_md = _read_body(body, from_file)
-        entry = memory_service.add_entry(
+        entry = memory_repo.create(
             ctx.conn,
             project_id=project.id,
             title=title,
@@ -161,7 +161,7 @@ def memory_edit(
         if title is None and body_md is None and tags is None:
             console.print("[yellow]Nothing to update[/yellow] — pass --title, --body, or --tags.")
             raise typer.Exit(2)
-        updated = memory_service.edit_entry(
+        updated = memory_repo.update(
             ctx.conn,
             existing.id,
             title=title,
@@ -195,7 +195,7 @@ def memory_rm(
             if not confirmed:
                 console.print("[dim]Cancelled.[/dim]")
                 raise typer.Exit(1)
-        ok = memory_service.remove_entry(ctx.conn, existing.id)
+        ok = memory_repo.delete(ctx.conn, existing.id)
         if not ok:
             console.print(f"[red]Memory entry vanished:[/red] {existing.id}")
             raise typer.Exit(1)
@@ -213,7 +213,7 @@ def memory_search(
     ctx = prepare_or_wizard()
     try:
         project = ctx.active_project()
-        rows = memory_service.search_entries(ctx.conn, project.id, query, limit=limit)
+        rows = memory_repo.search(ctx.conn, project.id, query, limit=limit)
         if not rows:
             console.print(f"[dim]No matches in[/dim] [cyan]{project.name}[/cyan].")
             return
@@ -236,12 +236,12 @@ def memory_search(
 
 def _resolve(ctx: Context, memory_id: str) -> MemoryEntry:
     """Look up by full id; on miss, fall back to a unique 8-char prefix match."""
-    direct = memory_service.get_entry(ctx.conn, memory_id)
+    direct = memory_repo.get(ctx.conn, memory_id)
     if direct is not None:
         return direct
     project = ctx.active_project()
     candidates = [
-        e for e in memory_service.list_entries(ctx.conn, project.id) if e.id.startswith(memory_id)
+        e for e in memory_repo.list_for_project(ctx.conn, project.id) if e.id.startswith(memory_id)
     ]
     if not candidates:
         console.print(f"[red]No memory entry matching:[/red] {memory_id}")

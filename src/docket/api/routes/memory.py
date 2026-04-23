@@ -24,7 +24,7 @@ from docket.api.schemas import (
 )
 from docket.config.models import Config
 from docket.core.model import MemoryEntry
-from docket.core.services import memory_service
+from docket.storage.repos import memory_repo
 
 router = APIRouter(
     tags=["memory"],
@@ -51,7 +51,7 @@ def _require_project(config: Config, project_id: str) -> None:
 
 
 def _require_entry(conn: sqlite3.Connection, memory_id: str) -> MemoryEntry:
-    entry = memory_service.get_entry(conn, memory_id)
+    entry = memory_repo.get(conn, memory_id)
     if entry is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown memory entry '{memory_id}'")
     return entry
@@ -68,8 +68,8 @@ def list_memory(
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> MemoryListDTO:
     _require_project(config, project_id)
-    entries = memory_service.list_entries(conn, project_id, limit=limit)
-    revision = memory_service.get_revision(conn, project_id)
+    entries = memory_repo.list_for_project(conn, project_id, limit=limit)
+    revision = memory_repo.get_revision(conn, project_id)
     return MemoryListDTO(
         project_id=project_id,
         revision=revision,
@@ -89,8 +89,8 @@ def search_memory(
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> MemoryListDTO:
     _require_project(config, project_id)
-    entries = memory_service.search_entries(conn, project_id, q, limit=limit)
-    revision = memory_service.get_revision(conn, project_id)
+    entries = memory_repo.search(conn, project_id, q, limit=limit)
+    revision = memory_repo.get_revision(conn, project_id)
     return MemoryListDTO(
         project_id=project_id,
         revision=revision,
@@ -112,7 +112,7 @@ def create_memory(
 ) -> MemoryDTO:
     _require_project(config, project_id)
     try:
-        entry = memory_service.add_entry(
+        entry = memory_repo.create(
             conn,
             project_id=project_id,
             title=payload.title,
@@ -150,7 +150,7 @@ def update_memory(
             status.HTTP_400_BAD_REQUEST,
             "At least one of title, body_md, tags must be set.",
         )
-    updated = memory_service.edit_entry(
+    updated = memory_repo.update(
         conn,
         memory_id,
         title=payload.title,
@@ -174,7 +174,7 @@ def delete_memory(
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> None:
     _require_entry(conn, memory_id)
-    memory_service.remove_entry(conn, memory_id)
+    memory_repo.delete(conn, memory_id)
 
 
 __all__ = ["router"]
