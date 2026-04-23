@@ -53,7 +53,15 @@ Rules:
 - Pick the transition that best matches the ticket's real next move. If none apply, use the closest intent but raise it in open_questions.
 - Only suggest a description patch when the current text is missing, unclear, or stale. A good patch clarifies acceptance criteria, repro steps, or scope.
 - open_questions is for blockers you cannot resolve from the snapshot alone. Keep each under 120 characters. Empty list if nothing is unclear.
-- Do not invent linked tickets, authors, or dates."""
+- Do not invent linked tickets, authors, or dates.
+
+`description_patch_md` formatting (when non-empty):
+- Must be valid Markdown. Use `##` for section labels — never bare label lines like `Context` / `Problem` / `Done`.
+- Required shape, in this order, skipping any section that has no content:
+  `## Context` (1-3 sentences) -> `## Problem` (what's wrong) -> `## Expected` (what should happen) -> `## Next steps` (3-6 numbered, actionable verbs; concrete commands or code areas) -> `## Definition of done` (bullet list of exit criteria) -> `## Risks` (bullets, optional).
+- Put a blank line before and after every heading and every list.
+- Use inline backticks for ids, fields, paths, flags; fenced ``` code blocks for commands or multi-line snippets.
+- Since the value is a JSON string, encode newlines as `\\n` — do NOT emit raw newline bytes inside the string."""
 
 
 @dataclass

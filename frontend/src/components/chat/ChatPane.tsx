@@ -142,6 +142,10 @@ function PersistedMessage({
 }) {
   if (message.role === "system") return null;
   const role = message.role;
+  // Assistant turns with no text (tool-dispatch rounds, or a rare empty reply)
+  // render as a blank "No description." card. The following `tool` rows already
+  // show what was called, so skip these instead of showing a misleading card.
+  if (role === "assistant" && !message.content.trim()) return null;
   return (
     <div
       className={cn(

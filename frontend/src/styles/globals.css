@@ -3,6 +3,8 @@
 @import "@fontsource/jetbrains-mono/400.css";
 @import "@fontsource/jetbrains-mono/500.css";
 
+@plugin "@tailwindcss/typography";
+
 @variant dark (&:where(.dark, .dark *));
 
 /* Semantic color tokens.
