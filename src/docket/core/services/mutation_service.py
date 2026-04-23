@@ -12,6 +12,7 @@ local cache so subsequent reads match the remote state.
 from __future__ import annotations
 
 import sqlite3
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -31,6 +32,9 @@ from docket.providers.base import WorkItemProvider
 from docket.storage import transaction
 from docket.storage.item_keys import item_storage_key
 from docket.storage.repos import comment_repo, item_repo, memory_repo
+from docket.telemetry.logging import get_logger
+
+_log = get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -177,9 +181,50 @@ def confirm(
     knows which provider is active; otherwise the existing row's key is
     preserved by the UPSERT (new items created without it land unscoped and
     get stamped on the next sync)."""
+    proposal_type = type(proposal).__name__
     if dry_run:
+        _log.info(
+            "proposal_confirm",
+            proposal_type=proposal_type,
+            provider=provider_key or None,
+            outcome="dry_run",
+            latency_ms=0,
+        )
         return MutationResult(proposal_id=proposal.id, dry_run=True)
 
+    started = time.monotonic_ns()
+    try:
+        result = _execute(conn, provider, proposal, provider_key=provider_key)
+    except Exception as exc:
+        _log.warning(
+            "proposal_confirm",
+            proposal_type=proposal_type,
+            provider=provider_key or None,
+            outcome="error",
+            error_type=type(exc).__name__,
+            latency_ms=_elapsed_ms(started),
+            exc_info=True,
+        )
+        raise
+    _log.info(
+        "proposal_confirm",
+        proposal_type=proposal_type,
+        provider=provider_key or None,
+        outcome="ok",
+        latency_ms=_elapsed_ms(started),
+    )
+    return result
+
+
+def _execute(
+    conn: sqlite3.Connection,
+    provider: WorkItemProvider,
+    proposal: Proposal,
+    *,
+    provider_key: str,
+) -> MutationResult:
+    """Dispatch a proposal to the right provider call. The wrapper in
+    `confirm` measures latency and emits the proposal-outcome log line."""
     if isinstance(proposal, StateChange):
         updated = provider.transition(proposal.item.id, proposal.intent)
         _refresh_cache(conn, updated, provider_key)
@@ -278,3 +323,7 @@ def _refresh_cache(conn: sqlite3.Connection, item: Item, provider_key: str) -> N
         item.provider_key = provider_key
     with transaction(conn):
         item_repo.upsert_item(conn, item)
+
+
+def _elapsed_ms(started_ns: int) -> int:
+    return (time.monotonic_ns() - started_ns) // 1_000_000

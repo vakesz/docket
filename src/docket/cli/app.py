@@ -15,6 +15,7 @@ from docket.cli.commands.serve import serve_command
 from docket.cli.commands.setup import setup_app
 from docket.cli.commands.show import show_command
 from docket.cli.commands.source import source_app
+from docket.cli.commands.status import status_command
 from docket.cli.commands.sync import sync_command
 from docket.cli.commands.transition import transition_command
 
@@ -56,6 +57,7 @@ app.command("transition")(transition_command)
 app.command("patch")(patch_command)
 app.command("new")(new_command)
 app.command("serve")(serve_command)
+app.command("status")(status_command)
 app.command("help")(help_command)
 
 

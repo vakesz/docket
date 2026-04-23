@@ -8,9 +8,6 @@
 - make sure all of these are done in a clean and simple way that is easy to understand and use for developers and less technical users alike
 - github mcp?
 - add support for multiple projects in the same instance of the mcp, and make sure that the memory and sub agents are properly separated and organized for each project.
-- Add observability for agent and MCP execution
-  - Structured logs for tool calls, latency, failure reasons, and proposal outcomes.
-  - Simple health dashboard or status command for integrations.
 - Command palette discoverability improvements
   - Better command descriptions, examples, and “recently used” commands to reduce memorization.
 - Human-friendly status bar

@@ -13,11 +13,15 @@ must be side-effect free for read-only tools; mutations go through
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 from docket.agent.types import ToolSchema
+from docket.telemetry.logging import get_logger
+
+_log = get_logger(__name__)
 
 ToolHandler = Callable[[dict[str, Any]], str]
 
@@ -59,14 +63,40 @@ class ToolRegistry:
     def dispatch(self, name: str, arguments: dict[str, Any]) -> str:
         tool = self._tools.get(name)
         if tool is None:
+            _log.warning(
+                "tool_call",
+                tool_name=name,
+                outcome="unknown_tool",
+                latency_ms=0,
+            )
             return json.dumps({"error": f"unknown tool '{name}'"})
+        started = time.monotonic_ns()
         try:
-            return tool.handler(arguments)
+            result = tool.handler(arguments)
         except Exception as e:  # tool failure → structured error the model can see
+            _log.warning(
+                "tool_call",
+                tool_name=name,
+                outcome="error",
+                error_type=type(e).__name__,
+                latency_ms=_elapsed_ms(started),
+                exc_info=True,
+            )
             return json.dumps({"error": str(e), "tool": name})
+        _log.info(
+            "tool_call",
+            tool_name=name,
+            outcome="ok",
+            latency_ms=_elapsed_ms(started),
+        )
+        return result
 
     def __len__(self) -> int:
         return len(self._tools)
 
     def __contains__(self, name: object) -> bool:
         return name in self._tools
+
+
+def _elapsed_ms(started_ns: int) -> int:
+    return (time.monotonic_ns() - started_ns) // 1_000_000

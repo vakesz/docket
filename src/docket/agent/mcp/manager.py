@@ -16,13 +16,16 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Any
 
 from docket.agent.mcp.client import MCPClient
 from docket.agent.tools import ToolHandler, ToolRegistry
 from docket.config.models import MCPServerEntry
+from docket.telemetry.logging import get_logger
 
 log = logging.getLogger(__name__)
+_event_log = get_logger(__name__)
 
 
 class MCPManager:
@@ -48,9 +51,7 @@ class MCPManager:
         """Snapshot of currently-connected clients keyed by server name."""
         return dict(self._clients)
 
-    def bind_project(
-        self, project_id: str | None, servers: dict[str, MCPServerEntry]
-    ) -> None:
+    def bind_project(self, project_id: str | None, servers: dict[str, MCPServerEntry]) -> None:
         """Switch to `project_id`'s MCP fleet.
 
         Tears down any previously-connected clients first, then starts
@@ -65,17 +66,32 @@ class MCPManager:
             return
         for name, entry in servers.items():
             if not entry.enabled:
+                _event_log.debug(
+                    "mcp_bind",
+                    project=project_id,
+                    tool_name=name,
+                    outcome="disabled",
+                )
                 continue
             if not entry.command:
                 log.warning(
                     "mcp.%s: skipping — entry has no `command` configured",
                     name,
                 )
+                _event_log.warning(
+                    "mcp_bind",
+                    project=project_id,
+                    tool_name=name,
+                    outcome="error",
+                    error_type="missing_command",
+                )
                 continue
             client = MCPClient(name, entry)
+            started = time.monotonic_ns()
             try:
                 client.start()
             except Exception as exc:
+                latency_ms = (time.monotonic_ns() - started) // 1_000_000
                 log.warning(
                     "mcp.%s: failed to start (%s); skipping. command=%r args=%r",
                     name,
@@ -83,16 +99,33 @@ class MCPManager:
                     entry.command,
                     list(entry.args),
                 )
+                _event_log.warning(
+                    "mcp_bind",
+                    project=project_id,
+                    tool_name=name,
+                    outcome="error",
+                    error_type=type(exc).__name__,
+                    latency_ms=latency_ms,
+                )
                 # `start()` already calls `close()` on failure, but be
                 # defensive in case a future code path changes that.
                 client.close()
                 continue
             self._clients[name] = client
+            tool_count = len(client.list_tools())
             log.info(
                 "mcp.%s: connected (%d tool%s)",
                 name,
-                len(client.list_tools()),
-                "" if len(client.list_tools()) == 1 else "s",
+                tool_count,
+                "" if tool_count == 1 else "s",
+            )
+            _event_log.info(
+                "mcp_bind",
+                project=project_id,
+                tool_name=name,
+                outcome="ok",
+                latency_ms=(time.monotonic_ns() - started) // 1_000_000,
+                tools=tool_count,
             )
 
     def register_tools(self, registry: ToolRegistry) -> None:

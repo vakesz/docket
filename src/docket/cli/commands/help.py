@@ -37,6 +37,11 @@ COMMANDS: tuple[CommandHelp, ...] = (
         "docket patch S-42 --from-file body.md --dry-run",
     ),
     CommandHelp("serve", "Run the local HTTP API surface.", "docket serve"),
+    CommandHelp(
+        "status",
+        "Print a health snapshot of the active install.",
+        "docket status",
+    ),
     CommandHelp("setup", "Run or resume first-time setup.", "docket setup"),
     CommandHelp(
         "project",
