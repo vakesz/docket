@@ -34,6 +34,7 @@ _HELP_MARKDOWN = """\
 - `s` suggest next action
 - `o` open the selected item in your browser
 - `t` start a new chat thread for the selected item
+- `c` show or hide resolved/closed items in the backlog
 - `q` quit
 
 ## Tips

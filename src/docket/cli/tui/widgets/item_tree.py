@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 from rich.segment import Segment
 from rich.style import Style
@@ -15,7 +15,16 @@ from textual.widgets.tree import TreeNode
 
 from docket.core.model import Item, ItemKind, ItemState
 
+GroupingStrategy = Literal["by_kind", "by_state_bucket"]
+
 _KIND_ORDER = [ItemKind.EPIC, ItemKind.FEATURE, ItemKind.STORY, ItemKind.TASK, ItemKind.BUG]
+
+# Mirrors `STATE_BUCKETS` in frontend/src/components/items/ItemsList.tsx.
+# Keep the two in sync — they're the shared definition of "Open" vs "Done".
+_OPEN_STATES: frozenset[ItemState] = frozenset(
+    {ItemState.NEW, ItemState.ACTIVE, ItemState.BLOCKED, ItemState.NEEDS_INFO}
+)
+_DONE_STATES: frozenset[ItemState] = frozenset({ItemState.RESOLVED, ItemState.CLOSED})
 _STATE_STYLE = {
     ItemState.NEW: "item-tree--state-new",
     ItemState.ACTIVE: "item-tree--state-active",
@@ -88,13 +97,20 @@ class ItemTree(Tree[str]):
     }
     """
 
-    def __init__(self, *, id: str | None = None, stale_threshold_days: int | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        id: str | None = None,
+        stale_threshold_days: int | None = None,
+        grouping: GroupingStrategy = "by_kind",
+    ) -> None:
         super().__init__("Work Items", id=id)
         self.show_root = False
         # None disables the marker (threshold <= 0 also disables — same effect).
         self.stale_threshold_days = stale_threshold_days
         self._rows: dict[str, _ItemRow] = {}
         self._pinned_ids: frozenset[str] = frozenset()
+        self.grouping: GroupingStrategy = grouping
         self.tooltip = "Browse work items. Use the arrow keys to move and Enter to open the focused item. `w` to pin/unpin."
 
     def load_items(
@@ -102,13 +118,20 @@ class ItemTree(Tree[str]):
         items: Iterable[Item],
         *,
         pinned: Iterable[Item] | None = None,
+        grouping: GroupingStrategy | None = None,
     ) -> None:
         """Render the tree. `pinned` adds a top-level "Pinned" section ordered
         by pin time (caller is responsible for that ordering) — those rows
         stay visible across scope switches so they double as a personal
-        shortcut bar."""
+        shortcut bar.
+
+        `grouping` lets the caller switch strategies per render without
+        rebuilding the widget; when omitted, the strategy passed to
+        `__init__` (or set later via `self.grouping`) is used."""
         self.clear()
         self._rows = {}
+        if grouping is not None:
+            self.grouping = grouping
         sorted_items = sorted(
             items,
             key=lambda item: (
@@ -140,6 +163,14 @@ class ItemTree(Tree[str]):
             if not pinned_list:
                 self.root.add("[dim]No items[/dim]", expand=True)
             return
+
+        if self.grouping == "by_state_bucket":
+            self._render_state_bucket_groups(by_id)
+        else:
+            self._render_kind_groups(by_id)
+
+    def _render_kind_groups(self, by_id: dict[str, Item]) -> None:
+        """Azure-DevOps-style grouping: Epic/Feature/Story/Task/Bug → parent → child."""
         kind_nodes: dict[ItemKind, TreeNode[str]] = {}
         for kind in _KIND_ORDER:
             count = sum(1 for item in by_id.values() if item.kind == kind)
@@ -160,6 +191,35 @@ class ItemTree(Tree[str]):
             if item.id in placed:
                 continue
             self._add_item_recursive(kind_nodes[item.kind], item, by_id, placed)
+
+    def _render_state_bucket_groups(self, by_id: dict[str, Item]) -> None:
+        """GitHub-style grouping: Open vs Done. No kind sub-buckets, no parent
+        nesting — the hierarchy would mostly be empty for flat providers."""
+        open_items = [i for i in by_id.values() if i.state in _OPEN_STATES]
+        done_items = [i for i in by_id.values() if i.state in _DONE_STATES]
+        # `_add_item_flat` below doesn't walk parents, so every placed item is
+        # accounted for by bucket membership alone.
+        open_node = self.root.add(f"Open {len(open_items)}", expand=True)
+        # Collapse Done by default — it's usually the larger set and users
+        # opened the TUI to triage what's still actionable.
+        done_node = self.root.add(f"Done {len(done_items)}", expand=False)
+        for item in open_items:
+            self._add_item_flat(open_node, item)
+        for item in done_items:
+            self._add_item_flat(done_node, item)
+
+    def _add_item_flat(self, parent_node: TreeNode[str], item: Item) -> None:
+        self._rows[item.id] = _ItemRow(
+            item_id=item.id,
+            title=item.title,
+            state=item.state,
+            updated_at=item.updated_at,
+        )
+        parent_node.add(
+            self._plain_row_label(item),
+            data=item.id,
+            allow_expand=False,
+        )
 
     def pinned_ids(self) -> frozenset[str]:
         """Which ids were last drawn under the Pinned section."""

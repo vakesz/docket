@@ -159,6 +159,7 @@ def _register_builtins() -> None:
                     help="owner/name pair.",
                 ),
             ),
+            grouping="by_state_bucket",
         )
     )
     register(
@@ -175,6 +176,7 @@ def _register_builtins() -> None:
                     placeholder="example/repo",
                 ),
             ),
+            grouping="by_state_bucket",
         )
     )
 

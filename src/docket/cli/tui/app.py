@@ -43,7 +43,13 @@ from docket.cli.tui.widgets.theme_picker import ThemePicker
 from docket.config import save_config
 from docket.config.models import Config, ProviderEntry
 from docket.config.paths import Paths
-from docket.core.model import ItemKind, ScopeFilters, TransitionIntent, project_id_for
+from docket.core.model import (
+    ItemKind,
+    ItemState,
+    ScopeFilters,
+    TransitionIntent,
+    project_id_for,
+)
 from docket.core.services import (
     conversation_service,
     external_update_service,
@@ -54,7 +60,8 @@ from docket.core.services import (
 )
 from docket.core.services.proposal_store import ProposalStore
 from docket.core.services.suggestion_service import Suggestion, SuggestionError
-from docket.providers.base import WorkItemProvider
+from docket.providers import registry
+from docket.providers.base import GroupingStrategy, WorkItemProvider
 from docket.storage.repos import (
     comment_repo,
     conversation_repo,
@@ -176,6 +183,10 @@ class TuiContext:
     stale_threshold_by_provider: dict[str, int] | None = None
     default_new_item_kind: ItemKind = ItemKind.TASK
     show_acceptance_criteria: bool = True
+    # Hide resolved/closed items from the backlog tree by default. Matches the
+    # frontend's "open" state bucket; `c` toggles it at runtime. In-memory only —
+    # not persisted — so a relaunch starts back at "hide done" on every provider.
+    hide_done: bool = True
     # Optional handles for features that persist to config (theme picker, etc).
     # Pilot tests can leave these as None; persistence becomes a no-op.
     paths: Paths | None = None
@@ -257,6 +268,7 @@ class DocketApp(App[None]):
         Binding("o", "open_in_browser", "Open in browser", show=False),
         Binding("s", "suggest_next", "Suggest next action", show=False),
         Binding("w", "toggle_pin", "Pin/unpin item", show=False),
+        Binding("c", "toggle_done_visibility", "Show/hide done", show=False),
         Binding("comma", "open_settings", "Settings"),
         Binding("p", "edit_prompts", "Prompts"),
         Binding("m", "open_memory", "Memory", show=False),
@@ -305,7 +317,11 @@ class DocketApp(App[None]):
                 yield FullscreenToggle()
                 yield Static("Backlog", classes="pane-heading")
                 yield Input(placeholder="Search backlog…", id="filter")
-                yield ItemTree(id="tree", stale_threshold_days=self._resolved_stale_threshold())
+                yield ItemTree(
+                    id="tree",
+                    stale_threshold_days=self._resolved_stale_threshold(),
+                    grouping=self._resolved_grouping(),
+                )
             with Pane(id="mid"):
                 yield FullscreenToggle()
                 yield Static("Details", classes="pane-heading")
@@ -479,12 +495,15 @@ class DocketApp(App[None]):
             self.tui_ctx.conn,
             provider_key=self.tui_ctx.provider_key,
             assignee=resolved.assignee,
+            states=self._list_item_states(),
         )
         items = visual_filter.apply_to_items(items, resolved)
         pinned = watchlist_repo.list_pinned_items(
             self.tui_ctx.conn, provider_key=self.tui_ctx.provider_key
         )
-        self.query_one(ItemTree).load_items(items, pinned=pinned)
+        self.query_one(ItemTree).load_items(
+            items, pinned=pinned, grouping=self._resolved_grouping()
+        )
 
     def _provider_key(self) -> str:
         """Key used to look up per-provider overrides (stale threshold,
@@ -513,6 +532,33 @@ class DocketApp(App[None]):
         floors = self.tui_ctx.background_sync_min_interval_by_provider or {}
         floor = floors.get(self._provider_key(), 0.0)
         return max(base, floor)
+
+    def _resolved_grouping(self) -> GroupingStrategy:
+        """Grouping strategy declared by the active provider's spec.
+
+        Falls back to `"by_kind"` when the config isn't available (pilot
+        tests) or the provider's type id isn't registered — matches the
+        legacy behavior so nothing regresses for Azure DevOps."""
+        entry = self._active_provider_entry()
+        if entry is None:
+            return "by_kind"
+        spec = registry.spec(entry.type)
+        if spec is None:
+            return "by_kind"
+        return spec.grouping
+
+    def _list_item_states(self) -> tuple[ItemState, ...] | None:
+        """States to pass to `item_repo.list_items`. `None` means "no state
+        filter" — for the 'show done' toggle — and matches the existing
+        behavior when called without a `states=` argument."""
+        if not self.tui_ctx.hide_done:
+            return None
+        return (
+            ItemState.NEW,
+            ItemState.ACTIVE,
+            ItemState.BLOCKED,
+            ItemState.NEEDS_INFO,
+        )
 
     def _init_status_bar(self) -> None:
         """Populate the static status-bar segments (provider name, scope key).
@@ -708,13 +754,20 @@ class DocketApp(App[None]):
             self.tui_ctx.conn, provider_key=self.tui_ctx.provider_key
         )
         resolved = self._active_view_filter()
+        grouping = self._resolved_grouping()
+        states = self._list_item_states()
         if not query:
             items = item_repo.list_items(
                 self.tui_ctx.conn,
                 provider_key=self.tui_ctx.provider_key,
                 assignee=resolved.assignee,
+                states=states,
             )
-            tree.load_items(visual_filter.apply_to_items(items, resolved), pinned=pinned)
+            tree.load_items(
+                visual_filter.apply_to_items(items, resolved),
+                pinned=pinned,
+                grouping=grouping,
+            )
             return
         ids = search_repo.search(
             self.tui_ctx.conn,
@@ -723,7 +776,7 @@ class DocketApp(App[None]):
             assignee=resolved.assignee,
         )
         if not ids:
-            tree.load_items([], pinned=pinned)
+            tree.load_items([], pinned=pinned, grouping=grouping)
             return
         by_id = {
             i.id: i
@@ -731,10 +784,15 @@ class DocketApp(App[None]):
                 self.tui_ctx.conn,
                 provider_key=self.tui_ctx.provider_key,
                 assignee=resolved.assignee,
+                states=states,
             )
         }
         ordered = [by_id[iid] for iid in ids if iid in by_id]
-        tree.load_items(visual_filter.apply_to_items(ordered, resolved), pinned=pinned)
+        tree.load_items(
+            visual_filter.apply_to_items(ordered, resolved),
+            pinned=pinned,
+            grouping=grouping,
+        )
 
     def _move_from_filter_to_tree(self) -> None:
         tree = self.query_one(ItemTree)
@@ -1118,6 +1176,24 @@ class DocketApp(App[None]):
             self.tui_ctx.conn.commit()
             self.notify(f"Pinned {item_id}.", severity="information")
         self._reload_tree()
+
+    def action_toggle_done_visibility(self) -> None:
+        """Flip the backlog's show/hide for resolved + closed items.
+
+        Mirrors the frontend's "Open / Done / All states" control. In-memory
+        only — the preference does not persist, so every session starts back
+        at "hide done" to match the default triage experience."""
+        self.tui_ctx.hide_done = not self.tui_ctx.hide_done
+        # Re-run the active search (if any) so the toggle respects the current
+        # filter input rather than silently dropping it.
+        try:
+            filter_input = self.query_one("#filter", Input)
+        except Exception:
+            self._reload_tree()
+        else:
+            self._apply_filter(filter_input.value or "")
+        label = "hidden" if self.tui_ctx.hide_done else "visible"
+        self.notify(f"Done items {label}.", severity="information")
 
     def action_suggest_next(self) -> None:
         if self._selected_item_id is None:

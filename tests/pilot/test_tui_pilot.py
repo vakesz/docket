@@ -19,7 +19,7 @@ from docket.cli.tui.widgets.chat_pane import ChatPane
 from docket.cli.tui.widgets.item_detail import ItemDetail
 from docket.cli.tui.widgets.item_tree import ItemTree
 from docket.cli.tui.widgets.status_bar import StatusBar
-from docket.config import Config, ProjectEntry
+from docket.config import Config, ProjectEntry, ProviderEntry
 from docket.core.model import Comment, Item, ItemKind, ItemState, ScopeFilters
 from docket.storage import init_db
 from docket.storage.repos import comment_repo, item_repo
@@ -155,6 +155,85 @@ async def test_tree_rows_show_short_ids_and_status_bar_shows_project_name(tui_se
         bar = app.query_one(StatusBar)
         assert bar.project_name == "Ericsson/CodeChecker"
         assert "Ericsson/CodeChecker" in str(bar.render())
+
+
+def _tree_bucket_labels(tree: ItemTree) -> list[str]:
+    """Top-level bucket labels under the hidden root, with pinned stripped.
+
+    The Pinned section only appears when items are pinned, so tests that only
+    care about the kind/state-bucket row can ignore it via the "📌" prefix."""
+    return [str(n.label) for n in tree.root.children if not str(n.label).startswith("📌")]
+
+
+async def test_github_provider_uses_state_bucket_grouping(tui_setup) -> None:
+    """GitHub's ProviderSpec.grouping="by_state_bucket" must reach the tree:
+    "Open" and "Done" buckets instead of the ADO kind hierarchy."""
+    ctx, _ = tui_setup
+    pid = "gh-main"
+    ctx.provider_key = pid
+    # Swap the cached items so they're owned by the GitHub-typed provider key.
+    for item in list(ctx.provider.items):
+        item.provider_key = pid
+        item_repo.upsert_item(ctx.conn, item)
+    ctx.config = Config(
+        providers={
+            pid: ProviderEntry(type="github_stub", display_name="GH", config={}),
+        },
+        active_provider=pid,
+    )
+    app = DocketApp(ctx)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        labels = _tree_bucket_labels(app.query_one(ItemTree))
+        assert any(label.startswith("Open ") for label in labels)
+        assert any(label.startswith("Done ") for label in labels)
+        assert not any("Epics" in label for label in labels)
+
+
+async def test_azure_provider_keeps_kind_grouping(tui_setup) -> None:
+    """Azure DevOps is the default, and its hierarchy is what the existing
+    kind buckets encode. Re-check so the test doubles as a regression guard
+    when new providers are added to the registry."""
+    ctx, _ = tui_setup
+    pid = "ado-main"
+    ctx.provider_key = pid
+    for item in list(ctx.provider.items):
+        item.provider_key = pid
+        item_repo.upsert_item(ctx.conn, item)
+    ctx.config = Config(
+        providers={
+            pid: ProviderEntry(type="azure_devops", display_name="ADO", config={}),
+        },
+        active_provider=pid,
+    )
+    app = DocketApp(ctx)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        labels = _tree_bucket_labels(app.query_one(ItemTree))
+        assert any("Epics" in label for label in labels)
+        assert any("Bugs" in label for label in labels)
+        assert not any(label.startswith("Open ") for label in labels)
+
+
+async def test_closed_items_hidden_by_default_and_toggle_reveals_them(tui_setup) -> None:
+    """`hide_done` defaults to True so the backlog matches the frontend's
+    "open" bucket; `c` flips it and the tree repaints with the closed rows."""
+    ctx, _ = tui_setup
+    closed = _mk_item(
+        "C-1", kind=ItemKind.TASK, title="Old and done", state=ItemState.CLOSED
+    )
+    item_repo.upsert_item(ctx.conn, closed)
+    ctx.provider.items.append(closed)
+    app = DocketApp(ctx)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tree = app.query_one(ItemTree)
+        assert _find_node(tree.root, "C-1") is None
+
+        await app.run_action("toggle_done_visibility")
+        await pilot.pause()
+        tree = app.query_one(ItemTree)
+        assert _find_node(tree.root, "C-1") is not None
 
 
 async def test_refresh_action_invokes_sync(tui_setup) -> None:

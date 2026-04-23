@@ -86,6 +86,18 @@ class SetupField:
 ProviderFactory = Callable[[dict[str, Any], str], WorkItemProvider]
 
 
+GroupingStrategy = Literal["by_kind", "by_state_bucket"]
+"""How the TUI's backlog tree should group items for this provider.
+
+- `"by_kind"` — top-level buckets follow `ItemKind` (Epic/Feature/Story/Task/
+  Bug) with parent/child nesting inside. Matches Azure DevOps, which uses a
+  real hierarchy and labels all five kinds.
+- `"by_state_bucket"` — top-level buckets are Open vs Done. Matches GitHub
+  Issues, which only realistically emit TASK/STORY/BUG and have no
+  Epic/Feature hierarchy to group under.
+"""
+
+
 @dataclass(frozen=True)
 class ProviderSpec:
     """Static description of a provider type — what the registry knows about it.
@@ -93,10 +105,15 @@ class ProviderSpec:
     `factory` constructs a live provider from `(config, display_name)`.
     `setup_fields` and `requires_cli` are consumed by the setup surfaces
     (HTTP `/setup/providers/types`, CLI `docket setup provider add`) so each
-    provider owns the shape of its own onboarding."""
+    provider owns the shape of its own onboarding.
+
+    `grouping` tells the TUI how to arrange the backlog tree — see
+    `GroupingStrategy`. Defaulting to `"by_kind"` keeps the existing Azure
+    DevOps behavior for any spec that doesn't explicitly opt in."""
 
     type_id: str
     display_name: str
     factory: ProviderFactory
     setup_fields: tuple[SetupField, ...] = field(default_factory=tuple)
     requires_cli: tuple[str, ...] = field(default_factory=tuple)
+    grouping: GroupingStrategy = "by_kind"
