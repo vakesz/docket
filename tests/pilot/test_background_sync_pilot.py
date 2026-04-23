@@ -264,7 +264,7 @@ async def test_palette_exposes_switch_view_entries(tmp_path: Path) -> None:
         async with app.run_test() as pilot:
             await pilot.pause()
             provider = DocketCommands(app.screen, match_style=None)  # type: ignore[arg-type]
-            labels = [label for label, _help, _cb in provider._commands()]
+            labels = [c.label for c in provider._commands()]
             assert "Switch view → blocked" in labels
             assert "Switch view → my-team" in labels
             # Active view is filtered out.

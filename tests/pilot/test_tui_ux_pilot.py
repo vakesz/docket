@@ -168,7 +168,7 @@ async def test_docket_commands_expose_core_actions(ctx) -> None:
     app = DocketApp(ctx)
     async with app.run_test():
         provider = DocketCommands(screen=app.screen, match_style=None)
-        labels = [label for label, _help, _cb in provider._commands()]
+        labels = [c.label for c in provider._commands()]
         assert {"Sync now", "Pick theme", "Fullscreen pane", "Quick-open by id"} <= set(labels)
 
 
@@ -178,7 +178,7 @@ async def test_transition_commands_hidden_without_selection(ctx) -> None:
     app = DocketApp(ctx)
     async with app.run_test():
         provider = DocketCommands(screen=app.screen, match_style=None)
-        labels = [label for label, _h, _cb in provider._commands()]
+        labels = [c.label for c in provider._commands()]
         assert not any(label.startswith("Transition →") for label in labels)
 
 
@@ -193,10 +193,53 @@ async def test_transition_commands_appear_after_selection(ctx) -> None:
         await pilot.pause()
 
         provider = DocketCommands(screen=app.screen, match_style=None)
-        labels = [label for label, _h, _cb in provider._commands()]
+        labels = [c.label for c in provider._commands()]
         assert "Transition → Start work" in labels
         assert "Transition → Close (done)" in labels
         assert "Transition → Reopen" in labels
+
+
+async def test_palette_floats_recently_used_commands(ctx) -> None:
+    """`_order_with_recents` should surface commands in `command_usage` ahead
+    of the rest, newest first. Ids that no longer map to an available command
+    (e.g. a transition id when nothing is selected) are silently skipped."""
+    from docket.storage.repos import command_usage_repo
+
+    command_usage_repo.record(ctx.conn, "pick-theme")
+    command_usage_repo.record(ctx.conn, "sync-now")
+    command_usage_repo.record(ctx.conn, "transition-start_work")  # no selection → stale id
+
+    app = DocketApp(ctx)
+    async with app.run_test():
+        provider = DocketCommands(screen=app.screen, match_style=None)
+        ordered = provider._order_with_recents(provider._commands())
+        recent_labels = [c.label for c, is_recent in ordered if is_recent]
+        # Newest-first, stale ids skipped.
+        assert recent_labels == ["Sync now", "Pick theme"]
+        # Non-recent commands still appear after the recents.
+        assert any(not is_recent for _, is_recent in ordered)
+
+
+async def test_palette_records_usage_when_command_fires(ctx) -> None:
+    """Wrapping commands through `_wrap` must persist a usage row so the next
+    palette open can float the command to the top."""
+    from docket.cli.tui.commands import Command
+    from docket.storage.repos import command_usage_repo
+
+    calls: list[str] = []
+
+    app = DocketApp(ctx)
+    async with app.run_test():
+        provider = DocketCommands(screen=app.screen, match_style=None)
+        probe = Command(
+            id="test-probe",
+            label="Probe",
+            description="",
+            callback=lambda: calls.append("fired"),
+        )
+        provider._wrap(probe)()
+        assert calls == ["fired"]
+        assert command_usage_repo.recent_ids(ctx.conn) == ["test-probe"]
 
 
 async def test_new_item_form_surfaces_duplicates_and_stages_proposal(ctx) -> None:

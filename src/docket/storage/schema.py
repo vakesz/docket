@@ -316,4 +316,19 @@ STATEMENTS: tuple[str, ...] = (
         DELETE FROM sources_fts WHERE source_id = old.id;
     END
     """,
+    # ---------------------------------------------------------------------
+    # Command palette usage counter. Used by the TUI (and eventually the
+    # frontend) to float recently-used commands to the top of the list so
+    # the user doesn't have to re-discover the same action every session.
+    # Rows are keyed by a stable command id (not the display label, which
+    # may change) and carry a usage count for future tie-breakers.
+    # ---------------------------------------------------------------------
+    """
+    CREATE TABLE IF NOT EXISTS command_usage (
+        id            TEXT PRIMARY KEY,
+        last_used_at  TEXT NOT NULL,
+        usage_count   INTEGER NOT NULL DEFAULT 1
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_command_usage_last_used ON command_usage(last_used_at DESC)",
 )

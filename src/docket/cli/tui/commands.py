@@ -5,17 +5,24 @@ user can discover and trigger them by name (with fuzzy search) without
 memorizing keybinds. Each command delegates to an existing `action_*`
 method on `DocketApp` — the palette is a discoverability layer, not a second
 home for behavior.
+
+Every palette entry carries a stable `id` so we can track usage in SQLite
+(`command_usage_repo`) and float recently-run commands to the top of the
+discovery list. Labels are allowed to change; ids aren't.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextlib import suppress
+from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING
 
 from textual.command import DiscoveryHit, Hit, Hits, Provider
 
 from docket.core.model import TransitionIntent
+from docket.storage.repos import command_usage_repo
 
 if TYPE_CHECKING:
     from docket.cli.tui.app import DocketApp
@@ -30,77 +37,198 @@ _INTENT_LABELS: dict[TransitionIntent, str] = {
     TransitionIntent.REOPEN: "Reopen",
 }
 
+#: How many recently-run commands to float to the top of the discover() list.
+#: Small on purpose — the point is muscle-memory acceleration, not dominating
+#: the palette with history.
+_RECENT_LIMIT = 5
+
+
+@dataclass(frozen=True)
+class Command:
+    """One palette entry.
+
+    `id` is the stable usage-tracking key — never changes, never shown.
+    `label` is what the user sees and searches against.
+    `description` is the one-line help rendered next to the label.
+    `example` is an optional tiny hint — typically a keybind or canonical
+    argument — appended to `description` for extra context.
+    """
+
+    id: str
+    label: str
+    description: str
+    callback: Callable[[], None]
+    example: str = ""
+
+    @property
+    def help_text(self) -> str:
+        if not self.example:
+            return self.description
+        return f"{self.description}  ·  {self.example}"
+
 
 class DocketCommands(Provider):
     """Exposes Docket's main actions in the command palette."""
 
     async def search(self, query: str) -> Hits:
         matcher = self.matcher(query)
-        for label, help_text, callback in self._commands():
-            score = matcher.match(label)
+        for command in self._commands():
+            score = matcher.match(command.label)
             if score > 0:
                 yield Hit(
                     score=score,
-                    match_display=matcher.highlight(label),
-                    command=callback,
-                    help=help_text,
+                    match_display=matcher.highlight(command.label),
+                    command=self._wrap(command),
+                    help=command.help_text,
                 )
 
     async def discover(self) -> Hits:
-        for label, help_text, callback in self._commands():
-            yield DiscoveryHit(display=label, command=callback, help=help_text)
+        """Pre-search palette order: recents first, then the rest.
 
-    def _commands(self) -> list[tuple[str, str, Callable[[], None]]]:
+        `discover()` is what Textual shows when the palette opens with no
+        query typed. Surfacing the last-used commands here is the whole
+        point of recency tracking — a user who just pinned an item and
+        wants to do it again sees "Pin current item" at the top."""
+        commands = self._commands()
+        ordered = self._order_with_recents(commands)
+        for command, is_recent in ordered:
+            prefix = "★ " if is_recent else ""
+            yield DiscoveryHit(
+                display=f"{prefix}{command.label}",
+                command=self._wrap(command),
+                help=command.help_text,
+            )
+
+    def _order_with_recents(self, commands: list[Command]) -> list[tuple[Command, bool]]:
+        recents = self._recent_ids()
+        if not recents:
+            return [(c, False) for c in commands]
+        by_id = {c.id: c for c in commands}
+        # Recents preserve last-used order (newest first), skipping any id that
+        # isn't currently available (e.g. a transition whose item isn't selected).
+        recent_cmds: list[Command] = []
+        seen: set[str] = set()
+        for cid in recents:
+            cmd = by_id.get(cid)
+            if cmd is not None and cid not in seen:
+                recent_cmds.append(cmd)
+                seen.add(cid)
+        rest = [c for c in commands if c.id not in seen]
+        return [(c, True) for c in recent_cmds] + [(c, False) for c in rest]
+
+    def _recent_ids(self) -> list[str]:
         app: DocketApp = self.app  # type: ignore[assignment]
-        commands: list[tuple[str, str, Callable[[], None]]] = [
-            ("Show help", "Open the shortcut and workflow guide.", app.action_show_help),
-            ("Open settings", "Edit config.toml from inside the app.", app.action_open_settings),
-            (
-                "Edit prompt library",
-                "Update the assistant's prompt templates without editing files manually.",
-                app.action_edit_prompts,
+        conn = getattr(app.tui_ctx, "conn", None)
+        if conn is None:
+            return []
+        try:
+            return command_usage_repo.recent_ids(conn, limit=_RECENT_LIMIT)
+        except Exception:
+            # Palette must stay usable even if the DB misbehaves — swallow
+            # errors and fall back to alphabetical order.
+            return []
+
+    def _wrap(self, command: Command) -> Callable[[], None]:
+        """Return a callback that records usage, then fires the real action."""
+        app: DocketApp = self.app  # type: ignore[assignment]
+
+        def _fire() -> None:
+            conn = getattr(app.tui_ctx, "conn", None)
+            if conn is not None:
+                # Recording is best-effort; never block the action.
+                with suppress(Exception):
+                    command_usage_repo.record(conn, command.id)
+            command.callback()
+
+        return _fire
+
+    def _commands(self) -> list[Command]:
+        app: DocketApp = self.app  # type: ignore[assignment]
+        commands: list[Command] = [
+            Command(
+                id="show-help",
+                label="Show help",
+                description="Open the shortcut and workflow guide.",
+                example="F1",
+                callback=app.action_show_help,
             ),
-            ("Sync now", "Pull the latest items from the active provider.", app.action_refresh),
-            (
-                "Full sync",
-                "Reset the watermark and re-pull everything the active provider exposes.",
-                app.action_full_refresh,
+            Command(
+                id="open-settings",
+                label="Open settings",
+                description="Edit config.toml from inside the app.",
+                callback=app.action_open_settings,
             ),
-            ("Pick theme", "Switch the TUI theme with live preview.", app.action_pick_theme),
-            (
-                "Fullscreen pane",
-                "Toggle maximize on the focused pane.",
-                app.action_toggle_fullscreen,
+            Command(
+                id="edit-prompts",
+                label="Edit prompt library",
+                description="Update the assistant's prompt templates without editing files manually.",
+                callback=app.action_edit_prompts,
             ),
-            (
-                "Quick-open by id",
-                "Jump to a specific ticket by id.",
-                app.action_quick_open,
+            Command(
+                id="sync-now",
+                label="Sync now",
+                description="Pull the latest items from the active provider.",
+                example="r",
+                callback=app.action_refresh,
             ),
-            (
-                "New thread",
-                "Archive the current chat thread and start fresh.",
-                app.action_new_thread,
+            Command(
+                id="full-sync",
+                label="Full sync",
+                description="Reset the watermark and re-pull everything the active provider exposes.",
+                example="R",
+                callback=app.action_full_refresh,
             ),
-            (
-                "New work item",
-                "Open the create-ticket form with duplicate check.",
-                app.action_new_item,
+            Command(
+                id="pick-theme",
+                label="Pick theme",
+                description="Switch the TUI theme with live preview.",
+                callback=app.action_pick_theme,
             ),
-            (
-                "Review pending proposals",
-                "Show the next pending mutation diff.",
-                app.action_review_pending,
+            Command(
+                id="toggle-fullscreen",
+                label="Fullscreen pane",
+                description="Toggle maximize on the focused pane.",
+                example="Ctrl+Shift+F",
+                callback=app.action_toggle_fullscreen,
             ),
-            (
-                "Suggest next action",
-                "Ask the agent for a structured next step.",
-                app.action_suggest_next,
+            Command(
+                id="quick-open",
+                label="Quick-open by id",
+                description="Jump to a specific ticket by id.",
+                example="g",
+                callback=app.action_quick_open,
             ),
-            (
-                "Open in browser",
-                "Open the selected ticket in your browser.",
-                app.action_open_in_browser,
+            Command(
+                id="new-thread",
+                label="New thread",
+                description="Archive the current chat thread and start fresh.",
+                callback=app.action_new_thread,
+            ),
+            Command(
+                id="new-item",
+                label="New work item",
+                description="Open the create-ticket form with duplicate check.",
+                example="n",
+                callback=app.action_new_item,
+            ),
+            Command(
+                id="review-pending",
+                label="Review pending proposals",
+                description="Show the next pending mutation diff.",
+                callback=app.action_review_pending,
+            ),
+            Command(
+                id="suggest-next",
+                label="Suggest next action",
+                description="Ask the agent for a structured next step.",
+                callback=app.action_suggest_next,
+            ),
+            Command(
+                id="open-in-browser",
+                label="Open in browser",
+                description="Open the selected ticket in your browser.",
+                example="o",
+                callback=app.action_open_in_browser,
             ),
         ]
         # One palette entry per TransitionIntent, scoped to the current item.
@@ -109,10 +237,11 @@ class DocketCommands(Provider):
         if getattr(app, "_selected_item_id", None) is not None:
             for intent, label in _INTENT_LABELS.items():
                 commands.append(
-                    (
-                        f"Transition → {label}",
-                        f"Stage a '{intent.value}' transition for the selected item.",
-                        partial(app.action_transition, intent.value),
+                    Command(
+                        id=f"transition-{intent.value}",
+                        label=f"Transition → {label}",
+                        description=f"Stage a '{intent.value}' transition for the selected item.",
+                        callback=partial(app.action_transition, intent.value),
                     )
                 )
 
@@ -129,10 +258,11 @@ class DocketCommands(Provider):
                     if name == active_scope:
                         continue
                     commands.append(
-                        (
-                            f"Switch view → {name}",
-                            f"Load the '{name}' saved view.",
-                            partial(app.action_switch_view, name),
+                        Command(
+                            id=f"switch-view-{active_key}-{name}",
+                            label=f"Switch view → {name}",
+                            description=f"Load the '{name}' saved view.",
+                            callback=partial(app.action_switch_view, name),
                         )
                     )
             # Providers: one "Switch provider → <display>" per configured
@@ -145,10 +275,11 @@ class DocketCommands(Provider):
                     continue  # plugin failed to load; skip it
                 display = config.providers[key].display_name
                 commands.append(
-                    (
-                        f"Switch provider → {display}",
-                        f"Activate the '{key}' provider for this session.",
-                        partial(app.action_switch_provider, key),
+                    Command(
+                        id=f"switch-provider-{key}",
+                        label=f"Switch provider → {display}",
+                        description=f"Activate the '{key}' provider for this session.",
+                        callback=partial(app.action_switch_provider, key),
                     )
                 )
             # Pin current provider as default — writes `active_provider` to
@@ -163,10 +294,11 @@ class DocketCommands(Provider):
                 and app.tui_ctx.paths is not None
             ):
                 commands.append(
-                    (
-                        f"Set default provider → {active_entry.display_name}",
-                        "Persist this provider as the default in config.toml.",
-                        app.action_set_default_provider,
+                    Command(
+                        id="set-default-provider",
+                        label=f"Set default provider → {active_entry.display_name}",
+                        description="Persist this provider as the default in config.toml.",
+                        callback=app.action_set_default_provider,
                     )
                 )
         return commands
