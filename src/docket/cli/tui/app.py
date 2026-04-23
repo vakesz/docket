@@ -506,9 +506,9 @@ class DocketApp(App[None]):
     def _init_status_bar(self) -> None:
         """Populate the static status-bar segments (provider name, scope key).
 
-        Dynamic segments (last-sync, offline, streaming, cost, read-only) are
-        updated elsewhere — here we just put the right initial values up so
-        the bar doesn't render with em-dashes on first paint."""
+        Dynamic segments (last sync, offline, thinking, pending, cost,
+        read-only) are updated elsewhere — here we just put the right initial
+        values up so the bar doesn't render with em-dashes on first paint."""
         try:
             bar = self.query_one(StatusBar)
         except Exception:
@@ -520,7 +520,25 @@ class DocketApp(App[None]):
         bar.active_view = self.tui_ctx.scope_key
         bar.project_name = self._resolve_project_name()
         bar.read_only = self.tui_ctx.read_only
-        bar.tooltip = "Session status: project, provider, active view, sync health, streaming, cost, and read-only mode."
+        bar.pending_count = len(self._proposals)
+        bar.tooltip = (
+            "Session status: project, provider, active view, sync health, "
+            "chat activity, pending proposals, cost, and read-only mode."
+        )
+
+    def _refresh_pending_count(self) -> None:
+        """Push the current pending-proposal count into the status bar.
+
+        Called after every mutation of `self._proposals` so the visible count
+        matches reality without polling."""
+        with contextlib.suppress(Exception):
+            self.query_one(StatusBar).pending_count = len(self._proposals)
+
+    def _set_thinking(self, value: bool) -> None:
+        """Toggle the status-bar 'thinking…' segment. Safe from worker threads
+        because reactive assignments are atomic."""
+        with contextlib.suppress(Exception):
+            self.query_one(StatusBar).thinking = value
 
     def _resolve_project_name(self) -> str:
         """Display name for the active (provider, scope) project, or empty
@@ -745,6 +763,7 @@ class DocketApp(App[None]):
 
         # Begin the assistant bubble before deltas arrive.
         self.call_from_thread(chat.begin_assistant)
+        self.call_from_thread(self._set_thinking, True)
         try:
             result = conversation_service.send_user_message(
                 self.tui_ctx.conn,
@@ -767,10 +786,13 @@ class DocketApp(App[None]):
             self.call_from_thread(
                 chat.note, traceback.format_exc().splitlines()[-1], cls="msg-system"
             )
+            self.call_from_thread(self._set_thinking, False)
             return
         self.call_from_thread(chat.finish_turn, result.usage)
+        self.call_from_thread(self._set_thinking, False)
         # If the turn produced pending proposals, surface the first one.
         if len(self._proposals) > 0:
+            self.call_from_thread(self._refresh_pending_count)
             self.call_from_thread(self._open_next_pending)
 
     def action_refresh(self) -> None:
@@ -1108,6 +1130,7 @@ class DocketApp(App[None]):
             self._proposals.add(staged.state_change, source="suggestion")
             if staged.description_patch is not None:
                 self._proposals.add(staged.description_patch, source="suggestion")
+            self._refresh_pending_count()
             self.notify(
                 f"Staged {1 if staged.description_patch is None else 2} proposal(s); "
                 "press 'd' to review.",
@@ -1136,6 +1159,7 @@ class DocketApp(App[None]):
                 return
             proposal = mutation_service.propose_create(result.kind, result.fields)
             self._proposals.add(proposal, source="form")
+            self._refresh_pending_count()
             self._open_next_pending()
 
         self.push_screen(
@@ -1267,6 +1291,7 @@ class DocketApp(App[None]):
             self.notify(f"Cannot stage: {e}", severity="error")
             return
         self._proposals.add(proposal, source="palette")
+        self._refresh_pending_count()
         self._open_next_pending()
 
     def action_switch_view(self, name: str) -> None:
@@ -1455,6 +1480,7 @@ class DocketApp(App[None]):
         def on_decision(edited: Proposal | None) -> None:
             # peek_next did not remove; we drain here.
             popped = self._proposals.pop(pending.proposal.id)
+            self._refresh_pending_count()
             if popped is None:
                 return
             if edited is None:
@@ -1551,6 +1577,7 @@ class DocketApp(App[None]):
                     log.exception("batch apply failed for %s", pid)
                     self.notify(f"Apply failed for {pid}: {e}", severity="error")
                     failed += 1
+            self._refresh_pending_count()
             if applied or rejected or failed:
                 self._reload_tree()
                 parts = [f"applied {applied}", f"rejected {rejected}"]

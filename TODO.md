@@ -10,7 +10,5 @@
 - add support for multiple projects in the same instance of the mcp, and make sure that the memory and sub agents are properly separated and organized for each project.
 - Command palette discoverability improvements
   - Better command descriptions, examples, and “recently used” commands to reduce memorization.
-- Human-friendly status bar
-  - Show sync health, provider status, and pending proposals in plain language, not internal terms.
 - Plain-language error messages
   - Replace technical failures with clear “what happened / what to do next” guidance, plus one-click retry.

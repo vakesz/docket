@@ -2,7 +2,7 @@
 
 Verifies that `TuiContext(read_only=True)`:
   - skips `register_mutating_tools` so the agent can't propose writes
-  - surfaces a `READ-ONLY` badge via StatusBar
+  - surfaces a `read-only` badge via StatusBar
   - blocks `action_new_item` / `action_transition` with a toast
   - blocks the suggestion-accept path (read tools still work)
 
@@ -78,7 +78,7 @@ async def test_read_only_status_bar_shows_indicator(ro_ctx) -> None:
         await pilot.pause()
         bar = app.query_one(StatusBar)
         assert bar.read_only is True
-        assert "READ-ONLY" in str(bar.render())
+        assert "read-only" in str(bar.render())
 
 
 async def test_read_only_blocks_new_item_action(ro_ctx) -> None:

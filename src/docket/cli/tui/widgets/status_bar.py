@@ -1,8 +1,11 @@
 """Bottom-docked status bar for the main TUI.
 
-Renders a single line with dot-separated segments: provider · scope ·
-last-sync · offline · streaming · cost · read-only. The app wires each
-segment by assigning to the reactive attributes on this widget.
+Renders a single line with dot-separated segments: project · provider ·
+scope · last sync · next sync · offline · thinking · N pending · cost ·
+read-only. Labels are intentionally plain English (no "streaming", no
+"READ-ONLY" caps) so a new user can parse the bar without a glossary.
+The app wires each segment by assigning to the reactive attributes on
+this widget.
 """
 
 from __future__ import annotations
@@ -92,7 +95,8 @@ class StatusBar(Static):
     next_sync_at: reactive[datetime | None] = reactive(None)
     active_view: reactive[str | None] = reactive(None)
     offline: reactive[bool] = reactive(False)
-    streaming: reactive[bool] = reactive(False)
+    thinking: reactive[bool] = reactive(False)
+    pending_count: reactive[int] = reactive(0)
     cost_cents: reactive[int] = reactive(0)
     read_only: reactive[bool] = reactive(False)
 
@@ -102,7 +106,15 @@ class StatusBar(Static):
         def append_part(text: str, component: str | None = None) -> None:
             if out:
                 out.append(" · ")
-            style = self.get_component_rich_style(component, partial=True) if component else None
+            # Component styles are only populated after the widget mounts
+            # inside an App. Fall back to an unstyled segment in unit tests
+            # where the bar is constructed standalone.
+            style = None
+            if component:
+                try:
+                    style = self.get_component_rich_style(component, partial=True)
+                except KeyError:
+                    style = None
             out.append(text, style=style)
 
         if self.project_name:
@@ -111,17 +123,20 @@ class StatusBar(Static):
         append_part(self.scope_label)
         if self.active_view and self.active_view != self.scope_label:
             append_part(self.active_view)
-        append_part(f"synced {_format_relative(self.last_sync)}")
+        append_part(f"last sync {_format_relative(self.last_sync)}")
         if self.next_sync_at is not None:
-            append_part(f"next {_format_countdown(self.next_sync_at)}")
+            append_part(f"next sync in {_format_countdown(self.next_sync_at)}")
         if self.offline:
             append_part("offline", "status-bar--error")
-        if self.streaming:
-            append_part("streaming", "status-bar--warning")
+        if self.thinking:
+            append_part("thinking…", "status-bar--warning")
+        if self.pending_count > 0:
+            noun = "proposal" if self.pending_count == 1 else "proposals"
+            append_part(f"{self.pending_count} pending {noun}", "status-bar--accent")
         if self.cost_cents > 0:
             append_part(f"${self.cost_cents / 100:.2f}")
         if self.read_only:
-            append_part("READ-ONLY", "status-bar--accent")
+            append_part("read-only", "status-bar--accent")
         return out
 
     def set_last_sync_now(self) -> None:
