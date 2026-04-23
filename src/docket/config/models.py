@@ -87,6 +87,10 @@ class UiConfig(BaseModel):
         pattern="^(epic|feature|story|task|bug)$",
     )
     show_acceptance_criteria: bool = True
+    # Whether to hide resolved/closed items from the backlog on startup.
+    # The `c` key toggles it at runtime and writes back here so the choice
+    # survives relaunches.
+    hide_done: bool = True
     # Web UI only: number of tag-filter chips to show before the "+N more"
     # toggle. 0 disables collapsing (show every tag).
     tag_filter_collapse_limit: int = Field(default=4, ge=0, le=100)

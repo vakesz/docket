@@ -38,9 +38,12 @@ def _format_relative(ts: datetime | None) -> str:
 
 
 def _format_countdown(target: datetime | None) -> str:
-    """Round-up countdown to a future timestamp. Mirrors `_format_relative`
-    style (`45s`, `3m`, `2h`) so the status bar reads the same whether a
-    segment is looking backward or forward."""
+    """Minute-precision countdown to a future timestamp.
+
+    Sub-minute resolution is omitted intentionally: showing seconds causes the
+    status bar to visually update on every repaint triggered by other reactive
+    changes (thinking toggle, cost updates). Minute granularity is accurate
+    enough and keeps the bar visually stable."""
     if target is None:
         return "—"
     now = datetime.now(UTC)
@@ -49,7 +52,7 @@ def _format_countdown(target: datetime | None) -> str:
     if seconds <= 0:
         return "now"
     if seconds < 60:
-        return f"{seconds}s"
+        return "< 1m"
     if seconds < 3600:
         return f"{seconds // 60}m"
     if seconds < 86400:
@@ -152,6 +155,9 @@ class StatusBar(Static):
         out.append(" " * gap)
         out.append_text(right)
         return out
+
+    def on_mount(self) -> None:
+        self.set_interval(60, self.refresh)
 
     def set_last_sync_now(self) -> None:
         self.last_sync = datetime.now(UTC)

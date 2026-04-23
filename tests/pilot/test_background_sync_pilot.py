@@ -313,6 +313,6 @@ def test_countdown_formatter_handles_ranges() -> None:
     now = datetime.now(UTC)
     assert _format_countdown(None) == "—"
     assert _format_countdown(now - timedelta(seconds=5)) == "now"
-    assert _format_countdown(now + timedelta(seconds=30)).endswith("s")
+    assert _format_countdown(now + timedelta(seconds=30)) == "< 1m"
     assert _format_countdown(now + timedelta(minutes=5)).endswith("m")
     assert _format_countdown(now + timedelta(hours=3)).endswith("h")

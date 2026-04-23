@@ -83,6 +83,14 @@ class ChatPane(Vertical):
         border: none;
         background: transparent;
     }
+    ChatPane #empty-hint {
+        height: 1fr;
+        content-align: center middle;
+        color: $text-disabled;
+        padding: 2 4;
+        display: none;
+    }
+    ChatPane #empty-hint.visible { display: block; }
     ChatPane #prompt {
         dock: bottom;
         height: 3;
@@ -128,6 +136,12 @@ class ChatPane(Vertical):
         yield Static("Select a ticket", id="chat-title")
         with VerticalScroll(id="criteria"):
             yield Static("[b]acceptance criteria[/b]", id="criteria-title")
+        yield Static(
+            "Select an item from the backlog to start chatting.\n\n"
+            "Use [b]/[/b] to filter  ·  [b]:[/b] to open by id  ·  [b]?[/b] for all shortcuts",
+            id="empty-hint",
+            classes="visible",
+        )
         yield VerticalScroll(id="transcript")
         yield Static("", id="ledger")
         yield Input(placeholder="Ask about this ticket… (enter to send)", id="prompt")
@@ -142,13 +156,16 @@ class ChatPane(Vertical):
         transcript.remove_children()
         title = self.query_one("#chat-title", Static)
         prompt = self.query_one("#prompt", Input)
+        hint = self.query_one("#empty-hint", Static)
         prompt.tooltip = "Press Enter to send the current message."
         if item is None:
             title.update("Select a ticket")
             prompt.disabled = True
+            hint.add_class("visible")
             self.set_status("")
             self._render_criteria([])
             return
+        hint.remove_class("visible")
         title.update(f"{item.id} · {item.kind.value} · {item.state.value}")
         prompt.disabled = False
         self.set_status("")

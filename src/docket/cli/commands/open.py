@@ -114,6 +114,7 @@ def run_open_tui(
             stale_threshold_by_provider=dict(ctx.config.stale.threshold_days_by_provider),
             default_new_item_kind=ItemKind(ctx.config.ui.default_new_item_kind),
             show_acceptance_criteria=ctx.config.ui.show_acceptance_criteria,
+            hide_done=ctx.config.ui.hide_done,
             paths=ctx.paths,
             config=ctx.config,
         )

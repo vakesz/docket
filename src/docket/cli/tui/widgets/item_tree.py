@@ -274,7 +274,18 @@ class ItemTree(Tree[str]):
             )
 
         age_days = _age_days(row.updated_at)
-        age_label = f"{age_days}d" if age_days is not None else ""
+        threshold = self.stale_threshold_days
+        if (
+            age_days is not None
+            and threshold is not None
+            and threshold > 0
+            and age_days >= threshold
+        ):
+            age_label = f"stale {age_days}d"
+        elif age_days is not None:
+            age_label = f"{age_days}d"
+        else:
+            age_label = ""
         age_width = len(age_label)
         gap_width = 1 if age_label else 0
         main_width = max(1, available_width - prefix.cell_len - age_width - gap_width)

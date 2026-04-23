@@ -188,7 +188,7 @@ class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
             with Pane(id="left"):
                 yield FullscreenToggle()
                 yield Static("Backlog", classes="pane-heading")
-                yield Input(placeholder="Search backlog…", id="filter")
+                yield Input(placeholder="Search backlog…  (: to open by id)", id="filter")
                 yield ItemTree(
                     id="tree",
                     stale_threshold_days=self._resolved_stale_threshold(),
@@ -378,7 +378,7 @@ class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
         with contextlib.suppress(Exception):
             self.query_one(
                 "#filter", Input
-            ).tooltip = "Filter by title, description, or comments. Press Enter to keep the current results."
+            ).tooltip = "Filter by title, description, or comments. Press Enter to keep current results. Press : to jump directly to a ticket by id."
         for toggle in self.query(FullscreenToggle):
             toggle.tooltip = "Maximize or restore this pane."
 
@@ -763,10 +763,17 @@ class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
     def action_toggle_done_visibility(self) -> None:
         """Flip the backlog's show/hide for resolved + closed items.
 
-        Mirrors the frontend's "Open / Done / All states" control. In-memory
-        only — the preference does not persist, so every session starts back
-        at "hide done" to match the default triage experience."""
+        Persists the new value to config.toml so the choice survives
+        relaunches. Falls back gracefully if paths/config aren't wired
+        (pilot tests, read-only sessions)."""
         self.tui_ctx.hide_done = not self.tui_ctx.hide_done
+        # Persist to config so the next launch opens with the same setting.
+        cfg = self.tui_ctx.config
+        paths = self.tui_ctx.paths
+        if cfg is not None and paths is not None:
+            cfg.ui.hide_done = self.tui_ctx.hide_done
+            with contextlib.suppress(Exception):
+                save_config(paths, cfg)
         # Re-run the active search (if any) so the toggle respects the current
         # filter input rather than silently dropping it.
         try:
@@ -1223,6 +1230,7 @@ class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
         self.tui_ctx.stale_threshold_by_provider = dict(config.stale.threshold_days_by_provider)
         self.tui_ctx.default_new_item_kind = ItemKind(config.ui.default_new_item_kind)
         self.tui_ctx.show_acceptance_criteria = config.ui.show_acceptance_criteria
+        self.tui_ctx.hide_done = config.ui.hide_done
         self.query_one(ItemTree).stale_threshold_days = self._resolved_stale_threshold()
         self.query_one(ChatPane).set_show_acceptance_criteria(config.ui.show_acceptance_criteria)
         entry = (
