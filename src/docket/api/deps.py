@@ -101,6 +101,10 @@ def get_runtime(request: Request) -> RuntimeState:
     return runtime
 
 
+def get_runtime_optional(request: Request) -> RuntimeState | None:
+    return getattr(request.app.state, "runtime", None)
+
+
 def get_active_provider_key(request: Request) -> str:
     """Active provider key from the runtime, or `""` when no runtime is wired
     (e.g., bootstrap mode or tests). Repos truth-test this value, so `""` and
@@ -131,6 +135,7 @@ __all__ = [
     "get_proposals",
     "get_provider",
     "get_runtime",
+    "get_runtime_optional",
     "require_agent",
     "require_llm",
     "require_not_read_only",

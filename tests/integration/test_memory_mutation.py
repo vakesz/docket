@@ -12,14 +12,11 @@ from docket.storage import init_db
 from tests.fakes.provider import FakeProvider
 
 
-def _seed_project(conn, project_id: str = "main::default") -> str:
+def _seed_project(conn, project_id: str = "main") -> str:
     from docket.config import Config, ProjectEntry
 
-    provider, scope = project_id.split("::", 1)
     cfg = Config(
-        projects={
-            project_id: ProjectEntry(provider_key=provider, scope_key=scope, name="Main")
-        }
+        projects={project_id: ProjectEntry(provider_key=project_id, name="Main")}
     )
     project_service.mirror_into_db(cfg, conn)
     return project_id
@@ -76,8 +73,8 @@ def test_propose_memory_write_edit_carries_previous(tmp_path: Path) -> None:
 
 def test_propose_memory_write_rejects_cross_project(tmp_path: Path) -> None:
     conn = init_db(tmp_path / "docket.db")
-    pid_a = _seed_project(conn, "a::default")
-    pid_b = _seed_project(conn, "b::default")
+    pid_a = _seed_project(conn, "a")
+    pid_b = _seed_project(conn, "b")
     entry_b = memory_service.add_entry(conn, project_id=pid_b, title="B", body_md="")
     with pytest.raises(ValueError, match="belongs to project"):
         mutation_service.propose_memory_write(

@@ -50,6 +50,7 @@ from docket.core.services import (
     mutation_service,
     suggestion_service,
     sync_service,
+    visual_filter,
 )
 from docket.core.services.proposal_store import ProposalStore
 from docket.core.services.suggestion_service import Suggestion, SuggestionError
@@ -294,7 +295,7 @@ class DocketApp(App[None]):
                 active_item=lambda: self._selected_item_id,
                 read_only=tui_ctx.read_only,
                 provider_key=tui_ctx.provider_key,
-                project_id=project_id_for(tui_ctx.provider_key, tui_ctx.scope_key),
+                project_id=project_id_for(tui_ctx.provider_key),
                 mcp_manager=tui_ctx.mcp_manager,
             )
 
@@ -356,9 +357,10 @@ class DocketApp(App[None]):
         the UI stays responsive while the sync runs. `exclusive=True` means
         a slow sync never stacks up behind itself.
 
-        We snapshot the provider/scope on the event-loop thread and close
-        the worker over them; a mid-sync provider switch must not swap the
-        target out from under an in-flight refresh."""
+        We snapshot the provider on the event-loop thread and close the
+        worker over it; a mid-sync provider switch must not swap the target
+        out from under an in-flight refresh. Sync pulls every item for the
+        provider — views are applied at render time, not sync time."""
         interval = self._resolved_sync_interval()
         if interval <= 0:
             return  # Disabled mid-session — nothing to do.
@@ -367,10 +369,8 @@ class DocketApp(App[None]):
         self._schedule_next_sync(interval)
         provider = self.tui_ctx.provider
         provider_key = self.tui_ctx.provider_key
-        scope_key = self.tui_ctx.scope_key
-        scope = self.tui_ctx.scope
         self.run_worker(
-            lambda: self._background_sync_once(provider, provider_key, scope_key, scope),
+            lambda: self._background_sync_once(provider, provider_key),
             group="background-sync",
             exclusive=True,
             thread=True,
@@ -380,22 +380,18 @@ class DocketApp(App[None]):
         self,
         provider: WorkItemProvider,
         provider_key: str,
-        scope_key: str,
-        scope: ScopeFilters,
     ) -> None:
         try:
             summary = sync_service.refresh(
                 self.tui_ctx.conn,
                 provider,
-                scope_key,
-                scope,
                 provider_key=provider_key,
             )
         except Exception:
             # Background sync is best-effort; a provider hiccup shouldn't
             # interrupt the session. Flip the offline flag so the user has
             # some signal that their list may be stale.
-            log.exception("background sync failed for scope %s", scope_key)
+            log.exception("background sync failed for provider %s", provider_key)
             self.call_from_thread(self._set_offline, True)
             return
 
@@ -469,8 +465,22 @@ class DocketApp(App[None]):
 
         self.call_from_thread(apply)
 
+    def _active_view_filter(self) -> visual_filter.ResolvedFilter:
+        """Resolve the active saved view into a post-cache filter.
+
+        `@me` is asked of the active provider; scopes without a first-class
+        SQL column (area/iteration/team) are applied in Python by
+        `visual_filter.apply_to_items`."""
+        return visual_filter.resolve(self.tui_ctx.scope, self.tui_ctx.provider)
+
     def _reload_tree(self) -> None:
-        items = item_repo.list_items(self.tui_ctx.conn, provider_key=self.tui_ctx.provider_key)
+        resolved = self._active_view_filter()
+        items = item_repo.list_items(
+            self.tui_ctx.conn,
+            provider_key=self.tui_ctx.provider_key,
+            assignee=resolved.assignee,
+        )
+        items = visual_filter.apply_to_items(items, resolved)
         pinned = watchlist_repo.list_pinned_items(
             self.tui_ctx.conn, provider_key=self.tui_ctx.provider_key
         )
@@ -542,28 +552,29 @@ class DocketApp(App[None]):
             self.query_one(StatusBar).thinking = value
 
     def _resolve_project_name(self) -> str:
-        """Display name for the active (provider, scope) project, or empty
+        """Display name for the active project (= active provider), or empty
         string if no name has been configured yet (status bar will skip)."""
         cfg = self.tui_ctx.config
         if cfg is None:
             return ""
-        pid = project_id_for(self.tui_ctx.provider_key, self.tui_ctx.scope_key)
+        pid = project_id_for(self.tui_ctx.provider_key)
         entry = cfg.projects.get(pid)
         return entry.name if entry else ""
 
     def _rebind_mcp_for_active_project(self) -> None:
-        """Switch the MCP fleet to match the current (provider, scope).
+        """Switch the MCP fleet to match the current project (= provider).
 
-        Called from the scope/provider switch handlers before rebuilding
-        the agent so the fresh `ToolRegistry` sees the new project's
-        MCP tools. No-op when MCP isn't wired (pilot tests, read-only
+        Called from the provider switch handler before rebuilding the agent
+        so the fresh `ToolRegistry` sees the new project's MCP tools. View
+        switches are render-only and do not change the project, so they do
+        not trigger this. No-op when MCP isn't wired (pilot tests, read-only
         sessions). MCP startup can be slow; failures are logged inside
         the manager and don't block the UI."""
         mgr = self.tui_ctx.mcp_manager
         cfg = self.tui_ctx.config
         if mgr is None or cfg is None:
             return
-        pid = project_id_for(self.tui_ctx.provider_key, self.tui_ctx.scope_key)
+        pid = project_id_for(self.tui_ctx.provider_key)
         project = cfg.projects.get(pid)
         servers = dict(project.mcp) if project is not None else {}
         mgr.bind_project(pid, servers)
@@ -688,27 +699,42 @@ class DocketApp(App[None]):
 
         Empty query = full list (same as _reload_tree). Non-empty delegates
         to the FTS5-backed search_repo so title + description + comments all
-        match, returning items in bm25 rank order."""
+        match, returning items in bm25 rank order. The active view filter
+        (assignee, area, iteration, team) is layered on top of the search
+        hits so scope and free-text narrow together."""
         query = raw.strip()
         tree = self.query_one(ItemTree)
         pinned = watchlist_repo.list_pinned_items(
             self.tui_ctx.conn, provider_key=self.tui_ctx.provider_key
         )
+        resolved = self._active_view_filter()
         if not query:
-            tree.load_items(
-                item_repo.list_items(self.tui_ctx.conn, provider_key=self.tui_ctx.provider_key),
-                pinned=pinned,
+            items = item_repo.list_items(
+                self.tui_ctx.conn,
+                provider_key=self.tui_ctx.provider_key,
+                assignee=resolved.assignee,
             )
+            tree.load_items(visual_filter.apply_to_items(items, resolved), pinned=pinned)
             return
-        ids = search_repo.search(self.tui_ctx.conn, query, provider_key=self.tui_ctx.provider_key)
+        ids = search_repo.search(
+            self.tui_ctx.conn,
+            query,
+            provider_key=self.tui_ctx.provider_key,
+            assignee=resolved.assignee,
+        )
         if not ids:
             tree.load_items([], pinned=pinned)
             return
         by_id = {
             i.id: i
-            for i in item_repo.list_items(self.tui_ctx.conn, provider_key=self.tui_ctx.provider_key)
+            for i in item_repo.list_items(
+                self.tui_ctx.conn,
+                provider_key=self.tui_ctx.provider_key,
+                assignee=resolved.assignee,
+            )
         }
-        tree.load_items([by_id[iid] for iid in ids if iid in by_id], pinned=pinned)
+        ordered = [by_id[iid] for iid in ids if iid in by_id]
+        tree.load_items(visual_filter.apply_to_items(ordered, resolved), pinned=pinned)
 
     def _move_from_filter_to_tree(self) -> None:
         tree = self.query_one(ItemTree)
@@ -775,7 +801,7 @@ class DocketApp(App[None]):
                 on_message=on_message,
                 compaction_threshold_tokens=self.tui_ctx.compaction_threshold_tokens or None,
                 provider_key=self.tui_ctx.provider_key,
-                project_id=project_id_for(self.tui_ctx.provider_key, self.tui_ctx.scope_key),
+                project_id=project_id_for(self.tui_ctx.provider_key),
             )
         except Exception as e:
             log.exception("chat turn failed")
@@ -800,8 +826,6 @@ class DocketApp(App[None]):
             summary = sync_service.refresh(
                 self.tui_ctx.conn,
                 self.tui_ctx.provider,
-                self.tui_ctx.scope_key,
-                self.tui_ctx.scope,
                 provider_key=self.tui_ctx.provider_key,
             )
         except Exception as e:  # provider failure → toast, not crash
@@ -1197,7 +1221,7 @@ class DocketApp(App[None]):
         if cfg is None:
             self.notify("Memory is unavailable in this session.", severity="warning")
             return
-        project_id = project_id_for(self.tui_ctx.provider_key, self.tui_ctx.scope_key)
+        project_id = project_id_for(self.tui_ctx.provider_key)
         project_name = self._resolve_project_name() or project_id
         self.push_screen(
             MemoryPane(
@@ -1214,7 +1238,7 @@ class DocketApp(App[None]):
         if cfg is None:
             self.notify("Sources are unavailable in this session.", severity="warning")
             return
-        project_id = project_id_for(self.tui_ctx.provider_key, self.tui_ctx.scope_key)
+        project_id = project_id_for(self.tui_ctx.provider_key)
         project_name = self._resolve_project_name() or project_id
         self.push_screen(
             SourcePane(
@@ -1237,7 +1261,7 @@ class DocketApp(App[None]):
         if cfg is None or paths is None:
             self.notify("MCP is unavailable in this session.", severity="warning")
             return
-        project_id = project_id_for(self.tui_ctx.provider_key, self.tui_ctx.scope_key)
+        project_id = project_id_for(self.tui_ctx.provider_key)
         project_name = self._resolve_project_name() or project_id
 
         def on_dismiss(changed: bool | None) -> None:
@@ -1250,7 +1274,7 @@ class DocketApp(App[None]):
                     active_item=lambda: self._selected_item_id,
                     read_only=self.tui_ctx.read_only,
                     provider_key=self.tui_ctx.provider_key,
-                    project_id=project_id_for(self.tui_ctx.provider_key, self.tui_ctx.scope_key),
+                    project_id=project_id_for(self.tui_ctx.provider_key),
                     mcp_manager=self.tui_ctx.mcp_manager,
                 )
 
@@ -1299,14 +1323,14 @@ class DocketApp(App[None]):
     def action_switch_view(self, name: str) -> None:
         """Switch the active saved view (= named scope filter) on the active provider.
 
-        Only touches in-memory state — we do not persist the change to
-        config.toml because users experiment with views during a session
-        and expect their default back next launch. To make a view sticky,
-        edit the provider's `active_scope` in config.toml.
+        Views are visual filters over the cached set — switching one does
+        **not** change the project, the MCP fleet, or the agent's tool
+        registry. We just re-render the backlog with the new filter applied.
+        This is what lets users peek at a teammate's queue without the chat
+        pane losing its memory/sources/MCP context.
 
-        A switch doesn't force a sync; the next background tick will pick
-        up fresh data for the new scope, or the user can press `r`. This
-        keeps scope-switching feel snappy."""
+        In-memory only; persisting the active view requires editing the
+        provider's `active_scope` in config.toml."""
         config = self.tui_ctx.config
         entry = self._active_provider_entry()
         if config is None or entry is None or name not in entry.scopes:
@@ -1314,28 +1338,10 @@ class DocketApp(App[None]):
             return
         self.tui_ctx.scope_key = name
         self.tui_ctx.scope = entry.scopes[name].to_core()
-        # Active project changed (project_id = provider_key + scope_key) → the
-        # agent's memory/sources tools captured the previous one. The MCP
-        # fleet is also per-project, so rebind it before rebuilding the
-        # agent so the new tool set reflects the new project's servers.
-        self._rebind_mcp_for_active_project()
-        if self.tui_ctx.llm is not None:
-            self._agent = build_agent(
-                llm=self.tui_ctx.llm,
-                conn=self.tui_ctx.conn,
-                provider=self.tui_ctx.provider,
-                store=self._proposals,
-                active_item=lambda: self._selected_item_id,
-                read_only=self.tui_ctx.read_only,
-                provider_key=self.tui_ctx.provider_key,
-                project_id=project_id_for(self.tui_ctx.provider_key, self.tui_ctx.scope_key),
-                mcp_manager=self.tui_ctx.mcp_manager,
-            )
         with contextlib.suppress(Exception):
             bar = self.query_one(StatusBar)
             bar.scope_label = name
             bar.active_view = name
-            bar.project_name = self._resolve_project_name()
         self._reload_tree()
         self.notify(f"Switched to view '{name}'.", severity="information")
 
@@ -1373,7 +1379,7 @@ class DocketApp(App[None]):
         self._selected_item_id = None
         # The agent holds tool closures bound to the old provider + provider_key.
         # Rebuild so `search_items` and `get_item` target the new backend. MCP
-        # fleet is per-project (provider_key + scope_key), so rebind first.
+        # fleet is per-project (= per-provider), so rebind first.
         self._rebind_mcp_for_active_project()
         if self.tui_ctx.llm is not None:
             self._agent = build_agent(
@@ -1384,7 +1390,7 @@ class DocketApp(App[None]):
                 active_item=lambda: self._selected_item_id,
                 read_only=self.tui_ctx.read_only,
                 provider_key=self.tui_ctx.provider_key,
-                project_id=project_id_for(self.tui_ctx.provider_key, self.tui_ctx.scope_key),
+                project_id=project_id_for(self.tui_ctx.provider_key),
                 mcp_manager=self.tui_ctx.mcp_manager,
             )
         # The detail and chat panes were rendered for an item from the previous
@@ -1417,7 +1423,7 @@ class DocketApp(App[None]):
         config = self.tui_ctx.config
         if config is None:
             return None
-        key = self.tui_ctx.provider_key or self.tui_ctx.scope_key
+        key = self.tui_ctx.provider_key
         return config.providers.get(key) if key else None
 
     def action_set_default_provider(self) -> None:

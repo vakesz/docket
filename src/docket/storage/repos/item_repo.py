@@ -114,7 +114,13 @@ def list_items(
     parent_id: str | None = None,
     include_archived: bool = False,
     provider_key: str | None = None,
+    assignee: str | None = None,
 ) -> list[Item]:
+    """List cached items, optionally narrowed by axis.
+
+    `assignee` is the post-cache visual filter's "who" — callers resolve
+    `@me` via `visual_filter.resolve` and pass the concrete identity here.
+    An empty or `None` assignee means "don't narrow on this axis"."""
     clauses: list[str] = []
     params: list[object] = []
     if kind is not None:
@@ -144,6 +150,9 @@ def list_items(
     if provider_key:
         clauses.append("provider_key = ?")
         params.append(provider_key)
+    if assignee:
+        clauses.append("assignee = ?")
+        params.append(assignee)
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     rows = conn.execute(
         f"SELECT * FROM items {where} ORDER BY updated_at DESC",

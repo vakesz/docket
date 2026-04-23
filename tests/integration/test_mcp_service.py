@@ -27,7 +27,7 @@ from docket.core.services import mcp_service
 def _seeded(tmp_xdg: Path) -> tuple[Config, str]:
     paths = resolve_paths()
     paths.ensure()
-    pid = project_id_for("main", "default")
+    pid = project_id_for("main")
     config = Config(
         providers={
             "main": ProviderEntry(
@@ -39,7 +39,7 @@ def _seeded(tmp_xdg: Path) -> tuple[Config, str]:
             )
         },
         active_provider="main",
-        projects={pid: ProjectEntry(provider_key="main", scope_key="default", name="Main")},
+        projects={pid: ProjectEntry(provider_key="main", name="Main")},
     )
     save_config(paths, config)
     return config, pid

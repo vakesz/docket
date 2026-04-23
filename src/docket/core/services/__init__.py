@@ -9,6 +9,7 @@ from docket.core.services import (
     source_service,
     suggestion_service,
     sync_service,
+    visual_filter,
 )
 
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "source_service",
     "suggestion_service",
     "sync_service",
+    "visual_filter",
 ]

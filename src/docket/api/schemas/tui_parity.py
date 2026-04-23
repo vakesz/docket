@@ -75,15 +75,14 @@ class ProviderSwitchRequest(BaseModel):
 class ProjectDTO(BaseModel):
     """Project surface for the HTTP API.
 
-    `id` is the stable composite key used everywhere internally; UIs render
-    `name`. `active` is true when this is the currently-active project for
-    the runtime. `description` is human-edited."""
+    `id` is the provider key used everywhere internally; UIs render `name`.
+    `active` is true when this is the currently-active project for the
+    runtime. `description` is human-edited."""
 
     id: str
     name: str
     description: str = ""
     provider_key: str
-    scope_key: str
     active: bool = False
     archived: bool = False
 

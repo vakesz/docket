@@ -35,16 +35,12 @@ def manual_sync(
             summary = sync_service.full_refresh(
                 conn,
                 runtime.provider,
-                runtime.scope_key,
-                runtime.scope,
                 provider_key=runtime.provider_key,
             )
         else:
             summary = sync_service.refresh(
                 conn,
                 runtime.provider,
-                runtime.scope_key,
-                runtime.scope,
                 provider_key=runtime.provider_key,
             )
     except Exception as e:

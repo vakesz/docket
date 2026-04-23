@@ -10,3 +10,6 @@
 - add support for multiple projects in the same instance of the mcp, and make sure that the memory and sub agents are properly separated and organized for each project.
 - Command palette discoverability improvements
   - Better command descriptions, examples, and “recently used” commands to reduce memorization.
+
+
+- review mcp integration and add toolsm, http stuff check what needs and could be added

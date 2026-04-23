@@ -60,6 +60,13 @@ class WorkItemProvider(Protocol):
 
     def create_item(self, kind: ItemKind, fields: CreateFields) -> Item: ...
 
+    # Optional: returning the authenticated user's identity — the string that
+    # the provider stamps into `Item.assignee` for "me" — lets the surface-
+    # level `@me` visual filter match cached rows. Providers that can't
+    # resolve their own identity cheaply can omit this; `@me` then degrades
+    # to "no filter" (everything the user can see).
+    def current_user_identity(self) -> str | None: ...
+
 
 @dataclass(frozen=True)
 class SetupField:

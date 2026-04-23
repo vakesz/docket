@@ -89,7 +89,7 @@ STATEMENTS: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_attachments_item ON attachments(item_id)",
     """
     CREATE TABLE IF NOT EXISTS sync_state (
-        scope_key           TEXT PRIMARY KEY,
+        provider_key        TEXT PRIMARY KEY,
         watermark_iso       TEXT,
         last_full_sync_at   TEXT
     )
@@ -104,21 +104,20 @@ STATEMENTS: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_watchlist_pinned_at ON watchlist(pinned_at DESC)",
-    # Projects. A project IS a (provider_key, scope_key) pair given a name and
-    # optional description. The id is derived: `{provider_key}::{scope_key}`.
-    # Memory, sources, and sub-agents are scoped by project_id. Rows are
-    # created lazily the first time a project is touched, but users can also
-    # rename / describe them up front via `docket project add`.
+    # Projects. A project IS a provider — name and optional description hang
+    # off the provider key. Scopes are visual filters, so they don't split
+    # project identity: memory, sources, sub-agents, and MCP servers are
+    # shared across every scope on the provider. Rows are created lazily the
+    # first time a project is touched but can be renamed / described up front
+    # via `docket project rename`.
     """
     CREATE TABLE IF NOT EXISTS projects (
         id           TEXT PRIMARY KEY,
-        provider_key TEXT NOT NULL,
-        scope_key    TEXT NOT NULL,
+        provider_key TEXT NOT NULL UNIQUE,
         name         TEXT NOT NULL,
         description  TEXT NOT NULL DEFAULT '',
         created_at   TEXT NOT NULL,
-        archived_at  TEXT,
-        UNIQUE (provider_key, scope_key)
+        archived_at  TEXT
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_projects_provider ON projects(provider_key, archived_at)",

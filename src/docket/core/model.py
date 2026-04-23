@@ -35,8 +35,15 @@ class TransitionIntent(StrEnum):
 
 @dataclass(frozen=True)
 class ScopeFilters:
-    """Filters applied to provider queries; mirrors the ScopeFilter config model
-    but lives in core so providers depend only on core."""
+    """Visual filter applied to cached items — *not* to provider queries.
+
+    Sync always pulls every item a provider exposes (so child items of
+    something assigned to the user are still in the cache). These fields
+    narrow the view at render time: the TUI list, CLI `list`, and HTTP
+    `/items` apply them post-cache. Empty string means "don't filter on
+    this axis"; assignee `"@me"` means the cached `assignee` column must
+    match the provider's current-user identity (empty string is taken as
+    "any" in line with the config default)."""
 
     team: str = ""
     area_path: str = ""
@@ -139,14 +146,17 @@ class PRMatch:
 
 @dataclass
 class Project:
-    """A named (provider_key, scope_key) pair. The id is the storage-layer
-    composite key built by `project_id_for(provider_key, scope_key)` so that
-    memory, sources, and sub-agents can be FK-scoped without exposing the
-    composite shape to UI code."""
+    """A named provider. The id is `provider_key` — memory, sources,
+    sub-agents, and MCP servers are keyed by provider, not by scope.
+
+    Scopes live on the provider as visual filters: switching scope in the
+    TUI re-filters what's shown from the cache but keeps the same project
+    context (same memory, same sources, same MCP fleet). This matters
+    because items assigned to the user can link to items assigned to
+    someone else — both belong in the same project."""
 
     id: str
     provider_key: str
-    scope_key: str
     name: str
     description: str = ""
     created_at: datetime | None = None
@@ -194,11 +204,12 @@ class Source:
     updated_at: datetime | None = None
 
 
-def project_id_for(provider_key: str, scope_key: str) -> str:
-    """Deterministic project id for a (provider_key, scope_key) pair.
+def project_id_for(provider_key: str) -> str:
+    """Deterministic project id — just the provider key.
 
-    Stable across renames: changing `name` or `description` does not change
-    the id, so memory/sources/sub-agents follow the same project even after
-    a rename. Empty `provider_key` is allowed for tests and for the implicit
-    "no provider configured yet" case."""
-    return f"{provider_key}::{scope_key}"
+    A project IS a provider: memory, sources, sub-agents, and MCP servers
+    live per-provider and are shared across every scope (view). Scopes are
+    visual filters applied at query time, so they don't split project
+    identity. Empty `provider_key` is allowed for tests and for the
+    implicit "no provider configured yet" case."""
+    return provider_key

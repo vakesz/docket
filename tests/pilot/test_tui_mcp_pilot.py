@@ -38,9 +38,7 @@ def _seeded_config(paths_dir: Path) -> Config:
         },
         active_provider="main",
         projects={
-            project_id_for("main", "default"): ProjectEntry(
-                provider_key="main", scope_key="default", name="Main"
-            )
+            project_id_for("main"): ProjectEntry(provider_key="main", name="Main")
         },
     )
 
@@ -94,7 +92,7 @@ async def test_save_persists_new_server_through_service(tmp_xdg: Path) -> None:
         await pilot.pause()
 
     reloaded = load_config(resolve_paths())
-    project = reloaded.projects[project_id_for("main", "default")]
+    project = reloaded.projects[project_id_for("main")]
     assert "demo" in project.mcp
     entry = project.mcp["demo"]
     assert entry.command == "/usr/bin/python"
@@ -109,7 +107,7 @@ async def test_delete_removes_entry_and_clears_editor(tmp_xdg: Path) -> None:
     ctx = _ctx(tmp_xdg, conn)
     # Pre-seed a server entry directly on the in-memory config so the
     # modal opens with a populated list.
-    pid = project_id_for("main", "default")
+    pid = project_id_for("main")
     from docket.config.models import MCPServerEntry
 
     ctx.config.projects[pid].mcp["doomed"] = MCPServerEntry(command="/bin/true")
@@ -148,7 +146,7 @@ async def test_save_with_invalid_env_blocks_persistence(tmp_xdg: Path) -> None:
         await pilot.pause()
 
     reloaded = load_config(resolve_paths())
-    pid = project_id_for("main", "default")
+    pid = project_id_for("main")
     # Validation failure → nothing persisted.
     assert "broken" not in reloaded.projects[pid].mcp
     conn.close()

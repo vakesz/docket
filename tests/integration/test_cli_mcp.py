@@ -38,7 +38,7 @@ def _seed(tmp_xdg: Path) -> None:
 
 
 def _pid() -> str:
-    return project_id_for("main", "default")
+    return project_id_for("main")
 
 
 def test_mcp_list_when_empty(tmp_xdg: Path) -> None:

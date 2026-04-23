@@ -18,14 +18,11 @@ from docket.core.services import project_service, source_service
 from docket.storage import init_db
 
 
-def _seed_project(conn, project_id: str = "main::default") -> str:
+def _seed_project(conn, project_id: str = "main") -> str:
     from docket.config import Config, ProjectEntry
 
-    provider, scope = project_id.split("::", 1)
     cfg = Config(
-        projects={
-            project_id: ProjectEntry(provider_key=provider, scope_key=scope, name="Main")
-        }
+        projects={project_id: ProjectEntry(provider_key=project_id, name="Main")}
     )
     project_service.mirror_into_db(cfg, conn)
     return project_id
@@ -80,8 +77,8 @@ def test_read_source_requires_id(env) -> None:
 
 def test_read_source_blocks_cross_project(tmp_path: Path) -> None:
     conn = init_db(tmp_path / "docket.db")
-    pid_a = _seed_project(conn, "p1::default")
-    pid_b = _seed_project(conn, "p2::default")
+    pid_a = _seed_project(conn, "p1")
+    pid_b = _seed_project(conn, "p2")
     other = source_service.add_entry(
         conn, project_id=pid_b, title="Secret", body_md="hush"
     )

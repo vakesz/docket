@@ -25,13 +25,8 @@ def item_storage_prefix(provider_key: str) -> str:
     return f"{provider_key}{_ITEM_KEY_SEPARATOR}"
 
 
-def scope_storage_key(provider_key: str, scope_key: str) -> str:
-    return item_storage_key(provider_key, scope_key)
-
-
 __all__ = [
     "item_storage_key",
     "item_storage_prefix",
-    "scope_storage_key",
     "split_item_storage_key",
 ]

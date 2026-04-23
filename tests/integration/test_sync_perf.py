@@ -12,7 +12,7 @@ import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from docket.core.model import Item, ItemKind, ItemState, ScopeFilters
+from docket.core.model import Item, ItemKind, ItemState
 from docket.core.services import sync_service
 from docket.storage import init_db
 from docket.storage.repos import item_repo
@@ -80,7 +80,7 @@ def test_refresh_batches_into_one_executemany(tmp_path: Path) -> None:
     items = _mk_items(200, datetime(2026, 4, 21, 10, 0, tzinfo=UTC))
     provider = FakeProvider(items=items)
 
-    summary = sync_service.refresh(spy, provider, "default", ScopeFilters())
+    summary = sync_service.refresh(spy, provider)
 
     assert summary.upserted == 200
     # Exactly one bulk upsert with all rows in it — the thing we care about.

@@ -76,7 +76,7 @@ def client(tmp_xdg: Path) -> TestClient:
 
 
 def _pid() -> str:
-    return project_id_for("main", "default")
+    return project_id_for("main")
 
 
 def _seed_project(client: TestClient) -> None:
@@ -186,7 +186,7 @@ def test_search_memory(client: TestClient) -> None:
 
 
 def test_unknown_project_returns_404(client: TestClient) -> None:
-    resp = client.get("/projects/ghost::scope/memory", headers=AUTH_HEADERS)
+    resp = client.get("/projects/ghost/memory", headers=AUTH_HEADERS)
     assert resp.status_code == 404
 
 

@@ -254,12 +254,9 @@ def setup_complete(
     initial_sync: SyncSummaryDTO | None = None
     if req.run_initial_sync:
         provider = built_providers[req.active_provider]
-        filters = providers_cfg[req.active_provider].scopes["default"].to_core()
         conn = init_db(paths.db_file)
         try:
-            summary = sync_service.full_refresh(
-                conn, provider, "default", filters, provider_key=req.active_provider
-            )
+            summary = sync_service.full_refresh(conn, provider, provider_key=req.active_provider)
             initial_sync = SyncSummaryDTO(
                 upserted=summary.upserted,
                 archived=summary.archived,

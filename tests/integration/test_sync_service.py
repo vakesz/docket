@@ -3,10 +3,9 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-from docket.core import Item, ItemKind, ItemState, ScopeFilters
+from docket.core import Item, ItemKind, ItemState
 from docket.core.services import sync_service
 from docket.storage import init_db
-from docket.storage.item_keys import scope_storage_key
 from docket.storage.repos import item_repo, sync_repo
 from tests.fakes.provider import FakeProvider
 
@@ -32,13 +31,13 @@ def test_incremental_refresh_advances_watermark(tmp_path: Path) -> None:
     t2 = datetime(2026, 4, 21, 10, 0, tzinfo=UTC)
     prov = FakeProvider(items=[_item("1", t1), _item("2", t2)])
 
-    s = sync_service.refresh(conn, prov, "default", ScopeFilters())
+    s = sync_service.refresh(conn, prov)
     assert s.upserted == 2
-    assert sync_repo.get_watermark(conn, "default") == t2
+    assert sync_repo.get_watermark(conn, "") == t2
     assert prov.list_calls[-1] is None
 
     # second call — provider gets the watermark, returns nothing new
-    s2 = sync_service.refresh(conn, prov, "default", ScopeFilters())
+    s2 = sync_service.refresh(conn, prov)
     assert s2.upserted == 0
     assert prov.list_calls[-1] == t2
 
@@ -48,7 +47,7 @@ def test_archived_flag_marks_item(tmp_path: Path) -> None:
     t = datetime(2026, 4, 21, 10, 0, tzinfo=UTC)
     prov = FakeProvider(items=[_item("1", t, archived=True), _item("2", t)])
 
-    s = sync_service.refresh(conn, prov, "default", ScopeFilters())
+    s = sync_service.refresh(conn, prov)
     assert s.archived == 1
     default = [i.id for i in item_repo.list_items(conn)]
     all_items = [i.id for i in item_repo.list_items(conn, include_archived=True)]
@@ -61,10 +60,10 @@ def test_full_refresh_resets_watermark(tmp_path: Path) -> None:
     t = datetime(2026, 4, 21, 10, 0, tzinfo=UTC)
     prov = FakeProvider(items=[_item("1", t)])
 
-    sync_service.refresh(conn, prov, "default", ScopeFilters())
-    assert sync_repo.get_watermark(conn, "default") == t
+    sync_service.refresh(conn, prov)
+    assert sync_repo.get_watermark(conn, "") == t
 
-    sync_service.full_refresh(conn, prov, "default", ScopeFilters())
+    sync_service.full_refresh(conn, prov)
     # last provider call received a None watermark (reset) even though items had one
     # (note: after full_refresh we re-set the watermark to the newest seen item)
     watermarks_seen_by_provider = prov.list_calls
@@ -78,13 +77,10 @@ def test_provider_scoped_refresh_namespaces_watermarks(tmp_path: Path) -> None:
     azure_devops = FakeProvider(items=[_item("42", t_azure_devops)])
     github = FakeProvider(items=[_item("42", t_gh)])
 
-    sync_service.refresh(conn, azure_devops, "default", ScopeFilters(), provider_key="azure_devops")
-    sync_service.refresh(conn, github, "default", ScopeFilters(), provider_key="github")
+    sync_service.refresh(conn, azure_devops, provider_key="azure_devops")
+    sync_service.refresh(conn, github, provider_key="github")
 
     assert azure_devops.list_calls == [None]
     assert github.list_calls == [None]
-    assert (
-        sync_repo.get_watermark(conn, scope_storage_key("azure_devops", "default"))
-        == t_azure_devops
-    )
-    assert sync_repo.get_watermark(conn, scope_storage_key("github", "default")) == t_gh
+    assert sync_repo.get_watermark(conn, "azure_devops") == t_azure_devops
+    assert sync_repo.get_watermark(conn, "github") == t_gh

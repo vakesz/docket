@@ -133,14 +133,15 @@ class MCPServerEntry(BaseModel):
 class ProjectEntry(BaseModel):
     """User-facing project metadata persisted in `config.toml`.
 
-    A project is identified by `(provider_key, scope_key)` — those two fields
-    plus the dict key in `Config.projects` form the composite identity. The
-    SQLite `projects` table mirrors this for FK integrity (memory, sources,
-    sub-agents) but `config.toml` is the source of truth for `name` and
-    `description`. Renaming a project means editing this file."""
+    A project IS a provider — the dict key in `Config.projects` is the
+    provider key, and all scopes on that provider share one project
+    (one name, one description, one MCP fleet, one memory store). The
+    SQLite `projects` table mirrors this for FK integrity (memory,
+    sources, sub-agents) but `config.toml` is the source of truth for
+    `name` and `description`. Renaming a project means editing this
+    file."""
 
     provider_key: str
-    scope_key: str
     name: str
     description: str = ""
     archived: bool = False
@@ -156,8 +157,8 @@ class Config(BaseModel):
 
     providers: dict[str, ProviderEntry] = Field(default_factory=dict)
     active_provider: str = ""
-    # Project metadata, keyed by the composite id `f"{provider_key}::{scope_key}"`.
-    # The active project is derived from `(active_provider, providers[active_provider].active_scope)`.
+    # Project metadata, keyed by provider key (one entry per provider). Scopes
+    # are visual filters on the provider — they share the same project entry.
     projects: dict[str, ProjectEntry] = Field(default_factory=dict)
     llm: LlmConfig = Field(default_factory=LlmConfig)
     http: HttpConfig = Field(default_factory=HttpConfig)

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from docket.core import Item, ItemKind, ItemState, ScopeFilters, TransitionIntent
+from docket.core import Item, ItemKind, ItemState, TransitionIntent
 from docket.core.model import CreateFields
 from docket.core.mutation import render_diff
 from docket.core.services import mutation_service, sync_service
@@ -27,7 +27,7 @@ def _seed(tmp_path: Path) -> tuple:
         updated_at=datetime(2026, 4, 21, 10, 0, tzinfo=UTC),
     )
     prov = FakeProvider(items=[item])
-    sync_service.refresh(conn, prov, "default", ScopeFilters())
+    sync_service.refresh(conn, prov)
     return conn, prov
 
 

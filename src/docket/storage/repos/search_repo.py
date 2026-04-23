@@ -37,8 +37,17 @@ def _decode_ids(rows: list[sqlite3.Row]) -> list[str]:
     return [split_item_storage_key(row[0])[1] for row in rows]
 
 
-def search(conn: sqlite3.Connection, query: str, *, provider_key: str | None = None) -> list[str]:
+def search(
+    conn: sqlite3.Connection,
+    query: str,
+    *,
+    provider_key: str | None = None,
+    assignee: str | None = None,
+) -> list[str]:
     """Return item ids matching `query`, ranked best-first.
+
+    `assignee` is a post-cache visual filter — resolved `@me` identity or
+    any exact assignee string. `None`/empty means "no narrowing".
 
     Empty/blank query returns []. On FTS5 syntax or tokenizer failure we fall
     back to a LIKE scan across title + description + comments_concat so the
@@ -46,19 +55,32 @@ def search(conn: sqlite3.Connection, query: str, *, provider_key: str | None = N
     stripped = query.strip()
     if not stripped:
         return []
+    extra_clauses: list[str] = []
+    extra_params: list[object] = []
+    if provider_key:
+        extra_clauses.append("i.provider_key = ?")
+        extra_params.append(provider_key)
+    if assignee:
+        extra_clauses.append("i.assignee = ?")
+        extra_params.append(assignee)
+    extras_sql = ""
+    if extra_clauses:
+        extras_sql = " AND " + " AND ".join(extra_clauses)
+    need_join = bool(extra_clauses)
+
     fts_query = _build_fts_query(stripped)
     if fts_query:
         try:
-            if provider_key:
+            if need_join:
                 rows = conn.execute(
-                    """
+                    f"""
                     SELECT f.item_id
                     FROM items_fts f
                     JOIN items i ON i.id = f.item_id
-                    WHERE items_fts MATCH ? AND i.provider_key = ?
+                    WHERE items_fts MATCH ?{extras_sql}
                     ORDER BY rank
                     """,
-                    (fts_query, provider_key),
+                    [fts_query, *extra_params],
                 ).fetchall()
             else:
                 rows = conn.execute(
@@ -71,16 +93,15 @@ def search(conn: sqlite3.Connection, query: str, *, provider_key: str | None = N
             # to the LIKE branch rather than hiding the result set entirely.
             pass
     like = f"%{stripped}%"
-    if provider_key:
+    if need_join:
         rows = conn.execute(
-            """
+            f"""
             SELECT DISTINCT f.item_id
             FROM items_fts f
             JOIN items i ON i.id = f.item_id
-            WHERE i.provider_key = ?
-              AND (f.title LIKE ? OR f.description_md LIKE ? OR f.comments_concat LIKE ?)
+            WHERE (f.title LIKE ? OR f.description_md LIKE ? OR f.comments_concat LIKE ?){extras_sql}
             """,
-            (provider_key, like, like, like),
+            [like, like, like, *extra_params],
         ).fetchall()
     else:
         rows = conn.execute(

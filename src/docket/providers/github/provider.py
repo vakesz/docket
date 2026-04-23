@@ -129,6 +129,10 @@ class GitHubProvider:
     def health_check(self) -> None:
         self._get(f"/repos/{self.default_repo}")
 
+    def current_user_identity(self) -> str | None:
+        """Return the authenticated user's login for the `@me` visual filter."""
+        return self._resolve_me_login()
+
     def list_changes_since(
         self, watermark: datetime | None, filters: ScopeFilters
     ) -> Iterable[Item]:

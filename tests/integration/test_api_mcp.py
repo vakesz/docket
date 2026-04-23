@@ -31,7 +31,7 @@ AUTH_HEADERS = {"Authorization": f"Bearer {TOKEN}"}
 
 
 def _pid() -> str:
-    return project_id_for("main", "default")
+    return project_id_for("main")
 
 
 @pytest.fixture
@@ -54,7 +54,6 @@ def client(tmp_xdg: Path) -> Iterator[TestClient]:
         projects={
             pid: ProjectEntry(
                 provider_key="main",
-                scope_key="default",
                 name="Main",
             )
         },
@@ -197,7 +196,7 @@ def test_test_endpoint_reports_failure_for_broken_command(client: TestClient) ->
 
 
 def test_unknown_project_returns_404(client: TestClient) -> None:
-    resp = client.get("/projects/ghost::scope/mcp", headers=AUTH_HEADERS)
+    resp = client.get("/projects/ghost/mcp", headers=AUTH_HEADERS)
     assert resp.status_code == 404
 
 
@@ -248,10 +247,16 @@ def test_inactive_project_writes_persist_but_do_not_rebind(
 ) -> None:
     """Targeting a non-active project still writes config but does not touch the live fleet."""
     paths = resolve_paths()
-    other_pid = project_id_for("main", "other")
     cfg = client.app.state.config
-    cfg.providers["main"].scopes["other"] = ScopeFilter()
-    cfg.projects[other_pid] = ProjectEntry(provider_key="main", scope_key="other", name="Other")
+    cfg.providers["secondary"] = ProviderEntry(
+        type="github_stub",
+        display_name="Secondary",
+        config={},
+        scopes={"default": ScopeFilter()},
+        active_scope="default",
+    )
+    other_pid = project_id_for("secondary")
+    cfg.projects[other_pid] = ProjectEntry(provider_key="secondary", name="Other")
     save_config(paths, cfg)
 
     manager = _manager(client)

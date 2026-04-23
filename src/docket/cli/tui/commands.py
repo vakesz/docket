@@ -116,7 +116,7 @@ class DocketCommands(Provider):
         # somewhere to go.
         config = getattr(app.tui_ctx, "config", None)
         if config is not None:
-            active_key = app.tui_ctx.provider_key or app.tui_ctx.scope_key
+            active_key = app.tui_ctx.provider_key
             entry = config.providers.get(active_key) if active_key else None
             if entry is not None:
                 active_scope = app.tui_ctx.scope_key

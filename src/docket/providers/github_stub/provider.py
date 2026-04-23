@@ -49,6 +49,10 @@ class GitHubStubProvider:
         """Stubs are always reachable."""
         return None
 
+    def current_user_identity(self) -> str | None:
+        """Return the stub identity used by tests for `@me` filtering."""
+        return "stub-user"
+
     def list_changes_since(
         self, watermark: datetime | None, filters: ScopeFilters
     ) -> Iterable[Item]:

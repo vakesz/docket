@@ -70,20 +70,21 @@ class Context:
 
     @property
     def project_id(self) -> str:
-        """Derived id for the currently-active (provider, scope).
+        """Derived id for the currently-active project (= provider key).
 
         Stable across renames; safe to use as a foreign key for memory,
-        sources, sub-agents, and any future per-project state."""
-        return project_id_for(self.active_provider, self.scope_key_for())
+        sources, sub-agents, and any future per-project state. Scopes
+        don't split project identity — they're visual filters over the
+        same cached set."""
+        return project_id_for(self.active_provider)
 
     def active_project(self) -> Project:
-        """Get-or-create the project row for the active (provider, scope)."""
+        """Get-or-create the project row for the active provider."""
         return project_service.activate(
             self.config,
             self.paths,
             self.conn,
             provider_key=self.active_provider,
-            scope_key=self.scope_key_for(),
         )
 
     def close(self) -> None:
@@ -146,7 +147,6 @@ def prepare() -> Context:
             paths,
             conn,
             provider_key=active,
-            scope_key=config.providers[active].active_scope,
         )
     return ctx
 

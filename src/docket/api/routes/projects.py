@@ -1,9 +1,9 @@
 """Project listing, view, and metadata updates.
 
-A project IS the named (provider_key, scope_key) pair currently active. The
-active project switches when the user switches scope (or provider). Updates
-here persist back to `config.toml` and re-mirror into the SQLite `projects`
-table that memory/sources/sub-agents reference."""
+A project IS the active provider. Switching scope (view) doesn't change the
+project — it just re-filters what's shown. Updates here persist back to
+`config.toml` and re-mirror into the SQLite `projects` table that
+memory/sources/sub-agents reference."""
 
 from __future__ import annotations
 
@@ -34,7 +34,6 @@ def _to_dto(
     name: str,
     description: str,
     provider_key: str,
-    scope_key: str,
     archived: bool,
     active_id: str,
 ) -> ProjectDTO:
@@ -43,7 +42,6 @@ def _to_dto(
         name=name,
         description=description,
         provider_key=provider_key,
-        scope_key=scope_key,
         active=(project_id == active_id),
         archived=archived,
     )
@@ -67,7 +65,6 @@ def list_projects(
                 name=entry.name,
                 description=entry.description,
                 provider_key=entry.provider_key,
-                scope_key=entry.scope_key,
                 archived=entry.archived,
                 active_id=active_id,
             )
@@ -85,14 +82,13 @@ def active_project(
     """Return the currently-active project.
 
     Lazily creates a default entry in `config.toml` the first time a new
-    (provider, scope) pair is queried, so the UI never sees an empty body
-    for the active project."""
+    provider is queried, so the UI never sees an empty body for the active
+    project."""
     project = project_service.activate(
         config,
         paths,
         conn,
         provider_key=runtime.provider_key,
-        scope_key=runtime.scope_key,
     )
     entry = config.projects[project.id]
     return _to_dto(
@@ -100,7 +96,6 @@ def active_project(
         name=entry.name,
         description=entry.description,
         provider_key=entry.provider_key,
-        scope_key=entry.scope_key,
         archived=entry.archived,
         active_id=runtime.project_id,
     )
@@ -120,7 +115,6 @@ def get_project(
         name=entry.name,
         description=entry.description,
         provider_key=entry.provider_key,
-        scope_key=entry.scope_key,
         archived=entry.archived,
         active_id=runtime.project_id,
     )
@@ -149,7 +143,6 @@ def update_project(
             paths,
             conn,
             provider_key=entry.provider_key,
-            scope_key=entry.scope_key,
             name=payload.name,
             description=payload.description,
         )
@@ -163,14 +156,14 @@ def update_project(
         name=refreshed.name,
         description=refreshed.description,
         provider_key=refreshed.provider_key,
-        scope_key=refreshed.scope_key,
         archived=refreshed.archived,
         active_id=runtime.project_id,
     )
 
 
-# Convenience: switch the active project by id. Equivalent to switching
-# provider+scope to the project's pair, but exposes a single button to the UI.
+# Convenience: switch the active project by id. Equivalent to switching the
+# active provider, but exposes a single button to the UI. Scope stays at the
+# provider's active scope.
 @router.post(
     "/{project_id:path}/activate",
     response_model=ProjectDTO,
@@ -191,14 +184,6 @@ def activate_project(
             f"Provider '{entry.provider_key}' is not currently loaded.",
         )
     runtime.switch_provider(entry.provider_key)
-    try:
-        runtime.switch_scope(entry.scope_key)
-    except KeyError as e:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            f"Scope '{entry.scope_key}' is no longer defined on provider "
-            f"'{entry.provider_key}'.",
-        ) from e
     # Active project changed → memory/sources tools captured the previous one.
     rebuild_agent(request, runtime)
     return _to_dto(
@@ -206,9 +191,8 @@ def activate_project(
         name=entry.name,
         description=entry.description,
         provider_key=entry.provider_key,
-        scope_key=entry.scope_key,
         archived=entry.archived,
-        active_id=project_id_for(entry.provider_key, entry.scope_key),
+        active_id=project_id_for(entry.provider_key),
     )
 
 

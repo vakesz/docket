@@ -139,7 +139,7 @@ def test_sync_service_works_against_stub(tmp_path: Path) -> None:
         issues=[_issue("example/repo#7", updated=t)],
     )
 
-    summary = sync_service.refresh(conn, provider, "default", ScopeFilters())
+    summary = sync_service.refresh(conn, provider)
     assert summary.upserted == 1
     cached = item_repo.get_item(conn, "example/repo#7")
     assert cached is not None

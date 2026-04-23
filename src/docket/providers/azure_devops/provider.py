@@ -87,6 +87,27 @@ class AzureDevOpsProvider:
                 f"Azure DevOps unreachable or project not found: {e}"
             ) from e
 
+    def current_user_identity(self) -> str | None:
+        """Azure DevOps stamps `Item.assignee` with the `uniqueName` of the
+        assigned identity (typically the user's email). Fetch it from the
+        Profile API so the `@me` visual filter can match cached rows.
+        Returns None on any error — `@me` then degrades to no filter."""
+        try:
+            profile_client = self._conn().clients.get_profile_client()
+        except Exception:
+            return None
+        try:
+            profile = profile_client.get_profile(id="me")
+        except Exception:
+            return None
+        # `emailAddress` on the profile matches the `uniqueName` stamped on
+        # assignees in practice; fall back to the profile display name.
+        email = getattr(profile, "email_address", None)
+        if isinstance(email, str) and email:
+            return email
+        display = getattr(profile, "display_name", None)
+        return display if isinstance(display, str) and display else None
+
     # -- reads ---------------------------------------------------------------
 
     def list_changes_since(

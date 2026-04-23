@@ -23,12 +23,13 @@ router = APIRouter(
 
 def _to_dto(runtime: RuntimeState, key: str) -> ProviderDTO:
     entry = runtime.config.providers[key]
+    active_scope = runtime.scope_key if key == runtime.provider_key else entry.active_scope
     return ProviderDTO(
         key=key,
         type=entry.type,
         display_name=entry.display_name,
         scopes=sorted(entry.scopes),
-        active_scope=entry.active_scope,
+        active_scope=active_scope,
         active=(key == runtime.provider_key),
     )
 

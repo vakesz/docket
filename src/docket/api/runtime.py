@@ -46,9 +46,11 @@ class RuntimeState:
 
     @property
     def project_id(self) -> str:
-        """Derived id for the active (provider, scope). Stable across renames."""
+        """Derived id for the active project (= provider key). Stable across
+        renames; scopes share the same project so switching views doesn't
+        change identity."""
         with self._lock:
-            return project_id_for(self.provider_key, self.scope_key)
+            return project_id_for(self.provider_key)
 
     def switch_provider(self, key: str) -> None:
         with self._lock:
@@ -64,17 +66,18 @@ class RuntimeState:
             if key not in entry.scopes:
                 raise KeyError(key)
             self.scope_key = key
-            self._rebind_mcp_locked()
+            # Scope changes are view-only now — the MCP fleet is per-provider
+            # and stays bound across view switches. No rebind needed.
 
     def _rebind_mcp_locked(self) -> None:
-        """Switch the MCP fleet to match the current (provider, scope) project.
+        """Switch the MCP fleet to match the current provider's project.
 
-        No-op when no manager is wired in (tests, surfaces without MCP).
-        Called with `_lock` held so the new `project_id` is derived from
-        a consistent snapshot."""
+        Called after `switch_provider` — scope switches don't rebind,
+        because the fleet follows the provider, not the view. No-op when
+        no manager is wired in (tests, surfaces without MCP)."""
         if self.mcp_manager is None:
             return
-        pid = project_id_for(self.provider_key, self.scope_key)
+        pid = project_id_for(self.provider_key)
         project = self.config.projects.get(pid)
         servers = dict(project.mcp) if project is not None else {}
         self.mcp_manager.bind_project(pid, servers)

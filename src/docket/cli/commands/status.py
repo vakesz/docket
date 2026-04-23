@@ -35,10 +35,12 @@ def _render(ctx: Context) -> None:
     active_provider = ctx.active_provider or "—"
     provider_entry = cfg.providers.get(active_provider) if active_provider != "—" else None
     scope_key = provider_entry.active_scope if provider_entry else "—"
-    project = project_service.get_by_scope(
-        ctx.conn, provider_key=active_provider, scope_key=scope_key
+    project = (
+        project_service.get_by_provider(ctx.conn, provider_key=active_provider)
+        if active_provider != "—"
+        else None
     )
-    project_id = project.id if project else f"{active_provider}::{scope_key}"
+    project_id = project.id if project else active_provider
     project_name = project.name if project else "—"
 
     console.print("[bold]Docket status[/bold]")
@@ -54,7 +56,7 @@ def _render(ctx: Context) -> None:
         "Provider",
         f"{active_provider}" + (f"  [dim]({display})[/dim]" if display else ""),
     )
-    overview.add_row("Scope", scope_key)
+    overview.add_row("View", scope_key)
     console.print(overview)
     console.print()
 
@@ -97,16 +99,17 @@ def _render(ctx: Context) -> None:
 
     # --- Sync state
     sync = Table(title="Sync state", title_style="bold")
-    sync.add_column("Scope", style="cyan")
+    sync.add_column("Provider", style="cyan")
     sync.add_column("Last full sync", style="green")
     sync.add_column("Watermark", style="yellow")
     rows = ctx.conn.execute(
-        "SELECT scope_key, watermark_iso, last_full_sync_at FROM sync_state ORDER BY scope_key"
+        "SELECT provider_key, watermark_iso, last_full_sync_at "
+        "FROM sync_state ORDER BY provider_key"
     ).fetchall()
     if rows:
         for row in rows:
             sync.add_row(
-                row["scope_key"],
+                row["provider_key"],
                 _fmt_iso(row["last_full_sync_at"]),
                 _fmt_iso(row["watermark_iso"]),
             )

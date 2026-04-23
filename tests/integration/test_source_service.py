@@ -17,7 +17,7 @@ from docket.storage import init_db
 from docket.storage.repos import source_repo
 
 
-def _seed_project(conn, project_id: str = "main::default") -> str:
+def _seed_project(conn, project_id: str = "main") -> str:
     project_service.mirror_into_db(_minimal_config(project_id), conn)
     return project_id
 
@@ -25,12 +25,9 @@ def _seed_project(conn, project_id: str = "main::default") -> str:
 def _minimal_config(project_id: str):
     from docket.config import Config, ProjectEntry
 
-    provider_key, scope_key = project_id.split("::", 1)
     return Config(
         projects={
-            project_id: ProjectEntry(
-                provider_key=provider_key, scope_key=scope_key, name="Main"
-            )
+            project_id: ProjectEntry(provider_key=project_id, name="Main")
         }
     )
 
@@ -84,8 +81,8 @@ def test_remove_entry_returns_false_when_missing(tmp_path: Path) -> None:
 
 def test_search_uses_fts_and_scopes_to_project(tmp_path: Path) -> None:
     conn = init_db(tmp_path / "docket.db")
-    pid_a = _seed_project(conn, "p1::default")
-    pid_b = _seed_project(conn, "p2::default")
+    pid_a = _seed_project(conn, "p1")
+    pid_b = _seed_project(conn, "p2")
     source_service.add_entry(
         conn, project_id=pid_a, title="Auth flow", body_md="OAuth tokens"
     )
@@ -132,7 +129,7 @@ def test_kind_filter(tmp_path: Path) -> None:
 def test_add_entry_rejects_unknown_project(tmp_path: Path) -> None:
     conn = init_db(tmp_path / "docket.db")
     with pytest.raises(KeyError):
-        source_service.add_entry(conn, project_id="ghost::scope", title="x", body_md="y")
+        source_service.add_entry(conn, project_id="ghost", title="x", body_md="y")
     conn.close()
 
 

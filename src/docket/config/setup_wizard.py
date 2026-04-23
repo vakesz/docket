@@ -676,8 +676,6 @@ def _step_initial_sync(state: WizardState) -> None:
         summary = sync_service.full_refresh(
             conn,
             provider,
-            "default",
-            state.scope.to_core(),
             provider_key=state.provider_key,
         )
         console.print(

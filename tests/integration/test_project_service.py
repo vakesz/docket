@@ -32,10 +32,10 @@ def _seed_config(name: str = "main", scope_name: str = "default") -> Config:
 
 def test_project_repo_ensure_is_idempotent(tmp_path: Path) -> None:
     conn = init_db(tmp_path / "docket.db")
-    p1 = project_repo.ensure(conn, provider_key="main", scope_key="default")
-    p2 = project_repo.ensure(conn, provider_key="main", scope_key="default")
-    assert p1.id == p2.id == project_id_for("main", "default")
-    assert p1.name == "main · default"
+    p1 = project_repo.ensure(conn, provider_key="main")
+    p2 = project_repo.ensure(conn, provider_key="main")
+    assert p1.id == p2.id == project_id_for("main")
+    assert p1.name == "main"
     rows = project_repo.list_all(conn)
     assert len(rows) == 1
     conn.close()
@@ -53,13 +53,12 @@ def test_project_service_upsert_persists_to_toml(tmp_xdg: Path) -> None:
         paths,
         conn,
         provider_key="main",
-        scope_key="default",
         name="My Project",
         description="Triage queue",
     )
     assert project.name == "My Project"
     # config.toml has the entry
-    pid = project_id_for("main", "default")
+    pid = project_id_for("main")
     assert config.projects[pid].name == "My Project"
     assert config.projects[pid].description == "Triage queue"
     # SQLite mirror agrees
@@ -76,9 +75,7 @@ def test_project_service_archive_unarchive_roundtrip(tmp_xdg: Path) -> None:
     config = _seed_config()
     save_config(paths, config)
 
-    project = project_service.upsert(
-        config, paths, conn, provider_key="main", scope_key="default", name="X"
-    )
+    project = project_service.upsert(config, paths, conn, provider_key="main", name="X")
     assert project.archived_at is None
 
     project_service.archive(config, paths, conn, project.id)
@@ -95,12 +92,11 @@ def test_project_service_archive_unarchive_roundtrip(tmp_xdg: Path) -> None:
 
 def test_mirror_into_db_reflects_config(tmp_path: Path) -> None:
     conn = init_db(tmp_path / "docket.db")
-    pid = project_id_for("main", "default")
+    pid = project_id_for("main")
     config = Config(
         projects={
             pid: ProjectEntry(
                 provider_key="main",
-                scope_key="default",
                 name="Renamed",
                 description="Hello",
             )
@@ -143,5 +139,5 @@ def test_cli_project_rename_persists(tmp_xdg: Path) -> None:
     from docket.config.loader import load_config
 
     reloaded = load_config(paths)
-    pid = project_id_for("main", "default")
+    pid = project_id_for("main")
     assert reloaded.projects[pid].name == "Triage Queue"

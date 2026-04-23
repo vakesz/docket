@@ -1,9 +1,10 @@
 """Persistence for `Project` rows.
 
-A project is a named (provider_key, scope_key) pair. Rows are upserted
-lazily by `ensure(...)` whenever a CLI/TUI/HTTP surface activates a scope
-that has not been seen before, and can be renamed / described / archived
-explicitly via the project commands.
+A project IS a provider. Rows are upserted lazily by `ensure(...)` whenever a
+CLI/TUI/HTTP surface activates a provider that has not been seen before, and
+can be renamed / described / archived explicitly via the project commands.
+Scopes (view filters) share the same project row — they never create a new
+one.
 """
 
 from __future__ import annotations
@@ -21,7 +22,6 @@ def _row_to_project(row: sqlite3.Row) -> Project:
     return Project(
         id=row["id"],
         provider_key=row["provider_key"],
-        scope_key=row["scope_key"],
         name=row["name"],
         description=row["description"] or "",
         created_at=datetime.fromisoformat(row["created_at"]),
@@ -29,15 +29,9 @@ def _row_to_project(row: sqlite3.Row) -> Project:
     )
 
 
-def _default_name(provider_key: str, scope_key: str) -> str:
+def _default_name(provider_key: str) -> str:
     """Human-readable default — never an empty string."""
-    if provider_key and scope_key:
-        return f"{provider_key} · {scope_key}"
-    if provider_key:
-        return provider_key
-    if scope_key:
-        return scope_key
-    return "default"
+    return provider_key or "default"
 
 
 def slugify(name: str) -> str:
@@ -50,29 +44,27 @@ def ensure(
     conn: sqlite3.Connection,
     *,
     provider_key: str,
-    scope_key: str,
     name: str | None = None,
     description: str | None = None,
 ) -> Project:
-    """Get-or-create the project row for this (provider_key, scope_key).
+    """Get-or-create the project row for this provider.
 
     Existing rows are not overwritten — pass `name`/`description` only when
     you want to seed a fresh row. Use `update(...)` to rename later."""
-    project_id = project_id_for(provider_key, scope_key)
+    project_id = project_id_for(provider_key)
     row = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
     if row is not None:
         return _row_to_project(row)
     now = datetime.now(UTC)
-    final_name = (name or _default_name(provider_key, scope_key)).strip() or "default"
+    final_name = (name or _default_name(provider_key)).strip() or "default"
     conn.execute(
         """
-        INSERT INTO projects (id, provider_key, scope_key, name, description, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO projects (id, provider_key, name, description, created_at)
+        VALUES (?, ?, ?, ?, ?)
         """,
         (
             project_id,
             provider_key,
-            scope_key,
             final_name,
             (description or "").strip(),
             now.isoformat(),
@@ -81,7 +73,6 @@ def ensure(
     return Project(
         id=project_id,
         provider_key=provider_key,
-        scope_key=scope_key,
         name=final_name,
         description=(description or "").strip(),
         created_at=now,

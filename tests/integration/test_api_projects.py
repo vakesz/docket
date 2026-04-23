@@ -81,8 +81,8 @@ def test_active_project_seeds_a_default_entry(client: TestClient) -> None:
     body = resp.json()
     assert body["active"] is True
     assert body["provider_key"] == "main"
-    assert body["scope_key"] == "default"
-    assert body["id"] == project_id_for("main", "default")
+    assert "scope_key" not in body
+    assert body["id"] == project_id_for("main")
     assert body["name"]  # default-named
 
 
@@ -97,7 +97,7 @@ def test_list_projects_returns_active_flag(client: TestClient) -> None:
 
 
 def test_patch_project_persists_to_config(client: TestClient) -> None:
-    pid = project_id_for("main", "default")
+    pid = project_id_for("main")
     # Seed the entry first.
     client.get("/projects/active", headers=AUTH_HEADERS)
     resp = client.patch(
@@ -116,5 +116,5 @@ def test_patch_project_persists_to_config(client: TestClient) -> None:
 
 
 def test_get_unknown_project_returns_404(client: TestClient) -> None:
-    resp = client.get("/projects/nope::nope", headers=AUTH_HEADERS)
+    resp = client.get("/projects/nope", headers=AUTH_HEADERS)
     assert resp.status_code == 404

@@ -18,14 +18,11 @@ from docket.core.services.proposal_store import ProposalStore
 from docket.storage import init_db
 
 
-def _seed_project(conn, project_id: str = "main::default") -> str:
+def _seed_project(conn, project_id: str = "main") -> str:
     from docket.config import Config, ProjectEntry
 
-    provider, scope = project_id.split("::", 1)
     cfg = Config(
-        projects={
-            project_id: ProjectEntry(provider_key=provider, scope_key=scope, name="Main")
-        }
+        projects={project_id: ProjectEntry(provider_key=project_id, name="Main")}
     )
     project_service.mirror_into_db(cfg, conn)
     return project_id

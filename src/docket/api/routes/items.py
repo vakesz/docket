@@ -7,7 +7,14 @@ import sqlite3
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from docket.api.auth import require_bearer
-from docket.api.deps import get_active_provider_key, get_conn, get_provider, require_not_read_only
+from docket.api.deps import (
+    get_active_provider_key,
+    get_conn,
+    get_provider,
+    get_runtime_optional,
+    require_not_read_only,
+)
+from docket.api.runtime import RuntimeState
 from docket.api.schemas import (
     CommentDTO,
     CreateItemRequest,
@@ -16,7 +23,7 @@ from docket.api.schemas import (
     ProposalDTO,
 )
 from docket.core.model import ItemKind, ItemState
-from docket.core.services import mutation_service
+from docket.core.services import mutation_service, visual_filter
 from docket.providers.base import WorkItemProvider
 from docket.storage.repos import comment_repo, item_repo
 
@@ -38,8 +45,20 @@ def list_items(
     tag: str | None = Query(None, description="Filter to items that carry this tag/label."),
     include_archived: bool = Query(False, alias="archived"),
     parent_id: str | None = Query(None),
+    apply_view: bool = Query(
+        True,
+        description="Apply the active saved view as a post-cache filter. "
+        "Set false to see every cached item regardless of view.",
+    ),
+    provider: WorkItemProvider = Depends(get_provider),
     provider_key: str = Depends(get_active_provider_key),
+    runtime: RuntimeState | None = Depends(get_runtime_optional),
 ) -> list[ItemDTO]:
+    resolved = (
+        visual_filter.resolve(runtime.scope, provider)
+        if apply_view and runtime is not None
+        else visual_filter.ResolvedFilter()
+    )
     items = item_repo.list_items(
         conn,
         kind=kind,
@@ -48,7 +67,9 @@ def list_items(
         parent_id=parent_id,
         include_archived=include_archived,
         provider_key=provider_key,
+        assignee=resolved.assignee,
     )
+    items = visual_filter.apply_to_items(items, resolved)
     return [ItemDTO.from_core(i) for i in items]
 
 

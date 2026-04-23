@@ -9,6 +9,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from docket.api import create_app
+from docket.api.runtime import RuntimeState
+from docket.config import Config, ProviderEntry, ScopeFilter
 from docket.core.model import Item, ItemKind, ItemState
 from docket.core.services.proposal_store import ProposalStore
 from docket.storage import init_db
@@ -18,6 +20,11 @@ from tests.fakes.provider import FakeProvider
 
 TOKEN = "test-bearer-token-abcdef"
 AUTH_HEADERS = {"Authorization": f"Bearer {TOKEN}"}
+
+
+class _MeProvider(FakeProvider):
+    def current_user_identity(self) -> str | None:
+        return "fake-user"
 
 
 def _mk_item(id_: str = "S-1", title: str = "Login") -> Item:
@@ -37,17 +44,43 @@ def _mk_item(id_: str = "S-1", title: str = "Login") -> Item:
 def env(tmp_path: Path):
     conn = init_db(tmp_path / "docket.db")
     item = _mk_item()
+    item.provider_key = "main"
     item_repo.upsert_item(conn, item)
-    provider = FakeProvider(items=[item])
+    provider = _MeProvider(items=[item])
     proposals = ProposalStore()
-    yield conn, provider, proposals, item
+    config = Config(
+        providers={
+            "main": ProviderEntry(
+                type="github_stub",
+                display_name="Stub",
+                config={},
+                scopes={"default": ScopeFilter(assignee=""), "mine": ScopeFilter(assignee="@me")},
+                active_scope="default",
+            )
+        },
+        active_provider="main",
+    )
+    runtime = RuntimeState(
+        config=config,
+        providers={"main": provider},
+        provider_key="main",
+        scope_key="default",
+    )
+    yield conn, provider, proposals, item, config, runtime
     conn.close()
 
 
 @pytest.fixture
 def client(env) -> TestClient:
-    conn, provider, proposals, _ = env
-    app = create_app(conn=conn, provider=provider, bearer_token=TOKEN, proposals=proposals)
+    conn, provider, proposals, _item, config, runtime = env
+    app = create_app(
+        conn=conn,
+        provider=provider,
+        bearer_token=TOKEN,
+        proposals=proposals,
+        runtime=runtime,
+        config=config,
+    )
     return TestClient(app)
 
 
@@ -78,7 +111,7 @@ def test_whoami_requires_auth(client: TestClient) -> None:
 
 
 def test_empty_token_refused_by_factory(env) -> None:
-    conn, provider, proposals, _ = env
+    conn, provider, proposals, _item, _config, _runtime = env
     with pytest.raises(ValueError):
         create_app(conn=conn, provider=provider, bearer_token="", proposals=proposals)
 
@@ -96,7 +129,7 @@ def test_list_items(client: TestClient) -> None:
 
 
 def test_list_items_filters_by_state(env, tmp_path: Path) -> None:
-    conn, provider, proposals, _ = env
+    conn, provider, proposals, _item, config, runtime = env
     item_repo.upsert_item(
         conn,
         Item(
@@ -108,10 +141,18 @@ def test_list_items_filters_by_state(env, tmp_path: Path) -> None:
             assignee=None,
             parent_id=None,
             updated_at=datetime.now(UTC),
+            provider_key="main",
         ),
     )
     client = TestClient(
-        create_app(conn=conn, provider=provider, bearer_token=TOKEN, proposals=proposals)
+        create_app(
+            conn=conn,
+            provider=provider,
+            bearer_token=TOKEN,
+            proposals=proposals,
+            runtime=runtime,
+            config=config,
+        )
     )
     resp = client.get("/items?state=new&state=active", headers=AUTH_HEADERS)
     assert resp.status_code == 200
@@ -121,7 +162,7 @@ def test_list_items_filters_by_state(env, tmp_path: Path) -> None:
 
 
 def test_list_items_filters_by_tag(env, tmp_path: Path) -> None:
-    conn, provider, proposals, _ = env
+    conn, provider, proposals, _item, config, runtime = env
     item_repo.upsert_item(
         conn,
         Item(
@@ -134,13 +175,103 @@ def test_list_items_filters_by_tag(env, tmp_path: Path) -> None:
             parent_id=None,
             tags=["bug"],
             updated_at=datetime.now(UTC),
+            provider_key="main",
         ),
     )
     client = TestClient(
-        create_app(conn=conn, provider=provider, bearer_token=TOKEN, proposals=proposals)
+        create_app(
+            conn=conn,
+            provider=provider,
+            bearer_token=TOKEN,
+            proposals=proposals,
+            runtime=runtime,
+            config=config,
+        )
     )
     resp = client.get("/items?tag=bug", headers=AUTH_HEADERS)
     assert [i["id"] for i in resp.json()] == ["S-2"]
+
+
+def test_list_items_applies_active_view_assignee_filter(env) -> None:
+    conn, provider, proposals, item, config, runtime = env
+    item.assignee = "fake-user"
+    item_repo.upsert_item(conn, item)
+    other = Item(
+        id="S-2",
+        kind=ItemKind.TASK,
+        title="Other queue",
+        description_md="",
+        state=ItemState.ACTIVE,
+        assignee="someone-else",
+        parent_id=None,
+        updated_at=datetime.now(UTC),
+        provider_key="main",
+    )
+    item_repo.upsert_item(conn, other)
+    runtime.scope_key = "mine"
+    client = TestClient(
+        create_app(
+            conn=conn,
+            provider=provider,
+            bearer_token=TOKEN,
+            proposals=proposals,
+            runtime=runtime,
+            config=config,
+        )
+    )
+    resp = client.get("/items", headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    assert [row["id"] for row in resp.json()] == ["S-1"]
+
+
+def test_list_items_can_disable_active_view_filter(env) -> None:
+    conn, provider, proposals, item, config, runtime = env
+    item.assignee = "fake-user"
+    item_repo.upsert_item(conn, item)
+    other = Item(
+        id="S-2",
+        kind=ItemKind.TASK,
+        title="Other queue",
+        description_md="",
+        state=ItemState.ACTIVE,
+        assignee="someone-else",
+        parent_id=None,
+        updated_at=datetime.now(UTC),
+        provider_key="main",
+    )
+    item_repo.upsert_item(conn, other)
+    runtime.scope_key = "mine"
+    client = TestClient(
+        create_app(
+            conn=conn,
+            provider=provider,
+            bearer_token=TOKEN,
+            proposals=proposals,
+            runtime=runtime,
+            config=config,
+        )
+    )
+    resp = client.get("/items?apply_view=false", headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    assert {row["id"] for row in resp.json()} == {"S-1", "S-2"}
+
+
+def test_list_items_without_runtime_falls_back_to_unfiltered_listing(env) -> None:
+    conn, provider, proposals, _item, _config, _runtime = env
+    client = TestClient(
+        create_app(
+            conn=conn,
+            provider=provider,
+            bearer_token=TOKEN,
+            proposals=proposals,
+        )
+    )
+    default_resp = client.get("/items", headers=AUTH_HEADERS)
+    assert default_resp.status_code == 200
+    assert [row["id"] for row in default_resp.json()] == ["S-1"]
+    explicit_resp = client.get("/items?apply_view=false", headers=AUTH_HEADERS)
+    assert explicit_resp.status_code == 200
+    assert [row["id"] for row in explicit_resp.json()] == ["S-1"]
 
 
 def test_get_item_by_id(client: TestClient) -> None:
@@ -155,7 +286,7 @@ def test_get_item_404(client: TestClient) -> None:
 
 
 def test_linked_delegates_to_provider(client: TestClient, env) -> None:
-    _, _, _, _ = env
+    _, _, _, _, _, _ = env
     resp = client.get("/items/S-1/linked", headers=AUTH_HEADERS)
     assert resp.status_code == 200
     assert resp.json() == []
@@ -177,7 +308,7 @@ def test_create_dry_run_returns_proposal(client: TestClient) -> None:
 
 
 def test_create_commits_through_provider(client: TestClient, env) -> None:
-    _, provider, _, _ = env
+    _, provider, _, _, _, _ = env
     resp = client.post(
         "/items",
         headers=AUTH_HEADERS,
@@ -193,7 +324,7 @@ def test_create_commits_through_provider(client: TestClient, env) -> None:
 
 
 def test_propose_transition_and_confirm(client: TestClient, env) -> None:
-    _, provider, _, _ = env
+    _, provider, _, _, _, _ = env
     propose = client.post(
         "/items/S-1/mutations/transition/propose",
         headers=AUTH_HEADERS,
@@ -232,7 +363,7 @@ def test_reject_discards_proposal(client: TestClient) -> None:
 
 
 def test_attachment_propose_accepts_base64(client: TestClient, env) -> None:
-    _, provider, _, _ = env
+    _, provider, _, _, _, _ = env
     content = b"# transcript\n"
     propose = client.post(
         "/items/S-1/mutations/attachment/propose",
@@ -260,7 +391,7 @@ def test_attachment_rejects_bad_base64(client: TestClient) -> None:
 
 
 def test_propose_comment_and_confirm(client: TestClient, env) -> None:
-    _, provider, _, _ = env
+    _, provider, _, _, _, _ = env
     propose = client.post(
         "/items/S-1/mutations/comment/propose",
         headers=AUTH_HEADERS,
@@ -324,7 +455,7 @@ def test_conversation_requires_llm(client: TestClient) -> None:
 
 
 def test_sse_streams_delta_and_done(env) -> None:
-    conn, provider, proposals, _ = env
+    conn, provider, proposals, _item, config, runtime = env
     llm = FakeLlmClient(script=[text_turn("hello world")])
     app = create_app(
         conn=conn,
@@ -332,6 +463,8 @@ def test_sse_streams_delta_and_done(env) -> None:
         bearer_token=TOKEN,
         proposals=proposals,
         llm=llm,
+        runtime=runtime,
+        config=config,
     )
     client = TestClient(app)
 
@@ -353,7 +486,7 @@ def test_sse_streams_delta_and_done(env) -> None:
 
 
 def test_sse_emits_proposal_event_when_agent_stages_mutation(env) -> None:
-    conn, provider, proposals, _ = env
+    conn, provider, proposals, _item, config, runtime = env
     # Turn 1: the agent calls propose_transition; turn 2: it replies.
     llm = FakeLlmClient(
         script=[
@@ -367,6 +500,8 @@ def test_sse_emits_proposal_event_when_agent_stages_mutation(env) -> None:
         bearer_token=TOKEN,
         proposals=proposals,
         llm=llm,
+        runtime=runtime,
+        config=config,
     )
     client = TestClient(app)
 
@@ -391,7 +526,7 @@ def test_sse_emits_proposal_event_when_agent_stages_mutation(env) -> None:
 
 
 def test_new_thread_archives_previous(env) -> None:
-    conn, provider, proposals, _ = env
+    conn, provider, proposals, _item, config, runtime = env
     llm = FakeLlmClient(script=[text_turn("ack")])
     app = create_app(
         conn=conn,
@@ -399,6 +534,8 @@ def test_new_thread_archives_previous(env) -> None:
         bearer_token=TOKEN,
         proposals=proposals,
         llm=llm,
+        runtime=runtime,
+        config=config,
     )
     client = TestClient(app)
 

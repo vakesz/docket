@@ -6,6 +6,7 @@ from rich.table import Table
 
 from docket.cli.context import prepare_or_wizard
 from docket.core.model import ItemKind
+from docket.core.services import visual_filter
 from docket.storage.repos import item_repo
 
 console = Console()
@@ -21,12 +22,15 @@ def list_command(
     ctx = prepare_or_wizard()
     try:
         kind_filter = ItemKind(kind) if kind else None
+        resolved = visual_filter.resolve(ctx.scope_filters(), ctx.provider)
         items = item_repo.list_items(
             ctx.conn,
             kind=kind_filter,
             include_archived=show_archived,
             provider_key=ctx.active_provider or None,
+            assignee=resolved.assignee,
         )
+        items = visual_filter.apply_to_items(items, resolved)
         table = Table(title=f"Docket ({len(items)} items)")
         table.add_column("ID", style="cyan", no_wrap=True)
         table.add_column("Kind", style="magenta")

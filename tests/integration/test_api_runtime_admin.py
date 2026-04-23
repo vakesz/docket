@@ -381,6 +381,14 @@ def test_switch_scope_updates_runtime(client: TestClient, env) -> None:
     r = client.put("/scopes/active", headers=AUTH, json={"name": "team"})
     assert r.status_code == 200
     assert env["runtime"].scope_key == "team"
+    active_provider = client.get("/providers/active", headers=AUTH)
+    assert active_provider.status_code == 200
+    assert active_provider.json()["active_scope"] == "team"
+    listed = client.get("/providers", headers=AUTH)
+    assert listed.status_code == 200
+    by_key = {row["key"]: row for row in listed.json()}
+    assert by_key["primary"]["active_scope"] == "team"
+    assert by_key["secondary"]["active_scope"] == "default"
 
 
 def test_switch_scope_unknown_returns_404(client: TestClient) -> None:

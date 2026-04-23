@@ -21,6 +21,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from docket.api import create_app
+from docket.api.runtime import RuntimeState
+from docket.config import Config, ProviderEntry, ScopeFilter
 from docket.core.model import Item, ItemKind, ItemState
 from docket.core.services.proposal_store import ProposalStore
 from docket.storage import init_db
@@ -49,22 +51,43 @@ def _mk_item() -> Item:
 def env(tmp_path: Path):
     conn = init_db(tmp_path / "docket.db")
     item = _mk_item()
+    item.provider_key = "main"
     item_repo.upsert_item(conn, item)
     provider = FakeProvider(items=[item])
     proposals = ProposalStore()
-    yield conn, provider, proposals
+    config = Config(
+        providers={
+            "main": ProviderEntry(
+                type="github_stub",
+                display_name="Stub",
+                config={},
+                scopes={"default": ScopeFilter(assignee="")},
+                active_scope="default",
+            )
+        },
+        active_provider="main",
+    )
+    runtime = RuntimeState(
+        config=config,
+        providers={"main": provider},
+        provider_key="main",
+        scope_key="default",
+    )
+    yield conn, provider, proposals, config, runtime
     conn.close()
 
 
 @pytest.fixture
 def ro_client(env) -> TestClient:
-    conn, provider, proposals = env
+    conn, provider, proposals, config, runtime = env
     app = create_app(
         conn=conn,
         provider=provider,
         bearer_token=TOKEN,
         proposals=proposals,
         read_only=True,
+        runtime=runtime,
+        config=config,
     )
     return TestClient(app)
 
@@ -159,7 +182,7 @@ def test_reads_still_work(ro_client: TestClient) -> None:
 
 
 def test_agent_registry_lacks_mutating_tools(env) -> None:
-    conn, provider, proposals = env
+    conn, provider, proposals, config, runtime = env
     app = create_app(
         conn=conn,
         provider=provider,
@@ -167,6 +190,8 @@ def test_agent_registry_lacks_mutating_tools(env) -> None:
         proposals=proposals,
         llm=FakeLlmClient(),
         read_only=True,
+        runtime=runtime,
+        config=config,
     )
     assert app.state.agent is not None
     registry = app.state.agent._tools  # type: ignore[attr-defined]
@@ -179,12 +204,14 @@ def test_agent_registry_lacks_mutating_tools(env) -> None:
 
 def test_writable_default_keeps_mutations(env) -> None:
     """Sanity: without read_only, POSTs go through as before."""
-    conn, provider, proposals = env
+    conn, provider, proposals, config, runtime = env
     app = create_app(
         conn=conn,
         provider=provider,
         bearer_token=TOKEN,
         proposals=proposals,
+        runtime=runtime,
+        config=config,
     )
     client = TestClient(app)
     resp = client.post(
