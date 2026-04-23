@@ -130,6 +130,92 @@ def mcp_add(
         ctx.close()
 
 
+@mcp_app.command("presets")
+def mcp_presets() -> None:
+    """List known MCP server presets (`docket mcp add-preset <id>`)."""
+    from docket.config.mcp_presets import list_presets
+
+    presets = list_presets()
+    if not presets:
+        console.print("[dim]No presets registered.[/dim]")
+        return
+    table = Table(title=f"MCP presets ({len(presets)})")
+    table.add_column("Id", style="cyan")
+    table.add_column("Label", style="green")
+    table.add_column("Env vars", style="yellow")
+    table.add_column("Description", style="dim")
+    for preset in presets:
+        env_names = ", ".join(var.name for var in preset.env) or "—"
+        table.add_row(preset.id, preset.label, env_names, preset.description)
+    console.print(table)
+
+
+@mcp_app.command("add-preset")
+def mcp_add_preset(
+    preset_id: str = typer.Argument(..., help="Preset id (run `docket mcp presets` to list)."),
+    name: str | None = typer.Option(
+        None,
+        "--name",
+        help="Override the server name. Defaults to the preset's own default.",
+    ),
+    env: list[str] | None = typer.Option(
+        None,
+        "--env",
+        help="KEY=VALUE for the preset's required env vars. Repeatable.",
+    ),
+    enabled: bool = typer.Option(True, "--enabled/--disabled", help="Start on bind."),
+) -> None:
+    """Add an MCP server from a known preset.
+
+    The preset defines the `command`, `args`, and transport; you only supply
+    the env values (typically an API token). `docket mcp presets` lists the
+    env vars each preset needs."""
+    from docket.config.mcp_presets import (
+        MissingPresetEnvError,
+        UnknownPresetError,
+    )
+
+    ctx = prepare_or_wizard()
+    try:
+        project = ctx.active_project()
+        try:
+            server_name, _ = mcp_service.add_server_from_preset(
+                ctx.config,
+                ctx.paths,
+                project.id,
+                preset_id,
+                name=name,
+                env=_split_env(env),
+                enabled=enabled,
+            )
+        except UnknownPresetError as exc:
+            console.print(
+                f"[red]Unknown preset '{preset_id}'.[/red] "
+                "[dim]Run `docket mcp presets` to see the list.[/dim]"
+            )
+            raise typer.Exit(1) from exc
+        except MissingPresetEnvError as exc:
+            console.print(f"[red]Missing env value:[/red] {exc}")
+            console.print("[dim]Pass it with `--env KEY=VALUE` (repeatable).[/dim]")
+            raise typer.Exit(1) from exc
+        except mcp_service.DuplicateServerError as exc:
+            console.print(
+                f"[red]Server '{server_name if name is None else name}' already exists.[/red] "
+                "[dim](use `docket mcp rm` first, or pass `--name` to add another instance).[/dim]"
+            )
+            raise typer.Exit(1) from exc
+        except mcp_service.InvalidServerConfigError as exc:
+            console.print(f"[red]Invalid MCP config:[/red] {exc}")
+            raise typer.Exit(1) from exc
+        console.print(
+            f"[green]Added[/green] MCP preset [cyan]{preset_id}[/cyan] as "
+            f"[cyan]{server_name}[/cyan] on [cyan]{project.name}[/cyan]. "
+            "[dim]Restart `docket serve`/the TUI to load it.[/dim]"
+        )
+    finally:
+        ctx.close()
+
+
 @mcp_app.command("rm")
 def mcp_rm(
     name: str = typer.Argument(..., help="Server name to remove."),

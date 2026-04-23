@@ -320,3 +320,65 @@ def test_get_does_not_require_runtime(client: TestClient) -> None:
     resp = client.get(f"/projects/{pid}/mcp/plain", headers=AUTH_HEADERS)
     assert resp.status_code == 200
     assert resp.json()["command"] == "/bin/true"
+
+
+def test_list_presets_includes_github(client: TestClient) -> None:
+    resp = client.get("/mcp/presets", headers=AUTH_HEADERS)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    ids = [p["id"] for p in body["presets"]]
+    assert "github" in ids
+    github = next(p for p in body["presets"] if p["id"] == "github")
+    assert github["command"] == "npx"
+    assert github["args"] == ["-y", "@modelcontextprotocol/server-github"]
+    env_names = [v["name"] for v in github["env"]]
+    assert "GITHUB_PERSONAL_ACCESS_TOKEN" in env_names
+
+
+def test_apply_preset_github_creates_server_and_rebinds(client: TestClient) -> None:
+    pid = _pid()
+    manager = _manager(client)
+    resp = client.post(
+        f"/projects/{pid}/mcp/presets/github/apply",
+        json={"env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_fake"}},
+        headers=AUTH_HEADERS,
+    )
+    # The preset command (`npx`) may or may not be installed, so the rebind
+    # either succeeds or fails soft with an empty client set — either way the
+    # persistence side must have worked.
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["name"] == "github"
+    listed = client.get(f"/projects/{pid}/mcp", headers=AUTH_HEADERS).json()
+    assert [e["name"] for e in listed["entries"]] == ["github"]
+    # `active_project_id` flips regardless of whether the client started.
+    assert manager.active_project_id == pid
+
+
+def test_apply_preset_rejects_missing_env(client: TestClient) -> None:
+    pid = _pid()
+    resp = client.post(
+        f"/projects/{pid}/mcp/presets/github/apply",
+        json={"env": {}},
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 400
+    assert "GITHUB_PERSONAL_ACCESS_TOKEN" in resp.text
+
+
+def test_apply_preset_unknown_id_is_404(client: TestClient) -> None:
+    pid = _pid()
+    resp = client.post(
+        f"/projects/{pid}/mcp/presets/nonexistent/apply",
+        json={"env": {"FOO": "bar"}},
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 404
+
+
+def test_apply_preset_requires_auth(client: TestClient) -> None:
+    pid = _pid()
+    resp = client.post(
+        f"/projects/{pid}/mcp/presets/github/apply",
+        json={"env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_fake"}},
+    )
+    assert resp.status_code == 401

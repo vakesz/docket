@@ -175,3 +175,71 @@ def test_mcp_add_rejects_bad_env_format(tmp_xdg: Path) -> None:
         ["mcp", "add", "fake", "--command", "/bin/true", "--env", "no_equals_here"],
     )
     assert res.exit_code != 0
+
+
+def test_mcp_presets_lists_github(tmp_xdg: Path) -> None:
+    _seed(tmp_xdg)
+    result = CliRunner().invoke(app, ["mcp", "presets"])
+    assert result.exit_code == 0, result.stdout
+    assert "github" in result.stdout
+    assert "GITHUB_PERSONAL_ACCESS_TOKEN" in result.stdout
+
+
+def test_mcp_add_preset_github_persists(tmp_xdg: Path) -> None:
+    _seed(tmp_xdg)
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "mcp",
+            "add-preset",
+            "github",
+            "--env",
+            "GITHUB_PERSONAL_ACCESS_TOKEN=ghp_fake",
+        ],
+    )
+    assert result.exit_code == 0, result.stdout
+    assert "Added" in result.stdout
+
+    cfg = load_config(resolve_paths())
+    entry = cfg.projects[_pid()].mcp["github"]
+    assert entry.command == "npx"
+    assert entry.args == ["-y", "@modelcontextprotocol/server-github"]
+    assert entry.env == {"GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_fake"}
+
+
+def test_mcp_add_preset_rejects_missing_env(tmp_xdg: Path) -> None:
+    _seed(tmp_xdg)
+    result = CliRunner().invoke(app, ["mcp", "add-preset", "github"])
+    assert result.exit_code != 0
+    assert "Missing env value" in result.stdout
+
+
+def test_mcp_add_preset_rejects_unknown_id(tmp_xdg: Path) -> None:
+    _seed(tmp_xdg)
+    result = CliRunner().invoke(
+        app,
+        ["mcp", "add-preset", "nonexistent", "--env", "FOO=bar"],
+    )
+    assert result.exit_code != 0
+    assert "Unknown preset" in result.stdout
+
+
+def test_mcp_add_preset_respects_name_override(tmp_xdg: Path) -> None:
+    _seed(tmp_xdg)
+    result = CliRunner().invoke(
+        app,
+        [
+            "mcp",
+            "add-preset",
+            "github",
+            "--name",
+            "gh-work",
+            "--env",
+            "GITHUB_PERSONAL_ACCESS_TOKEN=ghp_fake",
+        ],
+    )
+    assert result.exit_code == 0, result.stdout
+    cfg = load_config(resolve_paths())
+    assert "gh-work" in cfg.projects[_pid()].mcp
+    assert "github" not in cfg.projects[_pid()].mcp

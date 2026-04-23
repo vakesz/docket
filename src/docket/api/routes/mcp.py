@@ -23,6 +23,10 @@ from docket.api.auth import require_bearer
 from docket.api.deps import get_config, get_paths, get_runtime, require_not_read_only
 from docket.api.runtime import RuntimeState
 from docket.api.schemas import (
+    MCPPresetApplyRequest,
+    MCPPresetDTO,
+    MCPPresetEnvDTO,
+    MCPPresetListDTO,
     MCPServerCreateRequest,
     MCPServerDTO,
     MCPServerListDTO,
@@ -31,6 +35,7 @@ from docket.api.schemas import (
     MCPServerUpdateRequest,
     MCPToolDTO,
 )
+from docket.config.mcp_presets import MCPPreset, list_presets
 from docket.config.models import Config, MCPServerEntry
 from docket.config.paths import Paths
 from docket.core.services import mcp_service
@@ -298,6 +303,87 @@ def test_mcp_server(
     except mcp_service.UnknownServerError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown MCP server '{name}'") from exc
     return _test_result(name, entry)
+
+
+def _preset_dto(preset: MCPPreset) -> MCPPresetDTO:
+    return MCPPresetDTO(
+        id=preset.id,
+        label=preset.label,
+        description=preset.description,
+        default_name=preset.default_name,
+        command=preset.command,
+        args=list(preset.args),
+        env=[
+            MCPPresetEnvDTO(
+                name=var.name,
+                description=var.description,
+                required=var.required,
+                placeholder=var.placeholder,
+            )
+            for var in preset.env
+        ],
+        docs_url=preset.docs_url,
+        transport=preset.transport,
+        startup_timeout_seconds=preset.startup_timeout_seconds,
+    )
+
+
+@router.get(
+    "/mcp/presets",
+    response_model=MCPPresetListDTO,
+)
+def list_mcp_presets() -> MCPPresetListDTO:
+    """Return the catalog of known-good MCP server presets.
+
+    Read-only and project-independent — both bootstrap and full servers can
+    serve this so the setup UI can show presets before any project exists."""
+    return MCPPresetListDTO(presets=[_preset_dto(p) for p in list_presets()])
+
+
+@router.post(
+    "/projects/{project_id:path}/mcp/presets/{preset_id}/apply",
+    response_model=MCPServerDTO,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_not_read_only)],
+)
+def apply_mcp_preset(
+    project_id: str,
+    preset_id: str,
+    payload: MCPPresetApplyRequest,
+    request: Request,
+    config: Config = Depends(get_config),
+    paths: Paths = Depends(get_paths),
+    runtime: RuntimeState = Depends(get_runtime),
+) -> MCPServerDTO:
+    """Instantiate a preset as a concrete MCP server on this project.
+
+    The preset supplies `command`/`args`/`transport`; the caller supplies env
+    values (typically an API token) via `payload.env`. Returns 400 if the
+    preset or a required env var is missing, 409 on name conflict."""
+    _require_project(config, project_id)
+    try:
+        server_name, entry = mcp_service.add_server_from_preset(
+            config,
+            paths,
+            project_id,
+            preset_id,
+            name=payload.name,
+            env=dict(payload.env),
+            enabled=payload.enabled,
+        )
+    except mcp_service.UnknownPresetError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown MCP preset '{preset_id}'") from exc
+    except mcp_service.MissingPresetEnvError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    except mcp_service.DuplicateServerError as exc:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"MCP server '{payload.name or preset_id}' already exists on '{project_id}'.",
+        ) from exc
+    except mcp_service.InvalidServerConfigError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    _refresh_runtime(runtime, project_id, request)
+    return _to_dto(project_id, server_name, entry)
 
 
 __all__ = ["router"]

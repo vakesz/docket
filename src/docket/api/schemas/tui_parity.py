@@ -286,3 +286,46 @@ class MCPServerTestResultDTO(BaseModel):
     tools: list[str] = Field(default_factory=list)
     tool_details: list[MCPToolDTO] = Field(default_factory=list)
     error: str = ""
+
+
+class MCPPresetEnvDTO(BaseModel):
+    """One env-var slot a preset asks the caller to supply."""
+
+    name: str
+    description: str
+    required: bool = True
+    placeholder: str = ""
+
+
+class MCPPresetDTO(BaseModel):
+    """A frozen recipe for a known MCP server.
+
+    Surfaces turn this into a real `MCPServerDTO` by calling
+    `POST /mcp/presets/{id}/apply` with the env values filled in."""
+
+    id: str
+    label: str
+    description: str
+    default_name: str
+    command: str
+    args: list[str] = Field(default_factory=list)
+    env: list[MCPPresetEnvDTO] = Field(default_factory=list)
+    docs_url: str = ""
+    transport: str = "stdio"
+    startup_timeout_seconds: float = 15.0
+
+
+class MCPPresetListDTO(BaseModel):
+    presets: list[MCPPresetDTO] = Field(default_factory=list)
+
+
+class MCPPresetApplyRequest(BaseModel):
+    """Body for `POST /projects/{id}/mcp/presets/{preset_id}/apply`.
+
+    `name` overrides the preset's own default server name; leave unset to use
+    the preset default. `env` must contain all env vars the preset marks
+    `required`."""
+
+    name: str | None = None
+    env: dict[str, str] = Field(default_factory=dict)
+    enabled: bool = True

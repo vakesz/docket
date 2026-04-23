@@ -150,3 +150,53 @@ def test_unknown_server_raises(tmp_xdg: Path) -> None:
         mcp_service.update_server(config, paths, pid, "ghost", enabled=False)
     with pytest.raises(mcp_service.UnknownServerError):
         mcp_service.remove_server(config, paths, pid, "ghost")
+
+
+def test_add_from_preset_persists_full_entry(tmp_xdg: Path) -> None:
+    config, pid = _seeded(tmp_xdg)
+    paths = resolve_paths()
+    name, entry = mcp_service.add_server_from_preset(
+        config,
+        paths,
+        pid,
+        "github",
+        env={"GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_fake"},
+    )
+    assert name == "github"
+    assert entry.command == "npx"
+    assert entry.args == ["-y", "@modelcontextprotocol/server-github"]
+    assert entry.env == {"GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_fake"}
+    # Round-trip through TOML.
+    reloaded = load_config(paths)
+    saved = mcp_service.get_server(reloaded, pid, "github")
+    assert saved.command == "npx"
+    assert saved.env["GITHUB_PERSONAL_ACCESS_TOKEN"] == "ghp_fake"
+
+
+def test_add_from_preset_respects_name_override(tmp_xdg: Path) -> None:
+    config, pid = _seeded(tmp_xdg)
+    paths = resolve_paths()
+    name, _ = mcp_service.add_server_from_preset(
+        config,
+        paths,
+        pid,
+        "github",
+        name="gh-work",
+        env={"GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_fake"},
+    )
+    assert name == "gh-work"
+    assert "gh-work" in mcp_service.list_servers(config, pid)
+
+
+def test_add_from_preset_rejects_missing_env(tmp_xdg: Path) -> None:
+    config, pid = _seeded(tmp_xdg)
+    paths = resolve_paths()
+    with pytest.raises(mcp_service.MissingPresetEnvError):
+        mcp_service.add_server_from_preset(config, paths, pid, "github", env={})
+
+
+def test_add_from_preset_rejects_unknown_id(tmp_xdg: Path) -> None:
+    config, pid = _seeded(tmp_xdg)
+    paths = resolve_paths()
+    with pytest.raises(mcp_service.UnknownPresetError):
+        mcp_service.add_server_from_preset(config, paths, pid, "nonexistent", env={})
