@@ -21,7 +21,7 @@ import sqlite3
 from typing import Any
 
 from docket.agent.tools import ToolRegistry
-from docket.core.mutation import Proposal, render_diff
+from docket.core.mutation import pending_payload
 from docket.core.services import mutation_service
 from docket.core.services.proposal_store import ProposalStore
 from docket.storage.repos import memory_repo
@@ -38,18 +38,6 @@ def _entry_summary(entry: Any) -> dict[str, Any]:
         "source": entry.source,
         "updated_at": entry.updated_at.isoformat() if entry.updated_at else None,
     }
-
-
-def _payload(proposal: Proposal, *, extra: dict[str, Any] | None = None) -> str:
-    body: dict[str, Any] = {
-        "status": "pending_confirmation",
-        "proposal_id": proposal.id,
-        "kind": proposal.kind,
-        "diff": render_diff(proposal),
-    }
-    if extra:
-        body.update(extra)
-    return json.dumps(body)
 
 
 def register_memory_readonly_tools(
@@ -172,7 +160,7 @@ def register_memory_mutating_tools(
         except ValueError as e:
             return json.dumps({"error": str(e)})
         store.add(proposal)
-        return _payload(proposal)
+        return pending_payload(proposal)
 
     def propose_memory_delete(args: dict[str, Any]) -> str:
         memory_id = str(args.get("memory_id", "")).strip()
@@ -187,7 +175,7 @@ def register_memory_mutating_tools(
         except ValueError as e:
             return json.dumps({"error": str(e)})
         store.add(proposal)
-        return _payload(proposal)
+        return pending_payload(proposal)
 
     registry.register(
         name="propose_memory_write",

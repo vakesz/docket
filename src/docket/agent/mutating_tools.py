@@ -21,7 +21,7 @@ from typing import Any
 from docket.agent.tools import ToolRegistry
 from docket.agent.transcript import filename_for, next_version, render_markdown
 from docket.core.model import CreateFields, ItemKind, TransitionIntent
-from docket.core.mutation import Proposal, render_diff
+from docket.core.mutation import pending_payload
 from docket.core.redaction import redact_secrets
 from docket.core.services import mutation_service
 from docket.core.services.proposal_store import ProposalStore
@@ -29,18 +29,6 @@ from docket.providers.base import WorkItemProvider
 from docket.storage.repos import conversation_repo, item_repo, message_repo, search_repo
 
 _DUPLICATE_LIMIT = 5
-
-
-def _payload(proposal: Proposal, *, extra: dict[str, Any] | None = None) -> str:
-    body: dict[str, Any] = {
-        "status": "pending_confirmation",
-        "proposal_id": proposal.id,
-        "kind": proposal.kind,
-        "diff": render_diff(proposal),
-    }
-    if extra:
-        body.update(extra)
-    return json.dumps(body)
 
 
 def _find_duplicates(
@@ -96,7 +84,7 @@ def register_mutating_tools(
         except KeyError as e:
             return json.dumps({"error": str(e)})
         store.add(proposal)
-        return _payload(proposal)
+        return pending_payload(proposal)
 
     def propose_description_patch(args: dict[str, Any]) -> str:
         item_id = str(args.get("id", "")).strip()
@@ -110,7 +98,7 @@ def register_mutating_tools(
         except KeyError as e:
             return json.dumps({"error": str(e)})
         store.add(proposal)
-        return _payload(proposal)
+        return pending_payload(proposal)
 
     def propose_new_item(args: dict[str, Any]) -> str:
         kind_raw = str(args.get("kind", "")).strip()
@@ -135,7 +123,7 @@ def register_mutating_tools(
         # stage the proposal so the human has final say in the diff modal.
         similar = _find_duplicates(conn, title, provider_key=provider_key)
         extra = {"similar": similar} if similar else None
-        return _payload(proposal, extra=extra)
+        return pending_payload(proposal, extra=extra)
 
     def attach_transcript(args: dict[str, Any]) -> str:
         item_id = str(args.get("id") or active_item() or "").strip()
@@ -180,7 +168,7 @@ def register_mutating_tools(
         except KeyError as e:
             return json.dumps({"error": str(e)})
         store.add(proposal)
-        return _payload(proposal)
+        return pending_payload(proposal)
 
     registry.register(
         name="propose_transition",

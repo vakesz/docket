@@ -279,7 +279,7 @@ def _execute(
         except Exception:
             refreshed_item = None
         if refreshed_item is not None:
-            _refresh_cache(conn, refreshed_item, provider_key)
+            _refresh_cache(conn, refreshed_item, active_key)
         return MutationResult(proposal_id=proposal.id, dry_run=False, comment=comment)
 
     if isinstance(proposal, MemoryWrite):

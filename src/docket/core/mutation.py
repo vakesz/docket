@@ -10,9 +10,10 @@ AI-initiated writes safe.
 from __future__ import annotations
 
 import difflib
+import json
 import uuid
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 from docket.core.model import CreateFields, Item, ItemKind, TransitionIntent
 
@@ -175,3 +176,20 @@ def render_diff(proposal: Proposal) -> str:
         suffix = f" — '{proposal.title}'" if proposal.title else ""
         return f"memory delete: {proposal.memory_id}{suffix}"
     raise TypeError(f"unknown proposal type: {type(proposal)!r}")
+
+
+def pending_payload(proposal: Proposal, *, extra: dict[str, Any] | None = None) -> str:
+    """JSON wire format for an agent tool that just staged a Proposal.
+
+    Returned to the LLM so it can surface "pending_confirmation" to the user
+    without assuming the change took effect. The UI uses `proposal_id` to
+    look the proposal up in `ProposalStore` for the confirm modal."""
+    body: dict[str, Any] = {
+        "status": "pending_confirmation",
+        "proposal_id": proposal.id,
+        "kind": proposal.kind,
+        "diff": render_diff(proposal),
+    }
+    if extra:
+        body.update(extra)
+    return json.dumps(body)
