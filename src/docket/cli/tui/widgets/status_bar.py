@@ -101,11 +101,11 @@ class StatusBar(Static):
     read_only: reactive[bool] = reactive(False)
 
     def render(self) -> Text:
-        out = Text()
+        left = Text()
 
         def append_part(text: str, component: str | None = None) -> None:
-            if out:
-                out.append(" · ")
+            if left:
+                left.append(" · ")
             # Component styles are only populated after the widget mounts
             # inside an App. Fall back to an unstyled segment in unit tests
             # where the bar is constructed standalone.
@@ -115,7 +115,7 @@ class StatusBar(Static):
                     style = self.get_component_rich_style(component, partial=True)
                 except KeyError:
                     style = None
-            out.append(text, style=style)
+            left.append(text, style=style)
 
         if self.project_name:
             append_part(self.project_name, "status-bar--accent")
@@ -137,6 +137,20 @@ class StatusBar(Static):
             append_part(f"${self.cost_cents / 100:.2f}")
         if self.read_only:
             append_part("read-only", "status-bar--accent")
+
+        right = Text(no_wrap=True)
+        right.append("? help", style="dim")
+        right.append("  ·  ", style="dim")
+        right.append("^P commands", style="dim")
+
+        # Pad between left and right so hints sit at the far right edge.
+        width = self.size.width if self.size.width > 0 else 80
+        # Subtract 2 for the padding: 0 1 means 1 char each side.
+        available = width - 2
+        gap = max(2, available - len(left.plain) - len(right.plain))
+        out = left
+        out.append(" " * gap)
+        out.append_text(right)
         return out
 
     def set_last_sync_now(self) -> None:

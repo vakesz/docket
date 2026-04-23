@@ -9,39 +9,77 @@ from textual.screen import ModalScreen
 from textual.widgets import Markdown, Static
 
 _HELP_MARKDOWN = """\
-## Core workflow
+## Navigation
 
-- Use the left pane to browse work items.
-- Press `/` to filter by title, description, or comments.
-- Press `Enter` on a row to load details and chat context.
-- Use `Tab` and `Shift+Tab` to move between backlog, details, and assistant.
+| Key | Action |
+|---|---|
+| `Tab` / `Shift+Tab` | Cycle focus: backlog → details → assistant |
+| `↑` / `↓` | Move through backlog rows |
+| `↑` at top of list | Jump to search filter |
+| `↓` in search filter | Jump to first item |
+| `Escape` | Defocus chat input; close modals |
 
-## Shortcuts
+## Backlog
 
-- `Ctrl+P` command palette
-- `:` quick-open by item id
-- `,` settings editor
-- `p` prompt library
-- `m` project memory
-- `u` project sources
-- `Shift+M` MCP servers
-- `Ctrl+T` theme picker
-- `Ctrl+F` maximize the focused pane
-- `Ctrl+Left` / `Ctrl+Right` resize the focused pane
-- `r` sync now
-- `n` new work item
-- `d` review pending proposals
-- `s` suggest next action
-- `o` open the selected item in your browser
-- `t` start a new chat thread for the selected item
-- `c` show or hide resolved/closed items in the backlog
-- `q` quit
+| Key | Action |
+|---|---|
+| `/` | Focus search filter (live full-text search) |
+| `Enter` | Open selected item in details + assistant |
+| `c` | Toggle visibility of resolved / closed items |
+| `w` | Pin or unpin the selected item |
+| `:` | Quick-open by ticket id |
 
-## Tips
+## Item actions
 
-- Settings save to `config.toml` so non-technical users can update behavior without editing files.
-- Prompt edits apply on the next assistant turn.
-- Provider connection changes are saved immediately, but a restart gives the cleanest re-connect.
+| Key | Action |
+|---|---|
+| `n` | New work item (with duplicate check) |
+| `o` | Open selected item in browser |
+| `s` | Ask the assistant for a suggested next step |
+| `d` | Review pending proposals (diff modal) |
+| `t` | Start a new chat thread for the selected item |
+
+## Proposals & diffs
+
+| Key | Action |
+|---|---|
+| `y` | Confirm and apply the proposal |
+| `n` | Reject the proposal |
+| `e` | Edit the proposal before applying |
+| `Ctrl+S` | Save edits in the edit view |
+| `Escape` | Cancel / close |
+
+## Configuration & tools
+
+| Key | Action |
+|---|---|
+| `,` | Settings editor |
+| `p` | Prompt library |
+| `m` | Project memory |
+| `u` | Project sources |
+| `Shift+M` | MCP server config |
+| `Ctrl+T` | Theme picker (live preview) |
+
+## Layout
+
+| Key | Action |
+|---|---|
+| `Ctrl+F` | Maximize / restore the focused pane |
+| `Ctrl+Left` / `Ctrl+Right` | Shrink / grow the focused pane |
+| `⤢` button | Click to maximize; `⤡` to restore |
+
+## App
+
+| Key | Action |
+|---|---|
+| `r` | Sync now |
+| `Ctrl+P` | Command palette — search all actions |
+| `?` / `F1` / `h` | This help screen |
+| `q` | Quit |
+
+---
+
+*Tip: open `Ctrl+P` to search and run any action without memorizing keybinds.*
 """
 
 
@@ -49,9 +87,9 @@ class HelpModal(ModalScreen[None]):
     DEFAULT_CSS = """
     HelpModal { align: center middle; }
     HelpModal > Vertical {
-        width: 92;
-        max-width: 110;
-        height: 80%;
+        width: 96;
+        max-width: 120;
+        height: 85%;
         background: $surface;
         border: round $accent;
         padding: 1 2;
@@ -83,9 +121,9 @@ class HelpModal(ModalScreen[None]):
 
     def compose(self) -> ComposeResult:
         with Vertical():
-            yield Static("Docket help", id="title")
+            yield Static("Keyboard shortcuts", id="title")
             yield Static(
-                "Shortcuts, navigation, and the quickest path through the app.",
+                "Ctrl+P searches all commands  ·  Escape or ? to close",
                 id="subtitle",
             )
             with VerticalScroll():

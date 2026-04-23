@@ -230,7 +230,47 @@ class DocketCommands(Provider):
                 example="o",
                 callback=app.action_open_in_browser,
             ),
+            Command(
+                id="toggle-done-visibility",
+                label="Toggle done visibility",
+                description="Show or hide resolved and closed items in the backlog.",
+                example="c",
+                callback=app.action_toggle_done_visibility,
+            ),
+            Command(
+                id="open-memory",
+                label="Open memory",
+                description="View and edit the assistant's per-project memory.",
+                example="m",
+                callback=app.action_open_memory,
+            ),
+            Command(
+                id="open-sources",
+                label="Open sources",
+                description="Manage project source documents the assistant can read.",
+                example="u",
+                callback=app.action_open_source,
+            ),
+            Command(
+                id="open-mcp",
+                label="Open MCP servers",
+                description="Configure Model Context Protocol servers for this project.",
+                example="Shift+M",
+                callback=app.action_open_mcp,
+            ),
         ]
+        # Item-scoped actions — only appear when an item is selected.
+        if getattr(app, "_selected_item_id", None) is not None:
+            commands.append(
+                Command(
+                    id="toggle-pin",
+                    label="Pin / unpin item",
+                    description="Pin the selected item so it survives scope and view switches.",
+                    example="w",
+                    callback=app.action_toggle_pin,
+                )
+            )
+
         # One palette entry per TransitionIntent, scoped to the current item.
         # Hidden when nothing is selected — the action itself would just toast,
         # but the palette is cleaner if the option isn't there to tempt you.
