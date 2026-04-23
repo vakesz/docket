@@ -73,12 +73,11 @@ def build_agent(
             conn=conn,
             store=store,
             active_item=active_item,
+            provider=provider,
             provider_key=provider_key,
         )
         if project_id:
-            register_memory_mutating_tools(
-                registry, conn=conn, store=store, project_id=project_id
-            )
+            register_memory_mutating_tools(registry, conn=conn, store=store, project_id=project_id)
     return AgentLoop(client=llm, tools=registry)
 
 

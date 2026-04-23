@@ -15,13 +15,20 @@ from collections.abc import AsyncIterator
 from dataclasses import asdict
 from threading import Thread
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Request
 from sse_starlette.sse import EventSourceResponse, ServerSentEvent  # type: ignore[attr-defined]
 
 from docket.agent.loop import AgentLoop
 from docket.agent.types import ChatMessage, StreamDelta
 from docket.api.auth import require_bearer
-from docket.api.deps import get_active_provider_key, get_conn, get_proposals, require_agent
+from docket.api.deps import (
+    get_active_provider_key,
+    get_conn,
+    get_proposals,
+    get_provider,
+    require_agent,
+)
+from docket.api.routes.items import get_item_or_fetch
 from docket.api.schemas import (
     ChatRoleDTO,
     ConversationDTO,
@@ -31,7 +38,8 @@ from docket.api.schemas import (
 )
 from docket.core.services import conversation_service
 from docket.core.services.proposal_store import ProposalStore
-from docket.storage.repos import conversation_repo, item_repo
+from docket.providers.base import WorkItemProvider
+from docket.storage.repos import conversation_repo
 
 log = logging.getLogger(__name__)
 
@@ -58,10 +66,10 @@ def _message_dto(m: ChatMessage) -> ChatRoleDTO:
 def get_history(
     item_id: str,
     conn: sqlite3.Connection = Depends(get_conn),
+    provider: WorkItemProvider = Depends(get_provider),
     provider_key: str = Depends(get_active_provider_key),
 ) -> ConversationHistoryDTO:
-    if item_repo.get_item(conn, item_id, provider_key=provider_key) is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown item '{item_id}'")
+    get_item_or_fetch(conn, provider, item_id, provider_key)
     convo = conversation_repo.get_active_for_item(conn, item_id, provider_key=provider_key)
     if convo is None:
         return ConversationHistoryDTO(conversation=None, messages=[])
@@ -76,10 +84,10 @@ def get_history(
 def start_thread(
     item_id: str,
     conn: sqlite3.Connection = Depends(get_conn),
+    provider: WorkItemProvider = Depends(get_provider),
     provider_key: str = Depends(get_active_provider_key),
 ) -> ConversationDTO:
-    if item_repo.get_item(conn, item_id, provider_key=provider_key) is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown item '{item_id}'")
+    get_item_or_fetch(conn, provider, item_id, provider_key)
     convo = conversation_service.new_thread(conn, item_id, provider_key=provider_key)
     return ConversationDTO.from_core(convo)
 
@@ -90,6 +98,7 @@ async def send_message(
     payload: SendMessageRequest,
     request: Request,
     conn: sqlite3.Connection = Depends(get_conn),
+    provider: WorkItemProvider = Depends(get_provider),
     store: ProposalStore = Depends(get_proposals),
     agent: AgentLoop = Depends(require_agent),
     provider_key: str = Depends(get_active_provider_key),
@@ -104,8 +113,7 @@ async def send_message(
       - `done` — terminal, carries usage totals
       - `error` — terminal, carries a human-readable detail
     """
-    if item_repo.get_item(conn, item_id, provider_key=provider_key) is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown item '{item_id}'")
+    get_item_or_fetch(conn, provider, item_id, provider_key)
 
     generator = _stream_turn(
         conn=conn,

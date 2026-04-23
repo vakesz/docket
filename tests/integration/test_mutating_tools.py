@@ -39,7 +39,9 @@ def env(tmp_path: Path):
     store = ProposalStore()
     reg = ToolRegistry()
     register_readonly_tools(reg, conn=conn, provider=provider)
-    register_mutating_tools(reg, conn=conn, store=store, active_item=lambda: item.id)
+    register_mutating_tools(
+        reg, conn=conn, store=store, active_item=lambda: item.id, provider=provider
+    )
     yield conn, provider, store, reg, item
     conn.close()
 

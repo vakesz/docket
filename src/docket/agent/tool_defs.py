@@ -8,13 +8,20 @@ sees the failure and can reason about it.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from typing import Any
 
 from docket.agent.tools import ToolRegistry
-from docket.core.model import Item
+from docket.core.model import Item, ItemKind
 from docket.providers.base import WorkItemProvider
 from docket.storage.repos import comment_repo, item_repo
+
+# Matches bare http(s) URLs inside markdown bodies. Trailing punctuation that's
+# commonly prose-adjacent (`.`, `,`, `)`, `]`) is stripped when extracting so
+# links paste cleanly into follow-on tool calls.
+_URL_RE = re.compile(r"https?://[^\s<>\"')\]]+")
+_URL_TRIM = ".,;:!?"
 
 
 def _item_summary(item: Item) -> dict[str, Any]:
@@ -29,6 +36,21 @@ def _item_summary(item: Item) -> dict[str, Any]:
         "updated_at": item.updated_at.isoformat() if item.updated_at else None,
         "url": item.url,
     }
+
+
+def _extract_links(text: str | None) -> list[str]:
+    """Pull unique http(s) URLs from a markdown body, in first-seen order.
+
+    Trimmed of trailing sentence punctuation. Keeps order so the model can
+    reason about which link was mentioned first (often the primary repo)."""
+    if not text:
+        return []
+    seen: dict[str, None] = {}
+    for raw in _URL_RE.findall(text):
+        url = raw.rstrip(_URL_TRIM)
+        if url and url not in seen:
+            seen[url] = None
+    return list(seen.keys())
 
 
 def register_readonly_tools(
@@ -46,12 +68,15 @@ def register_readonly_tools(
         if item is None:
             try:
                 item = provider.get_item(id_)
-                if provider_key:
-                    item.provider_key = provider_key
             except Exception as e:
                 return json.dumps({"error": f"provider lookup failed: {e}"})
+            if provider_key:
+                item.provider_key = provider_key
+            # Cache on first hit so downstream tools and UI reads reuse it.
+            item_repo.upsert_item(conn, item)
         payload = _item_summary(item)
         payload["description_md"] = item.description_md
+        payload["links"] = _extract_links(item.description_md)
         return json.dumps(payload)
 
     def get_comments(args: dict[str, Any]) -> str:
@@ -91,16 +116,48 @@ def register_readonly_tools(
         limit = int(args.get("limit", 20) or 20)
         if not query:
             return json.dumps({"error": "query is required"})
+        kind_raw = args.get("kind")
+        kind: ItemKind | None = None
+        if isinstance(kind_raw, str) and kind_raw.strip():
+            try:
+                kind = ItemKind(kind_raw.strip().lower())
+            except ValueError:
+                allowed = ", ".join(k.value for k in ItemKind)
+                return json.dumps({"error": f"kind must be one of: {allowed}"})
+        cached = item_repo.list_items(conn, provider_key=provider_key)
         matches = [
             i
-            for i in item_repo.list_items(conn, provider_key=provider_key)
-            if query in i.title.lower() or query in (i.description_md or "").lower()
+            for i in cached
+            if (kind is None or i.kind == kind)
+            and (query in i.title.lower() or query in (i.description_md or "").lower())
         ][:limit]
-        return json.dumps([_item_summary(i) for i in matches])
+        if matches:
+            return json.dumps([_item_summary(i) for i in matches])
+        # Empty result — tell the model *why* so it doesn't retry the same
+        # search with slight wording changes (a common failure mode).
+        hint = (
+            "local cache is empty for this provider; run `sync` or call `get_item` "
+            "with a known id to populate it"
+            if not cached
+            else "no cached item matched; try a different keyword, narrow by `kind`, "
+            "or call `get_item` with a specific id"
+        )
+        return json.dumps(
+            {
+                "matches": [],
+                "cache_size": len(cached),
+                "hint": hint,
+            }
+        )
 
     registry.register(
         name="get_item",
-        description="Fetch full details (including description) for a work item by id. Tries cache, falls back to provider.",
+        description=(
+            "Fetch full details for a work item by id. Tries the local cache, "
+            "falls back to the provider. Response includes `description_md` and "
+            "a `links` array of http(s) URLs found in the description — use those "
+            "to spot a linked repo / PR / design doc before calling further tools."
+        ),
         parameters={
             "type": "object",
             "properties": {"id": {"type": "string", "description": "Work item id"}},
@@ -130,11 +187,22 @@ def register_readonly_tools(
     )
     registry.register(
         name="search_items",
-        description="Search the local cache by substring match against title and description. Returns up to `limit` summaries.",
+        description=(
+            "Substring-search the LOCAL item cache (title + description). Does NOT "
+            "query the provider — items only appear after a sync or an explicit "
+            "`get_item` call. On empty results the response includes `cache_size` "
+            "and a `hint`; do NOT retry the same search with reworded queries — "
+            "either narrow by `kind`, call `get_item` with a known id, or move on."
+        ),
         parameters={
             "type": "object",
             "properties": {
-                "query": {"type": "string"},
+                "query": {"type": "string", "description": "Substring to match"},
+                "kind": {
+                    "type": "string",
+                    "description": ("Optional filter: epic / feature / story / task / bug."),
+                    "enum": [k.value for k in ItemKind],
+                },
                 "limit": {"type": "integer", "default": 20, "minimum": 1, "maximum": 100},
             },
             "required": ["query"],
@@ -201,4 +269,4 @@ def register_readonly_tools(
         )
 
 
-__all__ = ["_item_summary", "register_readonly_tools"]
+__all__ = ["_extract_links", "_item_summary", "register_readonly_tools"]

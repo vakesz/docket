@@ -50,7 +50,9 @@ def env(tmp_path: Path):
     store = ProposalStore()
     reg = ToolRegistry()
     register_readonly_tools(reg, conn=conn, provider=provider)
-    register_mutating_tools(reg, conn=conn, store=store, active_item=lambda: item.id)
+    register_mutating_tools(
+        reg, conn=conn, store=store, active_item=lambda: item.id, provider=provider
+    )
     # Seed a conversation so the transcript tool has something to render.
     convo = conversation_service.open_thread(conn, item.id)
     message_repo.append(conn, convo.id, ChatMessage(role="user", content="Why is this blocked?"))
@@ -95,7 +97,9 @@ def test_attach_transcript_errors_when_no_conversation(env) -> None:
     # Fresh registry after archive — the original `store` still holds nothing.
     reg = ToolRegistry()
     register_readonly_tools(reg, conn=conn, provider=provider)
-    register_mutating_tools(reg, conn=conn, store=store, active_item=lambda: "S-1")
+    register_mutating_tools(
+        reg, conn=conn, store=store, active_item=lambda: "S-1", provider=provider
+    )
     out = reg.dispatch("attach_transcript", {"id": "S-1"})
     assert "no active conversation" in json.loads(out)["error"]
     assert len(store) == 0

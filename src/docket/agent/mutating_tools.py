@@ -25,6 +25,7 @@ from docket.core.mutation import Proposal, render_diff
 from docket.core.redaction import redact_secrets
 from docket.core.services import mutation_service
 from docket.core.services.proposal_store import ProposalStore
+from docket.providers.base import WorkItemProvider
 from docket.storage.repos import conversation_repo, item_repo, message_repo, search_repo
 
 _DUPLICATE_LIMIT = 5
@@ -65,12 +66,17 @@ def register_mutating_tools(
     conn: sqlite3.Connection,
     store: ProposalStore,
     active_item: Callable[[], str | None],
+    provider: WorkItemProvider,
     provider_key: str = "",
 ) -> None:
     """Register write tools.
 
     `active_item` returns the id of the currently-focused item — used by
     `attach_transcript` so the model doesn't need to pass it.
+
+    `provider` lets propose_* tools fall back to a live provider fetch when
+    the target item isn't in the local cache (parents and cross-scope items
+    routinely miss the sync window).
     """
 
     def propose_transition(args: dict[str, Any]) -> str:
@@ -85,7 +91,7 @@ def register_mutating_tools(
             return json.dumps({"error": f"unknown intent '{intent_raw}'", "allowed": allowed})
         try:
             proposal = mutation_service.propose_transition(
-                conn, item_id, intent, provider_key=provider_key
+                conn, item_id, intent, provider_key=provider_key, provider=provider
             )
         except KeyError as e:
             return json.dumps({"error": str(e)})
@@ -99,7 +105,7 @@ def register_mutating_tools(
             return json.dumps({"error": "id and new_description_md are required"})
         try:
             proposal = mutation_service.propose_description_patch(
-                conn, item_id, new_md, provider_key=provider_key
+                conn, item_id, new_md, provider_key=provider_key, provider=provider
             )
         except KeyError as e:
             return json.dumps({"error": str(e)})
@@ -143,7 +149,13 @@ def register_mutating_tools(
             return json.dumps({"error": "conversation is empty"})
         item = item_repo.get_item(conn, item_id, provider_key=provider_key)
         if item is None:
-            return json.dumps({"error": f"unknown item {item_id}"})
+            try:
+                item = provider.get_item(item_id)
+            except Exception as e:
+                return json.dumps({"error": f"unknown item {item_id}: {e}"})
+            if provider_key:
+                item.provider_key = provider_key
+            item_repo.upsert_item(conn, item)
         version = next_version(conn, item_id, provider_key=provider_key)
         filename = filename_for(version)
         md = render_markdown(
@@ -163,6 +175,7 @@ def register_mutating_tools(
                 content=md.encode("utf-8"),
                 content_type="text/markdown; charset=utf-8",
                 provider_key=provider_key,
+                provider=provider,
             )
         except KeyError as e:
             return json.dumps({"error": str(e)})

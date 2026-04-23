@@ -22,10 +22,37 @@ from docket.api.schemas import (
     MutationConfirmedDTO,
     ProposalDTO,
 )
-from docket.core.model import ItemKind, ItemState
+from docket.core.model import Item, ItemKind, ItemState
 from docket.core.services import mutation_service, visual_filter
 from docket.providers.base import WorkItemProvider
 from docket.storage.repos import comment_repo, item_repo
+
+
+def get_item_or_fetch(
+    conn: sqlite3.Connection,
+    provider: WorkItemProvider,
+    item_id: str,
+    provider_key: str,
+) -> Item:
+    """Return a cached Item, or fetch-and-cache from the provider on miss.
+
+    Parents often live outside the sync scope (different Azure DevOps project,
+    untracked work-item type, or a scope filter that excludes them), so the
+    cache alone isn't enough to back parent-link navigation. On a cache miss
+    we fall back to `provider.get_item`, upsert the result, and return it.
+    Raises 404 if the provider can't produce the item either."""
+    cached = item_repo.get_item(conn, item_id, provider_key=provider_key)
+    if cached is not None:
+        return cached
+    try:
+        fresh = provider.get_item(item_id)
+    except Exception as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown item '{item_id}'") from e
+    if provider_key:
+        fresh.provider_key = provider_key
+    item_repo.upsert_item(conn, fresh)
+    return fresh
+
 
 router = APIRouter(
     prefix="/items",
@@ -126,10 +153,7 @@ def get_item(
             fresh.provider_key = provider_key
         item_repo.upsert_item(conn, fresh)
         return ItemDTO.from_core(fresh)
-    cached = item_repo.get_item(conn, item_id, provider_key=provider_key)
-    if cached is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown item '{item_id}'")
-    return ItemDTO.from_core(cached)
+    return ItemDTO.from_core(get_item_or_fetch(conn, provider, item_id, provider_key))
 
 
 @router.post(
@@ -164,4 +188,4 @@ def create_item(
     )
 
 
-__all__ = ["router"]
+__all__ = ["get_item_or_fetch", "router"]

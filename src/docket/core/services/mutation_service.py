@@ -54,8 +54,9 @@ def propose_transition(
     intent: TransitionIntent,
     *,
     provider_key: str = "",
+    provider: WorkItemProvider | None = None,
 ) -> StateChange:
-    item = _require_cached(conn, item_id, provider_key=provider_key)
+    item = _require_cached(conn, item_id, provider_key=provider_key, provider=provider)
     return StateChange(item=item, intent=intent)
 
 
@@ -65,8 +66,9 @@ def propose_description_patch(
     new_md: str,
     *,
     provider_key: str = "",
+    provider: WorkItemProvider | None = None,
 ) -> DescriptionPatch:
-    item = _require_cached(conn, item_id, provider_key=provider_key)
+    item = _require_cached(conn, item_id, provider_key=provider_key, provider=provider)
     return DescriptionPatch(item=item, new_md=new_md)
 
 
@@ -78,8 +80,9 @@ def propose_attachment(
     content_type: str = "text/markdown; charset=utf-8",
     *,
     provider_key: str = "",
+    provider: WorkItemProvider | None = None,
 ) -> AttachmentUpload:
-    item = _require_cached(conn, item_id, provider_key=provider_key)
+    item = _require_cached(conn, item_id, provider_key=provider_key, provider=provider)
     return AttachmentUpload(
         item=item, filename=filename, content=content, content_type=content_type
     )
@@ -95,8 +98,9 @@ def propose_comment(
     body_md: str,
     *,
     provider_key: str = "",
+    provider: WorkItemProvider | None = None,
 ) -> CommentAdd:
-    item = _require_cached(conn, item_id, provider_key=provider_key)
+    item = _require_cached(conn, item_id, provider_key=provider_key, provider=provider)
     return CommentAdd(item=item, body_md=body_md)
 
 
@@ -309,13 +313,33 @@ def _execute(
     raise TypeError(f"unknown proposal type: {type(proposal)!r}")
 
 
-def _require_cached(conn: sqlite3.Connection, item_id: str, *, provider_key: str = "") -> Item:
+def _require_cached(
+    conn: sqlite3.Connection,
+    item_id: str,
+    *,
+    provider_key: str = "",
+    provider: WorkItemProvider | None = None,
+) -> Item:
     item = item_repo.get_item(conn, item_id, provider_key=provider_key)
-    if item is None:
-        raise KeyError(
-            f"no cached item with id={item_id}; run `docket sync` or open it first to load context"
-        )
-    return item
+    if item is not None:
+        return item
+    # Parents and cross-scope items may legitimately miss the cache. When a
+    # provider is available, fall back to a live fetch and cache the result so
+    # subsequent calls hit the fast path.
+    if provider is not None:
+        try:
+            fetched = provider.get_item(item_id)
+        except Exception as e:
+            raise KeyError(
+                f"no cached item with id={item_id} and provider lookup failed: {e}"
+            ) from e
+        if provider_key:
+            fetched.provider_key = provider_key
+        item_repo.upsert_item(conn, fetched)
+        return fetched
+    raise KeyError(
+        f"no cached item with id={item_id}; run `docket sync` or open it first to load context"
+    )
 
 
 def _refresh_cache(conn: sqlite3.Connection, item: Item, provider_key: str) -> None:
