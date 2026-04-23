@@ -103,20 +103,23 @@ export const api = {
     }
 
     const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+    // SSE event boundary is an empty line — any of `\r\n\r\n`, `\n\n`, or
+    // `\r\r`. sse-starlette uses `\r\n` by default, so we must handle CRLF.
+    const boundary = /\r\n\r\n|\n\n|\r\r/;
+    const lineSep = /\r\n|\r|\n/;
     let buf = "";
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       buf += value;
       for (;;) {
-        const idx = buf.indexOf("\n\n");
-        if (idx === -1) break;
-        const raw = buf.slice(0, idx);
-        buf = buf.slice(idx + 2);
-        const lines = raw.split("\n");
+        const match = boundary.exec(buf);
+        if (!match) break;
+        const raw = buf.slice(0, match.index);
+        buf = buf.slice(match.index + match[0].length);
         let event = "message";
         const dataLines: string[] = [];
-        for (const line of lines) {
+        for (const line of raw.split(lineSep)) {
           if (line.startsWith("event:")) event = line.slice(6).trim();
           else if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
         }
