@@ -17,7 +17,7 @@ import sqlite3
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from docket.api.auth import require_bearer
-from docket.api.deps import get_config, get_conn, require_not_read_only
+from docket.api.deps import get_config, get_conn, require_not_read_only, require_project
 from docket.api.schemas import (
     SourceCreateRequest,
     SourceDTO,
@@ -48,11 +48,6 @@ def _to_dto(entry: Source) -> SourceDTO:
     )
 
 
-def _require_project(config: Config, project_id: str) -> None:
-    if project_id not in config.projects:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown project '{project_id}'")
-
-
 def _require_entry(conn: sqlite3.Connection, source_id: str) -> Source:
     entry = source_repo.get(conn, source_id)
     if entry is None:
@@ -71,7 +66,7 @@ def list_sources(
     config: Config = Depends(get_config),
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> SourceListDTO:
-    _require_project(config, project_id)
+    require_project(config, project_id)
     entries = source_repo.list_for_project(conn, project_id, kind=kind, limit=limit)
     return SourceListDTO(
         project_id=project_id,
@@ -91,7 +86,7 @@ def search_sources(
     config: Config = Depends(get_config),
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> SourceListDTO:
-    _require_project(config, project_id)
+    require_project(config, project_id)
     entries = source_repo.search(conn, project_id, q, kind=kind, limit=limit)
     return SourceListDTO(
         project_id=project_id,
@@ -111,7 +106,7 @@ def create_source(
     config: Config = Depends(get_config),
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> SourceDTO:
-    _require_project(config, project_id)
+    require_project(config, project_id)
     try:
         entry = source_repo.create(
             conn,

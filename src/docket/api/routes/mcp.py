@@ -20,7 +20,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from docket.agent.mcp import MCPClient
 from docket.api.agent_rebuild import rebuild_agent
 from docket.api.auth import require_bearer
-from docket.api.deps import get_config, get_paths, get_runtime, require_not_read_only
+from docket.api.deps import (
+    get_config,
+    get_paths,
+    get_runtime,
+    require_not_read_only,
+    require_project,
+)
 from docket.api.runtime import RuntimeState
 from docket.api.schemas import (
     MCPPresetApplyRequest,
@@ -57,11 +63,6 @@ def _to_dto(project_id: str, name: str, entry: MCPServerEntry) -> MCPServerDTO:
         enabled=entry.enabled,
         startup_timeout_seconds=entry.startup_timeout_seconds,
     )
-
-
-def _require_project(config: Config, project_id: str) -> None:
-    if project_id not in config.projects:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown project '{project_id}'")
 
 
 def _refresh_runtime(runtime: RuntimeState, project_id: str, request: Request) -> None:
@@ -125,7 +126,7 @@ def list_mcp_servers(
     project_id: str,
     config: Config = Depends(get_config),
 ) -> MCPServerListDTO:
-    _require_project(config, project_id)
+    require_project(config, project_id)
     servers = mcp_service.list_servers(config, project_id)
     return MCPServerListDTO(
         project_id=project_id,
@@ -142,7 +143,7 @@ def get_mcp_server(
     name: str,
     config: Config = Depends(get_config),
 ) -> MCPServerDTO:
-    _require_project(config, project_id)
+    require_project(config, project_id)
     try:
         entry = mcp_service.get_server(config, project_id, name)
     except mcp_service.UnknownServerError as exc:
@@ -164,7 +165,7 @@ def create_mcp_server(
     paths: Paths = Depends(get_paths),
     runtime: RuntimeState = Depends(get_runtime),
 ) -> MCPServerDTO:
-    _require_project(config, project_id)
+    require_project(config, project_id)
     try:
         entry = mcp_service.add_server(
             config,
@@ -203,7 +204,7 @@ def update_mcp_server(
     paths: Paths = Depends(get_paths),
     runtime: RuntimeState = Depends(get_runtime),
 ) -> MCPServerDTO:
-    _require_project(config, project_id)
+    require_project(config, project_id)
     if (
         payload.command is None
         and payload.args is None
@@ -251,7 +252,7 @@ def delete_mcp_server(
     paths: Paths = Depends(get_paths),
     runtime: RuntimeState = Depends(get_runtime),
 ) -> None:
-    _require_project(config, project_id)
+    require_project(config, project_id)
     try:
         mcp_service.remove_server(config, paths, project_id, name)
     except mcp_service.UnknownServerError as exc:
@@ -270,7 +271,7 @@ def test_mcp_server_draft(
     config: Config = Depends(get_config),
 ) -> MCPServerTestResultDTO:
     """Validate a draft MCP server config without saving it."""
-    _require_project(config, project_id)
+    require_project(config, project_id)
     return _test_result(
         payload.name,
         MCPServerEntry(
@@ -297,7 +298,7 @@ def test_mcp_server(
     """Spawn the configured MCP server, complete the handshake, list its
     tools, then close. Lets the UI verify a fresh entry without restarting
     the running fleet."""
-    _require_project(config, project_id)
+    require_project(config, project_id)
     try:
         entry = mcp_service.get_server(config, project_id, name)
     except mcp_service.UnknownServerError as exc:
@@ -360,7 +361,7 @@ def apply_mcp_preset(
     The preset supplies `command`/`args`/`transport`; the caller supplies env
     values (typically an API token) via `payload.env`. Returns 400 if the
     preset or a required env var is missing, 409 on name conflict."""
-    _require_project(config, project_id)
+    require_project(config, project_id)
     try:
         server_name, entry = mcp_service.add_server_from_preset(
             config,

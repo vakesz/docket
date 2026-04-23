@@ -113,8 +113,8 @@ class BackgroundTasksMixin(_AppBase):
         def apply() -> None:
             self._set_offline(False)
             self._mark_sync_now()
-            self._reload_tree()
             if summary.upserted or summary.archived:
+                self._reload_tree()
                 self.notify(
                     f"Auto-sync · {summary.upserted} updated, {summary.archived} archived",
                     severity="information",

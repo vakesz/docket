@@ -22,10 +22,11 @@ def patch_command(
 ) -> None:
     """Replace a work item's description with the contents of a Markdown file."""
     abort_if_read_only(console)
-    if not from_file.exists():
-        console.print(f"[red]File not found: {from_file}[/red]")
-        raise typer.Exit(2)
-    new_md = from_file.read_text(encoding="utf-8")
+    try:
+        new_md = from_file.read_text(encoding="utf-8")
+    except OSError as exc:
+        console.print(f"[red]Cannot read {from_file}: {exc}[/red]")
+        raise typer.Exit(2) from exc
 
     ctx = prepare_or_wizard()
     try:

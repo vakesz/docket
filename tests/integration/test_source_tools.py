@@ -39,9 +39,7 @@ def env(tmp_path: Path):
 
 def test_list_sources_returns_summaries(env) -> None:
     conn, pid, reg = env
-    source_repo.create(
-        conn, project_id=pid, title="Spec", body_md="big body", kind="requirements"
-    )
+    source_repo.create(conn, project_id=pid, title="Spec", body_md="big body", kind="requirements")
     out = json.loads(reg.dispatch("list_sources", {}))
     assert len(out) == 1
     assert out[0]["title"] == "Spec"

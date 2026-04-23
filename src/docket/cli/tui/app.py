@@ -170,18 +170,7 @@ class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
         self._proposals = ProposalStore()
         self._agent: AgentLoop | None = None
         self._pane_pct: dict[str, int] = dict(self._DEFAULT_PANE_PCT)
-        if tui_ctx.llm is not None:
-            self._agent = build_agent(
-                llm=tui_ctx.llm,
-                conn=tui_ctx.conn,
-                provider=tui_ctx.provider,
-                store=self._proposals,
-                active_item=lambda: self._selected_item_id,
-                read_only=tui_ctx.read_only,
-                provider_key=tui_ctx.provider_key,
-                project_id=project_id_for(tui_ctx.provider_key),
-                mcp_manager=tui_ctx.mcp_manager,
-            )
+        self._rebuild_agent()
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="main"):
@@ -239,25 +228,11 @@ class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
         return visual_filter.resolve(self.tui_ctx.scope, self.tui_ctx.provider)
 
     def _reload_tree(self) -> None:
-        resolved = self._active_view_filter()
-        items = item_repo.list_items(
-            self.tui_ctx.conn,
-            provider_key=self.tui_ctx.provider_key,
-            assignee=resolved.assignee,
-            states=self._list_item_states(),
-        )
-        items = visual_filter.apply_to_items(items, resolved)
-        pinned = watchlist_repo.list_pinned_items(
-            self.tui_ctx.conn, provider_key=self.tui_ctx.provider_key
-        )
-        self.query_one(ItemTree).load_items(
-            items, pinned=pinned, grouping=self._resolved_grouping()
-        )
+        self._apply_filter("")
 
-    def _provider_key(self) -> str:
-        """Key used to look up per-provider overrides (stale threshold,
-        sync floor). Mirrors the status-bar rule: prefer `display_name`,
-        fall back to the class name."""
+    def _provider_display_key(self) -> str:
+        """Display-name key for per-provider override dicts (stale threshold,
+        sync floor). Distinct from `tui_ctx.provider_key` (the config id)."""
         prov = self.tui_ctx.provider
         name = getattr(prov, "display_name", None) or type(prov).__name__
         return str(name)
@@ -266,7 +241,7 @@ class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
         """Global default, unless the active provider has its own override.
         Returns None when the marker is disabled so ItemTree can short-circuit."""
         per_provider = self.tui_ctx.stale_threshold_by_provider or {}
-        value = per_provider.get(self._provider_key(), self.tui_ctx.stale_threshold_days)
+        value = per_provider.get(self._provider_display_key(), self.tui_ctx.stale_threshold_days)
         return value if value and value > 0 else None
 
     def _resolved_sync_interval(self) -> float:
@@ -279,7 +254,7 @@ class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
         if base <= 0:
             return 0.0
         floors = self.tui_ctx.background_sync_min_interval_by_provider or {}
-        floor = floors.get(self._provider_key(), 0.0)
+        floor = floors.get(self._provider_display_key(), 0.0)
         return max(base, floor)
 
     def _resolved_grouping(self) -> GroupingStrategy:
@@ -355,6 +330,33 @@ class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
         pid = project_id_for(self.tui_ctx.provider_key)
         entry = cfg.projects.get(pid)
         return entry.name if entry else ""
+
+    def _rebuild_agent(self) -> None:
+        """Rebuild the agent, rebinding all tool closures to the current provider/project.
+
+        Must be called after any provider switch or MCP config change so the
+        tool registry targets the new backend. No-op when no LLM is configured."""
+        if self.tui_ctx.llm is None:
+            return
+        self._agent = build_agent(
+            llm=self.tui_ctx.llm,
+            conn=self.tui_ctx.conn,
+            provider=self.tui_ctx.provider,
+            store=self._proposals,
+            active_item=lambda: self._selected_item_id,
+            read_only=self.tui_ctx.read_only,
+            provider_key=self.tui_ctx.provider_key,
+            project_id=project_id_for(self.tui_ctx.provider_key),
+            mcp_manager=self.tui_ctx.mcp_manager,
+        )
+
+    def _require_project_context(self, feature: str) -> tuple[str, str] | None:
+        """Return (project_id, project_name) for the active project, or toast and return None."""
+        if self.tui_ctx.config is None:
+            self.notify(f"{feature} is unavailable in this session.", severity="warning")
+            return None
+        project_id = project_id_for(self.tui_ctx.provider_key)
+        return project_id, self._resolve_project_name() or project_id
 
     def _rebind_mcp_for_active_project(self) -> None:
         """Switch the MCP fleet to match the current project (= provider).
@@ -508,10 +510,10 @@ class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
             return
         by_id = {
             i.id: i
-            for i in item_repo.list_items(
+            for i in item_repo.list_items_by_ids(
                 self.tui_ctx.conn,
+                ids,
                 provider_key=self.tui_ctx.provider_key,
-                assignee=resolved.assignee,
                 states=states,
             )
         }
@@ -558,7 +560,9 @@ class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
 
     def _run_turn(self, item_id: str, text: str) -> None:
         chat = self.query_one(ChatPane)
-        assert self._agent is not None  # guarded by on_user_turn_request
+        if self._agent is None:
+            self.call_from_thread(chat.note, "Agent is not available.", cls="msg-system")
+            return
 
         def on_delta(delta: StreamDelta) -> None:
             self.call_from_thread(chat.append_delta, delta)
@@ -907,12 +911,10 @@ class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
 
     def action_open_memory(self) -> None:
         """Open the per-project memory editor for the active project."""
-        cfg = self.tui_ctx.config
-        if cfg is None:
-            self.notify("Memory is unavailable in this session.", severity="warning")
+        ctx = self._require_project_context("Memory")
+        if ctx is None:
             return
-        project_id = project_id_for(self.tui_ctx.provider_key)
-        project_name = self._resolve_project_name() or project_id
+        project_id, project_name = ctx
         self.push_screen(
             MemoryPane(
                 conn=self.tui_ctx.conn,
@@ -924,12 +926,10 @@ class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
 
     def action_open_source(self) -> None:
         """Open the per-project sources editor for the active project."""
-        cfg = self.tui_ctx.config
-        if cfg is None:
-            self.notify("Sources are unavailable in this session.", severity="warning")
+        ctx = self._require_project_context("Sources")
+        if ctx is None:
             return
-        project_id = project_id_for(self.tui_ctx.provider_key)
-        project_name = self._resolve_project_name() or project_id
+        project_id, project_name = ctx
         self.push_screen(
             SourcePane(
                 conn=self.tui_ctx.conn,
@@ -955,18 +955,8 @@ class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
         project_name = self._resolve_project_name() or project_id
 
         def on_dismiss(changed: bool | None) -> None:
-            if changed and self.tui_ctx.llm is not None:
-                self._agent = build_agent(
-                    llm=self.tui_ctx.llm,
-                    conn=self.tui_ctx.conn,
-                    provider=self.tui_ctx.provider,
-                    store=self._proposals,
-                    active_item=lambda: self._selected_item_id,
-                    read_only=self.tui_ctx.read_only,
-                    provider_key=self.tui_ctx.provider_key,
-                    project_id=project_id_for(self.tui_ctx.provider_key),
-                    mcp_manager=self.tui_ctx.mcp_manager,
-                )
+            if changed:
+                self._rebuild_agent()
 
         self.push_screen(
             MCPPane(
@@ -1071,18 +1061,7 @@ class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
         # Rebuild so `search_items` and `get_item` target the new backend. MCP
         # fleet is per-project (= per-provider), so rebind first.
         self._rebind_mcp_for_active_project()
-        if self.tui_ctx.llm is not None:
-            self._agent = build_agent(
-                llm=self.tui_ctx.llm,
-                conn=self.tui_ctx.conn,
-                provider=self.tui_ctx.provider,
-                store=self._proposals,
-                active_item=lambda: self._selected_item_id,
-                read_only=self.tui_ctx.read_only,
-                provider_key=self.tui_ctx.provider_key,
-                project_id=project_id_for(self.tui_ctx.provider_key),
-                mcp_manager=self.tui_ctx.mcp_manager,
-            )
+        self._rebuild_agent()
         # The detail and chat panes were rendered for an item from the previous
         # provider. Wipe them so the user doesn't chat against a ticket that no
         # longer exists in the active cache slice.
@@ -1096,9 +1075,10 @@ class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
             bar.scope_label = scope_name
             bar.active_view = scope_name
             bar.project_name = self._resolve_project_name()
+        stale = self._resolved_stale_threshold()
         with contextlib.suppress(Exception):
-            self.query_one(ItemTree).stale_threshold_days = self._resolved_stale_threshold()
-            self.query_one(ItemDetail).stale_threshold_days = self._resolved_stale_threshold()
+            self.query_one(ItemTree).stale_threshold_days = stale
+            self.query_one(ItemDetail).stale_threshold_days = stale
         self._reload_tree()
         self.notify(
             f"Switched to provider '{entry.display_name}'.",

@@ -113,6 +113,12 @@ def get_active_provider_key(request: Request) -> str:
     return runtime.provider_key if runtime is not None else ""
 
 
+def require_project(config: Config, project_id: str) -> None:
+    """Raise HTTP 404 if `project_id` is not registered in the active config."""
+    if project_id not in config.projects:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown project '{project_id}'")
+
+
 def get_config(request: Request) -> Config:
     """Return the in-memory `Config` object the server was booted with.
 
@@ -139,4 +145,5 @@ __all__ = [
     "require_agent",
     "require_llm",
     "require_not_read_only",
+    "require_project",
 ]

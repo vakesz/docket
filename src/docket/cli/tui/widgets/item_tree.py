@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -177,12 +178,17 @@ class ItemTree(Tree[str]):
             label = f"{kind.value.title()}s {count}"
             kind_nodes[kind] = self.root.add(label, expand=True)
 
+        children_of: defaultdict[str, list[Item]] = defaultdict(list)
+        for item in by_id.values():
+            if item.parent_id:
+                children_of[item.parent_id].append(item)
+
         # First pass: render roots (no parent or parent not in snapshot) under their kind bucket.
         placed: set[str] = set()
         for item in by_id.values():
             if item.parent_id and item.parent_id in by_id:
                 continue
-            self._add_item_recursive(kind_nodes[item.kind], item, by_id, placed)
+            self._add_item_recursive(kind_nodes[item.kind], item, children_of, placed)
 
         # Second pass: items whose parent is in the snapshot but was never placed
         # (parent belongs to a different kind bucket). Attach them under the parent we can find,
@@ -190,7 +196,7 @@ class ItemTree(Tree[str]):
         for item in by_id.values():
             if item.id in placed:
                 continue
-            self._add_item_recursive(kind_nodes[item.kind], item, by_id, placed)
+            self._add_item_recursive(kind_nodes[item.kind], item, children_of, placed)
 
     def _render_state_bucket_groups(self, by_id: dict[str, Item]) -> None:
         """GitHub-style grouping: Open vs Done. No kind sub-buckets, no parent
@@ -229,13 +235,13 @@ class ItemTree(Tree[str]):
         self,
         parent_node: TreeNode[str],
         item: Item,
-        by_id: dict[str, Item],
+        children_of: defaultdict[str, list[Item]],
         placed: set[str],
     ) -> None:
         if item.id in placed:
             return
         children = sorted(
-            (c for c in by_id.values() if c.parent_id == item.id),
+            children_of.get(item.id, []),
             key=lambda child: (
                 -(child.updated_at.timestamp() if child.updated_at else 0),
                 child.title.lower(),
@@ -256,7 +262,7 @@ class ItemTree(Tree[str]):
         )
         placed.add(item.id)
         for child in children:
-            self._add_item_recursive(node, child, by_id, placed)
+            self._add_item_recursive(node, child, children_of, placed)
 
     def render_label(self, node: TreeNode[str], base_style: Style, style: Style) -> Text:
         item_id = node.data if isinstance(node.data, str) else None

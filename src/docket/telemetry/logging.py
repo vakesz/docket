@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import time
 from logging.handlers import RotatingFileHandler
 from typing import Any
 
@@ -139,6 +140,11 @@ def init_logging(
         logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=False,
     )
+
+
+def elapsed_ms(started_ns: int) -> int:
+    """Milliseconds elapsed since `started_ns` (from `time.monotonic_ns()`)."""
+    return (time.monotonic_ns() - started_ns) // 1_000_000
 
 
 def get_logger(name: str | None = None, **initial_values: Any) -> structlog.stdlib.BoundLogger:

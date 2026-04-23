@@ -84,6 +84,12 @@ def get(conn: sqlite3.Connection, project_id: str) -> Project | None:
     return _row_to_project(row) if row else None
 
 
+def require_project(conn: sqlite3.Connection, project_id: str) -> None:
+    """Raise `KeyError` if `project_id` is not in the projects table."""
+    if get(conn, project_id) is None:
+        raise KeyError(f"unknown project '{project_id}' — call project_service.activate() first")
+
+
 def list_all(conn: sqlite3.Connection, *, include_archived: bool = False) -> list[Project]:
     if include_archived:
         rows = conn.execute("SELECT * FROM projects ORDER BY name COLLATE NOCASE").fetchall()

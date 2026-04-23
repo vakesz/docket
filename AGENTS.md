@@ -2,13 +2,15 @@
 
 ## Project Snapshot
 
-- Docket is a Python 3.12+ terminal-first work-item triage app with a Typer CLI, a Textual TUI, and an optional FastAPI HTTP surface.
+- Docket is a Python 3.12+ terminal-first work-item triage app with a Typer CLI, a Textual TUI, a FastAPI HTTP surface, and a React (Vite + Bun + TanStack Router/Query) web client in `frontend/` that consumes the FastAPI OpenAPI schema.
 - The package is organized in layered ports-and-adapters style: surfaces in `cli/` and `api/`, canonical domain types in `core/`, workflow orchestration in `core/services/` and `agent/`, and adapters in `providers/`, `storage/`, `config/`, and `telemetry/`.
 - The app is multi-provider. Built-ins are `azure_devops`, `github`, and `github_stub`, and third-party providers can register through the `docket.providers` entry-point group (`src/docket/providers/registry.py`).
 - The runtime is local-first and project-scoped: remote items are cached in SQLite for fast browsing, while project metadata, prompt files, and MCP server configs live under XDG-managed config paths.
 - The primary safety goal is proposal-first mutation: cache and chat locally, render a visible diff, then require explicit confirmation before any provider write happens.
 
 ## Commands
+
+Backend (Python / `uv`):
 
 ```bash
 uv sync
@@ -46,6 +48,26 @@ uv run ruff format .
 uv run mypy src
 ```
 
+Frontend (React / `bun` in `frontend/`):
+
+```bash
+cd frontend && bun install
+cd frontend && bun run dev         # vite dev server on :3000
+cd frontend && bun run build
+cd frontend && bun run typecheck   # tsc --noEmit
+cd frontend && bun run lint        # biome check
+cd frontend && bun run gen:api     # regenerate OpenAPI types from running backend
+```
+
+Cross-tree shortcuts (`Makefile`):
+
+```bash
+make install      # uv sync + bun install
+make dev          # run backend (docket serve) and frontend (vite) together
+make check        # lint + typecheck + test across both trees
+make gen-api      # regenerate frontend OpenAPI types against the running backend
+```
+
 ## Non-Negotiable Rules
 
 - Keep concrete provider imports out of `src/docket/core/`, `src/docket/storage/`, `src/docket/agent/`, and `src/docket/api/`; those layers talk to `WorkItemProvider`, provider specs, or the registry, not `AzureDevOpsProvider`/`GitHubProvider` directly (`tests/unit/test_import_boundary.py`, `src/docket/providers/base.py`, `src/docket/providers/registry.py`).
@@ -53,7 +75,7 @@ uv run mypy src
 - Do not call `provider.transition`, `provider.patch_description`, `provider.upload_attachment`, or `provider.create_item` from CLI/TUI/API surfaces. In `src/`, provider writes go through `src/docket/core/services/mutation_service.py` only.
 - Treat every provider or agent-side write as proposal-first: build a `Proposal`, render a diff, get confirmation, then confirm through `mutation_service.confirm(...)` (`src/docket/core/mutation.py`, `src/docket/core/services/mutation_service.py`, `src/docket/core/services/proposal_store.py`).
 - Agent mutating tools only stage proposals. That includes work-item tools and project-memory tools; they do not write directly to providers or SQLite (`src/docket/agent/mutating_tools.py`, `src/docket/agent/memory_tools.py`).
-- Project sources are different: the agent can read them, but source writes are human-driven only through CLI/TUI/API paths (`src/docket/core/services/source_service.py`, `src/docket/agent/source_tools.py`).
+- Project sources are different: the agent can read them, but source writes are human-driven only through CLI/TUI/API paths that go directly to the repo (`src/docket/storage/repos/source_repo.py`, `src/docket/cli/commands/source.py`, `src/docket/api/routes/source.py`, `src/docket/cli/tui/widgets/source_pane.py`, `src/docket/agent/source_tools.py`).
 - Keep the prompt prefix byte-stable. Do not inject timestamps, usernames, scope labels, or other runtime-only text into the system-plus-snapshot prefix or prompt-cache hits will collapse (`src/docket/agent/prompt.py`, `src/docket/agent/tools.py`, `src/docket/agent/factory.py`, `tests/integration/test_prompt_loader.py`).
 - Preserve agent tool registration order when touching tool wiring. Tool schema order is part of the cached prompt prefix (`src/docket/agent/tools.py`, `src/docket/agent/factory.py`, `src/docket/agent/source_tools.py`, `src/docket/agent/memory_tools.py`).
 - Treat SQLite as a cache for provider-backed work items, not the system of record. Sync from the provider, and refresh cached rows after confirmed writes (`src/docket/core/services/sync_service.py`, `src/docket/core/services/mutation_service.py`).
@@ -98,9 +120,9 @@ cli.context.prepare[_or_wizard]
         |      syncs via sync_service
         |      chats via conversation_service -> AgentLoop
         |      mutates via mutation_service -> confirm modals
-        |      edits memory/source/MCP config via dedicated services
+        |      edits memory/source via storage repos, MCP via mcp_service
         |
-        +--> FastAPI app
+        +--> FastAPI app  <-- React frontend (frontend/, consumes /openapi.json)
                routes -> deps/runtime -> services
                SSE chat -> conversation_service
                proposal endpoints -> mutation_service.confirm

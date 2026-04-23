@@ -30,6 +30,13 @@ _DEFAULT_LIST_LIMIT = 25
 _DEFAULT_SEARCH_LIMIT = 10
 
 
+def _clamp_limit(raw: Any, default: int, max_val: int) -> int:
+    try:
+        return max(1, min(int(raw), max_val))
+    except (TypeError, ValueError):
+        return default
+
+
 def _entry_summary(entry: Any) -> dict[str, Any]:
     return {
         "id": entry.id,
@@ -52,11 +59,7 @@ def register_memory_readonly_tools(
     notes from another project by mistake."""
 
     def list_memory(args: dict[str, Any]) -> str:
-        limit_raw = args.get("limit", _DEFAULT_LIST_LIMIT)
-        try:
-            limit = max(1, min(int(limit_raw), 200))
-        except (TypeError, ValueError):
-            limit = _DEFAULT_LIST_LIMIT
+        limit = _clamp_limit(args.get("limit", _DEFAULT_LIST_LIMIT), _DEFAULT_LIST_LIMIT, 200)
         entries = memory_repo.list_for_project(conn, project_id, limit=limit)
         return json.dumps([_entry_summary(e) for e in entries])
 
@@ -64,11 +67,7 @@ def register_memory_readonly_tools(
         query = str(args.get("query", "")).strip()
         if not query:
             return json.dumps({"error": "query is required"})
-        limit_raw = args.get("limit", _DEFAULT_SEARCH_LIMIT)
-        try:
-            limit = max(1, min(int(limit_raw), 50))
-        except (TypeError, ValueError):
-            limit = _DEFAULT_SEARCH_LIMIT
+        limit = _clamp_limit(args.get("limit", _DEFAULT_SEARCH_LIMIT), _DEFAULT_SEARCH_LIMIT, 50)
         entries = memory_repo.search(conn, project_id, query, limit=limit)
         return json.dumps(
             [
@@ -155,9 +154,7 @@ def register_memory_mutating_tools(
                 source="agent",
                 memory_id=memory_id,
             )
-        except KeyError as e:
-            return json.dumps({"error": str(e)})
-        except ValueError as e:
+        except (KeyError, ValueError) as e:
             return json.dumps({"error": str(e)})
         store.add(proposal)
         return pending_payload(proposal)
@@ -170,9 +167,7 @@ def register_memory_mutating_tools(
             proposal = mutation_service.propose_memory_delete(
                 conn, project_id=project_id, memory_id=memory_id
             )
-        except KeyError as e:
-            return json.dumps({"error": str(e)})
-        except ValueError as e:
+        except (KeyError, ValueError) as e:
             return json.dumps({"error": str(e)})
         store.add(proposal)
         return pending_payload(proposal)

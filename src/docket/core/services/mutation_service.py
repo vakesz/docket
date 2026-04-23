@@ -31,8 +31,8 @@ from docket.core.mutation import (
 from docket.providers.base import WorkItemProvider
 from docket.storage import transaction
 from docket.storage.item_keys import item_storage_key
-from docket.storage.repos import comment_repo, item_repo, memory_repo
-from docket.telemetry.logging import get_logger
+from docket.storage.repos import comment_repo, item_repo, memory_repo, project_repo
+from docket.telemetry.logging import elapsed_ms, get_logger
 
 _log = get_logger(__name__)
 
@@ -118,7 +118,7 @@ def propose_memory_write(
 
     Validates: project exists; on edit, target memory entry exists and
     actually belongs to `project_id` (rejects cross-project edits)."""
-    memory_repo._require_project(conn, project_id)  # KeyError on unknown project
+    project_repo.require_project(conn, project_id)
     previous_title = ""
     previous_body_md = ""
     if memory_id:
@@ -150,7 +150,7 @@ def propose_memory_delete(
     project_id: str,
     memory_id: str,
 ) -> MemoryDelete:
-    memory_repo._require_project(conn, project_id)
+    project_repo.require_project(conn, project_id)
     existing = memory_repo.get(conn, memory_id)
     if existing is None:
         raise ValueError(f"unknown memory entry '{memory_id}'")
@@ -202,7 +202,7 @@ def confirm(
             provider=provider_key or None,
             outcome="error",
             error_type=type(exc).__name__,
-            latency_ms=_elapsed_ms(started),
+            latency_ms=elapsed_ms(started),
             exc_info=True,
         )
         raise
@@ -211,7 +211,7 @@ def confirm(
         proposal_type=proposal_type,
         provider=provider_key or None,
         outcome="ok",
-        latency_ms=_elapsed_ms(started),
+        latency_ms=elapsed_ms(started),
     )
     return result
 
@@ -225,84 +225,89 @@ def _execute(
 ) -> MutationResult:
     """Dispatch a proposal to the right provider call. The wrapper in
     `confirm` measures latency and emits the proposal-outcome log line."""
-    if isinstance(proposal, StateChange):
-        updated = provider.transition(proposal.item.id, proposal.intent)
-        _refresh_cache(conn, updated, provider_key)
-        return MutationResult(proposal_id=proposal.id, dry_run=False, item=updated)
+    match proposal:
+        case StateChange():
+            updated = provider.transition(proposal.item.id, proposal.intent)
+            _refresh_cache(conn, updated, provider_key)
+            return MutationResult(proposal_id=proposal.id, dry_run=False, item=updated)
 
-    if isinstance(proposal, DescriptionPatch):
-        updated = provider.patch_description(proposal.item.id, proposal.new_md)
-        _refresh_cache(conn, updated, provider_key)
-        return MutationResult(proposal_id=proposal.id, dry_run=False, item=updated)
+        case DescriptionPatch():
+            updated = provider.patch_description(proposal.item.id, proposal.new_md)
+            _refresh_cache(conn, updated, provider_key)
+            return MutationResult(proposal_id=proposal.id, dry_run=False, item=updated)
 
-    if isinstance(proposal, AttachmentUpload):
-        url = provider.upload_attachment(
-            proposal.item.id, proposal.filename, proposal.content, proposal.content_type
-        )
-        with transaction(conn):
-            conn.execute(
-                "INSERT INTO attachments (id, item_id, conversation_id, filename, remote_url, uploaded_at) "
-                "VALUES (?, ?, NULL, ?, ?, ?)",
-                (
-                    str(uuid.uuid4()),
-                    item_storage_key(proposal.item.provider_key or provider_key, proposal.item.id),
-                    proposal.filename,
-                    url,
-                    datetime.now(UTC).isoformat(),
-                ),
+        case AttachmentUpload():
+            url = provider.upload_attachment(
+                proposal.item.id, proposal.filename, proposal.content, proposal.content_type
             )
-        return MutationResult(proposal_id=proposal.id, dry_run=False, attachment_url=url)
-
-    if isinstance(proposal, ItemCreate):
-        created = provider.create_item(proposal.item_kind, proposal.fields)
-        _refresh_cache(conn, created, provider_key)
-        return MutationResult(proposal_id=proposal.id, dry_run=False, item=created)
-
-    if isinstance(proposal, CommentAdd):
-        comment = provider.add_comment(proposal.item.id, proposal.body_md)
-        # Refresh both the cached comments list and the item row (so its
-        # `updated_at` reflects the provider-side change). We swallow refresh
-        # failures so a slow comments fetch doesn't fail the write that already
-        # succeeded — the next read will reconcile via `?refresh=true`.
-        try:
-            fresh = provider.get_comments(proposal.item.id)
-        except Exception:
-            fresh = None
-        active_key = proposal.item.provider_key or provider_key
-        if fresh is not None:
             with transaction(conn):
-                comment_repo.replace_comments_for_item(
-                    conn, proposal.item.id, fresh, provider_key=active_key
+                conn.execute(
+                    "INSERT INTO attachments (id, item_id, conversation_id, filename, remote_url, uploaded_at) "
+                    "VALUES (?, ?, NULL, ?, ?, ?)",
+                    (
+                        str(uuid.uuid4()),
+                        item_storage_key(
+                            proposal.item.provider_key or provider_key, proposal.item.id
+                        ),
+                        proposal.filename,
+                        url,
+                        datetime.now(UTC).isoformat(),
+                    ),
                 )
-        try:
-            refreshed_item = provider.get_item(proposal.item.id)
-        except Exception:
-            refreshed_item = None
-        if refreshed_item is not None:
-            _refresh_cache(conn, refreshed_item, active_key)
-        return MutationResult(proposal_id=proposal.id, dry_run=False, comment=comment)
+            return MutationResult(proposal_id=proposal.id, dry_run=False, attachment_url=url)
 
-    if isinstance(proposal, MemoryWrite):
-        entry = memory_repo.upsert_for_proposal(
-            conn,
-            project_id=proposal.project_id,
-            title=proposal.title,
-            body_md=proposal.body_md,
-            tags=list(proposal.tags),
-            source=proposal.source,
-            memory_id=proposal.memory_id,
-        )
-        return MutationResult(proposal_id=proposal.id, dry_run=False, memory=entry)
+        case ItemCreate():
+            created = provider.create_item(proposal.item_kind, proposal.fields)
+            _refresh_cache(conn, created, provider_key)
+            return MutationResult(proposal_id=proposal.id, dry_run=False, item=created)
 
-    if isinstance(proposal, MemoryDelete):
-        ok = memory_repo.delete(conn, proposal.memory_id)
-        return MutationResult(
-            proposal_id=proposal.id,
-            dry_run=False,
-            memory_deleted_id=proposal.memory_id if ok else None,
-        )
+        case CommentAdd():
+            comment = provider.add_comment(proposal.item.id, proposal.body_md)
+            # Refresh both the cached comments list and the item row (so its
+            # `updated_at` reflects the provider-side change). Swallow refresh
+            # failures — the write already succeeded; next read reconciles via `?refresh=true`.
+            try:
+                fresh = provider.get_comments(proposal.item.id)
+            except Exception:
+                _log.debug("comment_refresh_failed", item_id=proposal.item.id, exc_info=True)
+                fresh = None
+            active_key = proposal.item.provider_key or provider_key
+            if fresh is not None:
+                with transaction(conn):
+                    comment_repo.replace_comments_for_item(
+                        conn, proposal.item.id, fresh, provider_key=active_key
+                    )
+            try:
+                refreshed_item = provider.get_item(proposal.item.id)
+            except Exception:
+                _log.debug("item_refresh_failed", item_id=proposal.item.id, exc_info=True)
+                refreshed_item = None
+            if refreshed_item is not None:
+                _refresh_cache(conn, refreshed_item, active_key)
+            return MutationResult(proposal_id=proposal.id, dry_run=False, comment=comment)
 
-    raise TypeError(f"unknown proposal type: {type(proposal)!r}")
+        case MemoryWrite():
+            entry = memory_repo.upsert_for_proposal(
+                conn,
+                project_id=proposal.project_id,
+                title=proposal.title,
+                body_md=proposal.body_md,
+                tags=list(proposal.tags),
+                source=proposal.source,
+                memory_id=proposal.memory_id,
+            )
+            return MutationResult(proposal_id=proposal.id, dry_run=False, memory=entry)
+
+        case MemoryDelete():
+            ok = memory_repo.delete(conn, proposal.memory_id)
+            return MutationResult(
+                proposal_id=proposal.id,
+                dry_run=False,
+                memory_deleted_id=proposal.memory_id if ok else None,
+            )
+
+        case _:
+            raise TypeError(f"unknown proposal type: {type(proposal)!r}")
 
 
 def _require_cached(
@@ -339,7 +344,3 @@ def _refresh_cache(conn: sqlite3.Connection, item: Item, provider_key: str) -> N
         item.provider_key = provider_key
     with transaction(conn):
         item_repo.upsert_item(conn, item)
-
-
-def _elapsed_ms(started_ns: int) -> int:
-    return (time.monotonic_ns() - started_ns) // 1_000_000

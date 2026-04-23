@@ -1,8 +1,6 @@
-<div align="center">
-
 # Docket
 
-**Terminal-first work-item triage — fast local cache, three-pane TUI, and an AI assistant that asks before it writes.**
+> **Terminal-first work-item triage — fast local cache, three-pane TUI, and an AI assistant that asks before it writes.**
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![uv](https://img.shields.io/badge/packaging-uv-261230?logo=python&logoColor=white)](https://docs.astral.sh/uv/)
@@ -13,7 +11,22 @@
 
 Browse · Filter · Chat · Transition · Patch · Create — without leaving your terminal.
 
-</div>
+---
+
+## Contents
+
+- [Why Docket](#why-docket)
+- [Feature tour](#feature-tour)
+- [Quick start](#quick-start)
+- [CLI reference](#cli-reference)
+- [TUI cheat sheet](#tui-cheat-sheet)
+- [Web UI](#web-ui)
+- [Providers](#providers)
+- [Configuration](#configuration)
+- [Architecture](#architecture)
+- [Testing](#testing)
+- [Development](#development)
+- [License](#license)
 
 ---
 
@@ -30,11 +43,8 @@ Most triage tools make you context-switch between a browser, a Kanban board, and
 
 ## Feature tour
 
-<table>
-<tr>
-<td width="50%" valign="top">
+### Browse and navigate
 
-### Browse & navigate
 - Three resizable panes: backlog, detail, assistant
 - Live filter (FTS5 over title, description, comments)
 - Quick-open by id (`:`)
@@ -43,15 +53,14 @@ Most triage tools make you context-switch between a browser, a Kanban board, and
 - Command palette for every action (`Ctrl+P`)
 - Stale marker (`STALE — Xd`) after a configurable threshold
 
-### Pin & focus
+### Pin and focus
+
 - Watchlist pins survive scope and view switches (`w`)
 - Pinned section always at the top of the tree
 - Join on live items — archived pins drop out silently
 
-</td>
-<td width="50%" valign="top">
-
 ### Chat with safety rails
+
 - Streaming assistant pane wired to the active ticket
 - Prompt library — edit system + per-kind prompts from the app (`p`)
 - Suggest next action (`s`) with structured output
@@ -59,14 +68,11 @@ Most triage tools make you context-switch between a browser, a Kanban board, and
 - Transcript upload as a ticket attachment on close (with regex-based secret redaction)
 
 ### Mutate with a confirm gate
+
 - Diff modal on every transition, description patch, new item
 - Batch review when the agent proposes multiple writes in one turn
 - Read-only mode via `--read-only` or `DOCKET_READ_ONLY=1`
 - Background list sync with per-provider rate-limit floor
-
-</td>
-</tr>
-</table>
 
 ---
 
@@ -86,22 +92,26 @@ uv run docket
 
 First run with no config falls straight into the wizard, so step 2 is optional if you're happy typing answers at step 3.
 
-### Everyday commands
+---
 
-| Command | Alias | What it does |
-| --- | --- | --- |
-| `docket` | — | Open the TUI |
-| `docket help` | — | Command list + examples |
-| `docket sync` | `refresh` | Pull changes from the provider |
-| `docket list` | `ls` | List cached items (supports `--kind`) |
-| `docket show <id>` | `view` | Show one item's full detail |
-| `docket new task --title "Follow up"` | `create` | Create with confirm gate |
-| `docket transition <id> start_work --dry-run` | — | Propose a named transition |
-| `docket patch <id> --from-file body.md` | — | Preview a description update |
-| `docket open` | `browse`, `ui` | Same as `docket` |
-| `docket serve` | — | Run the local HTTP API |
-| `docket setup` | — | Re-run or resume the wizard |
-| `docket setup provider add <name>` | — | Register an additional provider |
+## CLI reference
+
+| Command | What it does |
+| --- | --- |
+| `docket` | Open the TUI (default when no subcommand is given) |
+| `docket help` | Command list with quick examples |
+| `docket status` | Show the active provider, scope, project, and cache state |
+| `docket sync` / `sync --full` | Pull changes from the active provider |
+| `docket list --kind story` | List cached items (filter by kind, state, assignee) |
+| `docket show <id>` | Show one item's full detail |
+| `docket new task --title "Follow up"` | Create a new item through the confirm gate |
+| `docket transition <id> start_work --dry-run` | Preview a named transition; drop `--dry-run` to confirm |
+| `docket patch <id> --from-file body.md --dry-run` | Preview a description update |
+| `docket open --provider <key>` | Open the TUI against a specific provider |
+| `docket serve` | Run the FastAPI HTTP surface (defaults to `127.0.0.1:8765`) |
+| `docket setup` / `setup --step=<name>` | Run or resume the setup wizard |
+| `docket setup provider add <name> --type <type>` | Register an additional provider |
+| `docket project` / `memory` / `source` / `mcp` | Manage projects, project memory, sources, and MCP servers |
 
 Bare `docket` always runs the TUI — subcommands still work, and a missing config auto-triggers the wizard.
 
@@ -109,10 +119,8 @@ Bare `docket` always runs the TUI — subcommands still work, and a missing conf
 
 ## TUI cheat sheet
 
-<table>
-<tr><td>
+### Navigation
 
-**Navigation**
 - `Tab` / `Shift+Tab` — next/previous pane
 - `/` — focus the filter
 - `:` — quick-open by id
@@ -120,9 +128,7 @@ Bare `docket` always runs the TUI — subcommands still work, and a missing conf
 - `Ctrl+Left` / `Ctrl+Right` — resize the focused pane
 - `Ctrl+P` — command palette
 
-</td><td>
-
-**Actions**
+### Actions
 
 - `r` — refresh (sync now)
 - `n` — new item
@@ -131,19 +137,33 @@ Bare `docket` always runs the TUI — subcommands still work, and a missing conf
 - `o` — open item in browser
 - `w` — pin/unpin the focused item
 - `d` — review pending proposals
+- `c` — show/hide done items
 
-</td><td>
+### Meta
 
-**Meta**
-
-- `?` or `F1` — in-app help
+- `?` / `F1` / `h` — in-app help
 - `,` — settings editor
 - `p` — prompt library
+- `m` — memory editor
+- `u` — sources editor
+- `Shift+M` — MCP servers
 - `Ctrl+T` — theme picker
 - `q` — quit
 
-</td></tr>
-</table>
+---
+
+## Web UI
+
+Docket ships with a React web client in `frontend/` that consumes the FastAPI surface. It is optional — the TUI is the primary interface — but handy when you want a browser view of the same cache.
+
+```bash
+make install   # uv sync + bun install (one-time)
+make dev       # run `docket serve` + vite dev server together
+```
+
+The backend is at `http://127.0.0.1:8765` and the frontend at `http://localhost:3000`. Regenerate the OpenAPI-typed client with `make gen-api` while the backend is running.
+
+Stack: React 19, TanStack Router/Query, Vite, Tailwind, Biome, Bun.
 
 ---
 
@@ -155,7 +175,7 @@ Bare `docket` always runs the TUI — subcommands still work, and a missing conf
 | **GitHub** (`github`) | `gh auth token`, `GITHUB_TOKEN` fallback | assignee | Issues + PRs mapped to the canonical model. `find_related_prs` agent tool scans recent PRs for id/keyword mentions. |
 | **github_stub** (`github_stub`) | — | any | In-memory reference impl for tests and demos. Useful when you want to poke at the TUI without wiring a real backend. |
 
-Adding Jira, Linear, or a custom system is a matter of satisfying the `WorkItemProvider` Protocol — see [Adding a provider](#adding-a-provider) below. Third-party providers can ship as separate pip packages via the `docket.providers` entry-point group.
+Adding Jira, Linear, or a custom system is a matter of satisfying the `WorkItemProvider` Protocol in `src/docket/providers/base.py`: implement `fetch_list`, `fetch_detail`, `transition`, `patch_description`, `upload_attachment`, and `create_item`, plus a state-map module that translates provider-native states to canonical `ItemState` / `TransitionIntent`. Register it with `register_provider(...)` from `src/docket/providers/registry.py`, or ship it as a separate pip package that declares a `docket.providers` entry-point.
 
 ---
 
@@ -184,9 +204,9 @@ Linux and Windows resolve to their usual XDG equivalents. The setup wizard write
 
 ---
 
-## Architecture at a glance
+## Architecture
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────┐
 │ CLI (typer)    TUI (Textual)    API (FastAPI + SSE)          │
 └─────────┬───────────┬──────────────────┬─────────────────────┘
@@ -220,12 +240,12 @@ These invariants are enforced by tests — `tests/unit/test_import_boundary.py`,
 ## Testing
 
 ```bash
-uv run pytest                              # ~370 tests, async auto-mode
-uv run pytest tests/integration/test_api.py    # one file
+uv run pytest                                           # full suite, async auto-mode
+uv run pytest tests/integration/test_api.py             # one file
 uv run pytest tests/integration/test_api.py::test_name  # one test
-uv run pytest -k "pattern"                 # by name
+uv run pytest -k "pattern"                              # by name
 uv run ruff check . && uv run ruff format .
-uv run mypy src                            # strict
+uv run mypy src                                         # strict
 ```
 
 Testing conventions:
@@ -248,27 +268,34 @@ uv run ruff check . && uv run mypy src && uv run pytest
 
 Repo layout:
 
-```
+```text
 src/docket/
-├── cli/                 # typer entrypoint + commands + Textual TUI
-├── api/                 # FastAPI app (items / conversations / SSE stream)
-├── core/                # canonical model + services (the single write gate)
-├── agent/               # Azure OpenAI client, tool registry, prompt loader
-├── providers/           # base Protocol + concrete backends
-├── storage/             # SQLite schema + repos (items, comments, watchlist, FTS5)
-└── config/              # Pydantic config models + setup wizard + paths
+├── cli/         # typer entrypoint + commands + Textual TUI
+├── api/         # FastAPI app (items / conversations / SSE stream)
+├── core/        # canonical model + services (the single write gate)
+├── agent/       # Azure OpenAI client, tool registry, prompt loader
+├── providers/   # base Protocol + concrete backends (azure_devops, github, github_stub)
+├── storage/     # SQLite schema + repos (items, comments, watchlist, FTS5)
+├── config/      # Pydantic config models + setup wizard + paths
+└── telemetry/   # structlog configuration
 
-tests/                   # pytest; TUI tests use Textual pilot
-tests/fakes/             # FakeProvider + scripted LLM clients
-tests/fixtures/cassettes # pytest-recording cassettes
+frontend/       # React + Vite + Bun web client (consumes /openapi.json)
+tests/          # pytest; unit / integration / pilot (Textual run_test)
+tests/fakes/    # FakeProvider + scripted LLM clients
+tests/fixtures/ # pytest-recording cassettes
 ```
+
+See [AGENTS.md](AGENTS.md) for the full architecture contract, non-negotiable rules, and testing conventions.
 
 ---
 
 ## Docs
 
-- 📘 **[First-Time Setup Guide](.docs/FIRST_TIME_SETUP.md)** — install, wizard walkthrough, provider-specific prerequisites, troubleshooting
+- **[First-Time Setup Guide](.docs/FIRST_TIME_SETUP.md)** — install, wizard walkthrough, provider-specific prerequisites, troubleshooting
+- **[AGENTS.md](AGENTS.md)** — contract for human and AI contributors: architecture guardrails, mutation surface pattern, testing conventions
+
+---
 
 ## License
 
-MIT — see [pyproject.toml](pyproject.toml).
+MIT — declared in [pyproject.toml](pyproject.toml).

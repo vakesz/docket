@@ -30,14 +30,6 @@ from docket.storage.db import transaction
 from docket.storage.repos import project_repo
 
 
-def _require_project(conn: sqlite3.Connection, project_id: str) -> None:
-    if project_repo.get(conn, project_id) is None:
-        raise KeyError(
-            f"unknown project '{project_id}' "
-            "— call project_service.activate() before writing memory"
-        )
-
-
 def _row_to_entry(row: sqlite3.Row) -> MemoryEntry:
     raw_tags = row["tags_json"] or "[]"
     try:
@@ -86,7 +78,7 @@ def create(
     """Insert a new memory row and bump the project's revision.
 
     Raises `KeyError` if the project is unknown."""
-    _require_project(conn, project_id)
+    project_repo.require_project(conn, project_id)
     now = datetime.now(UTC)
     memory_id = str(uuid.uuid4())
     tags_clean = [t.strip() for t in (tags or []) if t and t.strip()]
@@ -151,18 +143,20 @@ def update(
     params.append(datetime.now(UTC).isoformat())
     params.append(memory_id)
     with transaction(conn):
-        conn.execute(f"UPDATE memory SET {', '.join(fields)} WHERE id = ?", params)
+        row = conn.execute(
+            f"UPDATE memory SET {', '.join(fields)} WHERE id = ? RETURNING *", params
+        ).fetchone()
         bump_revision(conn, existing.project_id)
-    return get(conn, memory_id)
+    return _row_to_entry(row) if row else None
 
 
 def delete(conn: sqlite3.Connection, memory_id: str) -> bool:
-    existing = get(conn, memory_id)
-    if existing is None:
+    row = conn.execute("SELECT project_id FROM memory WHERE id = ?", (memory_id,)).fetchone()
+    if row is None:
         return False
     with transaction(conn):
         conn.execute("DELETE FROM memory WHERE id = ?", (memory_id,))
-        bump_revision(conn, existing.project_id)
+        bump_revision(conn, row["project_id"])
     return True
 
 

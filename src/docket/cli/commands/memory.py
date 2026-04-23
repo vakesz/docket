@@ -7,15 +7,13 @@ and `recall_memory` tools and writes them through proposal-confirm.
 
 from __future__ import annotations
 
-import sys
-from datetime import datetime
-
 import typer
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
+from docket.cli.commands._utils import format_updated, read_body, split_tags
 from docket.cli.context import Context, prepare_or_wizard
 from docket.core.model import MemoryEntry
 from docket.storage.repos import memory_repo
@@ -27,29 +25,6 @@ memory_app = typer.Typer(
     help="List, search, add, edit, remove project memory entries.",
     no_args_is_help=True,
 )
-
-
-def _split_tags(raw: str | None) -> list[str]:
-    if not raw:
-        return []
-    return [t.strip() for t in raw.split(",") if t.strip()]
-
-
-def _format_updated(value: datetime | None) -> str:
-    if value is None:
-        return "—"
-    return value.strftime("%Y-%m-%d %H:%M")
-
-
-def _read_body(body: str | None, from_file: str | None) -> str:
-    if from_file == "-":
-        return sys.stdin.read()
-    if from_file:
-        with open(from_file, encoding="utf-8") as fh:
-            return fh.read()
-    if body is not None:
-        return body
-    raise typer.BadParameter("provide --body or --from-file (use '-' for stdin)")
 
 
 @memory_app.command("list")

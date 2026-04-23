@@ -23,14 +23,6 @@ from docket.storage.db import transaction
 from docket.storage.repos import project_repo
 
 
-def _require_project(conn: sqlite3.Connection, project_id: str) -> None:
-    if project_repo.get(conn, project_id) is None:
-        raise KeyError(
-            f"unknown project '{project_id}' "
-            "— call project_service.activate() before writing sources"
-        )
-
-
 def _row_to_entry(row: sqlite3.Row) -> Source:
     raw_tags = row["tags_json"] or "[]"
     try:
@@ -87,7 +79,7 @@ def create(
     tags: list[str] | None = None,
 ) -> Source:
     """Insert a new source row. Raises `KeyError` if the project is unknown."""
-    _require_project(conn, project_id)
+    project_repo.require_project(conn, project_id)
     now = datetime.now(UTC)
     source_id = str(uuid.uuid4())
     tags_clean = [t.strip() for t in (tags or []) if t and t.strip()]

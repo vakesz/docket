@@ -23,7 +23,7 @@ from docket.agent.mcp.client import MCPClient
 from docket.agent.tools import ToolHandler, ToolRegistry
 from docket.config.models import MCPServerEntry
 from docket.core.services import mcp_service
-from docket.telemetry.logging import get_logger
+from docket.telemetry.logging import elapsed_ms, get_logger
 
 log = logging.getLogger(__name__)
 _event_log = get_logger(__name__)
@@ -104,7 +104,6 @@ class MCPManager:
             try:
                 client.start()
             except Exception as exc:
-                latency_ms = (time.monotonic_ns() - started) // 1_000_000
                 log.warning(
                     "mcp.%s: failed to start (%s); skipping. command=%r args=%r",
                     name,
@@ -118,7 +117,7 @@ class MCPManager:
                     tool_name=name,
                     outcome="error",
                     error_type=type(exc).__name__,
-                    latency_ms=latency_ms,
+                    latency_ms=elapsed_ms(started),
                 )
                 # `start()` already calls `close()` on failure, but be
                 # defensive in case a future code path changes that.
@@ -137,7 +136,7 @@ class MCPManager:
                 project=project_id,
                 tool_name=name,
                 outcome="ok",
-                latency_ms=(time.monotonic_ns() - started) // 1_000_000,
+                latency_ms=elapsed_ms(started),
                 tools=tool_count,
             )
 

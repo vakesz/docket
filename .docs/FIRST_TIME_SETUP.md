@@ -78,7 +78,7 @@ Provider add is where the per-backend questions live. If you just want to get go
 
 ### Azure DevOps
 
-**Prereqs**
+#### Prereqs
 
 ```bash
 az login                          # interactive sign-in
@@ -87,20 +87,20 @@ az account show                   # sanity check
 
 The setup wizard shells out to `az` for token acquisition — it won't prompt you for a PAT.
 
-**Wizard questions**
+#### Wizard questions
 
 1. **Organization URL** — `https://dev.azure.com/<org>`
 2. **Project name** — the ADO project you want to triage
 3. **Scope filter** — defaults to "my items in the current iteration". You can override by team, area path, iteration path, or assignee. Each is optional.
 4. **Work item types** — auto-discovered from the project's process template. No need to type anything unless you want to override the defaults.
 
-**What it does under the hood**
+#### What it does under the hood
 
 - Saves `providers.<name>.config = { organization, project }` and a default scope to `config.toml`.
 - Runs a `list_changes_since(None, ...)` probe to confirm auth works.
 - Creates the SQLite cache and pulls the first page of items.
 
-**Notes**
+#### Notes
 
 - If your project uses HTML-only description fields, Docket detects this during the probe and flips a flag in `sync_state` so Markdown ↔ HTML conversion happens transparently.
 - Canonical states are translated in `providers/azure_devops/state_map.py`. If a custom state isn't mapped cleanly, add it there — the rest of the app deals in canonical `ItemState` only.
@@ -109,7 +109,7 @@ The setup wizard shells out to `az` for token acquisition — it won't prompt yo
 
 ### GitHub
 
-**Prereqs**
+#### GitHub prereqs
 
 ```bash
 gh auth login                     # recommended — uses your existing gh session
@@ -118,19 +118,19 @@ gh auth status                    # confirm the active account
 
 Docket reads `gh auth token` at startup and falls back to the `GITHUB_TOKEN` environment variable if `gh` isn't installed. No PAT prompt during setup.
 
-**Wizard questions**
+#### GitHub wizard questions
 
 1. **Repo picker** — Docket scans `/user/repos` for repos you own or collaborate on, plus every org you're a member of via `/orgs/{org}/repos` (this is deliberate — `/users/{login}/repos` would miss private repos you have access to). Pick one from the list.
 2. If nothing comes back (no `gh`, no orgs, no accessible repos), the wizard drops to a manual `owner/name` prompt.
 3. **Scope filter** — GitHub's query params only honor `assignee`, so team / area / iteration options are hidden. `@me` expands to the authenticated user.
 
-**What it does under the hood**
+#### What GitHub setup does under the hood
 
 - Saves `providers.<name>.config = { default_repo: "owner/name" }`.
 - Issues + PRs both map to the canonical `Item`. Label-based kind guessing: `bug` → BUG; `enhancement|feature|story` → STORY; `epic` → EPIC; default → TASK. PRs are always TASK.
 - Canonical id format is `owner/name#number` — stable across syncs.
 
-**Tips**
+#### Tips
 
 - The agent tool `find_related_prs` registers itself automatically for GitHub — ask the assistant "any PRs that might close this?" and it'll scan the repo's recent PRs.
 - GitHub REST has no direct attachment upload, so `upload_attachment` raises a descriptive `ProviderUnreachableError`. The workaround Docket expects is posting a comment with an externally-hosted URL.
@@ -202,7 +202,7 @@ uv run docket setup provider remove personal-gh
 
 Inside the TUI, the command palette (`Ctrl+P`) has a **Switch provider** entry — the tree, scope, and status bar all re-bind to the new active provider without restarting.
 
-Third-party providers can ship as separate pip packages via the `docket.providers` entry-point group. The Protocol contract and cross-cutting test expectations are documented in the [README's "Adding a provider" section](../README.md#adding-a-provider).
+Third-party providers can ship as separate pip packages via the `docket.providers` entry-point group. The Protocol contract and cross-cutting test expectations are documented in the [README's "Providers" section](../README.md#providers).
 
 ---
 
@@ -228,40 +228,50 @@ drops the cached tables and re-pulls items instead of running migrations.
 ## Troubleshooting
 
 ### `docket` prints "Provider '…' is not configured"
+
 Re-run `uv run docket setup` to step through provider configuration again. If you've clean-checked out a newer version and the old config.toml is incompatible, the wizard will detect this and ask before overwriting.
 
 ### Azure auth fails during setup
+
 ```bash
 az account show                   # verify a live session
 az login                          # re-authenticate if needed
 az account set --subscription <id-or-name>   # if you have multiple subscriptions
 ```
+
 Re-run `docket setup --step=ado`.
 
 ### GitHub setup shows no repos
+
 - Confirm `gh auth status` — the CLI must be signed in as the account you want to triage under.
 - Check `gh api user --jq .login` — if this errors, your token lacks `read:user` scope. Run `gh auth refresh -s read:user,read:org,repo`.
 - If you only want public repos, any `GITHUB_TOKEN` with `public_repo` scope works — set it in `.env` and skip the `gh` step.
 
 ### "Chat disabled: set AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT …"
+
 The TUI didn't find Azure OpenAI credentials. Either:
+
 - Add the env vars (`AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT`) to your `.env`, or
 - Launch with `docket open --no-chat` to silence the warning entirely.
 
 ### "Read-only mode — mutations disabled"
+
 Either you passed `--read-only` or `DOCKET_READ_ONLY=1` is set in your environment. Unset it and relaunch. The status bar shows a `READ-ONLY` badge while the flag is active so this shouldn't sneak up on you.
 
 ### The tree is empty after sync
+
 - `docket sync` to force a pull.
 - Confirm your scope filter returns anything with the provider's native UI. For ADO, swap the default `assignee="@me"` for a looser filter in settings (`,`).
 - Check `~/Library/Logs/docket/docket.log` for provider errors.
 
 ### The TUI feels cramped
+
 - `Ctrl+F` maximizes the focused pane; `Ctrl+F` again restores the three-pane layout.
 - `Ctrl+Left` / `Ctrl+Right` resize panes by 5% each press.
 - Pick a denser theme with `Ctrl+T` — preview on highlight, commit on Enter, revert on Esc.
 
 ### Something else
+
 - `docket setup` is always safe to re-run.
 - Open the in-app settings with `,` to fix saved values without touching `config.toml` by hand.
 - Logs live next to the cache under the Docket paths above.

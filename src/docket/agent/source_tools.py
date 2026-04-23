@@ -23,6 +23,13 @@ _DEFAULT_LIST_LIMIT = 25
 _DEFAULT_SEARCH_LIMIT = 10
 
 
+def _clamp_limit(raw: Any, default: int, max_val: int) -> int:
+    try:
+        return max(1, min(int(raw), max_val))
+    except (TypeError, ValueError):
+        return default
+
+
 def _entry_summary(entry: Any) -> dict[str, Any]:
     return {
         "id": entry.id,
@@ -46,11 +53,7 @@ def register_source_readonly_tools(
     sources from another project by mistake."""
 
     def list_sources(args: dict[str, Any]) -> str:
-        limit_raw = args.get("limit", _DEFAULT_LIST_LIMIT)
-        try:
-            limit = max(1, min(int(limit_raw), 200))
-        except (TypeError, ValueError):
-            limit = _DEFAULT_LIST_LIMIT
+        limit = _clamp_limit(args.get("limit", _DEFAULT_LIST_LIMIT), _DEFAULT_LIST_LIMIT, 200)
         kind_raw = args.get("kind")
         kind = str(kind_raw).strip() if isinstance(kind_raw, str) else None
         entries = source_repo.list_for_project(conn, project_id, kind=kind or None, limit=limit)
@@ -74,11 +77,7 @@ def register_source_readonly_tools(
         query = str(args.get("query", "")).strip()
         if not query:
             return json.dumps({"error": "query is required"})
-        limit_raw = args.get("limit", _DEFAULT_SEARCH_LIMIT)
-        try:
-            limit = max(1, min(int(limit_raw), 50))
-        except (TypeError, ValueError):
-            limit = _DEFAULT_SEARCH_LIMIT
+        limit = _clamp_limit(args.get("limit", _DEFAULT_SEARCH_LIMIT), _DEFAULT_SEARCH_LIMIT, 50)
         kind_raw = args.get("kind")
         kind = str(kind_raw).strip() if isinstance(kind_raw, str) else None
         entries = source_repo.search(conn, project_id, query, kind=kind or None, limit=limit)

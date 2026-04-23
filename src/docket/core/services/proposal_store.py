@@ -36,7 +36,7 @@ class ProposalStore:
         with self._lock:
             if not self._pending:
                 return None
-            _, pending = next(iter(self._pending.items()))
+            pending = next(iter(self._pending.values()))
             return pending
 
     def get(self, proposal_id: str) -> PendingProposal | None:

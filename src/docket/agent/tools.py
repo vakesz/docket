@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from docket.agent.types import ToolSchema
-from docket.telemetry.logging import get_logger
+from docket.telemetry.logging import elapsed_ms, get_logger
 
 _log = get_logger(__name__)
 
@@ -79,7 +79,7 @@ class ToolRegistry:
                 tool_name=name,
                 outcome="error",
                 error_type=type(e).__name__,
-                latency_ms=_elapsed_ms(started),
+                latency_ms=elapsed_ms(started),
                 exc_info=True,
             )
             return json.dumps({"error": str(e), "tool": name})
@@ -87,7 +87,7 @@ class ToolRegistry:
             "tool_call",
             tool_name=name,
             outcome="ok",
-            latency_ms=_elapsed_ms(started),
+            latency_ms=elapsed_ms(started),
         )
         return result
 
@@ -96,7 +96,3 @@ class ToolRegistry:
 
     def __contains__(self, name: object) -> bool:
         return name in self._tools
-
-
-def _elapsed_ms(started_ns: int) -> int:
-    return (time.monotonic_ns() - started_ns) // 1_000_000

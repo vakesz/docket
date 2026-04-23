@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Sequence
 from datetime import UTC, datetime
 
 from docket.core.model import Item, ItemKind, ItemState
@@ -163,6 +163,43 @@ def list_items(
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     rows = conn.execute(
         f"SELECT * FROM items {where} ORDER BY updated_at DESC",
+        params,
+    ).fetchall()
+    return [_row_to_item(r) for r in rows]
+
+
+def list_items_by_ids(
+    conn: sqlite3.Connection,
+    ids: Sequence[str],
+    *,
+    provider_key: str | None = None,
+    states: Iterable[ItemState] | None = None,
+) -> list[Item]:
+    """Fetch a specific set of items by provider_item_id.
+
+    Avoids scanning the full cache when only a known subset of ids is needed
+    (e.g. the result set returned by search_repo.search)."""
+    if not ids:
+        return []
+    placeholders = ",".join("?" for _ in ids)
+    clauses: list[str] = [
+        _VISIBLE_ITEM_SQL,
+        "archived = 0",
+        f"provider_item_id IN ({placeholders})",
+    ]
+    params: list[object] = list(ids)
+    if provider_key:
+        clauses.append("provider_key = ?")
+        params.append(provider_key)
+    if states is not None:
+        state_values = [s.value for s in states]
+        if not state_values:
+            return []
+        ph = ",".join("?" for _ in state_values)
+        clauses.append(f"state IN ({ph})")
+        params.extend(state_values)
+    rows = conn.execute(
+        f"SELECT * FROM items WHERE {' AND '.join(clauses)}",
         params,
     ).fetchall()
     return [_row_to_item(r) for r in rows]
