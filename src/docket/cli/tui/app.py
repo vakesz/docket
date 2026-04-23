@@ -3,7 +3,6 @@ from __future__ import annotations
 import contextlib
 import logging
 import sqlite3
-import traceback
 import webbrowser
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -23,6 +22,8 @@ from docket.agent.llm_client import LlmClient
 from docket.agent.loop import AgentLoop
 from docket.agent.mcp import MCPManager
 from docket.agent.types import ChatMessage, StreamDelta
+from docket.cli.tui.errors import humanize as humanize_error
+from docket.cli.tui.errors import retry_hint
 from docket.cli.tui.widgets.batch_diff_modal import BatchDecision, BatchDiffModal
 from docket.cli.tui.widgets.chat_pane import ChatPane, TurnFinished, UserTurnRequest
 from docket.cli.tui.widgets.diff_modal import DiffModal
@@ -778,13 +779,11 @@ class DocketApp(App[None]):
             )
         except Exception as e:
             log.exception("chat turn failed")
-            detail = f"{type(e).__name__}: {e}".strip()
-            body = getattr(getattr(e, "response", None), "text", None)
-            if body:
-                detail = f"{detail} — {body[:200]}"
-            self.call_from_thread(chat.note, f"chat failed: {detail}", cls="msg-system")
+            friendly = humanize_error(e, action="Chat")
             self.call_from_thread(
-                chat.note, traceback.format_exc().splitlines()[-1], cls="msg-system"
+                chat.note,
+                f"{friendly} (see logs for the full traceback)",
+                cls="msg-system",
             )
             self.call_from_thread(self._set_thinking, False)
             return
@@ -806,7 +805,10 @@ class DocketApp(App[None]):
                 provider_key=self.tui_ctx.provider_key,
             )
         except Exception as e:  # provider failure → toast, not crash
-            self.notify(f"Sync failed: {e}", severity="error")
+            self.notify(
+                f"{humanize_error(e, action='Sync')} {retry_hint('r', 'sync')}",
+                severity="error",
+            )
             self._set_offline(True)
             return
         self._set_offline(False)
@@ -1288,7 +1290,7 @@ class DocketApp(App[None]):
                 provider_key=self.tui_ctx.provider_key,
             )
         except KeyError as e:
-            self.notify(f"Cannot stage: {e}", severity="error")
+            self.notify(humanize_error(e, action="Stage transition"), severity="error")
             return
         self._proposals.add(proposal, source="palette")
         self._refresh_pending_count()
@@ -1447,7 +1449,7 @@ class DocketApp(App[None]):
         try:
             save_config(paths, config)
         except Exception as e:
-            self.notify(f"Couldn't write config.toml: {e}", severity="error")
+            self.notify(humanize_error(e, action="Save config"), severity="error")
             return
         entry = config.providers[key]
         self.notify(
@@ -1496,7 +1498,10 @@ class DocketApp(App[None]):
                     provider_key=self.tui_ctx.provider_key,
                 )
             except Exception as e:
-                self.notify(f"Apply failed: {e}", severity="error")
+                self.notify(
+                    f"{humanize_error(e, action='Apply')} {retry_hint('d', 'review')}",
+                    severity="error",
+                )
                 return
             self._reload_tree()
             if result.attachment_url:
@@ -1575,7 +1580,10 @@ class DocketApp(App[None]):
                     applied += 1
                 except Exception as e:
                     log.exception("batch apply failed for %s", pid)
-                    self.notify(f"Apply failed for {pid}: {e}", severity="error")
+                    self.notify(
+                        f"{humanize_error(e, action=f'Apply {pid}')}",
+                        severity="error",
+                    )
                     failed += 1
             self._refresh_pending_count()
             if applied or rejected or failed:
