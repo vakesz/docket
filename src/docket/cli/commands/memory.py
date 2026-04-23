@@ -13,7 +13,12 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
-from docket.cli.commands._utils import format_updated, read_body, split_tags
+from docket.cli.commands._utils import (
+    format_updated,
+    read_body,
+    resolve_by_id_or_prefix,
+    split_tags,
+)
 from docket.cli.context import Context, prepare_or_wizard
 from docket.core.model import MemoryEntry
 from docket.storage.repos import memory_repo
@@ -210,25 +215,14 @@ def memory_search(
 
 
 def _resolve(ctx: Context, memory_id: str) -> MemoryEntry:
-    """Look up by full id; on miss, fall back to a unique 8-char prefix match."""
-    direct = memory_repo.get(ctx.conn, memory_id)
-    if direct is not None:
-        return direct
     project = ctx.active_project()
-    candidates = [
-        e for e in memory_repo.list_for_project(ctx.conn, project.id) if e.id.startswith(memory_id)
-    ]
-    if not candidates:
-        console.print(f"[red]No memory entry matching:[/red] {memory_id}")
-        raise typer.Exit(1)
-    if len(candidates) > 1:
-        console.print(
-            f"[red]Ambiguous prefix '{memory_id}' matches {len(candidates)} entries.[/red]"
-        )
-        for entry in candidates[:5]:
-            console.print(f"  [dim]{entry.id}[/dim]  {entry.title}")
-        raise typer.Exit(1)
-    return candidates[0]
+    return resolve_by_id_or_prefix(
+        memory_id,
+        get_fn=lambda mid: memory_repo.get(ctx.conn, mid),
+        candidates_fn=lambda: memory_repo.list_for_project(ctx.conn, project.id),
+        resource_name="memory entry",
+        console=console,
+    )
 
 
 __all__ = ["memory_app"]

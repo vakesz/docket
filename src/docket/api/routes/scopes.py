@@ -13,6 +13,7 @@ from docket.api.auth import require_bearer
 from docket.api.deps import get_runtime, require_not_read_only
 from docket.api.runtime import RuntimeState
 from docket.api.schemas import ScopeDTO, ScopeSwitchRequest
+from docket.config.models import ScopeFilter
 
 router = APIRouter(
     prefix="/scopes",
@@ -21,38 +22,34 @@ router = APIRouter(
 )
 
 
-def _entry_scopes(runtime: RuntimeState) -> list[ScopeDTO]:
-    entry = runtime.config.providers[runtime.provider_key]
-    return [
-        ScopeDTO(
-            name=name,
-            team=sf.team,
-            area_path=sf.area_path,
-            iteration_path=sf.iteration_path,
-            assignee=sf.assignee,
-            active=(name == runtime.scope_key),
-        )
-        for name, sf in entry.scopes.items()
-    ]
-
-
-@router.get("", response_model=list[ScopeDTO])
-def list_scopes(runtime: RuntimeState = Depends(get_runtime)) -> list[ScopeDTO]:
-    return _entry_scopes(runtime)
-
-
-@router.get("/active", response_model=ScopeDTO)
-def active_scope(runtime: RuntimeState = Depends(get_runtime)) -> ScopeDTO:
-    entry = runtime.config.providers[runtime.provider_key]
-    sf = entry.scopes[runtime.scope_key]
+def _scope_dto(name: str, sf: ScopeFilter, *, active: bool) -> ScopeDTO:
     return ScopeDTO(
-        name=runtime.scope_key,
+        name=name,
         team=sf.team,
         area_path=sf.area_path,
         iteration_path=sf.iteration_path,
         assignee=sf.assignee,
-        active=True,
+        active=active,
     )
+
+
+def _active_scope_dto(runtime: RuntimeState) -> ScopeDTO:
+    entry = runtime.config.providers[runtime.provider_key]
+    return _scope_dto(runtime.scope_key, entry.scopes[runtime.scope_key], active=True)
+
+
+@router.get("", response_model=list[ScopeDTO])
+def list_scopes(runtime: RuntimeState = Depends(get_runtime)) -> list[ScopeDTO]:
+    entry = runtime.config.providers[runtime.provider_key]
+    return [
+        _scope_dto(name, sf, active=(name == runtime.scope_key))
+        for name, sf in entry.scopes.items()
+    ]
+
+
+@router.get("/active", response_model=ScopeDTO)
+def active_scope(runtime: RuntimeState = Depends(get_runtime)) -> ScopeDTO:
+    return _active_scope_dto(runtime)
 
 
 @router.put(
@@ -73,16 +70,7 @@ def set_active_scope(
         ) from e
     # View change is render-only — the project, agent, and MCP fleet stay
     # bound to the provider. No agent rebuild required.
-    entry = runtime.config.providers[runtime.provider_key]
-    sf = entry.scopes[runtime.scope_key]
-    return ScopeDTO(
-        name=runtime.scope_key,
-        team=sf.team,
-        area_path=sf.area_path,
-        iteration_path=sf.iteration_path,
-        assignee=sf.assignee,
-        active=True,
-    )
+    return _active_scope_dto(runtime)
 
 
 __all__ = ["router"]

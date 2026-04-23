@@ -18,7 +18,9 @@ from rich.console import Console
 from rich.table import Table
 
 from docket.cli.context import Context, prepare_or_wizard
-from docket.core.services import mcp_service, project_service
+from docket.core.model import project_id_for
+from docket.core.services import mcp_service
+from docket.storage.repos import project_repo
 from docket.telemetry.log_reader import tail_events
 
 console = Console()
@@ -48,7 +50,7 @@ def _render(ctx: Context, *, verbose: bool = False) -> None:
     provider_entry = cfg.providers.get(active_provider) if active_provider != "—" else None
     scope_key = provider_entry.active_scope if provider_entry else "—"
     project = (
-        project_service.get_by_provider(ctx.conn, provider_key=active_provider)
+        project_repo.get(ctx.conn, project_id_for(active_provider))
         if active_provider != "—"
         else None
     )

@@ -28,14 +28,14 @@ def replace_comments_for_item(
 ) -> int:
     storage_id = item_storage_key(provider_key, item_id)
     conn.execute("DELETE FROM comments WHERE item_id = ?", (storage_id,))
-    n = 0
-    for c in comments:
-        conn.execute(
-            "INSERT INTO comments (id, item_id, author, body_md, created_at) VALUES (?, ?, ?, ?, ?)",
-            (c.id, storage_id, c.author, c.body_md, c.created_at.isoformat()),
-        )
-        n += 1
-    return n
+    rows = [(c.id, storage_id, c.author, c.body_md, c.created_at.isoformat()) for c in comments]
+    if not rows:
+        return 0
+    conn.executemany(
+        "INSERT INTO comments (id, item_id, author, body_md, created_at) VALUES (?, ?, ?, ?, ?)",
+        rows,
+    )
+    return len(rows)
 
 
 def list_comments(

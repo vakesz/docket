@@ -21,14 +21,10 @@ from datetime import UTC, datetime
 from docket.core.model import Source
 from docket.storage.db import transaction
 from docket.storage.repos import project_repo
+from docket.storage.repos._tags import clean_tags, clean_title, parse_tags
 
 
 def _row_to_entry(row: sqlite3.Row) -> Source:
-    raw_tags = row["tags_json"] or "[]"
-    try:
-        tags = list(json.loads(raw_tags))
-    except (TypeError, ValueError):
-        tags = []
     return Source(
         id=row["id"],
         project_id=row["project_id"],
@@ -36,7 +32,7 @@ def _row_to_entry(row: sqlite3.Row) -> Source:
         body_md=row["body_md"],
         kind=row["kind"] or "",
         uri=row["uri"] or "",
-        tags=[str(t) for t in tags],
+        tags=parse_tags(row["tags_json"]),
         created_at=datetime.fromisoformat(row["created_at"]),
         updated_at=datetime.fromisoformat(row["updated_at"]),
     )
@@ -82,7 +78,7 @@ def create(
     project_repo.require_project(conn, project_id)
     now = datetime.now(UTC)
     source_id = str(uuid.uuid4())
-    tags_clean = [t.strip() for t in (tags or []) if t and t.strip()]
+    tags_clean = clean_tags(tags)
     with transaction(conn):
         conn.execute(
             """
@@ -93,7 +89,7 @@ def create(
             (
                 source_id,
                 project_id,
-                title.strip() or "(untitled)",
+                clean_title(title),
                 kind.strip(),
                 uri.strip(),
                 body_md,
@@ -105,7 +101,7 @@ def create(
     return Source(
         id=source_id,
         project_id=project_id,
-        title=title.strip() or "(untitled)",
+        title=clean_title(title),
         body_md=body_md,
         kind=kind.strip(),
         uri=uri.strip(),
@@ -133,7 +129,7 @@ def update(
     params: list[object] = []
     if title is not None:
         fields.append("title = ?")
-        params.append(title.strip() or "(untitled)")
+        params.append(clean_title(title))
     if body_md is not None:
         fields.append("body_md = ?")
         params.append(body_md)
@@ -144,9 +140,8 @@ def update(
         fields.append("uri = ?")
         params.append(uri.strip())
     if tags is not None:
-        cleaned = [t.strip() for t in tags if t and t.strip()]
         fields.append("tags_json = ?")
-        params.append(json.dumps(cleaned))
+        params.append(json.dumps(clean_tags(tags)))
     if not fields:
         return existing
     fields.append("updated_at = ?")

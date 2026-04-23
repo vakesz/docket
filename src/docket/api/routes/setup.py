@@ -19,7 +19,7 @@ import threading
 import time
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import HttpUrl, ValidationError
 
 from docket.api.auth import require_setup_token
@@ -57,13 +57,7 @@ router = APIRouter(prefix="/setup", tags=["setup"])
 
 
 @router.get("/status", response_model=SetupStatusDTO)
-def setup_status(request: Request) -> SetupStatusDTO:
-    paths: Paths | None = getattr(request.app.state, "paths", None)
-    if paths is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Paths are not wired — this endpoint requires `docket serve`.",
-        )
+def setup_status(paths: Paths = Depends(get_paths)) -> SetupStatusDTO:
     try:
         cfg = load_config(paths)
     except ConfigMissingError:

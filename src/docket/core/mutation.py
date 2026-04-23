@@ -18,12 +18,16 @@ from typing import Any, Literal
 from docket.core.model import CreateFields, Item, ItemKind, TransitionIntent
 
 
+def _new_id() -> str:
+    return str(uuid.uuid4())
+
+
 @dataclass(frozen=True)
 class StateChange:
     kind: Literal["state_change"] = field(default="state_change", init=False)
     item: Item
     intent: TransitionIntent
-    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    id: str = field(default_factory=_new_id)
 
 
 @dataclass(frozen=True)
@@ -31,7 +35,7 @@ class DescriptionPatch:
     kind: Literal["description_patch"] = field(default="description_patch", init=False)
     item: Item
     new_md: str
-    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    id: str = field(default_factory=_new_id)
 
 
 @dataclass(frozen=True)
@@ -41,7 +45,7 @@ class AttachmentUpload:
     filename: str
     content: bytes
     content_type: str = "text/markdown; charset=utf-8"
-    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    id: str = field(default_factory=_new_id)
 
 
 @dataclass(frozen=True)
@@ -49,7 +53,7 @@ class ItemCreate:
     kind: Literal["item_create"] = field(default="item_create", init=False)
     item_kind: ItemKind
     fields: CreateFields
-    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    id: str = field(default_factory=_new_id)
 
 
 @dataclass(frozen=True)
@@ -57,7 +61,7 @@ class CommentAdd:
     kind: Literal["comment_add"] = field(default="comment_add", init=False)
     item: Item
     body_md: str
-    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    id: str = field(default_factory=_new_id)
 
 
 @dataclass(frozen=True)
@@ -79,7 +83,7 @@ class MemoryWrite:
     memory_id: str | None = None
     previous_title: str = ""
     previous_body_md: str = ""
-    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    id: str = field(default_factory=_new_id)
 
 
 @dataclass(frozen=True)
@@ -88,7 +92,7 @@ class MemoryDelete:
     project_id: str = ""
     memory_id: str = ""
     title: str = ""  # snapshot at propose time so the diff is human-readable
-    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    id: str = field(default_factory=_new_id)
 
 
 Proposal = (

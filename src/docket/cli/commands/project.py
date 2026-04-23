@@ -14,6 +14,7 @@ from rich.table import Table
 from docket.cli.context import prepare_or_wizard
 from docket.core.model import project_id_for
 from docket.core.services import project_service
+from docket.storage.repos import project_repo
 
 console = Console()
 
@@ -32,7 +33,7 @@ def project_list(
     ctx = prepare_or_wizard()
     try:
         active_id = ctx.project_id
-        rows = project_service.list_all(ctx.conn, include_archived=show_archived)
+        rows = project_repo.list_all(ctx.conn, include_archived=show_archived)
         table = Table(title=f"Projects ({len(rows)})")
         table.add_column("Active", style="green")
         table.add_column("Name", style="cyan")
@@ -66,7 +67,7 @@ def project_show(
     ctx = prepare_or_wizard()
     try:
         provider_key = provider or ctx.active_provider
-        project = project_service.get_by_provider(ctx.conn, provider_key=provider_key)
+        project = project_repo.get(ctx.conn, project_id_for(provider_key))
         if project is None:
             console.print(
                 f"[yellow]No project metadata for[/yellow] "

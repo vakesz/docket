@@ -44,7 +44,6 @@ def pin_item(
     provider_key: str = Depends(get_active_provider_key),
 ) -> None:
     watchlist_repo.pin(conn, item_id, provider_key=provider_key)
-    conn.commit()
 
 
 @router.delete(
@@ -58,7 +57,6 @@ def unpin_item(
     provider_key: str = Depends(get_active_provider_key),
 ) -> None:
     watchlist_repo.unpin(conn, item_id, provider_key=provider_key)
-    conn.commit()
 
 
 @router.get("/pinned", response_model=list[ItemDTO])

@@ -20,24 +20,12 @@ Lifecycle:
 from __future__ import annotations
 
 import sqlite3
-from datetime import UTC, datetime
 
 from docket.config.loader import save_config
 from docket.config.models import Config, ProjectEntry
 from docket.config.paths import Paths
 from docket.core.model import Project, project_id_for
 from docket.storage.repos import project_repo
-
-
-def _entry_to_project(entry: ProjectEntry, project_id: str) -> Project:
-    return Project(
-        id=project_id,
-        provider_key=entry.provider_key,
-        name=entry.name,
-        description=entry.description,
-        created_at=None,
-        archived_at=datetime.now(UTC) if entry.archived else None,
-    )
 
 
 def _default_name(provider_key: str) -> str:
@@ -133,18 +121,6 @@ def activate(
     return project
 
 
-def get(conn: sqlite3.Connection, project_id: str) -> Project | None:
-    return project_repo.get(conn, project_id)
-
-
-def get_by_provider(conn: sqlite3.Connection, *, provider_key: str) -> Project | None:
-    return project_repo.get(conn, project_id_for(provider_key))
-
-
-def list_all(conn: sqlite3.Connection, *, include_archived: bool = False) -> list[Project]:
-    return project_repo.list_all(conn, include_archived=include_archived)
-
-
 def rename(
     config: Config,
     paths: Paths,
@@ -158,7 +134,7 @@ def rename(
     entry.name = new_name.strip() or "default"
     save_config(paths, config)
     mirror_into_db(config, conn)
-    return get(conn, project_id)
+    return project_repo.get(conn, project_id)
 
 
 def describe(
@@ -174,7 +150,7 @@ def describe(
     entry.description = description.strip()
     save_config(paths, config)
     mirror_into_db(config, conn)
-    return get(conn, project_id)
+    return project_repo.get(conn, project_id)
 
 
 def archive(config: Config, paths: Paths, conn: sqlite3.Connection, project_id: str) -> None:

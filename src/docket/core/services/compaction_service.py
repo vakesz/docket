@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from docket.agent.llm_client import LlmClient
-from docket.agent.types import ChatMessage, ToolSchema
+from docket.agent.types import ChatMessage
 from docket.storage import transaction
 from docket.storage.repos import conversation_repo, message_repo
 
@@ -140,9 +140,6 @@ def _render_for_summary(messages: list[ChatMessage]) -> str:
             lines.append(f"{prefix} {m.content}")
     return "\n".join(lines)
 
-
-# Unused but kept so callers can introspect the summary signal without parsing.
-_ = ToolSchema
 
 __all__ = [
     "SUMMARY_MARKER",

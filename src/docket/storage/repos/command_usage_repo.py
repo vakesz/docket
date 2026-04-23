@@ -25,7 +25,6 @@ def record(conn: sqlite3.Connection, command_id: str) -> None:
         """,
         (command_id, now),
     )
-    conn.commit()
 
 
 def recent_ids(conn: sqlite3.Connection, *, limit: int = 5) -> list[str]:
@@ -44,7 +43,6 @@ def clear(conn: sqlite3.Connection) -> None:
     """Drop all recorded usage. Intended for tests and a future 'forget'
     surface; not currently exposed to users."""
     conn.execute("DELETE FROM command_usage")
-    conn.commit()
 
 
 __all__ = ["clear", "recent_ids", "record"]

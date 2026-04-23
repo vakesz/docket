@@ -756,11 +756,9 @@ class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
             self.tui_ctx.conn, item_id, provider_key=self.tui_ctx.provider_key
         ):
             watchlist_repo.unpin(self.tui_ctx.conn, item_id, provider_key=self.tui_ctx.provider_key)
-            self.tui_ctx.conn.commit()
             self.notify(f"Unpinned {item_id}.", severity="information")
         else:
             watchlist_repo.pin(self.tui_ctx.conn, item_id, provider_key=self.tui_ctx.provider_key)
-            self.tui_ctx.conn.commit()
             self.notify(f"Pinned {item_id}.", severity="information")
         self._reload_tree()
 
