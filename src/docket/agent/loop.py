@@ -84,7 +84,7 @@ class AgentLoop:
             if on_message:
                 on_message(assistant_msg)
 
-            if not assistant_msg.tool_calls or rounds >= self._max_rounds:
+            if not assistant_msg.tool_calls:
                 return AgentTurn(
                     final=assistant_msg,
                     new_messages=new_messages,
@@ -99,6 +99,25 @@ class AgentLoop:
                 if on_message:
                     on_message(tool_result_msg)
 
+            if rounds >= self._max_rounds:
+                # Budget exhausted while the model still wants to call tools.
+                # Force a final text completion (no tools offered) so the user
+                # sees a summary / options instead of a blank assistant card.
+                final_result = self._complete(working, on_delta=on_delta, with_tools=False)
+                total.tokens_in += final_result.usage.tokens_in
+                total.tokens_out += final_result.usage.tokens_out
+                total.cached_tokens_in += final_result.usage.cached_tokens_in
+                final_msg = final_result.message
+                new_messages.append(final_msg)
+                if on_message:
+                    on_message(final_msg)
+                return AgentTurn(
+                    final=final_msg,
+                    new_messages=new_messages,
+                    usage=total,
+                    rounds=rounds,
+                )
+
     # -- internals ----------------------------------------------------------
 
     def _complete(
@@ -106,8 +125,9 @@ class AgentLoop:
         messages: list[ChatMessage],
         *,
         on_delta: Callable[[StreamDelta], None] | None = None,
+        with_tools: bool = True,
     ) -> CompletionResult:
-        schemas = self._tools.schemas()
+        schemas = self._tools.schemas() if with_tools else []
         if self._stream:
             stream = self._client.stream(messages, schemas)
             if on_delta is not None:

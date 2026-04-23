@@ -67,12 +67,15 @@ def test_tool_call_round_then_final_text() -> None:
 
 
 def test_max_rounds_bound() -> None:
-    # Infinite tool-call loop — the guard must stop at max_tool_rounds.
+    # Infinite tool-call loop — the guard must stop at max_tool_rounds, then
+    # make one more no-tools completion so the user sees a text answer rather
+    # than a blank tool-dispatch message.
     client = FakeLlmClient(
         script=[
             tool_turn("tc-1", "noop", "{}"),
             tool_turn("tc-2", "noop", "{}"),
             tool_turn("tc-3", "noop", "{}"),
+            text_turn("I'm out of tool budget — here's what I found so far."),
         ]
     )
     reg = _registry_with("noop", lambda _: "{}")
@@ -83,6 +86,10 @@ def test_max_rounds_bound() -> None:
         user_message=ChatMessage(role="user", content="loop"),
     )
     assert turn.rounds == 3
+    assert turn.final.content.startswith("I'm out of tool budget")
+    assert not turn.final.tool_calls
+    # The final no-tools completion must be called with an empty tools list.
+    assert client.tool_schemas_seen[-1] == []
 
 
 def test_stream_callback_fires_on_each_delta() -> None:
