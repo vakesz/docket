@@ -26,6 +26,7 @@ def _row_to_item(row: sqlite3.Row) -> Item:
         updated_at=datetime.fromisoformat(row["updated_at"]) if row["updated_at"] else None,
         url=row["url"],
         author=row["author"],
+        repository_url=row["repository_url"],
         provider_raw=json.loads(row["provider_raw"]),
         provider_key=row["provider_key"],
     )
@@ -34,8 +35,8 @@ def _row_to_item(row: sqlite3.Row) -> Item:
 _UPSERT_SQL = """
 INSERT INTO items (
     id, provider_key, provider_item_id, kind, title, description_md, state, assignee, parent_id,
-    tags_json, provider_raw, updated_at, synced_at, archived, url, author
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+    tags_json, provider_raw, updated_at, synced_at, archived, url, author, repository_url
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
     provider_key    = excluded.provider_key,
     provider_item_id = excluded.provider_item_id,
@@ -51,7 +52,8 @@ ON CONFLICT(id) DO UPDATE SET
     synced_at      = excluded.synced_at,
     archived       = 0,
     url            = COALESCE(excluded.url, items.url),
-    author         = COALESCE(excluded.author, items.author)
+    author         = COALESCE(excluded.author, items.author),
+    repository_url = COALESCE(excluded.repository_url, items.repository_url)
 """
 
 
@@ -72,6 +74,7 @@ def _upsert_row(item: Item, now_iso: str) -> tuple[object, ...]:
         now_iso,
         item.url,
         item.author,
+        item.repository_url,
     )
 
 
@@ -172,7 +175,9 @@ def iter_items(conn: sqlite3.Connection, *, provider_key: str | None = None) -> 
             (provider_key,),
         )
     else:
-        cur = conn.execute(f"SELECT * FROM items WHERE {_VISIBLE_ITEM_SQL} ORDER BY updated_at DESC")
+        cur = conn.execute(
+            f"SELECT * FROM items WHERE {_VISIBLE_ITEM_SQL} ORDER BY updated_at DESC"
+        )
     for row in cur:
         yield _row_to_item(row)
 

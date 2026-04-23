@@ -81,6 +81,7 @@ class FakeProvider:
             updated_at=datetime.now(UTC),
             url=current.url,
             author=current.author,
+            repository_url=current.repository_url,
             provider_raw={**current.provider_raw, "state": new_state.value},
         )
         self._replace(updated)
@@ -100,6 +101,7 @@ class FakeProvider:
             updated_at=datetime.now(UTC),
             url=current.url,
             author=current.author,
+            repository_url=current.repository_url,
             provider_raw=dict(current.provider_raw),
         )
         self._replace(updated)

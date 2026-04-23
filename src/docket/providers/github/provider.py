@@ -320,6 +320,7 @@ class GitHubProvider:
             updated_at=item.updated_at,
             url=item.url,
             author=item.author,
+            repository_url=item.repository_url,
             attachments=list(item.attachments),
             provider_raw=dict(item.provider_raw),
         )
@@ -433,6 +434,7 @@ class GitHubProvider:
             updated_at=_parse_iso(payload.get("updated_at")),
             url=str(url) if isinstance(url, str) else None,
             author=cast(str | None, author),
+            repository_url=f"https://github.com/{owner_name}",
             provider_raw={
                 "github_state": state,
                 "github_state_reason": str(reason),

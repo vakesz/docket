@@ -98,6 +98,7 @@ class GitHubStubProvider:
             updated_at=datetime.now(UTC),
             url=current.url,
             author=current.author,
+            repository_url=current.repository_url,
             provider_raw=new_raw,
         )
         self._replace(updated)
@@ -117,6 +118,7 @@ class GitHubStubProvider:
             updated_at=datetime.now(UTC),
             url=current.url,
             author=current.author,
+            repository_url=current.repository_url,
             provider_raw=dict(current.provider_raw),
         )
         self._replace(updated)
@@ -162,6 +164,7 @@ class GitHubStubProvider:
             tags=list(fields.tags),
             updated_at=datetime.now(UTC),
             url=f"https://github.example/{self.default_repo}/issues/{number}",
+            repository_url=f"https://github.example/{self.default_repo}",
             provider_raw=raw,
         )
         self.issues.append(item)

@@ -29,7 +29,8 @@ STATEMENTS: tuple[str, ...] = (
         updated_at      TEXT NOT NULL,
         synced_at       TEXT NOT NULL,
         archived        INTEGER NOT NULL DEFAULT 0,
-        url             TEXT
+        url             TEXT,
+        repository_url  TEXT
     )
     """,
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_items_provider_item ON items(provider_key, provider_item_id)",

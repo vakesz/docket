@@ -70,6 +70,10 @@ class Item:
     updated_at: datetime | None = None
     url: str | None = None
     author: str | None = None
+    # Repository the item is primarily associated with, when the provider can
+    # attest to it (GitHub knows; Azure DevOps generally doesn't surface a
+    # reliable repo pointer in a work item's payload, so it stays None there).
+    repository_url: str | None = None
     attachments: list[Attachment] = field(default_factory=list)
     provider_raw: dict[str, Any] = field(default_factory=dict)
     # Stamped at the storage boundary (sync_service + mutation upserts) so the
