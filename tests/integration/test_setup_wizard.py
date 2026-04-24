@@ -139,6 +139,7 @@ def test_wizard_uses_discovery_selections_end_to_end(
             "1",  # pick provider type → azure_devops (sorted first alphabetically)
             "1",  # pick org → contoso (no 'any' in org picker)
             "1",  # pick project → platform (no 'any' in project picker)
+            "",  # display-name label → accept the suggested default
             "2",  # team picker → Alpha
             "2",  # area path picker → platform
             "3",  # iteration path picker → platform\Sprint 42
@@ -186,6 +187,7 @@ def test_wizard_falls_back_when_discovery_fails(
             "1",  # pick provider type → azure_devops
             "https://dev.azure.com/contoso",  # org URL
             "platform",  # project name
+            "",  # display-name label → accept the suggested default
             "",  # team (blank)
             "",  # area
             "",  # iteration
@@ -235,6 +237,7 @@ def test_wizard_rejects_bare_org_name_then_accepts_full_url(
             "platform",  # rejected — not a URL
             "https://dev.azure.com/contoso",  # accepted
             "platform",  # project name
+            "",  # display-name label → accept the suggested default
             "",  # team
             "",  # area
             "",  # iteration
@@ -274,6 +277,7 @@ def test_wizard_enables_http_and_mints_token(
             "1",  # pick provider type → azure_devops
             "1",  # pick org (no 'any')
             "1",  # pick project (no 'any')
+            "",  # display-name label → accept the suggested default
             "",  # team
             "",  # area
             "",  # iteration
@@ -313,6 +317,7 @@ def test_wizard_http_disabled_leaves_token_empty(
             "1",  # pick provider type → azure_devops
             "https://dev.azure.com/contoso",
             "platform",
+            "",  # display-name label → accept the suggested default
             "",
             "",
             "",

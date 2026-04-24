@@ -139,6 +139,19 @@ export function useAddProvider() {
   });
 }
 
+export function useUpdateProvider() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ key, body }: { key: string; body: DTO["SettingsProviderUpdateRequest"] }) =>
+      api.put<DTO["SettingsUpdatedDTO"]>(`/settings/providers/${encodeURIComponent(key)}`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.settings() });
+      qc.invalidateQueries({ queryKey: qk.providers() });
+      qc.invalidateQueries({ queryKey: qk.status() });
+    },
+  });
+}
+
 export function useRemoveProvider() {
   const qc = useQueryClient();
   return useMutation({

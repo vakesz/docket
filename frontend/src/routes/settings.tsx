@@ -13,6 +13,7 @@ import {
   FormInput,
   Globe,
   Palette,
+  Pencil,
   Plus,
   RefreshCw,
   RotateCcw,
@@ -48,6 +49,7 @@ import {
   useSettings,
   useSettingsProviderTypes,
   useTestSettingsProvider,
+  useUpdateProvider,
 } from "~/api/hooks";
 import type { components } from "~/api/schema";
 import { McpPage } from "~/components/mcp/McpPage";
@@ -664,6 +666,7 @@ function ProvidersForm({
   const active = draftActive ?? initialActive;
 
   const [showAdd, setShowAdd] = useState(false);
+  const [editingKey, setEditingKey] = useState<string | null>(null);
   const remove = useRemoveProvider();
   const [removeError, setRemoveError] = useState<string | null>(null);
 
@@ -752,6 +755,14 @@ function ProvidersForm({
                       )}
                       <button
                         type="button"
+                        onClick={() => setEditingKey(k)}
+                        title={`Edit provider '${k}'`}
+                        className="inline-flex items-center rounded-lg p-1 text-fg-muted hover:bg-surface-alt hover:text-fg"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => onRemove(k)}
                         disabled={isRuntimeActive || remove.isPending}
                         title={
@@ -779,39 +790,79 @@ function ProvidersForm({
       </div>
 
       {showAdd && (
-        <AddProviderModal
+        <ProviderModal
+          mode="add"
           existingKeys={providerKeys}
           onClose={() => setShowAdd(false)}
-          onAdded={() => setShowAdd(false)}
+          onSaved={() => setShowAdd(false)}
         />
       )}
+      {editingKey && providers[editingKey] ? (
+        <ProviderModal
+          mode="edit"
+          existingKeys={providerKeys}
+          existingKey={editingKey}
+          existingEntry={asRecord(providers[editingKey]) ?? {}}
+          onClose={() => setEditingKey(null)}
+          onSaved={() => setEditingKey(null)}
+        />
+      ) : null}
     </>
   );
 }
 
-// ---------- Add-provider modal ---------------------------------------------
+// ---------- Provider modal (add/edit) --------------------------------------
 
 type ProviderTypeDTO = DTO["SetupProviderTypeDTO"];
 type ProviderFieldDTO = DTO["SetupProviderFieldDTO"];
 
-function AddProviderModal({
-  existingKeys,
-  onClose,
-  onAdded,
-}: {
-  existingKeys: string[];
-  onClose: () => void;
-  onAdded: (key: string) => void;
-}) {
+type ProviderModalProps =
+  | {
+      mode: "add";
+      existingKeys: string[];
+      existingKey?: undefined;
+      existingEntry?: undefined;
+      onClose: () => void;
+      onSaved: (key: string) => void;
+    }
+  | {
+      mode: "edit";
+      existingKeys: string[];
+      existingKey: string;
+      existingEntry: Record<string, unknown>;
+      onClose: () => void;
+      onSaved: (key: string) => void;
+    };
+
+function ProviderModal(props: ProviderModalProps) {
+  const { mode, existingKeys, onClose, onSaved } = props;
+  const isEdit = mode === "edit";
   const types = useSettingsProviderTypes();
   const testMutation = useTestSettingsProvider();
   const addMutation = useAddProvider();
+  const updateMutation = useUpdateProvider();
 
-  const [selectedType, setSelectedType] = useState<string>("");
-  const [key, setKey] = useState<string>("");
-  const [displayName, setDisplayName] = useState<string>("");
+  // In edit mode the type & key are locked to the existing entry.
+  const existingType = isEdit ? (getString(props.existingEntry, "type") ?? "") : "";
+  const existingConfig = isEdit ? (asRecord(props.existingEntry.config) ?? {}) : {};
+  const existingDisplay = isEdit ? (getString(props.existingEntry, "display_name") ?? "") : "";
+
+  const [selectedType, setSelectedType] = useState<string>(existingType);
+  const [key, setKey] = useState<string>(isEdit ? props.existingKey : "");
+  const [displayName, setDisplayName] = useState<string>(existingDisplay);
   const [makeActive, setMakeActive] = useState(false);
-  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  // Per-type field values so switching the dropdown doesn't wipe what the user
+  // already typed for another type. Only the slot for `selectedType` is sent.
+  const [fieldValuesByType, setFieldValuesByType] = useState<
+    Record<string, Record<string, string>>
+  >(() => {
+    if (!isEdit) return {};
+    const seeded: Record<string, string> = {};
+    for (const [k, v] of Object.entries(existingConfig)) {
+      seeded[k] = v == null ? "" : String(v);
+    }
+    return { [existingType]: seeded };
+  });
   const [testResult, setTestResult] = useState<DTO["SetupTestResultDTO"] | null>(null);
 
   const spec = useMemo<ProviderTypeDTO | null>(
@@ -819,15 +870,17 @@ function AddProviderModal({
     [types.data, selectedType],
   );
 
+  const fieldValues = fieldValuesByType[selectedType] ?? {};
+
   useEffect(() => {
+    if (isEdit) return;
     if (!selectedType && types.data && types.data.length > 0) {
       setSelectedType(types.data[0]?.id ?? "");
     }
-  }, [types.data, selectedType]);
+  }, [types.data, selectedType, isEdit]);
 
   useEffect(() => {
-    // Default the config key to the type id, suffixed when it collides with
-    // an existing entry — mirrors the CLI wizard's behavior.
+    if (isEdit) return;
     if (!selectedType) return;
     if (existingKeys.includes(key)) return;
     if (!existingKeys.includes(selectedType)) {
@@ -837,10 +890,13 @@ function AddProviderModal({
     let i = 2;
     while (existingKeys.includes(`${selectedType}-${i}`)) i += 1;
     setKey((prev) => prev || `${selectedType}-${i}`);
-  }, [selectedType, existingKeys, key]);
+  }, [selectedType, existingKeys, key, isEdit]);
 
   const onField = (k: string, v: string) => {
-    setFieldValues((prev) => ({ ...prev, [k]: v }));
+    setFieldValuesByType((prev) => ({
+      ...prev,
+      [selectedType]: { ...(prev[selectedType] ?? {}), [k]: v },
+    }));
     setTestResult(null);
   };
 
@@ -849,7 +905,8 @@ function AddProviderModal({
     return (spec.fields ?? []).some((f) => f.required && !(fieldValues[f.key] ?? "").trim());
   }, [spec, fieldValues]);
 
-  const keyInvalid = !key.trim() || existingKeys.includes(key);
+  // In edit mode the key is immutable; in add mode it must be non-empty and unique.
+  const keyInvalid = !isEdit && (!key.trim() || existingKeys.includes(key));
 
   const runTest = () => {
     if (!spec || missingRequired) return;
@@ -860,8 +917,24 @@ function AddProviderModal({
     );
   };
 
-  const runAdd = () => {
-    if (!spec || keyInvalid || missingRequired) return;
+  const submitMutation = isEdit ? updateMutation : addMutation;
+
+  const runSubmit = () => {
+    if (!spec || missingRequired) return;
+    if (isEdit) {
+      updateMutation.mutate(
+        {
+          key: props.existingKey,
+          body: {
+            display_name: displayName.trim() || props.existingKey,
+            config: fieldValues,
+          },
+        },
+        { onSuccess: () => onSaved(props.existingKey) },
+      );
+      return;
+    }
+    if (keyInvalid) return;
     addMutation.mutate(
       {
         key: key.trim(),
@@ -871,11 +944,10 @@ function AddProviderModal({
         scope: {},
         make_active: makeActive,
       },
-      { onSuccess: () => onAdded(key.trim()) },
+      { onSuccess: () => onSaved(key.trim()) },
     );
   };
 
-  // Esc closes
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -883,6 +955,18 @@ function AddProviderModal({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  const title = isEdit ? "Edit provider" : "Add provider";
+  const subtitle = isEdit
+    ? "Rotate credentials or tweak config for this backend. Key and type are fixed — remove and re-add to change them."
+    : "Register a new backend at runtime. A server restart is required before it becomes fully wired in the agent loop.";
+  const submitLabel = isEdit
+    ? updateMutation.isPending
+      ? "Saving…"
+      : "Save changes"
+    : addMutation.isPending
+      ? "Adding…"
+      : "Add provider";
 
   return (
     <div
@@ -893,14 +977,11 @@ function AddProviderModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-xl">
-        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+      <div className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-xl">
+        <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-4">
           <div>
-            <h3 className="text-base font-semibold text-fg">Add provider</h3>
-            <p className="text-xs text-fg-muted">
-              Register a new backend at runtime. A server restart is required before it becomes
-              fully wired in the agent loop.
-            </p>
+            <h3 className="text-base font-semibold text-fg">{title}</h3>
+            <p className="mt-0.5 text-xs text-fg-muted">{subtitle}</p>
           </div>
           <button
             type="button"
@@ -911,7 +992,7 @@ function AddProviderModal({
           </button>
         </div>
 
-        <div className="flex flex-1 flex-col gap-4 overflow-auto px-5 py-4">
+        <div className="flex flex-1 flex-col gap-4 overflow-auto px-6 py-5">
           {types.isPending ? (
             <p className="text-sm text-fg-muted">Loading provider types…</p>
           ) : types.error ? (
@@ -920,29 +1001,50 @@ function AddProviderModal({
             </Notice>
           ) : (
             <>
-              <FormField label="Provider type">
-                <Select
-                  value={selectedType}
-                  options={(types.data ?? []).map((t) => ({
-                    value: t.id,
-                    label: `${t.display} (${t.id})`,
-                  }))}
-                  onChange={setSelectedType}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FormField label="Provider type">
+                  {isEdit ? (
+                    <div className="rounded-xl border border-border bg-surface-alt px-3 py-2 font-mono text-sm text-fg-muted">
+                      {existingType || "unknown"}
+                    </div>
+                  ) : (
+                    <Select
+                      value={selectedType}
+                      options={(types.data ?? []).map((t) => ({
+                        value: t.id,
+                        label: `${t.display} (${t.id})`,
+                      }))}
+                      onChange={setSelectedType}
+                    />
+                  )}
+                </FormField>
+                <FormField
+                  label="Config key"
+                  help={
+                    isEdit
+                      ? "Immutable once created. Remove and re-add to change."
+                      : "Short id used internally (e.g. in tool names, tickets). Must be unique."
+                  }
+                >
+                  {isEdit ? (
+                    <div className="rounded-xl border border-border bg-surface-alt px-3 py-2 font-mono text-sm text-fg-muted">
+                      {key}
+                    </div>
+                  ) : (
+                    <TextInput value={key} onChange={setKey} placeholder="github-work" />
+                  )}
+                </FormField>
+              </div>
+
+              <FormField label="Display name" help="Shown in the UI.">
+                <TextInput
+                  value={displayName}
+                  onChange={setDisplayName}
+                  placeholder={isEdit ? props.existingKey : key}
                 />
               </FormField>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <FormField
-                  label="Config key"
-                  help="Short id used internally (e.g. in tool names, tickets). Must be unique."
-                >
-                  <TextInput value={key} onChange={setKey} placeholder="github-work" />
-                </FormField>
-                <FormField label="Display name" help="Shown in the UI.">
-                  <TextInput value={displayName} onChange={setDisplayName} placeholder={key} />
-                </FormField>
-              </div>
-              {keyInvalid && key.trim() && (
+              {!isEdit && keyInvalid && key.trim() && (
                 <p className="text-xs text-danger">
                   Provider '{key}' already exists. Pick a different key.
                 </p>
@@ -950,26 +1052,32 @@ function AddProviderModal({
 
               {spec?.requires_cli && spec.requires_cli.length > 0 && (
                 <Notice tone="warning" title="CLI auth required">
-                  {`This provider uses the \`${spec.requires_cli.join(", ")}\` CLI(s). Make sure you're signed in on the server host before adding.`}
+                  {`This provider uses the \`${spec.requires_cli.join(", ")}\` CLI(s). Make sure you're signed in on the server host before ${isEdit ? "saving" : "adding"}.`}
                 </Notice>
               )}
 
-              {(spec?.fields ?? []).map((f) => (
-                <ProviderFieldInput
-                  key={f.key}
-                  field={f}
-                  value={fieldValues[f.key] ?? ""}
-                  onChange={(v) => onField(f.key, v)}
-                />
-              ))}
+              {(spec?.fields ?? []).length > 0 && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {(spec?.fields ?? []).map((f) => (
+                    <ProviderFieldInput
+                      key={f.key}
+                      field={f}
+                      value={fieldValues[f.key] ?? ""}
+                      onChange={(v) => onField(f.key, v)}
+                    />
+                  ))}
+                </div>
+              )}
 
-              <FormField label="Make active">
-                <Toggle
-                  checked={makeActive}
-                  onChange={setMakeActive}
-                  label={makeActive ? "Will become active" : "Keep current active provider"}
-                />
-              </FormField>
+              {!isEdit && (
+                <FormField label="Make active">
+                  <Toggle
+                    checked={makeActive}
+                    onChange={setMakeActive}
+                    label={makeActive ? "Will become active" : "Keep current active provider"}
+                  />
+                </FormField>
+              )}
 
               {testResult && (
                 <Notice
@@ -977,20 +1085,22 @@ function AddProviderModal({
                   title={testResult.ok ? "Provider reachable" : "Provider test failed"}
                 >
                   {testResult.ok
-                    ? "Connection test passed. You can add the provider now."
+                    ? isEdit
+                      ? "Connection test passed. You can save now."
+                      : "Connection test passed. You can add the provider now."
                     : (testResult.error ?? "Unknown error")}
                 </Notice>
               )}
-              {addMutation.error && (
-                <Notice tone="error" title="Add failed">
-                  {(addMutation.error as Error).message}
+              {submitMutation.error && (
+                <Notice tone="error" title={isEdit ? "Save failed" : "Add failed"}>
+                  {(submitMutation.error as Error).message}
                 </Notice>
               )}
             </>
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
+        <div className="flex items-center justify-end gap-2 border-t border-border px-6 py-3">
           <button
             type="button"
             onClick={runTest}
@@ -1001,18 +1111,18 @@ function AddProviderModal({
           </button>
           <button
             type="button"
-            onClick={runAdd}
+            onClick={runSubmit}
             disabled={
               !spec ||
               keyInvalid ||
               missingRequired ||
-              addMutation.isPending ||
+              submitMutation.isPending ||
               (!!testResult && !testResult.ok)
             }
             className="inline-flex items-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-accent-fg hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <Plus className="h-4 w-4" />
-            {addMutation.isPending ? "Adding…" : "Add provider"}
+            {isEdit ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+            {submitLabel}
           </button>
         </div>
       </div>

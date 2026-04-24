@@ -33,6 +33,7 @@ from docket.api.schemas import (
     SettingsLlmKeyRequest,
     SettingsPatchRequest,
     SettingsProviderAddRequest,
+    SettingsProviderUpdateRequest,
     SettingsUpdatedDTO,
     SetupProviderFieldDTO,
     SetupProviderTypeDTO,
@@ -334,6 +335,88 @@ def add_provider(
 
     save_config(paths, merged)
     runtime.config = merged
+    runtime.providers[key] = built
+
+    return SettingsUpdatedDTO(
+        config=_mask_config(merged),
+        requires_restart=["providers"],
+    )
+
+
+@router.put(
+    "/providers/{key}",
+    response_model=SettingsUpdatedDTO,
+    dependencies=[Depends(require_not_read_only)],
+)
+def update_provider(
+    key: str,
+    payload: SettingsProviderUpdateRequest,
+    paths: Paths = Depends(get_paths),
+    runtime: RuntimeState = Depends(get_runtime),
+) -> SettingsUpdatedDTO:
+    """Update an existing provider's display_name and config in place.
+
+    `type` and `key` are immutable here — those identify the provider in
+    project metadata, cached items, and downstream tool names, so changing
+    them mid-stream would orphan rows. Callers who need a different type
+    should remove + re-add."""
+    if key not in runtime.config.providers:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown provider '{key}'")
+    existing = runtime.config.providers[key]
+
+    try:
+        normalized = _normalize_provider_config(existing.type, dict(payload.config))
+    except ValueError as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
+
+    display_name = payload.display_name or existing.display_name or key
+    try:
+        built = build_provider(existing.type, dict(normalized), display_name=display_name)
+    except UnknownProviderError as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
+    except (ValueError, ValidationError) as e:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"invalid config for '{key}': {e}",
+        ) from e
+
+    if payload.scope is None:
+        scopes = dict(existing.scopes)
+    else:
+        try:
+            scope = ScopeFilter(**dict(payload.scope))
+        except ValidationError as e:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                f"invalid scope for '{key}': {e}",
+            ) from e
+        # Replace the active scope slot only — leave any extra named scopes alone.
+        scopes = dict(existing.scopes)
+        scopes[existing.active_scope] = scope
+
+    entry = ProviderEntry(
+        type=existing.type,
+        display_name=display_name,
+        config=normalized,
+        scopes=scopes,
+        active_scope=existing.active_scope,
+    )
+
+    cfg_dump = runtime.config.model_dump(mode="json")
+    cfg_dump.setdefault("providers", {})[key] = entry.model_dump(mode="json")
+    try:
+        merged = Config.model_validate(cfg_dump)
+    except ValidationError as e:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"Config validation failed: {e}",
+        ) from e
+
+    save_config(paths, merged)
+    runtime.config = merged
+    # Swap the live provider so subsequent requests use the new credentials
+    # without a restart. The agent loop still reads `requires_restart` and
+    # may need a rebuild for cached tool closures.
     runtime.providers[key] = built
 
     return SettingsUpdatedDTO(

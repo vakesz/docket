@@ -366,6 +366,73 @@ def test_patch_settings_read_only_403(ro_client: TestClient) -> None:
     assert r.status_code == 403
 
 
+# -- provider edit -----------------------------------------------------------
+
+
+def test_update_provider_replaces_config_and_swaps_runtime(client: TestClient, env) -> None:
+    r = client.put(
+        "/settings/providers/secondary",
+        headers=AUTH,
+        json={
+            "display_name": "Secondary (renamed)",
+            "config": {"default_repo": "example/secondary-renamed"},
+        },
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "providers" in body["requires_restart"]
+    entry = env["runtime"].config.providers["secondary"]
+    assert entry.display_name == "Secondary (renamed)"
+    assert entry.config["default_repo"] == "example/secondary-renamed"
+    # Live provider is swapped in place — credentials change without a restart.
+    assert env["runtime"].providers["secondary"].display_name == "Secondary (renamed)"
+
+
+def test_update_provider_preserves_existing_scope_when_omitted(client: TestClient, env) -> None:
+    before = dict(env["runtime"].config.providers["primary"].scopes)
+    r = client.put(
+        "/settings/providers/primary",
+        headers=AUTH,
+        json={"display_name": "Primary", "config": {"default_repo": "example/primary"}},
+    )
+    assert r.status_code == 200, r.text
+    after = dict(env["runtime"].config.providers["primary"].scopes)
+    # Both 'default' and 'team' scopes survive a config-only update.
+    assert set(after.keys()) == set(before.keys())
+    assert after["team"].team == before["team"].team
+
+
+def test_update_provider_unknown_returns_404(client: TestClient) -> None:
+    r = client.put(
+        "/settings/providers/ghost",
+        headers=AUTH,
+        json={"display_name": "x", "config": {"default_repo": "example/x"}},
+    )
+    assert r.status_code == 404
+
+
+def test_update_provider_invalid_scope_422(client: TestClient) -> None:
+    r = client.put(
+        "/settings/providers/primary",
+        headers=AUTH,
+        json={
+            "display_name": "Primary",
+            "config": {"default_repo": "example/primary"},
+            "scope": {"assignee": 123},  # wrong type — ScopeFilter expects str
+        },
+    )
+    assert r.status_code == 422, r.text
+
+
+def test_update_provider_read_only_403(ro_client: TestClient) -> None:
+    r = ro_client.put(
+        "/settings/providers/primary",
+        headers=AUTH,
+        json={"display_name": "x", "config": {"default_repo": "example/x"}},
+    )
+    assert r.status_code == 403
+
+
 # -- scopes ------------------------------------------------------------------
 
 

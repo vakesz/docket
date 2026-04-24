@@ -1871,6 +1871,29 @@ export interface components {
              */
             make_active: boolean;
         };
+        /**
+         * SettingsProviderUpdateRequest
+         * @description Update an existing provider's display_name and config.
+         *
+         *     The provider `key` (path param) and `type` are immutable — to change them
+         *     the caller removes and re-adds. `scope` is left untouched if omitted, so
+         *     in-flight scope edits aren't clobbered by a credentials-only update.
+         */
+        SettingsProviderUpdateRequest: {
+            /**
+             * Display Name
+             * @default
+             */
+            display_name: string;
+            /** Config */
+            config?: {
+                [key: string]: unknown;
+            };
+            /** Scope */
+            scope?: {
+                [key: string]: unknown;
+            } | null;
+        };
         /** SettingsUpdatedDTO */
         SettingsUpdatedDTO: {
             /** Config */

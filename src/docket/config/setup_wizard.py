@@ -21,8 +21,11 @@ import os
 import secrets
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
+
+if TYPE_CHECKING:
+    from docket.providers.github.discover import HostRef
 
 from pydantic import HttpUrl, ValidationError
 from rich.console import Console
@@ -53,6 +56,7 @@ STEP_NAMES: tuple[str, ...] = (
     "provider",
     "auth",
     "connection",
+    "label",
     "scope",
     "telemetry",
     "http",
@@ -87,6 +91,9 @@ class WizardState:
     llm_deployment: str = "gpt-5"
     # Discovered hints (used to pre-populate assignee pickers).
     signed_in_email: str | None = None
+    # gh host picked during the GitHub connection step. Feeds the label
+    # step's default and is not persisted directly (base_url is).
+    signed_in_github_host: str | None = None
     # Whether this entry should become the active provider after saving.
     make_active: bool = True
 
@@ -112,6 +119,7 @@ def run_wizard(start_at: str | None = None) -> None:
         ("provider", _step_pick_provider),
         ("auth", _step_provider_auth),
         ("connection", _step_provider_connection),
+        ("label", _step_pick_label),
         ("scope", _step_provider_scope),
         ("telemetry", _step_telemetry),
         ("http", _step_http_surface),
@@ -390,8 +398,63 @@ def _prompt_project_name(state: WizardState) -> str:
 
 
 def _github_step_connection(state: WizardState) -> None:
-    repo = _pick_github_repo()
-    state.provider_config = {"default_repo": repo}
+    host = _pick_github_host()
+    repo = _pick_github_repo(host=host.hostname if host else None)
+    config: dict[str, Any] = {"default_repo": repo}
+    if host and host.api_base_url != "https://api.github.com":
+        config["base_url"] = host.api_base_url
+    state.provider_config = config
+    # Store the hostname as a hint for the label step's default — doesn't
+    # persist to config.toml; only `base_url` / `default_repo` do.
+    state.signed_in_github_host = host.hostname if host else None
+
+
+def _pick_github_host() -> HostRef | None:
+    """Offer every authenticated gh host, plus a custom-URL escape hatch.
+
+    Returns `None` only when the user has a single github.com host and we
+    don't need to disambiguate — callers treat that as "use the default
+    `api.github.com` base URL and the default `gh` host."""
+    from docket.providers.github import discover as gh_discover
+
+    hosts = gh_discover.list_hosts()
+    if not hosts:
+        # `gh auth status --json hosts` failed — assume github.com and move
+        # on; repo discovery will surface the real problem if there is one.
+        return None
+    if len(hosts) == 1 and hosts[0].hostname == "github.com":
+        return hosts[0]
+
+    console.print(
+        "[dim]Multiple GitHub hosts are signed in via `gh`. "
+        "Pick which one this provider should use.[/dim]"
+    )
+    labels = [f"{h.hostname}  [dim]→ {h.api_base_url}[/dim]" for h in hosts]
+    choice = _pick("GitHub host", labels, allow_custom=True)
+    if choice is _CUSTOM_SENTINEL:
+        return _prompt_github_host_manual()
+    assert isinstance(choice, int)
+    return hosts[choice]
+
+
+def _prompt_github_host_manual() -> HostRef:
+    from docket.providers.github.discover import HostRef
+
+    while True:
+        raw = (
+            Prompt.ask(
+                "GitHub host (e.g. github.com or ghe.example.com)",
+                default="github.com",
+            )
+            .strip()
+            .lower()
+        )
+        if not raw or " " in raw or "/" in raw:
+            console.print("[red]Please enter a bare hostname, e.g. `ghe.example.com`.[/red]")
+            continue
+        if raw == "github.com":
+            return HostRef(hostname=raw, api_base_url="https://api.github.com")
+        return HostRef(hostname=raw, api_base_url=f"https://{raw}/api/v3")
 
 
 def _github_stub_step_connection(state: WizardState) -> None:
@@ -427,6 +490,73 @@ def _generic_step_connection(state: WizardState) -> None:
 def _looks_like_http_url(value: str) -> bool:
     parsed = urlparse(value)
     return parsed.scheme in ("http", "https") and bool(parsed.netloc)
+
+
+# ---- step 3b: label (per-provider) ------------------------------------------
+
+
+def _step_pick_label(state: WizardState) -> None:
+    """Prompt for the human-readable display name shown in the TUI/web switcher.
+
+    Without this step every GitHub entry defaults to the spec's "GitHub"
+    label, which makes three github entries indistinguishable in the
+    provider dropdown. We default to a repo/org-aware suggestion so the
+    common case is just pressing enter."""
+    default = _suggest_display_name(state)
+    collisions = {
+        key: entry.display_name
+        for key, entry in state.existing.providers.items()
+        if key != state.provider_key and entry.display_name == default
+    }
+    if collisions:
+        console.print(
+            "[yellow]Heads up:[/yellow] another provider "
+            f"([cyan]{next(iter(collisions))}[/cyan]) already uses "
+            f"[cyan]{default}[/cyan] as its label. "
+            "Pick something distinct so the TUI/web switcher is unambiguous."
+        )
+    else:
+        console.print("Label for this provider — shown in the TUI and web provider switcher.")
+
+    while True:
+        raw = Prompt.ask("Display name", default=default).strip() or default
+        clashes = [
+            key
+            for key, entry in state.existing.providers.items()
+            if key != state.provider_key and entry.display_name == raw
+        ]
+        if clashes and not Confirm.ask(
+            f"[yellow]'{raw}' is already in use by '{clashes[0]}'. Use anyway?[/yellow]",
+            default=False,
+        ):
+            continue
+        state.display_name = raw
+        return
+
+
+def _suggest_display_name(state: WizardState) -> str:
+    """Build a sensible default label from the provider config we've collected."""
+    if state.type_id == "azure_devops":
+        org_url = str(state.provider_config.get("organization", ""))
+        project = str(state.provider_config.get("project", ""))
+        org = urlparse(org_url).path.strip("/") or urlparse(org_url).netloc
+        if org and project:
+            return f"Azure DevOps · {org}/{project}"
+        if state.display_name:
+            return state.display_name
+        return "Azure DevOps"
+    if state.type_id in ("github", "github_stub"):
+        repo = str(state.provider_config.get("default_repo", ""))
+        host = state.signed_in_github_host
+        prefix = "GitHub"
+        if host and host != "github.com":
+            # Surface the host so "GitHub · foo/bar" on github.com and
+            # "ghe.example.com · foo/bar" on Enterprise don't collide.
+            prefix = host
+        if repo:
+            return f"{prefix} · {repo}"
+        return prefix
+    return state.display_name or state.type_id
 
 
 # ---- step 4: scope (per-provider) -------------------------------------------
@@ -855,6 +985,7 @@ def provider_add(
         raise SystemExit(2)
 
     config: dict[str, object] = {}
+    label_hint = ""
     if type_id == "azure_devops":
         org = Prompt.ask("Azure DevOps organization URL").strip().rstrip("/")
         if not _looks_like_http_url(org):
@@ -865,12 +996,25 @@ def provider_add(
             console.print("[red]Project name is required.[/red]")
             raise SystemExit(2)
         config = {"organization": str(HttpUrl(org)), "project": project}
+        org_slug = (
+            urlparse(str(config["organization"])).path.strip("/")
+            or urlparse(str(config["organization"])).netloc
+        )
+        label_hint = (
+            f"Azure DevOps · {org_slug}/{project}" if org_slug else f"Azure DevOps · {project}"
+        )
     elif type_id == "github":
-        default_repo = _pick_github_repo()
+        host = _pick_github_host()
+        default_repo = _pick_github_repo(host=host.hostname if host else None)
         config = {"default_repo": default_repo}
+        if host and host.api_base_url != "https://api.github.com":
+            config["base_url"] = host.api_base_url
+        prefix = host.hostname if host and host.hostname != "github.com" else "GitHub"
+        label_hint = f"{prefix} · {default_repo}"
     elif type_id == "github_stub":
         default_repo = Prompt.ask("Default repo (owner/name)", default="example/repo").strip()
         config = {"default_repo": default_repo}
+        label_hint = f"GitHub (stub) · {default_repo}"
     else:
         # Custom provider types (from entry points) self-validate via the
         # factory on first build; the wizard just records an empty config
@@ -885,9 +1029,18 @@ def provider_add(
         f"Provider '{name}' already exists. Overwrite?", default=False
     ):
         return
+
+    if display_name is None:
+        default_label = label_hint or name
+        console.print(
+            "Label for this provider — shown in the TUI and web provider switcher. "
+            "Press enter to accept the suggested default."
+        )
+        display_name = Prompt.ask("Display name", default=default_label).strip() or default_label
+
     cfg.providers[name] = ProviderEntry(
         type=type_id,
-        display_name=display_name or name,
+        display_name=display_name,
         config=config,
         scopes={"default": ScopeFilter()},
         active_scope="default",
@@ -895,10 +1048,10 @@ def provider_add(
     if make_active or not cfg.active_provider:
         cfg.active_provider = name
     save_config(paths, cfg)
-    console.print(f"[green]✓ added provider '{name}'[/green]")
+    console.print(f"[green]✓ added provider '{name}'[/green] as [cyan]{display_name}[/cyan]")
 
 
-def _pick_github_repo() -> str:
+def _pick_github_repo(*, host: str | None = None) -> str:
     """Offer discovered repos for the active `gh` session, or fall back to typing.
 
     Composition:
@@ -908,10 +1061,12 @@ def _pick_github_repo() -> str:
          public ones `/users/{login}/repos` would return).
 
     We merge into a single de-duplicated picker ordered by discovery so
-    "my repos first, then each org in turn" reads naturally. Any step's
-    failure falls through to the remaining sources, and if nothing comes
-    back we drop to the manual prompt so a user without `gh` (or a user
-    in zero orgs and zero repos, somehow) can still finish."""
+    "my repos first, then each org in turn" reads naturally. The custom
+    option lets the user type any repo they can read — including
+    open-source repos they don't own (e.g. `ericsson/codechecker`). Any
+    discovery failure falls through to the remaining sources, and if
+    nothing comes back we drop to the manual prompt so a user without
+    `gh` (or in zero orgs and zero repos) can still finish."""
     from docket.providers.github import discover as gh_discover
 
     seen: set[str] = set()
@@ -923,39 +1078,57 @@ def _pick_github_repo() -> str:
                 seen.add(ref.full_name)
                 repos.append(ref.full_name)
 
-    login = gh_discover.signed_in_login()
+    login = gh_discover.signed_in_login(host=host)
+    host_label = host or "github.com"
     if login:
-        console.print(f"[dim]Scanning repos for [cyan]{login}[/cyan]...[/dim]")
+        console.print(
+            f"[dim]Scanning repos on [cyan]{host_label}[/cyan] for [cyan]{login}[/cyan]...[/dim]"
+        )
+
+    discovery_errors: list[str] = []
 
     # Section 1: the user's own repos.
     try:
-        _add(gh_discover.list_repos())
+        _add(gh_discover.list_repos(host=host))
     except gh_discover.DiscoveryError as e:
-        console.print(
-            f"[dim]Couldn't list your personal repos via `gh` ({e}) — "
-            "continuing with org discovery.[/dim]"
-        )
+        discovery_errors.append(f"personal repos: {e}")
 
     # Section 2: repos in every org the user belongs to. `gh` silently
     # returns an empty list when the user is in no orgs, so this is free.
     try:
-        orgs = gh_discover.list_orgs()
+        orgs = gh_discover.list_orgs(host=host)
     except gh_discover.DiscoveryError as e:
-        console.print(f"[dim]Couldn't list orgs via `gh` ({e}).[/dim]")
+        discovery_errors.append(f"orgs: {e}")
         orgs = []
     for org in orgs:
         before = len(repos)
         try:
-            _add(gh_discover.list_org_repos(org.login))
+            _add(gh_discover.list_org_repos(org.login, host=host))
         except gh_discover.DiscoveryError as e:
-            console.print(f"[dim]Skipping org [cyan]{org.login}[/cyan] ({e}).[/dim]")
+            console.print(f"[yellow]Skipping org [cyan]{org.login}[/cyan]:[/yellow] {e}")
             continue
         added = len(repos) - before
         console.print(f"[dim]  · [cyan]{org.login}[/cyan]: {added} repo(s)[/dim]")
 
+    if discovery_errors:
+        # Make failures loud, not dim — if we end up at the manual prompt
+        # below, the user needs to know why discovery returned nothing.
+        for detail in discovery_errors:
+            console.print(f"[yellow]GitHub discovery issue ({detail})[/yellow]")
+
     if not repos:
+        console.print(
+            "[yellow]No repositories discovered.[/yellow] "
+            "You can still type any repo you have read access to below "
+            "(including public repos you don't own, e.g. "
+            "[cyan]ericsson/codechecker[/cyan])."
+        )
         return _prompt_github_repo_manual()
 
+    console.print(
+        "[dim]Don't see the repo you want? Choose [cyan]custom…[/cyan] to type "
+        "any repo you can read (e.g. [cyan]ericsson/codechecker[/cyan]).[/dim]"
+    )
     choice = _pick("GitHub repository", repos, allow_custom=True)
     if choice is _CUSTOM_SENTINEL:
         return _prompt_github_repo_manual()
