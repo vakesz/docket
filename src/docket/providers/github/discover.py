@@ -38,14 +38,25 @@ class OrgRef:
     login: str  # e.g. "anthropics"
 
 
-def signed_in_login() -> str | None:
-    """Return the signed-in GitHub login, or None on failure.
+@dataclass(frozen=True)
+class HostRef:
+    """One authenticated `gh` host plus the API base URL a GitHubProvider needs.
+
+    `api_base_url` is the REST endpoint. For github.com it's `api.github.com`;
+    for `<enterprise>.ghe.com` or self-hosted GHE it's `<host>/api/v3`."""
+
+    hostname: str
+    api_base_url: str
+
+
+def signed_in_login(host: str | None = None) -> str | None:
+    """Return the signed-in GitHub login for `host` (default: active host), or None on failure.
 
     Safe to call in the wizard UX path — never raises. A None just means
     the wizard can't label the picker with `(you: <login>)`."""
     try:
         result = subprocess.run(
-            [_gh_path(), "api", "user", "--jq", ".login"],
+            _gh_cmd(["api", "user", "--jq", ".login"], host=host),
             capture_output=True,
             text=True,
             check=True,
@@ -57,9 +68,51 @@ def signed_in_login() -> str | None:
     return login or None
 
 
-def list_orgs() -> list[OrgRef]:
-    """Return every org the signed-in user belongs to."""
-    payload = _gh_api_json("/user/orgs", paginate=True)
+def list_hosts() -> list[HostRef]:
+    """Every host the user is authenticated against via `gh auth login`.
+
+    Parses `gh auth status --json hosts` so we can drive per-host discovery
+    for users with both github.com and an enterprise host active. Returns an
+    empty list when the command fails — callers should fall back to the
+    single-host path."""
+    try:
+        result = subprocess.run(
+            [_gh_path(), "auth", "status", "--json", "hosts"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ProviderError):
+        return []
+    try:
+        payload = json.loads(result.stdout or "{}")
+    except json.JSONDecodeError:
+        return []
+    hosts = payload.get("hosts") if isinstance(payload, dict) else None
+    if not isinstance(hosts, dict):
+        return []
+    out: list[HostRef] = []
+    for hostname in hosts:
+        if isinstance(hostname, str) and hostname:
+            out.append(HostRef(hostname=hostname, api_base_url=_api_base_url_for(hostname)))
+    return out
+
+
+def _api_base_url_for(hostname: str) -> str:
+    """Map a gh host to its REST API base URL.
+
+    github.com → api.github.com; everything else is treated as GitHub
+    Enterprise, which exposes the REST API under `/api/v3` on the same
+    host (this matches gh's own host handling)."""
+    if hostname == "github.com":
+        return "https://api.github.com"
+    return f"https://{hostname}/api/v3"
+
+
+def list_orgs(host: str | None = None) -> list[OrgRef]:
+    """Return every org the signed-in user belongs to on `host`."""
+    payload = _gh_api_json("/user/orgs", paginate=True, host=host)
     if not isinstance(payload, list):
         raise DiscoveryError("unexpected /user/orgs payload shape")
     out: list[OrgRef] = []
@@ -72,7 +125,9 @@ def list_orgs() -> list[OrgRef]:
     return out
 
 
-def list_repos(owner: str | None = None, *, limit: int = 50) -> list[RepoRef]:
+def list_repos(
+    owner: str | None = None, *, limit: int = 50, host: str | None = None
+) -> list[RepoRef]:
     """List repos for `owner` (a user login) or the authenticated user when None.
 
     `limit` caps the returned set so a user on a big org doesn't wait ages
@@ -84,24 +139,25 @@ def list_repos(owner: str | None = None, *, limit: int = 50) -> list[RepoRef]:
     the user is a member of, call `list_org_repos(org)` instead so private
     repos they can see also show up."""
     path = f"/users/{owner}/repos" if owner else "/user/repos"
-    return _collect_repo_refs(path, limit=limit)
+    return _collect_repo_refs(path, limit=limit, host=host)
 
 
-def list_org_repos(org: str, *, limit: int = 100) -> list[RepoRef]:
+def list_org_repos(org: str, *, limit: int = 100, host: str | None = None) -> list[RepoRef]:
     """List every repo under `org` that the authenticated user can see.
 
     Uses `/orgs/{org}/repos`, which — unlike `/users/{org}/repos` — honors
     the caller's org membership and returns private repos they have access
     to. Default limit is higher than `list_repos` because org picks are
     typically where users actually work."""
-    return _collect_repo_refs(f"/orgs/{org}/repos", limit=limit)
+    return _collect_repo_refs(f"/orgs/{org}/repos", limit=limit, host=host)
 
 
-def _collect_repo_refs(path: str, *, limit: int) -> list[RepoRef]:
+def _collect_repo_refs(path: str, *, limit: int, host: str | None) -> list[RepoRef]:
     per_page = min(limit, 100)
     payload = _gh_api_json(
         path,
         params=[("per_page", str(per_page)), ("sort", "updated")],
+        host=host,
     )
     if not isinstance(payload, list):
         raise DiscoveryError(f"unexpected {path} payload shape")
@@ -119,11 +175,11 @@ def _collect_repo_refs(path: str, *, limit: int) -> list[RepoRef]:
     return out
 
 
-def list_labels(repo: str) -> list[str]:
+def list_labels(repo: str, *, host: str | None = None) -> list[str]:
     """Return the label names for `owner/repo`. Empty list is a legitimate result."""
     if "/" not in repo:
         raise DiscoveryError(f"repo must be 'owner/name', got {repo!r}")
-    payload = _gh_api_json(f"/repos/{repo}/labels", paginate=True)
+    payload = _gh_api_json(f"/repos/{repo}/labels", paginate=True, host=host)
     if not isinstance(payload, list):
         raise DiscoveryError(f"unexpected /repos/{repo}/labels payload shape")
     names: list[str] = []
@@ -136,26 +192,39 @@ def list_labels(repo: str) -> list[str]:
     return names
 
 
+def _gh_cmd(args: list[str], *, host: str | None) -> list[str]:
+    cmd = [_gh_path(), *args]
+    if host:
+        cmd.extend(["--hostname", host])
+    return cmd
+
+
 def _gh_api_json(
     path: str,
     *,
     params: list[tuple[str, str]] | None = None,
     paginate: bool = False,
+    host: str | None = None,
 ) -> object:
     """Invoke `gh api <path>` and parse its JSON stdout.
 
     `paginate=True` asks `gh` to walk link headers and concatenate pages
     into a single JSON array — convenient for small enumerations (orgs,
     labels). For listings with an explicit cap we pass `per_page` instead
-    so we don't accidentally pull thousands of repos."""
-    cmd: list[str] = [_gh_path(), "api", path]
+    so we don't accidentally pull thousands of repos.
+
+    `--method GET` is passed explicitly: `gh api` infers POST as soon as
+    any `-f` parameter is present, which silently turns `/user/repos` into
+    a "create repo" call that fails with 422. All our discovery endpoints
+    are read-only, so forcing GET here is safe."""
+    cmd_args: list[str] = ["api", "--method", "GET", path]
     if paginate:
-        cmd.append("--paginate")
+        cmd_args.append("--paginate")
     for key, value in params or []:
-        cmd.extend(["-f", f"{key}={value}"])
+        cmd_args.extend(["-f", f"{key}={value}"])
     try:
         result = subprocess.run(
-            cmd,
+            _gh_cmd(cmd_args, host=host),
             capture_output=True,
             text=True,
             check=True,
@@ -180,8 +249,10 @@ def _gh_api_json(
 
 __all__ = [
     "DiscoveryError",
+    "HostRef",
     "OrgRef",
     "RepoRef",
+    "list_hosts",
     "list_labels",
     "list_org_repos",
     "list_orgs",
