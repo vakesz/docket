@@ -1063,7 +1063,7 @@ def _pick_github_repo(*, host: str | None = None) -> str:
     We merge into a single de-duplicated picker ordered by discovery so
     "my repos first, then each org in turn" reads naturally. The custom
     option lets the user type any repo they can read — including
-    open-source repos they don't own (e.g. `ericsson/codechecker`). Any
+    open-source repos they don't own (e.g. `anthropics/claude-code`). Any
     discovery failure falls through to the remaining sources, and if
     nothing comes back we drop to the manual prompt so a user without
     `gh` (or in zero orgs and zero repos) can still finish."""
@@ -1084,6 +1084,8 @@ def _pick_github_repo(*, host: str | None = None) -> str:
         console.print(
             f"[dim]Scanning repos on [cyan]{host_label}[/cyan] for [cyan]{login}[/cyan]...[/dim]"
         )
+    else:
+        console.print(f"[dim]Scanning repos on [cyan]{host_label}[/cyan]...[/dim]")
 
     discovery_errors: list[str] = []
 
@@ -1114,20 +1116,24 @@ def _pick_github_repo(*, host: str | None = None) -> str:
         # Make failures loud, not dim — if we end up at the manual prompt
         # below, the user needs to know why discovery returned nothing.
         for detail in discovery_errors:
-            console.print(f"[yellow]GitHub discovery issue ({detail})[/yellow]")
+            console.print(
+                f"[yellow]GitHub discovery issue on [cyan]{host_label}[/cyan] "
+                f"({detail})[/yellow]"
+            )
 
     if not repos:
+        console.print("[yellow]No repositories discovered.[/yellow]")
+        console.print()
         console.print(
-            "[yellow]No repositories discovered.[/yellow] "
             "You can still type any repo you have read access to below "
             "(including public repos you don't own, e.g. "
-            "[cyan]ericsson/codechecker[/cyan])."
+            "[cyan]anthropics/claude-code[/cyan])."
         )
         return _prompt_github_repo_manual()
 
     console.print(
         "[dim]Don't see the repo you want? Choose [cyan]custom…[/cyan] to type "
-        "any repo you can read (e.g. [cyan]ericsson/codechecker[/cyan]).[/dim]"
+        "any repo you can read (e.g. [cyan]anthropics/claude-code[/cyan]).[/dim]"
     )
     choice = _pick("GitHub repository", repos, allow_custom=True)
     if choice is _CUSTOM_SENTINEL:

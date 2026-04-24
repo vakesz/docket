@@ -13,6 +13,7 @@ import shutil
 import subprocess
 from functools import lru_cache
 
+from docket.config.env import external_tool_env
 from docket.providers.base import ProviderAuthError
 
 
@@ -36,6 +37,7 @@ def get_gh_token() -> str:
             text=True,
             check=True,
             timeout=10,
+            env=external_tool_env(),
         )
     except subprocess.CalledProcessError as e:
         raise ProviderAuthError(
@@ -56,6 +58,7 @@ def ensure_logged_in() -> str:
     We probe the local `gh` session with `gh auth token` (no network required) to
     tolerate flaky connectivity; any login name we surface afterwards is
     best-effort and reported as "<unknown>" if the `/user` lookup fails."""
+    env = external_tool_env()
     try:
         subprocess.run(
             [_gh_path(), "auth", "token"],
@@ -63,6 +66,7 @@ def ensure_logged_in() -> str:
             text=True,
             check=True,
             timeout=10,
+            env=env,
         )
     except subprocess.CalledProcessError as e:
         detail = (e.stderr or e.stdout or "").strip()
@@ -80,6 +84,7 @@ def ensure_logged_in() -> str:
             text=True,
             check=True,
             timeout=10,
+            env=env,
         )
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return "<unknown>"
@@ -100,6 +105,7 @@ def signed_in_email() -> str | None:
             text=True,
             check=True,
             timeout=10,
+            env=external_tool_env(),
         )
         payload = json.loads(result.stdout)
     except (

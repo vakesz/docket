@@ -15,6 +15,7 @@ import json
 import subprocess
 from dataclasses import dataclass
 
+from docket.config.env import external_tool_env
 from docket.providers.base import ProviderError
 from docket.providers.github.auth import _gh_path
 
@@ -61,6 +62,7 @@ def signed_in_login(host: str | None = None) -> str | None:
             text=True,
             check=True,
             timeout=10,
+            env=external_tool_env(),
         )
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ProviderError):
         return None
@@ -82,6 +84,7 @@ def list_hosts() -> list[HostRef]:
             text=True,
             check=True,
             timeout=10,
+            env=external_tool_env(),
         )
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ProviderError):
         return []
@@ -229,6 +232,7 @@ def _gh_api_json(
             text=True,
             check=True,
             timeout=20,
+            env=external_tool_env(),
         )
     except subprocess.CalledProcessError as e:
         raise DiscoveryError(

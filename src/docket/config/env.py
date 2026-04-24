@@ -8,6 +8,14 @@ from docket.config.paths import Paths
 
 _project_env_loaded = False
 
+# XDG_* is shared with every subprocess we spawn — `gh`, `az`, editors, etc. A
+# repo-local `.env` that redirects XDG_CONFIG_HOME to `./.docket-dev/config`
+# (for docket's own isolation) would otherwise point `gh` at an empty dir and
+# break `gh auth`. We snapshot the pre-`.env` values once and expose them via
+# `external_tool_env()` for subprocess calls to user-level tools.
+_XDG_VARS = ("XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME")
+_pre_dotenv_xdg: dict[str, str | None] = {}
+
 
 def load_project_env() -> None:
     """Load a project-local `.env` found by walking up from CWD.
@@ -27,8 +35,29 @@ def load_project_env() -> None:
         return
     path = find_dotenv(usecwd=True)
     if path:
+        # Snapshot shared XDG state *before* override=True clobbers it so we
+        # can hand the pre-override values back to external tools that use the
+        # same env var for unrelated config.
+        for key in _XDG_VARS:
+            _pre_dotenv_xdg[key] = os.environ.get(key)
         load_dotenv(path, override=True)
     _project_env_loaded = True
+
+
+def external_tool_env() -> dict[str, str]:
+    """Env for subprocesses that consume user-level config (gh, az, editors).
+
+    Restores any XDG_* vars that `.env` overrode so external tools resolve
+    their own config against the shell's original paths instead of docket's
+    dev-isolation dir. No-op when `.env` didn't touch XDG_*.
+    """
+    env = os.environ.copy()
+    for key, original in _pre_dotenv_xdg.items():
+        if original is None:
+            env.pop(key, None)
+        else:
+            env[key] = original
+    return env
 
 
 def load_env(paths: Paths) -> None:
