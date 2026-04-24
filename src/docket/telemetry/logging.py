@@ -27,10 +27,12 @@ from __future__ import annotations
 import contextlib
 import logging
 import time
+from collections.abc import Iterable
 from logging.handlers import RotatingFileHandler
 from typing import Any
 
 import structlog
+from structlog.typing import Processor
 
 from docket.config.paths import Paths
 
@@ -62,6 +64,20 @@ _DOCKET_HANDLER_ATTR = "_docket_telemetry_handler"
 #: Effective level used when telemetry is disabled — silences everything,
 #: including `CRITICAL`, without removing the call sites.
 _DISABLED_LEVEL = logging.CRITICAL + 10
+
+#: Canonical structlog processor pipeline used by the enabled path. Keeping it
+#: as a module-level tuple (rather than inlining under `structlog.configure`)
+#: makes it obvious at a glance which processors run in what order, which
+#: matters because downstream consumers (`EVENT_KEYS`, the log reader at
+#: `telemetry.log_reader.tail_events`) rely on the JSON shape produced here.
+_STRUCTLOG_PROCESSORS: tuple[Processor, ...] = (
+    structlog.contextvars.merge_contextvars,
+    structlog.processors.add_log_level,
+    structlog.processors.TimeStamper(fmt="iso", utc=True),
+    structlog.processors.StackInfoRenderer(),
+    structlog.processors.format_exc_info,
+    structlog.processors.JSONRenderer(),
+)
 
 
 def init_logging(
@@ -97,11 +113,9 @@ def init_logging(
         # only accepts standard logging levels for its filtering wrapper, so
         # use CRITICAL here; the stdlib root level (above CRITICAL) is what
         # actually silences output.
-        structlog.configure(
-            processors=[structlog.processors.JSONRenderer()],
-            wrapper_class=structlog.make_filtering_bound_logger(logging.CRITICAL),
-            logger_factory=structlog.stdlib.LoggerFactory(),
-            cache_logger_on_first_use=False,
+        _configure_structlog(
+            processors=(structlog.processors.JSONRenderer(),),
+            level=logging.CRITICAL,
         )
         return
 
@@ -127,16 +141,15 @@ def init_logging(
     root.setLevel(effective_level)
     root.addHandler(handler)
 
+    _configure_structlog(processors=_STRUCTLOG_PROCESSORS, level=effective_level)
+
+
+def _configure_structlog(*, processors: Iterable[Processor], level: int) -> None:
+    """Thin wrapper so enabled / disabled branches differ only in their
+    processor list and filter level — the rest of the kwargs are shared."""
     structlog.configure(
-        processors=[
-            structlog.contextvars.merge_contextvars,
-            structlog.processors.add_log_level,
-            structlog.processors.TimeStamper(fmt="iso", utc=True),
-            structlog.processors.StackInfoRenderer(),
-            structlog.processors.format_exc_info,
-            structlog.processors.JSONRenderer(),
-        ],
-        wrapper_class=structlog.make_filtering_bound_logger(effective_level),
+        processors=list(processors),
+        wrapper_class=structlog.make_filtering_bound_logger(level),
         logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=False,
     )

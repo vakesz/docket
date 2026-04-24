@@ -14,7 +14,6 @@ file is strictly the HTTP API's contract."""
 from __future__ import annotations
 
 import base64
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -23,10 +22,10 @@ from fastapi.testclient import TestClient
 from docket.api import create_app
 from docket.api.runtime import RuntimeState
 from docket.config import Config, ProviderEntry, ScopeFilter
-from docket.core.model import Item, ItemKind, ItemState
 from docket.core.services.proposal_store import ProposalStore
 from docket.storage import init_db
 from docket.storage.repos import item_repo
+from tests.conftest import MakeItem
 from tests.fakes.llm import FakeLlmClient
 from tests.fakes.provider import FakeProvider
 
@@ -34,24 +33,10 @@ TOKEN = "test-bearer-token-abcdef"
 AUTH = {"Authorization": f"Bearer {TOKEN}"}
 
 
-def _mk_item() -> Item:
-    return Item(
-        id="S-1",
-        kind=ItemKind.STORY,
-        title="Login",
-        description_md="Add login.",
-        state=ItemState.NEW,
-        assignee=None,
-        parent_id=None,
-        updated_at=datetime.now(UTC),
-    )
-
-
 @pytest.fixture
-def env(tmp_path: Path):
+def env(tmp_path: Path, make_item: MakeItem):
     conn = init_db(tmp_path / "docket.db")
-    item = _mk_item()
-    item.provider_key = "main"
+    item = make_item(provider_key="main")
     item_repo.upsert_item(conn, item)
     provider = FakeProvider(items=[item])
     proposals = ProposalStore()

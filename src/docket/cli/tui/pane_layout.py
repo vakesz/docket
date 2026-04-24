@@ -5,8 +5,8 @@ The three named panes (`#left`, `#mid`, `#right`) are managed as a group:
 - Tab / Shift+Tab cycles focus between the tree, detail scroll, and chat
   prompt — Escape parks focus on the owning Pane container so single-key
   bindings work again, and Tab from a Pane re-enters the prompt.
-- Ctrl+F toggles a fullscreen layer for the focused pane; the ⤢ glyph on
-  each Pane mirrors the same action.
+- Ctrl+F toggles a fullscreen layer for the focused pane; the "Maximize"
+  button on each Pane mirrors the same action.
 - Ctrl+[ / Ctrl+] resize the focused pane by ±5% and steal from its
   neighbor, clamped to 10-80% so nothing collapses.
 
@@ -32,7 +32,7 @@ else:
 
 
 class PaneLayoutMixin(_AppBase):
-    """Tab cycling, ⤢ fullscreen, and ±5% resizing for `DocketApp`.
+    """Tab cycling, fullscreen toggling, and ±5% resizing for `DocketApp`.
 
     The mixin pretends to inherit from `App` at type-check time so mypy
     sees Textual's `query_one`/`focused`/`screen`/etc, and declares the
@@ -134,9 +134,17 @@ class PaneLayoutMixin(_AppBase):
         self.sync_fullscreen_icons()
 
     def clear_pane_width_override(self, pane: Widget) -> None:
-        """Drop any inline width set by ctrl+[/] resizes so the pane can
-        actually expand to fill the maximize layer."""
-        pane.styles.width = None
+        """Force the pane to fill the maximize layer.
+
+        The base CSS pins each pane to a fraction of the screen (`#main > #mid
+        { width: 41% }`), and that selector has higher specificity than
+        `Pane.-maximized { width: 100% }` — so clearing the width simply falls
+        back to the 41% rule and the "maximized" pane renders in its normal
+        column. Setting an inline width wins over the CSS rules regardless of
+        specificity, so we park 100% directly on the widget and let
+        `restore_pane_widths` reset it when we minimize."""
+        pane.styles.width = "100%"
+        pane.styles.height = "100%"
 
     def restore_pane_widths(self) -> None:
         """Re-apply the user's resize preferences after leaving fullscreen."""
@@ -145,19 +153,20 @@ class PaneLayoutMixin(_AppBase):
                 self.query_one(f"#{pid}", Widget).styles.width = f"{pct}%"
 
     def sync_fullscreen_icons(self) -> None:
-        """Flip each pane's ⤢ glyph to ⤡ while that pane is maximized.
+        """Flip each pane's fullscreen button between "Maximize" and "Restore"
+        to match the current screen state.
 
         Called after Ctrl+F and after clicking a FullscreenToggle so the
-        visible button reflects the current screen state."""
+        visible button reflects whether this pane is the maximized one."""
         maximized = self.screen.maximized
         for toggle in self.query(FullscreenToggle):
             owner: Widget | None = toggle.parent if isinstance(toggle.parent, Widget) else None
             while owner is not None and not isinstance(owner, Pane):
                 owner = owner.parent if isinstance(owner.parent, Widget) else None
             if owner is not None and owner is maximized:
-                toggle.update(FullscreenToggle.GLYPH_MINIMIZE)
+                toggle.update(FullscreenToggle.LABEL_MINIMIZE)
             else:
-                toggle.update(FullscreenToggle.GLYPH_MAXIMIZE)
+                toggle.update(FullscreenToggle.LABEL_MAXIMIZE)
 
     def action_shrink_pane(self) -> None:
         self._resize_focused_pane(-5)

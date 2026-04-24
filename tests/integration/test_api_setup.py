@@ -22,7 +22,16 @@ from fastapi.testclient import TestClient
 from docket.api import create_app, create_bootstrap_app
 from docket.api.routes import setup as setup_routes
 from docket.api.runtime import RuntimeState
-from docket.config.models import Config, HttpConfig, ProviderEntry, ScopeFilter
+from docket.config.models import (
+    Config,
+    HttpConfig,
+    LlmConfig,
+    ProviderEntry,
+    ScopeFilter,
+    StaleConfig,
+    SyncConfig,
+    UiConfig,
+)
 from docket.config.paths import Paths
 from docket.storage import init_db
 from tests.fakes.provider import FakeProvider
@@ -349,3 +358,228 @@ def test_full_app_setup_rejects_unknown_token(tmp_path: Path) -> None:
     client = _full_app_client(tmp_path)
     r = client.get("/setup/providers/types", headers={"Authorization": "Bearer nope"})
     assert r.status_code == 401
+
+
+def test_setup_complete_preserves_existing_scopes_and_active_slot(tmp_path: Path) -> None:
+    """Re-running /setup/complete against a configured instance must keep extra
+    named scopes and the user's active-scope choice — the incoming scope should
+    land in whatever slot was already active, not clobber it with a new
+    'default' slot."""
+    paths = _mk_paths(tmp_path)
+    existing = Config(
+        providers={
+            "primary": ProviderEntry(
+                type="github_stub",
+                display_name="Primary",
+                config={"default_repo": "example/primary"},
+                scopes={
+                    "default": ScopeFilter(),
+                    "my-team": ScopeFilter(team="Team A"),
+                    "blocked": ScopeFilter(area_path="Blocked"),
+                },
+                active_scope="my-team",
+            )
+        },
+        active_provider="primary",
+        http=HttpConfig(enabled=True, token=BEARER_TOKEN),
+    )
+    from docket.config.loader import save_config
+
+    save_config(paths, existing)
+    conn = init_db(paths.db_file)
+    provider = FakeProvider()
+    runtime = RuntimeState(
+        config=existing,
+        providers={"primary": provider},
+        provider_key="primary",
+        scope_key="my-team",
+    )
+    app = create_app(
+        conn=conn,
+        provider=provider,
+        bearer_token=BEARER_TOKEN,
+        paths=paths,
+        runtime=runtime,
+        setup_token=SETUP_TOKEN,
+    )
+    client = TestClient(app)
+
+    payload: dict[str, Any] = {
+        "providers": {
+            "primary": {
+                "type": "github_stub",
+                "display_name": "Primary",
+                "config": {"default_repo": "example/primary"},
+                "scope": {"team": "Team B"},
+            }
+        },
+        "active_provider": "primary",
+        "llm": None,
+        "http_token": BEARER_TOKEN,
+        "run_initial_sync": False,
+    }
+    r = client.post("/setup/complete", headers=SETUP_AUTH, json=payload)
+    assert r.status_code == 200, r.text
+
+    with paths.config_file.open("rb") as f:
+        raw = tomllib.load(f)
+    entry = raw["providers"]["primary"]
+    # active_scope preserved at "my-team" (not silently reset to "default").
+    assert entry["active_scope"] == "my-team"
+    # The user's incoming edit landed in the my-team slot.
+    assert entry["scopes"]["my-team"]["team"] == "Team B"
+    # Extra scopes ("default", "blocked") are still present and unchanged.
+    assert entry["scopes"]["default"]["team"] == ""
+    assert entry["scopes"]["blocked"]["area_path"] == "Blocked"
+
+
+def test_setup_complete_preserves_non_wizard_fields(tmp_path: Path) -> None:
+    """`ui`, `sync`, `stale`, and LLM advanced knobs (`compaction_threshold_tokens`,
+    `external_watch_interval_seconds`) are not surfaced by the wizard. Re-running
+    /setup/complete must keep the existing values instead of snapping them back
+    to pydantic defaults."""
+    paths = _mk_paths(tmp_path)
+    existing = Config(
+        providers={
+            "primary": ProviderEntry(
+                type="github_stub",
+                display_name="Primary",
+                config={"default_repo": "example/primary"},
+                scopes={"default": ScopeFilter()},
+                active_scope="default",
+            )
+        },
+        active_provider="primary",
+        http=HttpConfig(enabled=True, token=BEARER_TOKEN),
+        llm=LlmConfig(
+            deployment="gpt-5",
+            compaction_threshold_tokens=12345,
+            external_watch_interval_seconds=17.5,
+        ),
+        ui=UiConfig(theme="textual-light", hide_done=False, tag_filter_collapse_limit=9),
+        sync=SyncConfig(
+            background_interval_seconds=42.0,
+            min_interval_seconds_by_provider={"primary": 15.0},
+        ),
+        stale=StaleConfig(
+            threshold_days=3,
+            threshold_days_by_provider={"primary": 5},
+        ),
+    )
+    from docket.config.loader import save_config
+
+    save_config(paths, existing)
+    conn = init_db(paths.db_file)
+    provider = FakeProvider()
+    runtime = RuntimeState(
+        config=existing,
+        providers={"primary": provider},
+        provider_key="primary",
+        scope_key="default",
+    )
+    app = create_app(
+        conn=conn,
+        provider=provider,
+        bearer_token=BEARER_TOKEN,
+        paths=paths,
+        runtime=runtime,
+        setup_token=SETUP_TOKEN,
+    )
+    client = TestClient(app)
+
+    payload: dict[str, Any] = {
+        "providers": {
+            "primary": {
+                "type": "github_stub",
+                "display_name": "Primary",
+                "config": {"default_repo": "example/primary"},
+                "scope": {"team": "Team C"},
+            }
+        },
+        "active_provider": "primary",
+        "llm": {
+            "endpoint": "https://example.cognitiveservices.azure.com/",
+            "api_key": "",
+            "deployment": "gpt-5-mini",
+        },
+        "http_token": BEARER_TOKEN,
+        "run_initial_sync": False,
+    }
+    r = client.post("/setup/complete", headers=SETUP_AUTH, json=payload)
+    assert r.status_code == 200, r.text
+
+    with paths.config_file.open("rb") as f:
+        raw = tomllib.load(f)
+    # Wizard-surfaced LLM fields updated, advanced knobs preserved.
+    assert raw["llm"]["deployment"] == "gpt-5-mini"
+    assert raw["llm"]["compaction_threshold_tokens"] == 12345
+    assert raw["llm"]["external_watch_interval_seconds"] == 17.5
+    # ui / sync / stale never touched by the wizard — must survive intact.
+    assert raw["ui"]["theme"] == "textual-light"
+    assert raw["ui"]["hide_done"] is False
+    assert raw["ui"]["tag_filter_collapse_limit"] == 9
+    assert raw["sync"]["background_interval_seconds"] == 42.0
+    assert raw["sync"]["min_interval_seconds_by_provider"]["primary"] == 15.0
+    assert raw["stale"]["threshold_days"] == 3
+    assert raw["stale"]["threshold_days_by_provider"]["primary"] == 5
+
+
+def test_update_provider_preserves_active_scope_slot(tmp_path: Path) -> None:
+    """PUT /settings/providers/{key} with a new scope must land the scope in
+    the existing `active_scope` slot while keeping other named scopes intact."""
+    paths = _mk_paths(tmp_path)
+    existing = Config(
+        providers={
+            "primary": ProviderEntry(
+                type="github_stub",
+                display_name="Primary",
+                config={"default_repo": "example/primary"},
+                scopes={
+                    "default": ScopeFilter(),
+                    "my-team": ScopeFilter(team="Team A"),
+                },
+                active_scope="my-team",
+            )
+        },
+        active_provider="primary",
+        http=HttpConfig(enabled=True, token=BEARER_TOKEN),
+    )
+    from docket.config.loader import save_config
+
+    save_config(paths, existing)
+    conn = init_db(paths.db_file)
+    provider = FakeProvider()
+    runtime = RuntimeState(
+        config=existing,
+        providers={"primary": provider},
+        provider_key="primary",
+        scope_key="my-team",
+    )
+    app = create_app(
+        conn=conn,
+        provider=provider,
+        bearer_token=BEARER_TOKEN,
+        paths=paths,
+        runtime=runtime,
+        setup_token=SETUP_TOKEN,
+    )
+    client = TestClient(app)
+
+    r = client.put(
+        "/settings/providers/primary",
+        headers={"Authorization": f"Bearer {BEARER_TOKEN}"},
+        json={
+            "display_name": "Primary",
+            "config": {"default_repo": "example/primary"},
+            "scope": {"team": "Team B"},
+        },
+    )
+    assert r.status_code == 200, r.text
+
+    with paths.config_file.open("rb") as f:
+        raw = tomllib.load(f)
+    entry = raw["providers"]["primary"]
+    assert entry["active_scope"] == "my-team"
+    assert entry["scopes"]["my-team"]["team"] == "Team B"
+    # The other named scope is untouched.
+    assert entry["scopes"]["default"]["team"] == ""

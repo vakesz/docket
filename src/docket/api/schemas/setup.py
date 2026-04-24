@@ -7,6 +7,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from docket.api.schemas.routes import SyncSummaryDTO
+from docket.config.models import TelemetryLevel
 
 
 class SetupStatusDTO(BaseModel):
@@ -80,7 +81,7 @@ class SetupCompleteRequest(BaseModel):
     http_port: int = 8765
     http_token: str = ""
     telemetry_enabled: bool = True
-    telemetry_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "DEBUG"
+    telemetry_level: TelemetryLevel = TelemetryLevel.DEBUG
     run_initial_sync: bool = True
 
 

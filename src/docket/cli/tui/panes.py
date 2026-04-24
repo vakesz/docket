@@ -1,8 +1,8 @@
 """Three-pane layout primitives.
 
 `Pane` is the resizable/maximizable container used for backlog/detail/chat;
-`FullscreenToggle` is the clickable ⤢ affordance docked at the top of each
-pane that mirrors the Ctrl+F keybinding.
+`FullscreenToggle` is the clickable "Maximize"/"Restore" affordance docked at
+the top of each pane that mirrors the Ctrl+F keybinding.
 
 Lifted out of `app.py` so the layout primitives live next to each other and
 the app file stays focused on app-level wiring."""
@@ -43,20 +43,21 @@ class Pane(Vertical):
 
 
 class FullscreenToggle(Static):
-    """Clickable ⤢ affordance docked at the top of each Pane.
+    """Clickable "Maximize"/"Restore" affordance docked at the top of each Pane.
 
     Mirrors the Ctrl+F keybinding: click toggles maximize/minimize on the
-    owning Pane. Glyph flips to ⤡ while that pane is maximized so the
+    owning Pane. The label flips between "Maximize ⛶" and "Restore ⧉" so the
     action is discoverable and its state is visible.
     """
 
     DEFAULT_CSS = """
     FullscreenToggle {
-        height: auto;
+        height: 1;
         background: transparent;
         color: $text-muted;
         content-align-horizontal: right;
-        padding: 1 1 0 0;
+        padding: 0 1 0 0;
+        margin-bottom: 1;
     }
     FullscreenToggle:hover {
         color: $text;
@@ -64,11 +65,11 @@ class FullscreenToggle(Static):
     }
     """
 
-    GLYPH_MAXIMIZE = "⤢"
-    GLYPH_MINIMIZE = "⤡"
+    LABEL_MAXIMIZE = "Maximize ⛶"
+    LABEL_MINIMIZE = "Restore ⧉"
 
     def __init__(self) -> None:
-        super().__init__(self.GLYPH_MAXIMIZE)
+        super().__init__(self.LABEL_MAXIMIZE)
 
     def on_click(self) -> None:
         from docket.cli.tui.app import DocketApp

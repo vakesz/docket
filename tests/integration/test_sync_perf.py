@@ -12,10 +12,11 @@ import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from docket.core.model import Item, ItemKind, ItemState
+from docket.core.model import Item, ItemState
 from docket.core.services import sync_service
 from docket.storage import init_db
 from docket.storage.repos import item_repo
+from tests.conftest import MakeItem
 from tests.fakes.provider import FakeProvider
 
 
@@ -46,25 +47,22 @@ class _CountingConn:
         return getattr(self._real, name)
 
 
-def _mk_items(n: int, start: datetime) -> list[Item]:
+def _mk_items(make_item: MakeItem, n: int, start: datetime) -> list[Item]:
     return [
-        Item(
-            id=f"S-{i}",
-            kind=ItemKind.STORY,
+        make_item(
+            f"S-{i}",
             title=f"story {i}",
             description_md="",
             state=ItemState.ACTIVE,
-            assignee=None,
-            parent_id=None,
             updated_at=start + timedelta(seconds=i),
         )
         for i in range(n)
     ]
 
 
-def test_bulk_upsert_uses_executemany(tmp_path: Path) -> None:
+def test_bulk_upsert_uses_executemany(tmp_path: Path, make_item: MakeItem) -> None:
     conn = init_db(tmp_path / "t.db")
-    items = _mk_items(500, datetime(2026, 4, 21, 10, 0, tzinfo=UTC))
+    items = _mk_items(make_item, 500, datetime(2026, 4, 21, 10, 0, tzinfo=UTC))
 
     n = item_repo.upsert_items(conn, items)
     assert n == 500
@@ -72,12 +70,12 @@ def test_bulk_upsert_uses_executemany(tmp_path: Path) -> None:
     assert len(item_repo.list_items(conn)) == 500
 
 
-def test_refresh_batches_into_one_executemany(tmp_path: Path) -> None:
+def test_refresh_batches_into_one_executemany(tmp_path: Path, make_item: MakeItem) -> None:
     """Sync of 200 items should do O(1) `executemany` calls for the upsert,
     not O(n) `execute` calls."""
     real = init_db(tmp_path / "t.db")
     spy = _CountingConn(real)
-    items = _mk_items(200, datetime(2026, 4, 21, 10, 0, tzinfo=UTC))
+    items = _mk_items(make_item, 200, datetime(2026, 4, 21, 10, 0, tzinfo=UTC))
     provider = FakeProvider(items=items)
 
     summary = sync_service.refresh(spy, provider)

@@ -1,10 +1,26 @@
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field, HttpUrl
 
 from docket.core.model import ScopeFilters
+
+
+class TelemetryLevel(StrEnum):
+    """Log levels surfaced in telemetry config + the setup wizard + settings UI.
+
+    Same string values stdlib logging uses so `logging.getLevelName(level)`
+    works unchanged — one source of truth instead of a regex pattern on the
+    model, a `Literal` on the setup schema, and hand-written tuples in the
+    wizard and Textual settings modal."""
+
+    DEBUG = "DEBUG"
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    CRITICAL = "CRITICAL"
 
 
 class ScopeFilter(BaseModel):
@@ -46,6 +62,47 @@ class ProviderEntry(BaseModel):
     active_scope: str = "default"
 
 
+def build_provider_entry(
+    *,
+    type_id: str,
+    display_name: str,
+    config: dict[str, Any],
+    scope: ScopeFilter,
+    existing: ProviderEntry | None = None,
+) -> ProviderEntry:
+    """Assemble a `ProviderEntry` with consistent scope-preservation policy.
+
+    Why: every wizard / CLI / HTTP surface that edits providers had its own
+    inlined construction, and at least one (`_build_config_from_state`)
+    drifted — it read from `existing.active_scope` but wrote the user's edit
+    into a hard-coded `"default"` slot, so reconfiguring a provider whose
+    active scope was e.g. `"my-team"` silently lost the change.
+
+    Policy:
+      - No `existing`: fresh entry with `scopes={"default": scope}` and
+        `active_scope="default"`.
+      - With `existing`: keep every extra scope slot, replace only
+        `existing.scopes[existing.active_scope]` with `scope`, and keep the
+        active-scope name unchanged."""
+    if existing is None:
+        return ProviderEntry(
+            type=type_id,
+            display_name=display_name,
+            config=dict(config),
+            scopes={"default": scope},
+            active_scope="default",
+        )
+    scopes = dict(existing.scopes)
+    scopes[existing.active_scope] = scope
+    return ProviderEntry(
+        type=type_id,
+        display_name=display_name,
+        config=dict(config),
+        scopes=scopes,
+        active_scope=existing.active_scope,
+    )
+
+
 class LlmConfig(BaseModel):
     """LLM connection + runtime behavior. The concrete client today targets
     Azure OpenAI; `endpoint`/`deployment` identify that deployment."""
@@ -67,17 +124,12 @@ class TelemetryConfig(BaseModel):
     """Local telemetry / logging settings.
 
     `enabled=True` (the default) routes every stdlib + structlog call through a
-    rotating JSON file under `paths.log_dir`. `level` is a stdlib logging name
-    (`"DEBUG"`, `"INFO"`, `"WARNING"`, `"ERROR"`, `"CRITICAL"`) — defaults to
-    `DEBUG` so the on-disk log captures as much context as possible for the
-    small group of operators reviewing it. Lower it to `INFO` if the log volume
-    becomes a problem."""
+    rotating JSON file under `paths.log_dir`. `level` defaults to `DEBUG` so the
+    on-disk log captures as much context as possible for the small group of
+    operators reviewing it. Lower it to `INFO` if log volume becomes a problem."""
 
     enabled: bool = True
-    level: str = Field(
-        default="DEBUG",
-        pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$",
-    )
+    level: TelemetryLevel = TelemetryLevel.DEBUG
 
 
 class UiConfig(BaseModel):
@@ -170,3 +222,48 @@ class Config(BaseModel):
     ui: UiConfig = Field(default_factory=UiConfig)
     sync: SyncConfig = Field(default_factory=SyncConfig)
     stale: StaleConfig = Field(default_factory=StaleConfig)
+
+
+def compose_config(
+    existing: Config | None,
+    *,
+    providers: dict[str, ProviderEntry],
+    active_provider: str,
+    telemetry: TelemetryConfig,
+    http: HttpConfig,
+    llm_endpoint: str | None,
+    llm_deployment: str,
+) -> Config:
+    """Merge wizard output onto an optional existing `Config`.
+
+    Preserves `ui`, `sync`, `stale`, `projects`, and the LLM advanced knobs
+    (`compaction_threshold_tokens`, `external_watch_interval_seconds`) when
+    an existing config is handed in — otherwise falls back to pydantic
+    defaults for the bootstrap case.
+
+    Why this exists: the CLI wizard (`_build_config_from_state`) and the
+    HTTP `/setup/complete` handler both reconstruct the top-level `Config`
+    from wizard output, and they drifted — the HTTP path silently dropped
+    `ui`, `sync`, `stale`, `projects` and the LLM advanced knobs by
+    rebuilding a fresh `Config`. Routing both through this helper keeps
+    them honest."""
+    endpoint = HttpUrl(llm_endpoint) if llm_endpoint else None
+    if existing is None:
+        return Config(
+            providers=providers,
+            active_provider=active_provider,
+            llm=LlmConfig(endpoint=endpoint, deployment=llm_deployment),
+            http=http,
+            telemetry=telemetry,
+        )
+    return existing.model_copy(
+        update={
+            "providers": providers,
+            "active_provider": active_provider,
+            "telemetry": telemetry,
+            "http": http,
+            "llm": existing.llm.model_copy(
+                update={"endpoint": endpoint, "deployment": llm_deployment}
+            ),
+        }
+    )

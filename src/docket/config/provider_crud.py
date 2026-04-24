@@ -4,9 +4,9 @@ The first-time wizard handles the full onboarding; this module handles the
 incremental path: add a second provider, drop one, or just print what's there.
 It edits `config.toml` in place so az login / full sync aren't repeated.
 
-Shared helpers (`_pick_github_host`, `_pick_github_repo`, `_looks_like_http_url`,
-`console`) live in `setup_wizard` — the dependency is one-way (this module →
-setup_wizard) so the wizard stays independent of the CRUD surface."""
+Shared helpers (`pick_github_host`, `pick_github_repo`, `looks_like_http_url`,
+`console`) live in `setup_utils` so both the wizard and this CRUD surface can
+import them without either depending on the other."""
 
 from __future__ import annotations
 
@@ -16,13 +16,13 @@ from pydantic import HttpUrl
 from rich.prompt import Confirm, Prompt
 
 from docket.config.loader import ConfigLoadPolicy, load_config, save_config
-from docket.config.models import Config, ProviderEntry, ScopeFilter
+from docket.config.models import Config, ScopeFilter, build_provider_entry
 from docket.config.paths import resolve_paths
-from docket.config.setup_wizard import (
-    _looks_like_http_url,
-    _pick_github_host,
-    _pick_github_repo,
+from docket.config.setup_utils import (
     console,
+    looks_like_http_url,
+    pick_github_host,
+    pick_github_repo,
 )
 
 
@@ -70,7 +70,7 @@ def provider_add(
     match type_id:
         case "azure_devops":
             org = Prompt.ask("Azure DevOps organization URL").strip().rstrip("/")
-            if not _looks_like_http_url(org):
+            if not looks_like_http_url(org):
                 console.print("[red]Organization must be a full URL.[/red]")
                 raise SystemExit(2)
             project = Prompt.ask("Project name").strip()
@@ -86,8 +86,8 @@ def provider_add(
                 f"Azure DevOps · {org_slug}/{project}" if org_slug else f"Azure DevOps · {project}"
             )
         case "github":
-            host = _pick_github_host()
-            default_repo = _pick_github_repo(host=host.hostname if host else None)
+            host = pick_github_host()
+            default_repo = pick_github_repo(host=host.hostname if host else None)
             config = {"default_repo": default_repo}
             if host and host.api_base_url != "https://api.github.com":
                 config["base_url"] = host.api_base_url
@@ -120,12 +120,12 @@ def provider_add(
         )
         display_name = Prompt.ask("Display name", default=default_label).strip() or default_label
 
-    cfg.providers[name] = ProviderEntry(
-        type=type_id,
+    cfg.providers[name] = build_provider_entry(
+        type_id=type_id,
         display_name=display_name,
         config=config,
-        scopes={"default": ScopeFilter()},
-        active_scope="default",
+        scope=ScopeFilter(),
+        existing=cfg.providers.get(name),
     )
     if make_active or not cfg.active_provider:
         cfg.active_provider = name

@@ -10,7 +10,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Checkbox, Input, Select, Static
 
 from docket.config.loader import save_config
-from docket.config.models import Config, ProviderEntry, ScopeFilter
+from docket.config.models import Config, ProviderEntry, ScopeFilter, TelemetryLevel
 from docket.config.paths import Paths
 
 _NEW_SCOPE = "__new__"
@@ -332,12 +332,10 @@ class SettingsModal(ModalScreen[Config | None]):
                 telemetry_checkbox.tooltip = "Telemetry stays local on disk."
                 yield telemetry_checkbox
                 yield Static("Telemetry log level", classes="field-label")
-                level_options = [
-                    (lvl, lvl) for lvl in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
-                ]
+                level_options = [(lvl.value, lvl.value) for lvl in TelemetryLevel]
                 level_select = Select(
                     options=level_options,
-                    value=self._config.telemetry.level,
+                    value=self._config.telemetry.level.value,
                     allow_blank=False,
                     id="telemetry-level",
                 )

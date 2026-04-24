@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -12,35 +11,23 @@ from docket.api import create_app
 from docket.api.runtime import RuntimeState
 from docket.config import Config, ProviderEntry, ScopeFilter, save_config
 from docket.config.paths import resolve_paths
-from docket.core.model import Item, ItemKind, ItemState, project_id_for
+from docket.core.model import project_id_for
 from docket.core.services.proposal_store import ProposalStore
 from docket.storage import init_db
 from docket.storage.repos import item_repo
+from tests.conftest import MakeItem
 from tests.fakes.provider import FakeProvider
 
 TOKEN = "test-bearer-token-abcdef"
 AUTH_HEADERS = {"Authorization": f"Bearer {TOKEN}"}
 
 
-def _mk_item() -> Item:
-    return Item(
-        id="S-1",
-        kind=ItemKind.STORY,
-        title="Login",
-        description_md="",
-        state=ItemState.NEW,
-        assignee=None,
-        parent_id=None,
-        updated_at=datetime.now(UTC),
-    )
-
-
 @pytest.fixture
-def client(tmp_xdg: Path) -> TestClient:
+def client(tmp_xdg: Path, make_item: MakeItem) -> TestClient:
     paths = resolve_paths()
     paths.ensure()
     conn = init_db(paths.db_file)
-    item_repo.upsert_item(conn, _mk_item())
+    item_repo.upsert_item(conn, make_item(description_md=""))
     config = Config(
         providers={
             "main": ProviderEntry(
@@ -55,7 +42,7 @@ def client(tmp_xdg: Path) -> TestClient:
         http={"enabled": True, "bind": "127.0.0.1", "port": 8765, "token": TOKEN},
     )
     save_config(paths, config)
-    provider = FakeProvider(items=[_mk_item()])
+    provider = FakeProvider(items=[make_item(description_md="")])
     runtime = RuntimeState(
         config=config,
         providers={"main": provider},

@@ -15,7 +15,13 @@ import sqlite3
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from docket.api.auth import require_bearer
-from docket.api.deps import get_config, get_conn, require_not_read_only, require_project
+from docket.api.deps import (
+    get_config,
+    get_conn,
+    require_by_id,
+    require_not_read_only,
+    require_project,
+)
 from docket.api.schemas import (
     MemoryCreateRequest,
     MemoryDTO,
@@ -23,33 +29,12 @@ from docket.api.schemas import (
     MemoryUpdateRequest,
 )
 from docket.config.models import Config
-from docket.core.model import MemoryEntry
 from docket.storage.repos import memory_repo
 
 router = APIRouter(
     tags=["memory"],
     dependencies=[Depends(require_bearer)],
 )
-
-
-def _to_dto(entry: MemoryEntry) -> MemoryDTO:
-    return MemoryDTO(
-        id=entry.id,
-        project_id=entry.project_id,
-        title=entry.title,
-        body_md=entry.body_md,
-        tags=list(entry.tags),
-        source=entry.source,
-        created_at=entry.created_at,
-        updated_at=entry.updated_at,
-    )
-
-
-def _require_entry(conn: sqlite3.Connection, memory_id: str) -> MemoryEntry:
-    entry = memory_repo.get(conn, memory_id)
-    if entry is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown memory entry '{memory_id}'")
-    return entry
 
 
 @router.get(
@@ -68,7 +53,7 @@ def list_memory(
     return MemoryListDTO(
         project_id=project_id,
         revision=revision,
-        entries=[_to_dto(e) for e in entries],
+        entries=[MemoryDTO.from_core(e) for e in entries],
     )
 
 
@@ -89,7 +74,7 @@ def search_memory(
     return MemoryListDTO(
         project_id=project_id,
         revision=revision,
-        entries=[_to_dto(e) for e in entries],
+        entries=[MemoryDTO.from_core(e) for e in entries],
     )
 
 
@@ -117,7 +102,7 @@ def create_memory(
         )
     except KeyError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
-    return _to_dto(entry)
+    return MemoryDTO.from_core(entry)
 
 
 @router.get("/memory/{memory_id}", response_model=MemoryDTO)
@@ -125,8 +110,8 @@ def get_memory(
     memory_id: str,
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> MemoryDTO:
-    entry = _require_entry(conn, memory_id)
-    return _to_dto(entry)
+    entry = require_by_id(memory_repo.get, conn, memory_id, label="memory entry")
+    return MemoryDTO.from_core(entry)
 
 
 @router.patch(
@@ -139,7 +124,7 @@ def update_memory(
     payload: MemoryUpdateRequest,
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> MemoryDTO:
-    _require_entry(conn, memory_id)
+    require_by_id(memory_repo.get, conn, memory_id, label="memory entry")
     if payload.title is None and payload.body_md is None and payload.tags is None:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
@@ -156,7 +141,7 @@ def update_memory(
         # Lost a race with another writer — surface as 404 so the frontend
         # refetches and reconciles.
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Memory entry '{memory_id}' vanished")
-    return _to_dto(updated)
+    return MemoryDTO.from_core(updated)
 
 
 @router.delete(
@@ -168,7 +153,7 @@ def delete_memory(
     memory_id: str,
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> None:
-    _require_entry(conn, memory_id)
+    require_by_id(memory_repo.get, conn, memory_id, label="memory entry")
     memory_repo.delete(conn, memory_id)
 
 

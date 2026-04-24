@@ -76,11 +76,6 @@ class ChatPane(Vertical):
         color: $text-muted;
         height: auto;
     }
-    ChatPane #agent-hint {
-        padding: 0 2 0 2;
-        color: $text-disabled;
-        height: 1;
-    }
     ChatPane #transcript {
         height: 1fr;
         margin: 0 2 1 2;
@@ -160,10 +155,6 @@ class ChatPane(Vertical):
         yield VerticalScroll(id="transcript")
         yield Static("thinking…", id="thinking-indicator")
         yield Static("", id="ledger")
-        yield Static(
-            "Ask the agent to comment, transition, or rewrite — confirms appear as proposals.",
-            id="agent-hint",
-        )
         yield Input(placeholder="Ask about this ticket… (enter to send)", id="prompt")
 
     # -- public API used by the app -----------------------------------------

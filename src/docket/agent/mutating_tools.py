@@ -18,6 +18,7 @@ import sqlite3
 from collections.abc import Callable
 from typing import Any
 
+from docket.agent._helpers import arg_error, required_str, str_list
 from docket.agent.tools import ToolRegistry
 from docket.agent.transcript import filename_for, next_version, render_markdown
 from docket.core.model import CreateFields, ItemKind, TransitionIntent
@@ -68,10 +69,11 @@ def register_mutating_tools(
     """
 
     def propose_transition(args: dict[str, Any]) -> str:
-        item_id = str(args.get("id", "")).strip()
-        intent_raw = str(args.get("intent", "")).strip()
-        if not item_id or not intent_raw:
-            return json.dumps({"error": "id and intent are required"})
+        try:
+            item_id = required_str(args, "id")
+            intent_raw = required_str(args, "intent")
+        except ValueError as e:
+            return arg_error(str(e))
         try:
             intent = TransitionIntent(intent_raw)
         except ValueError:
@@ -82,29 +84,34 @@ def register_mutating_tools(
                 conn, item_id, intent, provider_key=provider_key, provider=provider
             )
         except KeyError as e:
-            return json.dumps({"error": str(e)})
+            return arg_error(str(e))
         store.add(proposal)
         return pending_payload(proposal)
 
     def propose_description_patch(args: dict[str, Any]) -> str:
-        item_id = str(args.get("id", "")).strip()
+        try:
+            item_id = required_str(args, "id")
+        except ValueError as e:
+            return arg_error(str(e))
         new_md = args.get("new_description_md")
-        if not item_id or not isinstance(new_md, str):
-            return json.dumps({"error": "id and new_description_md are required"})
+        if not isinstance(new_md, str):
+            return arg_error("new_description_md is required")
         try:
             proposal = mutation_service.propose_description_patch(
                 conn, item_id, new_md, provider_key=provider_key, provider=provider
             )
         except KeyError as e:
-            return json.dumps({"error": str(e)})
+            return arg_error(str(e))
         store.add(proposal)
         return pending_payload(proposal)
 
     def propose_new_item(args: dict[str, Any]) -> str:
-        kind_raw = str(args.get("kind", "")).strip()
-        title = str(args.get("title", "")).strip()
-        if not kind_raw or not title:
-            return json.dumps({"error": "kind and title are required"})
+        try:
+            kind_raw = required_str(args, "kind")
+            title = required_str(args, "title")
+            tags = str_list(args, "tags")
+        except ValueError as e:
+            return arg_error(str(e))
         try:
             kind = ItemKind(kind_raw)
         except ValueError:
@@ -115,7 +122,7 @@ def register_mutating_tools(
             description_md=str(args.get("description_md", "") or ""),
             parent_id=args.get("parent_id") or None,
             assignee=args.get("assignee") or None,
-            tags=list(args.get("tags") or []),
+            tags=tags,
         )
         proposal = ItemCreate(item_kind=kind, fields=fields)
         store.add(proposal)
@@ -126,35 +133,38 @@ def register_mutating_tools(
         return pending_payload(proposal, extra=extra)
 
     def propose_comment(args: dict[str, Any]) -> str:
-        item_id = str(args.get("id", "")).strip()
+        try:
+            item_id = required_str(args, "id")
+        except ValueError as e:
+            return arg_error(str(e))
         body_md = args.get("body_md")
-        if not item_id or not isinstance(body_md, str) or not body_md.strip():
-            return json.dumps({"error": "id and non-empty body_md are required"})
+        if not isinstance(body_md, str) or not body_md.strip():
+            return arg_error("non-empty body_md is required")
         try:
             proposal = mutation_service.propose_comment(
                 conn, item_id, body_md, provider_key=provider_key, provider=provider
             )
         except KeyError as e:
-            return json.dumps({"error": str(e)})
+            return arg_error(str(e))
         store.add(proposal)
         return pending_payload(proposal)
 
     def attach_transcript(args: dict[str, Any]) -> str:
         item_id = str(args.get("id") or active_item() or "").strip()
         if not item_id:
-            return json.dumps({"error": "no item in focus and none provided"})
+            return arg_error("no item in focus and none provided")
         convo = conversation_repo.get_active_for_item(conn, item_id, provider_key=provider_key)
         if convo is None:
-            return json.dumps({"error": f"no active conversation for {item_id}"})
+            return arg_error(f"no active conversation for {item_id}")
         messages = message_repo.list_for_conversation(conn, convo.id)
         if not messages:
-            return json.dumps({"error": "conversation is empty"})
+            return arg_error("conversation is empty")
         item = item_repo.get_item(conn, item_id, provider_key=provider_key)
         if item is None:
             try:
                 item = provider.get_item(item_id)
             except Exception as e:
-                return json.dumps({"error": f"unknown item {item_id}: {e}"})
+                return arg_error(f"unknown item {item_id}: {e}")
             if provider_key:
                 item.provider_key = provider_key
             item_repo.upsert_item(conn, item)
@@ -180,7 +190,7 @@ def register_mutating_tools(
                 provider=provider,
             )
         except KeyError as e:
-            return json.dumps({"error": str(e)})
+            return arg_error(str(e))
         store.add(proposal)
         return pending_payload(proposal)
 

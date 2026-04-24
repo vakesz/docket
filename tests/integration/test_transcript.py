@@ -8,28 +8,15 @@ import pytest
 
 from docket.agent.transcript import filename_for, next_version, render_markdown
 from docket.agent.types import ChatMessage, ToolCall
-from docket.core.model import Item, ItemKind, ItemState
 from docket.storage import init_db
 from docket.storage.repos import item_repo
-
-
-def _mk_item(id_: str = "S-1") -> Item:
-    return Item(
-        id=id_,
-        kind=ItemKind.STORY,
-        title="Login flow",
-        description_md="x",
-        state=ItemState.NEW,
-        assignee=None,
-        parent_id=None,
-        updated_at=datetime.now(UTC),
-    )
+from tests.conftest import MakeItem
 
 
 @pytest.fixture
-def conn(tmp_path: Path):
+def conn(tmp_path: Path, make_item: MakeItem):
     c = init_db(tmp_path / "t.db")
-    item_repo.upsert_item(c, _mk_item())
+    item_repo.upsert_item(c, make_item(title="Login flow", description_md="x"))
     yield c
     c.close()
 
@@ -77,8 +64,8 @@ def test_next_version_ignores_non_matching_filenames(conn) -> None:
     assert next_version(conn, "S-1") == 2
 
 
-def test_next_version_is_per_item(conn) -> None:
-    item_repo.upsert_item(conn, _mk_item("S-2"))
+def test_next_version_is_per_item(conn, make_item: MakeItem) -> None:
+    item_repo.upsert_item(conn, make_item("S-2", title="Login flow", description_md="x"))
     _insert_attachment(conn, "S-1", "convo-001.md")
     _insert_attachment(conn, "S-1", "convo-002.md")
     assert next_version(conn, "S-2") == 1

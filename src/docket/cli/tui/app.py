@@ -11,7 +11,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.command import Provider
 from textual.containers import Horizontal
-from textual.widgets import Input, Static
+from textual.widgets import Input
 
 from docket.agent.factory import build_agent
 from docket.agent.loop import AgentLoop
@@ -24,6 +24,15 @@ from docket.cli.tui.panes import FullscreenToggle, Pane
 from docket.cli.tui.review_flow import ReviewFlowMixin
 from docket.cli.tui.suggestion_flow import SuggestionFlowMixin
 from docket.cli.tui.tui_context import TuiContext
+from docket.cli.tui.view_resolver import (
+    active_provider_entry,
+    active_view_filter,
+    resolve_grouping,
+    resolve_list_item_states,
+    resolve_project_name,
+    resolve_stale_threshold,
+    resolve_sync_interval,
+)
 from docket.cli.tui.widgets.chat_pane import ChatPane, TurnFinished, UserTurnRequest
 from docket.cli.tui.widgets.help_modal import HelpModal
 from docket.cli.tui.widgets.item_detail import ItemDetail
@@ -54,7 +63,6 @@ from docket.core.services import (
     visual_filter,
 )
 from docket.core.services.proposal_store import ProposalStore
-from docket.providers import registry
 from docket.providers.base import GroupingStrategy
 from docket.storage.repos import (
     comment_repo,
@@ -113,13 +121,6 @@ class DocketApp(
     #main > #mid   { width: 41%; }
     #main > #right { width: 28%; }
     Pane.-maximized { width: 100%; height: 100%; }
-    .pane-heading {
-        height: auto;
-        padding: 1 2 1 2;
-        color: $text;
-        text-style: bold;
-        background: transparent;
-    }
     #filter {
         height: 3;
         border: round $panel-lighten-1;
@@ -182,7 +183,6 @@ class DocketApp(
         with Horizontal(id="main"):
             with Pane(id="left"):
                 yield FullscreenToggle()
-                yield Static("Backlog", classes="pane-heading")
                 yield Input(placeholder="Search backlog…  (: to open by id)", id="filter")
                 yield ItemTree(
                     id="tree",
@@ -191,14 +191,12 @@ class DocketApp(
                 )
             with Pane(id="mid"):
                 yield FullscreenToggle()
-                yield Static("Details", classes="pane-heading")
                 yield ItemDetail(
                     id="mid-detail",
                     stale_threshold_days=self._resolved_stale_threshold(),
                 )
             with Pane(id="right"):
                 yield FullscreenToggle()
-                yield Static("Assistant", classes="pane-heading")
                 yield ChatPane(
                     id="right-chat",
                     show_acceptance_criteria=self.tui_ctx.show_acceptance_criteria,
@@ -226,68 +224,22 @@ class DocketApp(
             )
 
     def _active_view_filter(self) -> visual_filter.ResolvedFilter:
-        """Resolve the active saved view into a post-cache filter.
-
-        `@me` is asked of the active provider; scopes without a first-class
-        SQL column (area/iteration/team) are applied in Python by
-        `visual_filter.apply_to_items`."""
-        return visual_filter.resolve(self.tui_ctx.scope, self.tui_ctx.provider)
+        return active_view_filter(self.tui_ctx)
 
     def _reload_tree(self) -> None:
         self._apply_filter("")
 
-    def _provider_display_key(self) -> str:
-        """Display-name key for per-provider override dicts (stale threshold,
-        sync floor). Distinct from `tui_ctx.provider_key` (the config id)."""
-        prov = self.tui_ctx.provider
-        name = getattr(prov, "display_name", None) or type(prov).__name__
-        return str(name)
-
     def _resolved_stale_threshold(self) -> int | None:
-        """Global default, unless the active provider has its own override.
-        Returns None when the marker is disabled so ItemTree can short-circuit."""
-        per_provider = self.tui_ctx.stale_threshold_by_provider or {}
-        value = per_provider.get(self._provider_display_key(), self.tui_ctx.stale_threshold_days)
-        return value if value and value > 0 else None
+        return resolve_stale_threshold(self.tui_ctx)
 
     def _resolved_sync_interval(self) -> float:
-        """Configured interval, clamped up to the per-provider floor (if any).
-
-        0 means disabled — and we keep it disabled even if a floor is set,
-        because the floor only protects an already-enabled timer from
-        exceeding the provider's rate limit."""
-        base = self.tui_ctx.background_sync_interval_seconds
-        if base <= 0:
-            return 0.0
-        floors = self.tui_ctx.background_sync_min_interval_by_provider or {}
-        floor = floors.get(self._provider_display_key(), 0.0)
-        return max(base, floor)
+        return resolve_sync_interval(self.tui_ctx)
 
     def _resolved_grouping(self) -> GroupingStrategy:
-        """Grouping strategy declared by the active provider's spec.
-
-        Falls back to `"by_kind"` when the config isn't available (pilot
-        tests) or the provider's type id isn't registered."""
-        entry = self._active_provider_entry()
-        if entry is None:
-            return "by_kind"
-        spec = registry.spec(entry.type)
-        if spec is None:
-            return "by_kind"
-        return spec.grouping
+        return resolve_grouping(self.tui_ctx)
 
     def _list_item_states(self) -> tuple[ItemState, ...] | None:
-        """States to pass to `item_repo.list_items`. `None` means "no state
-        filter" — for the 'show done' toggle — and matches the existing
-        behavior when called without a `states=` argument."""
-        if not self.tui_ctx.hide_done:
-            return None
-        return (
-            ItemState.NEW,
-            ItemState.ACTIVE,
-            ItemState.BLOCKED,
-            ItemState.NEEDS_INFO,
-        )
+        return resolve_list_item_states(self.tui_ctx)
 
     def _init_status_bar(self) -> None:
         """Populate the static status-bar segments (provider name, scope key).
@@ -321,24 +273,16 @@ class DocketApp(
             self.query_one(StatusBar).pending_count = len(self._proposals)
 
     def _set_thinking(self, value: bool) -> None:
-        """Toggle both the status-bar segment and the in-pane indicator. The
-        status bar alone was easy to miss — the pane indicator sits right next
-        to the prompt so the user can see when a turn is in flight. Safe from
-        worker threads because reactive assignments are atomic."""
-        with contextlib.suppress(Exception):
-            self.query_one(StatusBar).thinking = value
+        """Toggle the in-pane "thinking…" indicator next to the chat prompt.
+
+        Deliberately scoped to the chat pane — a duplicate segment in the
+        status bar pulled the eye away from the transcript. Safe from worker
+        threads because reactive assignments are atomic."""
         with contextlib.suppress(Exception):
             self.query_one(ChatPane).set_thinking(value)
 
     def _resolve_project_name(self) -> str:
-        """Display name for the active project (= active provider), or empty
-        string if no name has been configured yet (status bar will skip)."""
-        cfg = self.tui_ctx.config
-        if cfg is None:
-            return ""
-        pid = project_id_for(self.tui_ctx.provider_key)
-        entry = cfg.projects.get(pid)
-        return entry.name if entry else ""
+        return resolve_project_name(self.tui_ctx)
 
     def _rebuild_agent(self) -> None:
         """Rebuild the agent, rebinding all tool closures to the current provider/project.
@@ -391,7 +335,10 @@ class DocketApp(
                 "#filter", Input
             ).tooltip = "Filter by title, description, or comments. Press Enter to keep current results. Press : to jump directly to a ticket by id."
         for toggle in self.query(FullscreenToggle):
-            toggle.tooltip = "Maximize or restore this pane."
+            toggle.tooltip = (
+                "Maximize this pane to fill the screen, or restore the three-pane layout. "
+                "Ctrl+F does the same."
+            )
 
     def on_item_selected(self, message: ItemSelected) -> None:
         item = item_repo.get_item(
@@ -1022,15 +969,7 @@ class DocketApp(
         )
 
     def _active_provider_entry(self) -> ProviderEntry | None:
-        """Resolve the ProviderEntry behind the currently-active provider.
-
-        Returns None when the TUI was mounted without a full `config` (pilot
-        tests), which lets the callers short-circuit safely."""
-        config = self.tui_ctx.config
-        if config is None:
-            return None
-        key = self.tui_ctx.provider_key
-        return config.providers.get(key) if key else None
+        return active_provider_entry(self.tui_ctx)
 
     def action_set_default_provider(self) -> None:
         """Persist the current provider as `config.active_provider`.

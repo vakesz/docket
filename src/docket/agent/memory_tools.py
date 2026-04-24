@@ -25,7 +25,11 @@ from docket.agent._helpers import (
     DEFAULT_SEARCH_LIMIT,
     MAX_LIST_LIMIT,
     MAX_SEARCH_LIMIT,
+    arg_error,
     clamp_limit,
+    entry_summary,
+    required_str,
+    str_list,
 )
 from docket.agent.tools import ToolRegistry
 from docket.core.mutation import pending_payload
@@ -34,14 +38,8 @@ from docket.core.services.proposal_store import ProposalStore
 from docket.storage.repos import memory_repo
 
 
-def _entry_summary(entry: Any) -> dict[str, Any]:
-    return {
-        "id": entry.id,
-        "title": entry.title,
-        "tags": list(entry.tags),
-        "source": entry.source,
-        "updated_at": entry.updated_at.isoformat() if entry.updated_at else None,
-    }
+def _summary(entry: Any) -> dict[str, Any]:
+    return entry_summary(entry, source=entry.source)
 
 
 def register_memory_readonly_tools(
@@ -60,12 +58,13 @@ def register_memory_readonly_tools(
             args.get("limit", DEFAULT_LIST_LIMIT), DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT
         )
         entries = memory_repo.list_for_project(conn, project_id, limit=limit)
-        return json.dumps([_entry_summary(e) for e in entries])
+        return json.dumps([_summary(e) for e in entries])
 
     def recall_memory(args: dict[str, Any]) -> str:
-        query = str(args.get("query", "")).strip()
-        if not query:
-            return json.dumps({"error": "query is required"})
+        try:
+            query = required_str(args, "query")
+        except ValueError as e:
+            return arg_error(str(e))
         limit = clamp_limit(
             args.get("limit", DEFAULT_SEARCH_LIMIT), DEFAULT_SEARCH_LIMIT, MAX_SEARCH_LIMIT
         )
@@ -73,7 +72,7 @@ def register_memory_readonly_tools(
         return json.dumps(
             [
                 {
-                    **_entry_summary(e),
+                    **_summary(e),
                     "body_md": e.body_md,
                 }
                 for e in entries
@@ -135,16 +134,16 @@ def register_memory_mutating_tools(
     `mutation_service.confirm`."""
 
     def propose_memory_write(args: dict[str, Any]) -> str:
-        title = str(args.get("title", "")).strip()
+        try:
+            title = required_str(args, "title")
+            tags = str_list(args, "tags")
+        except ValueError as e:
+            return arg_error(str(e))
         body_md = args.get("body_md")
-        if not title or not isinstance(body_md, str):
-            return json.dumps({"error": "title and body_md are required"})
+        if not isinstance(body_md, str):
+            return arg_error("body_md is required")
         memory_id_raw = args.get("memory_id")
         memory_id = str(memory_id_raw).strip() if memory_id_raw else None
-        tags_raw = args.get("tags") or []
-        if not isinstance(tags_raw, list):
-            return json.dumps({"error": "tags must be an array of strings"})
-        tags = [str(t) for t in tags_raw if isinstance(t, (str, int, float))]
         try:
             proposal = mutation_service.propose_memory_write(
                 conn,
@@ -156,20 +155,21 @@ def register_memory_mutating_tools(
                 memory_id=memory_id,
             )
         except (KeyError, ValueError) as e:
-            return json.dumps({"error": str(e)})
+            return arg_error(str(e))
         store.add(proposal)
         return pending_payload(proposal)
 
     def propose_memory_delete(args: dict[str, Any]) -> str:
-        memory_id = str(args.get("memory_id", "")).strip()
-        if not memory_id:
-            return json.dumps({"error": "memory_id is required"})
+        try:
+            memory_id = required_str(args, "memory_id")
+        except ValueError as e:
+            return arg_error(str(e))
         try:
             proposal = mutation_service.propose_memory_delete(
                 conn, project_id=project_id, memory_id=memory_id
             )
         except (KeyError, ValueError) as e:
-            return json.dumps({"error": str(e)})
+            return arg_error(str(e))
         store.add(proposal)
         return pending_payload(proposal)
 

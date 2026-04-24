@@ -26,6 +26,48 @@ from docket.core.services.proposal_store import ProposalStore
 from docket.providers.base import WorkItemProvider
 
 
+def build_tool_registry(
+    *,
+    conn: sqlite3.Connection,
+    provider: WorkItemProvider,
+    store: ProposalStore,
+    active_item: Callable[[], str | None],
+    read_only: bool,
+    provider_key: str = "",
+    project_id: str = "",
+    mcp_manager: MCPManager | None = None,
+) -> ToolRegistry:
+    """Assemble the standard `ToolRegistry`.
+
+    Separated from `build_agent` so tests can lock the registration order
+    (which is part of the prompt prefix cache key) without having to supply
+    an LLM client. See `tests/unit/test_tool_registration_order.py` for the
+    pinned sequence.
+
+    Registration order (load-bearing): provider RO → memory RO → sources
+    RO → MCP → provider mutating → memory mutating. Changing it
+    invalidates every open conversation's prompt cache."""
+    registry = ToolRegistry()
+    register_readonly_tools(registry, conn=conn, provider=provider, provider_key=provider_key)
+    if project_id:
+        register_memory_readonly_tools(registry, conn=conn, project_id=project_id)
+        register_source_readonly_tools(registry, conn=conn, project_id=project_id)
+    if mcp_manager is not None and not read_only and project_id:
+        mcp_manager.register_tools(registry)
+    if not read_only:
+        register_mutating_tools(
+            registry,
+            conn=conn,
+            store=store,
+            active_item=active_item,
+            provider=provider,
+            provider_key=provider_key,
+        )
+        if project_id:
+            register_memory_mutating_tools(registry, conn=conn, store=store, project_id=project_id)
+    return registry
+
+
 def build_agent(
     *,
     llm: LlmClient,
@@ -55,30 +97,18 @@ def build_agent(
 
     Read-only mode keeps every readonly tool so the agent can still answer
     questions; it just strips every `propose_*` tool so the agent can't
-    stage writes.
-
-    Tool registration order is part of the prompt prefix cache key — keep
-    it stable: provider RO → memory RO → sources RO → MCP → provider
-    mutating → memory mutating."""
-    registry = ToolRegistry()
-    register_readonly_tools(registry, conn=conn, provider=provider, provider_key=provider_key)
-    if project_id:
-        register_memory_readonly_tools(registry, conn=conn, project_id=project_id)
-        register_source_readonly_tools(registry, conn=conn, project_id=project_id)
-    if mcp_manager is not None and not read_only and project_id:
-        mcp_manager.register_tools(registry)
-    if not read_only:
-        register_mutating_tools(
-            registry,
-            conn=conn,
-            store=store,
-            active_item=active_item,
-            provider=provider,
-            provider_key=provider_key,
-        )
-        if project_id:
-            register_memory_mutating_tools(registry, conn=conn, store=store, project_id=project_id)
+    stage writes."""
+    registry = build_tool_registry(
+        conn=conn,
+        provider=provider,
+        store=store,
+        active_item=active_item,
+        read_only=read_only,
+        provider_key=provider_key,
+        project_id=project_id,
+        mcp_manager=mcp_manager,
+    )
     return AgentLoop(client=llm, tools=registry)
 
 
-__all__ = ["build_agent"]
+__all__ = ["build_agent", "build_tool_registry"]

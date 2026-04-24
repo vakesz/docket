@@ -66,7 +66,7 @@ _HELP_MARKDOWN = """\
 |---|---|
 | `Ctrl+F` | Maximize / restore the focused pane |
 | `Ctrl+Left` / `Ctrl+Right` | Shrink / grow the focused pane |
-| `⤢` button | Click to maximize; `⤡` to restore |
+| `Maximize ⛶` button | Click to maximize; becomes `Restore ⧉` to revert |
 
 ## App
 

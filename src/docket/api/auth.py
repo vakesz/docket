@@ -15,6 +15,21 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 _scheme = HTTPBearer(auto_error=False)
 
 
+def _extract_bearer(creds: HTTPAuthorizationCredentials | None) -> str:
+    """Validate shape of the `Authorization: Bearer …` header.
+
+    Returns the token string on success; raises HTTP 401 with the
+    WWW-Authenticate challenge when the header is missing, non-bearer,
+    or empty."""
+    if creds is None or creds.scheme.lower() != "bearer" or not creds.credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing bearer token.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return creds.credentials
+
+
 def require_bearer(
     request: Request,
     creds: HTTPAuthorizationCredentials | None = Depends(_scheme),
@@ -25,13 +40,8 @@ def require_bearer(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="HTTP surface is not configured with a bearer token.",
         )
-    if creds is None or creds.scheme.lower() != "bearer" or not creds.credentials:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing bearer token.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    if not secrets.compare_digest(creds.credentials, expected):
+    supplied = _extract_bearer(creds)
+    if not secrets.compare_digest(supplied, expected):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid bearer token.",
@@ -55,13 +65,7 @@ def require_setup_token(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Setup surface requires either DOCKET_SETUP_TOKEN or a configured bearer token.",
         )
-    if creds is None or creds.scheme.lower() != "bearer" or not creds.credentials:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing bearer token.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    supplied = creds.credentials
+    supplied = _extract_bearer(creds)
     if setup_token and secrets.compare_digest(supplied, setup_token):
         return
     if bearer_token and secrets.compare_digest(supplied, bearer_token):

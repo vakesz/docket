@@ -1,11 +1,14 @@
 """Bottom-docked status bar for the main TUI.
 
 Renders a single line with dot-separated segments: project · provider ·
-scope · last sync · next sync · offline · thinking · N pending · cost ·
-read-only. Labels are intentionally plain English (no "streaming", no
-"READ-ONLY" caps) so a new user can parse the bar without a glossary.
-The app wires each segment by assigning to the reactive attributes on
-this widget.
+scope · last sync · next sync · offline · N pending · cost · read-only.
+Labels are intentionally plain English (no "streaming", no "READ-ONLY"
+caps) so a new user can parse the bar without a glossary. The app wires
+each segment by assigning to the reactive attributes on this widget.
+
+The agent "thinking…" indicator deliberately lives inside `ChatPane`
+only — duplicating it here pulls the eye away from the transcript where
+the user is already looking.
 """
 
 from __future__ import annotations
@@ -64,7 +67,6 @@ class StatusBar(Static):
     """One-line status bar docked at the bottom of the app."""
 
     COMPONENT_CLASSES: ClassVar[set[str]] = {
-        "status-bar--warning",
         "status-bar--error",
         "status-bar--accent",
     }
@@ -76,10 +78,6 @@ class StatusBar(Static):
         background: $panel;
         color: $text-muted;
         padding: 0 1;
-    }
-    StatusBar > .status-bar--warning {
-        color: $text-warning;
-        text-style: bold;
     }
     StatusBar > .status-bar--error {
         color: $text-error;
@@ -98,7 +96,6 @@ class StatusBar(Static):
     next_sync_at: reactive[datetime | None] = reactive(None)
     active_view: reactive[str | None] = reactive(None)
     offline: reactive[bool] = reactive(False)
-    thinking: reactive[bool] = reactive(False)
     pending_count: reactive[int] = reactive(0)
     cost_cents: reactive[int] = reactive(0)
     read_only: reactive[bool] = reactive(False)
@@ -131,8 +128,6 @@ class StatusBar(Static):
             append_part(f"next sync in {_format_countdown(self.next_sync_at)}")
         if self.offline:
             append_part("offline", "status-bar--error")
-        if self.thinking:
-            append_part("thinking…", "status-bar--warning")
         if self.pending_count > 0:
             noun = "proposal" if self.pending_count == 1 else "proposals"
             append_part(f"{self.pending_count} pending {noun}", "status-bar--accent")

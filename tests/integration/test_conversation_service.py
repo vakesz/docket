@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -8,31 +7,18 @@ import pytest
 from docket.agent.loop import AgentLoop
 from docket.agent.tool_defs import register_readonly_tools
 from docket.agent.tools import ToolRegistry
-from docket.core.model import Item, ItemKind, ItemState
 from docket.core.services import conversation_service
 from docket.storage import init_db
 from docket.storage.repos import conversation_repo, item_repo, message_repo
+from tests.conftest import MakeItem
 from tests.fakes.llm import FakeLlmClient, text_turn, tool_turn
 from tests.fakes.provider import FakeProvider
 
 
-def _mk_item(id_: str = "S-1") -> Item:
-    return Item(
-        id=id_,
-        kind=ItemKind.STORY,
-        title="Login",
-        description_md="Add login.",
-        state=ItemState.NEW,
-        assignee=None,
-        parent_id=None,
-        updated_at=datetime.now(UTC),
-    )
-
-
 @pytest.fixture
-def env(tmp_path: Path):
+def env(tmp_path: Path, make_item: MakeItem):
     conn = init_db(tmp_path / "docket.db")
-    item = _mk_item()
+    item = make_item()
     item_repo.upsert_item(conn, item)
     provider = FakeProvider(items=[item])
     reg = ToolRegistry()

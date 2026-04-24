@@ -25,16 +25,7 @@ from docket.core.model import Comment, Item, ItemKind, ItemState, ScopeFilters
 from docket.storage import init_db
 from docket.storage.repos import comment_repo, item_repo
 from tests.fakes.provider import FakeProvider
-
-
-def _find_node(node, target_id: str):
-    for child in node.children:
-        if child.data == target_id:
-            return child
-        found = _find_node(child, target_id)
-        if found is not None:
-            return found
-    return None
+from tests.pilot.conftest import find_node
 
 
 def _mk_item(
@@ -104,7 +95,7 @@ async def test_select_item_updates_detail_and_chat(tui_setup) -> None:
     app = DocketApp(ctx)
     async with app.run_test() as pilot:
         tree = app.query_one(ItemTree)
-        story_node = _find_node(tree.root, "S-1")
+        story_node = find_node(tree.root, "S-1")
         assert story_node is not None
         tree.select_node(story_node)
         await pilot.pause()
@@ -147,7 +138,7 @@ async def test_tree_rows_show_short_ids_and_status_bar_shows_project_name(tui_se
     async with app.run_test() as pilot:
         await pilot.pause()
         tree = app.query_one(ItemTree)
-        node = _find_node(tree.root, "Ericsson/CodeChecker#1")
+        node = find_node(tree.root, "Ericsson/CodeChecker#1")
         assert node is not None
         label = str(node.label)
         assert "#1" in label
@@ -227,12 +218,12 @@ async def test_closed_items_hidden_by_default_and_toggle_reveals_them(tui_setup)
     async with app.run_test() as pilot:
         await pilot.pause()
         tree = app.query_one(ItemTree)
-        assert _find_node(tree.root, "C-1") is None
+        assert find_node(tree.root, "C-1") is None
 
         await app.run_action("toggle_done_visibility")
         await pilot.pause()
         tree = app.query_one(ItemTree)
-        assert _find_node(tree.root, "C-1") is not None
+        assert find_node(tree.root, "C-1") is not None
 
 
 async def test_refresh_action_invokes_sync(tui_setup) -> None:
@@ -281,7 +272,7 @@ async def test_selected_tree_row_has_continuous_background(tui_setup) -> None:
         await pilot.pause()
         tree = app.query_one(ItemTree)
         tree.focus()
-        node = _find_node(tree.root, "S-1")
+        node = find_node(tree.root, "S-1")
         assert node is not None
         tree.select_node(node)
         await pilot.pause()

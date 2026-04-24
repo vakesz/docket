@@ -10,7 +10,6 @@ matches the cached messages. Confirming the proposal must then route through
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -19,32 +18,19 @@ from docket.agent.mutating_tools import register_mutating_tools
 from docket.agent.tool_defs import register_readonly_tools
 from docket.agent.tools import ToolRegistry
 from docket.agent.types import ChatMessage
-from docket.core.model import Item, ItemKind, ItemState
 from docket.core.mutation import AttachmentUpload
 from docket.core.services import conversation_service, mutation_service
 from docket.core.services.proposal_store import ProposalStore
 from docket.storage import init_db
 from docket.storage.repos import conversation_repo, item_repo, message_repo
+from tests.conftest import MakeItem
 from tests.fakes.provider import FakeProvider
 
 
-def _mk_item() -> Item:
-    return Item(
-        id="S-1",
-        kind=ItemKind.STORY,
-        title="Login flow",
-        description_md="x",
-        state=ItemState.NEW,
-        assignee=None,
-        parent_id=None,
-        updated_at=datetime.now(UTC),
-    )
-
-
 @pytest.fixture
-def env(tmp_path: Path):
+def env(tmp_path: Path, make_item: MakeItem):
     conn = init_db(tmp_path / "docket.db")
-    item = _mk_item()
+    item = make_item(title="Login flow", description_md="x")
     item_repo.upsert_item(conn, item)
     provider = FakeProvider(items=[item])
     store = ProposalStore()

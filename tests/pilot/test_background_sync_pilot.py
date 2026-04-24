@@ -20,6 +20,7 @@ from docket.core.model import Item, ItemKind, ItemState, ScopeFilters
 from docket.storage import init_db
 from docket.storage.repos import item_repo
 from tests.fakes.provider import FakeProvider
+from tests.pilot.conftest import find_label
 
 
 def _mk_item(
@@ -38,16 +39,6 @@ def _mk_item(
         parent_id=None,
         updated_at=updated_at or datetime.now(UTC),
     )
-
-
-def _find_label(node, target_id: str) -> str | None:
-    for child in node.children:
-        if child.data == target_id:
-            return str(child.label)
-        found = _find_label(child, target_id)
-        if found is not None:
-            return found
-    return None
 
 
 def _single_provider_cfg(
@@ -94,8 +85,8 @@ async def test_stale_marker_only_on_old_rows(stale_ctx) -> None:
     async with app.run_test() as pilot:
         await pilot.pause()
         tree = app.query_one(ItemTree)
-        stale_label = _find_label(tree.root, "S-stale")
-        fresh_label = _find_label(tree.root, "S-fresh")
+        stale_label = find_label(tree.root, "S-stale")
+        fresh_label = find_label(tree.root, "S-fresh")
         assert stale_label is not None
         assert "14d" in stale_label
         assert fresh_label is not None
@@ -117,7 +108,7 @@ async def test_stale_marker_disabled_when_threshold_zero(tmp_path: Path) -> None
     try:
         async with app.run_test() as pilot:
             await pilot.pause()
-            label = _find_label(app.query_one(ItemTree).root, "S-old")
+            label = find_label(app.query_one(ItemTree).root, "S-old")
             assert label is not None
             assert "365d" in label
     finally:
@@ -143,7 +134,7 @@ async def test_stale_per_provider_override(tmp_path: Path) -> None:
     try:
         async with app.run_test() as pilot:
             await pilot.pause()
-            label = _find_label(app.query_one(ItemTree).root, "S-1")
+            label = find_label(app.query_one(ItemTree).root, "S-1")
             assert label is not None
             assert "10d" in label
     finally:

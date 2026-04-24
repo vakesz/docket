@@ -38,12 +38,12 @@ from docket.api.schemas import (
 )
 from docket.config.loader import ConfigLoadPolicy, load_config, save_config
 from docket.config.models import (
-    Config,
     HttpConfig,
-    LlmConfig,
     ProviderEntry,
     ScopeFilter,
     TelemetryConfig,
+    build_provider_entry,
+    compose_config,
 )
 from docket.config.paths import Paths
 from docket.core.services import sync_service
@@ -174,6 +174,14 @@ def setup_complete(
 
     http_token = req.http_token or secrets.token_urlsafe(32)
 
+    # Load any pre-existing config so we preserve per-provider extra scope
+    # slots / active_scope choices when the wizard is re-run against a
+    # configured instance. Bootstrap mode will return None here.
+    try:
+        existing_cfg = load_config(paths, policy=ConfigLoadPolicy.OPTIONAL)
+    except ValidationError:
+        existing_cfg = None
+
     providers_cfg: dict[str, ProviderEntry] = {}
     built_providers: dict[str, Any] = {}
     for key, entry in req.providers.items():
@@ -210,40 +218,40 @@ def setup_complete(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=f"invalid scope for '{key}': {e}",
             ) from e
-        providers_cfg[key] = ProviderEntry(
-            type=entry.type,
+        providers_cfg[key] = build_provider_entry(
+            type_id=entry.type,
             display_name=entry.display_name or key,
             config=normalized,
-            scopes={"default": scope},
-            active_scope="default",
+            scope=scope,
+            existing=existing_cfg.providers.get(key) if existing_cfg else None,
         )
         built_providers[key] = built
 
-    llm_cfg = LlmConfig()
-    if req.llm is not None:
-        try:
-            llm_cfg = LlmConfig(endpoint=req.llm.endpoint, deployment=req.llm.deployment)
-        except ValidationError as e:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=f"invalid llm config: {e}",
-            ) from e
-
-    cfg = Config(
-        providers=providers_cfg,
-        active_provider=req.active_provider,
-        llm=llm_cfg,
-        http=HttpConfig(
-            enabled=True,
-            bind=req.http_bind,
-            port=req.http_port,
-            token=http_token,
-        ),
-        telemetry=TelemetryConfig(
-            enabled=req.telemetry_enabled,
-            level=req.telemetry_level,
-        ),
-    )
+    llm_endpoint = req.llm.endpoint if req.llm is not None else None
+    llm_deployment = req.llm.deployment if req.llm is not None else "gpt-5"
+    try:
+        cfg = compose_config(
+            existing_cfg,
+            providers=providers_cfg,
+            active_provider=req.active_provider,
+            telemetry=TelemetryConfig(
+                enabled=req.telemetry_enabled,
+                level=req.telemetry_level,
+            ),
+            http=HttpConfig(
+                enabled=True,
+                bind=req.http_bind,
+                port=req.http_port,
+                token=http_token,
+            ),
+            llm_endpoint=llm_endpoint,
+            llm_deployment=llm_deployment,
+        )
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"invalid llm config: {e}",
+        ) from e
 
     paths.ensure()
     scaffold_prompts(paths.prompts_dir)

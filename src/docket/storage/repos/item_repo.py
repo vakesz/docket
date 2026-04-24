@@ -9,7 +9,7 @@ from docket.core.model import Item, ItemKind, ItemState
 from docket.storage.item_keys import item_storage_key
 
 
-def _row_to_item(row: sqlite3.Row) -> Item:
+def row_to_item(row: sqlite3.Row) -> Item:
     return Item(
         id=row["provider_item_id"],
         kind=ItemKind(row["kind"]),
@@ -97,7 +97,7 @@ def get_item(conn: sqlite3.Connection, id: str, *, provider_key: str | None = No
             "SELECT * FROM items WHERE id = ?",
             (item_storage_key(provider_key, id),),
         ).fetchone()
-        return _row_to_item(row) if row else None
+        return row_to_item(row) if row else None
     rows = conn.execute(
         "SELECT * FROM items WHERE provider_item_id = ? ORDER BY updated_at DESC",
         (id,),
@@ -105,7 +105,7 @@ def get_item(conn: sqlite3.Connection, id: str, *, provider_key: str | None = No
     if len(rows) > 1:
         raise RuntimeError(f"ambiguous cached item id={id!r}; pass provider_key")
     row = rows[0] if rows else None
-    return _row_to_item(row) if row else None
+    return row_to_item(row) if row else None
 
 
 def list_items(
@@ -161,7 +161,7 @@ def list_items(
         f"SELECT * FROM items {where} ORDER BY updated_at DESC",
         params,
     ).fetchall()
-    return [_row_to_item(r) for r in rows]
+    return [row_to_item(r) for r in rows]
 
 
 def list_items_by_ids(
@@ -197,7 +197,7 @@ def list_items_by_ids(
         f"SELECT * FROM items WHERE {' AND '.join(clauses)}",
         params,
     ).fetchall()
-    return [_row_to_item(r) for r in rows]
+    return [row_to_item(r) for r in rows]
 
 
 def iter_items(conn: sqlite3.Connection, *, provider_key: str | None = None) -> Iterator[Item]:
@@ -209,7 +209,7 @@ def iter_items(conn: sqlite3.Connection, *, provider_key: str | None = None) -> 
     else:
         cur = conn.execute("SELECT * FROM items ORDER BY updated_at DESC")
     for row in cur:
-        yield _row_to_item(row)
+        yield row_to_item(row)
 
 
 def mark_archived(

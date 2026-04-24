@@ -2,9 +2,10 @@
 
 The bar is the TUI's primary at-a-glance readout, so its labels need to
 read as plain English even to a new user. The tests lock in the specific
-strings ("last sync", "next sync in", "thinking…", "N pending proposal(s)",
-"read-only") so a well-meaning cleanup doesn't accidentally reintroduce
-internal jargon like "READ-ONLY" or "streaming"."""
+strings ("last sync", "next sync in", "N pending proposal(s)", "read-only")
+so a well-meaning cleanup doesn't accidentally reintroduce internal jargon
+like "READ-ONLY" or "streaming". The agent "thinking…" state lives on the
+chat pane only — see `ChatPane.set_thinking` — so it is not asserted here."""
 
 from __future__ import annotations
 
@@ -35,14 +36,6 @@ def test_sync_segments_include_human_labels() -> None:
     text = _rendered(bar)
     assert "last sync" in text
     assert "next sync in" in text
-
-
-def test_thinking_flag_renders_friendly_word() -> None:
-    bar = StatusBar()
-    bar.thinking = True
-    text = _rendered(bar)
-    assert "thinking" in text
-    assert "streaming" not in text
 
 
 def test_pending_count_segment_pluralizes() -> None:

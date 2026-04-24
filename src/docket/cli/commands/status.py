@@ -1,14 +1,13 @@
-"""`docket status` — health snapshot for the local install.
+"""`docket status` — Rich renderer for the install health snapshot.
 
-Single-pane view of: active project, on-disk paths, cache row counts,
-sync watermarks, MCP fleet for the active project, telemetry config, and
-HTTP surface state. Read-only — never mutates or refreshes; pair with
-`docket sync` if the cache looks stale.
+Thin adapter: resolve a Context, ask `status_service.collect(...)` for a
+`StatusSnapshot`, render with Rich. All data gathering (SQL counts, log
+tailing, MCP wiring) lives in the service so other surfaces (HTTP, TUI
+palette, JSON-out) can reuse it without re-importing Rich or Typer.
 """
 
 from __future__ import annotations
 
-import sqlite3
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -17,15 +16,11 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from docket.cli.context import Context, prepare_or_wizard
-from docket.core.model import project_id_for
-from docket.core.services import mcp_service
-from docket.storage.repos import project_repo
-from docket.telemetry.log_reader import tail_events
+from docket.cli.context import prepare_or_wizard
+from docket.core.services import status_service
+from docket.core.services.status_service import StatusSnapshot
 
 console = Console()
-
-_VERBOSE_EVENT_TYPES: tuple[str, ...] = ("tool_call", "proposal_confirm", "mcp_bind")
 
 
 def status_command(
@@ -39,24 +34,19 @@ def status_command(
     """Print a health snapshot of the active install (paths, cache, sync, MCP)."""
     ctx = prepare_or_wizard()
     try:
-        _render(ctx, verbose=verbose)
+        snapshot = status_service.collect(
+            conn=ctx.conn,
+            config=ctx.config,
+            paths=ctx.paths,
+            active_provider=ctx.active_provider or "",
+            include_recent_events=verbose,
+        )
+        _render(snapshot, verbose=verbose)
     finally:
         ctx.close()
 
 
-def _render(ctx: Context, *, verbose: bool = False) -> None:
-    cfg = ctx.config
-    active_provider = ctx.active_provider or "—"
-    provider_entry = cfg.providers.get(active_provider) if active_provider != "—" else None
-    scope_key = provider_entry.active_scope if provider_entry else "—"
-    project = (
-        project_repo.get(ctx.conn, project_id_for(active_provider))
-        if active_provider != "—"
-        else None
-    )
-    project_id = project.id if project else active_provider
-    project_name = project.name if project else "—"
-
+def _render(snap: StatusSnapshot, *, verbose: bool = False) -> None:
     console.print("[bold]Docket status[/bold]")
     console.print()
 
@@ -64,13 +54,16 @@ def _render(ctx: Context, *, verbose: bool = False) -> None:
     overview = Table(show_header=False, box=None, pad_edge=False)
     overview.add_column(style="dim", no_wrap=True)
     overview.add_column()
-    overview.add_row("Project", f"[cyan]{project_name}[/cyan]  [dim]({project_id})[/dim]")
-    display = provider_entry.display_name if provider_entry else ""
+    overview.add_row(
+        "Project",
+        f"[cyan]{snap.project_name}[/cyan]  [dim]({snap.project_id})[/dim]",
+    )
+    display = snap.provider_display_name
     overview.add_row(
         "Provider",
-        f"{active_provider}" + (f"  [dim]({display})[/dim]" if display else ""),
+        f"{snap.active_provider}" + (f"  [dim]({display})[/dim]" if display else ""),
     )
-    overview.add_row("View", scope_key)
+    overview.add_row("View", snap.scope_key)
     console.print(overview)
     console.print()
 
@@ -78,36 +71,36 @@ def _render(ctx: Context, *, verbose: bool = False) -> None:
     paths = Table(title="Paths", show_header=False, box=None, pad_edge=False, title_style="bold")
     paths.add_column(style="dim", no_wrap=True)
     paths.add_column()
-    paths.add_row("Config", _path_with_size(ctx.paths.config_file))
-    paths.add_row("Database", _path_with_size(ctx.paths.db_file))
-    paths.add_row("Prompts dir", str(ctx.paths.prompts_dir))
-    paths.add_row("Log dir", str(ctx.paths.log_dir))
+    paths.add_row("Config", _path_with_size(snap.config_file))
+    paths.add_row("Database", _path_with_size(snap.db_file))
+    paths.add_row("Prompts dir", str(snap.prompts_dir))
+    paths.add_row("Log dir", str(snap.log_dir))
     console.print(paths)
     console.print()
 
     # --- Cache row counts
-    counts = _cache_counts(ctx.conn)
+    counts = snap.counts
     cache = Table(title="Cache", show_header=False, box=None, pad_edge=False, title_style="bold")
     cache.add_column(style="dim", no_wrap=True)
     cache.add_column(justify="right")
     cache.add_column()
     cache.add_row(
         "Items",
-        f"{counts['items_total']:>6}",
-        f"[dim]({counts['items_active']} active · {counts['items_archived']} archived)[/dim]",
+        f"{counts.items_total:>6}",
+        f"[dim]({counts.items_active} active · {counts.items_archived} archived)[/dim]",
     )
-    cache.add_row("Comments", f"{counts['comments']:>6}", "")
+    cache.add_row("Comments", f"{counts.comments:>6}", "")
     cache.add_row(
         "Conversations",
-        f"{counts['conversations_total']:>6}",
-        f"[dim]({counts['conversations_active']} active · "
-        f"{counts['conversations_archived']} archived)[/dim]",
+        f"{counts.conversations_total:>6}",
+        f"[dim]({counts.conversations_active} active · "
+        f"{counts.conversations_archived} archived)[/dim]",
     )
-    cache.add_row("Messages", f"{counts['messages']:>6}", "")
-    cache.add_row("Memory entries", f"{counts['memory']:>6}", "")
-    cache.add_row("Sources", f"{counts['sources']:>6}", "")
-    cache.add_row("Watchlist", f"{counts['watchlist']:>6}", "")
-    cache.add_row("Projects", f"{counts['projects']:>6}", "")
+    cache.add_row("Messages", f"{counts.messages:>6}", "")
+    cache.add_row("Memory entries", f"{counts.memory:>6}", "")
+    cache.add_row("Sources", f"{counts.sources:>6}", "")
+    cache.add_row("Watchlist", f"{counts.watchlist:>6}", "")
+    cache.add_row("Projects", f"{counts.projects:>6}", "")
     console.print(cache)
     console.print()
 
@@ -116,16 +109,12 @@ def _render(ctx: Context, *, verbose: bool = False) -> None:
     sync.add_column("Provider", style="cyan")
     sync.add_column("Last full sync", style="green")
     sync.add_column("Watermark", style="yellow")
-    rows = ctx.conn.execute(
-        "SELECT provider_key, watermark_iso, last_full_sync_at "
-        "FROM sync_state ORDER BY provider_key"
-    ).fetchall()
-    if rows:
-        for row in rows:
+    if snap.sync_rows:
+        for row in snap.sync_rows:
             sync.add_row(
-                row["provider_key"],
-                _fmt_iso(row["last_full_sync_at"]),
-                _fmt_iso(row["watermark_iso"]),
+                row.provider_key,
+                _fmt_iso(row.last_full_sync_at),
+                _fmt_iso(row.watermark_iso),
             )
         console.print(sync)
     else:
@@ -136,15 +125,14 @@ def _render(ctx: Context, *, verbose: bool = False) -> None:
     console.print()
 
     # --- MCP fleet for the active project
-    servers = mcp_service.list_servers(cfg, project_id) if project else {}
-    if servers:
+    if snap.mcp_servers:
         mcp_table = Table(title="MCP servers (active project)", title_style="bold")
         mcp_table.add_column("Name", style="cyan")
         mcp_table.add_column("Enabled", style="green")
         mcp_table.add_column("Transport", style="magenta")
         mcp_table.add_column("Command", style="yellow")
         mcp_table.add_column("Args", style="dim")
-        for name, entry in servers.items():
+        for name, entry in snap.mcp_servers.items():
             mcp_table.add_row(
                 name,
                 "yes" if entry.enabled else "no",
@@ -166,10 +154,9 @@ def _render(ctx: Context, *, verbose: bool = False) -> None:
     )
     telemetry.add_column(style="dim", no_wrap=True)
     telemetry.add_column()
-    telemetry.add_row("Enabled", "yes" if cfg.telemetry.enabled else "no")
-    telemetry.add_row("Level", cfg.telemetry.level)
-    log_file = ctx.paths.log_dir / "docket.log"
-    telemetry.add_row("Log file", _path_with_size(log_file))
+    telemetry.add_row("Enabled", "yes" if snap.telemetry_enabled else "no")
+    telemetry.add_row("Level", snap.telemetry_level)
+    telemetry.add_row("Log file", _path_with_size(snap.log_file))
     console.print(telemetry)
     console.print()
 
@@ -177,23 +164,22 @@ def _render(ctx: Context, *, verbose: bool = False) -> None:
     http = Table(title="HTTP", show_header=False, box=None, pad_edge=False, title_style="bold")
     http.add_column(style="dim", no_wrap=True)
     http.add_column()
-    http.add_row("Enabled", "yes" if cfg.http.enabled else "no")
-    http.add_row("Bind", f"{cfg.http.bind}:{cfg.http.port}")
-    http.add_row("Token", "set" if cfg.http.token else "unset")
+    http.add_row("Enabled", "yes" if snap.http_enabled else "no")
+    http.add_row("Bind", f"{snap.http_bind}:{snap.http_port}")
+    http.add_row("Token", "set" if snap.http_token_set else "unset")
     console.print(http)
 
     if verbose:
         console.print()
-        _render_recent_events(ctx.paths.log_dir / "docket.log")
+        _render_recent_events(snap)
 
 
-def _render_recent_events(log_file: Path) -> None:
+def _render_recent_events(snap: StatusSnapshot) -> None:
     console.print("[bold]Recent events[/bold]")
-    if not log_file.exists():
+    if not snap.log_file.exists():
         console.print("[dim]No log file yet.[/dim]")
         return
-    events = tail_events(log_file, event_types=_VERBOSE_EVENT_TYPES, limit=5)
-    if not events:
+    if not snap.recent_events:
         console.print("[dim]No tool / proposal / MCP events in the recent log window.[/dim]")
         return
     table = Table(show_header=True, box=None, pad_edge=False, header_style="dim")
@@ -202,7 +188,7 @@ def _render_recent_events(log_file: Path) -> None:
     table.add_column("Target")
     table.add_column("Outcome")
     table.add_column("ms", justify="right", style="dim")
-    for evt in events:
+    for evt in snap.recent_events:
         table.add_row(
             _fmt_event_ts(evt.get("timestamp")),
             str(evt.get("event", "—")),
@@ -254,31 +240,6 @@ def _fmt_latency(value: Any) -> str:
         return f"{int(float(value))}"
     except (TypeError, ValueError):
         return str(value)
-
-
-def _cache_counts(conn: sqlite3.Connection) -> dict[str, int]:
-    def _scalar(sql: str) -> int:
-        row = conn.execute(sql).fetchone()
-        return int(row[0]) if row and row[0] is not None else 0
-
-    items_active = _scalar("SELECT COUNT(*) FROM items WHERE archived = 0")
-    items_archived = _scalar("SELECT COUNT(*) FROM items WHERE archived = 1")
-    conv_active = _scalar("SELECT COUNT(*) FROM conversations WHERE archived_at IS NULL")
-    conv_archived = _scalar("SELECT COUNT(*) FROM conversations WHERE archived_at IS NOT NULL")
-    return {
-        "items_total": items_active + items_archived,
-        "items_active": items_active,
-        "items_archived": items_archived,
-        "comments": _scalar("SELECT COUNT(*) FROM comments"),
-        "conversations_total": conv_active + conv_archived,
-        "conversations_active": conv_active,
-        "conversations_archived": conv_archived,
-        "messages": _scalar("SELECT COUNT(*) FROM messages"),
-        "memory": _scalar("SELECT COUNT(*) FROM memory"),
-        "sources": _scalar("SELECT COUNT(*) FROM sources"),
-        "watchlist": _scalar("SELECT COUNT(*) FROM watchlist"),
-        "projects": _scalar("SELECT COUNT(*) FROM projects"),
-    }
 
 
 def _path_with_size(path: Path) -> str:

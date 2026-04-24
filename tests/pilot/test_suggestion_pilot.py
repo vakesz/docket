@@ -19,6 +19,7 @@ from docket.storage import init_db
 from docket.storage.repos import item_repo
 from tests.fakes.llm import FakeLlmClient, text_turn
 from tests.fakes.provider import FakeProvider
+from tests.pilot.conftest import find_node
 
 
 def _mk_item() -> Item:
@@ -34,19 +35,9 @@ def _mk_item() -> Item:
     )
 
 
-def _find_node(node, target_id: str):
-    for child in node.children:
-        if child.data == target_id:
-            return child
-        found = _find_node(child, target_id)
-        if found is not None:
-            return found
-    return None
-
-
 async def _select_story(app: DocketApp, pilot) -> None:
     tree = app.query_one(ItemTree)
-    node = _find_node(tree.root, "S-1")
+    node = find_node(tree.root, "S-1")
     assert node is not None
     tree.select_node(node)
     await pilot.pause()

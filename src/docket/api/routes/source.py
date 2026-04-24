@@ -17,7 +17,13 @@ import sqlite3
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from docket.api.auth import require_bearer
-from docket.api.deps import get_config, get_conn, require_not_read_only, require_project
+from docket.api.deps import (
+    get_config,
+    get_conn,
+    require_by_id,
+    require_not_read_only,
+    require_project,
+)
 from docket.api.schemas import (
     SourceCreateRequest,
     SourceDTO,
@@ -25,34 +31,12 @@ from docket.api.schemas import (
     SourceUpdateRequest,
 )
 from docket.config.models import Config
-from docket.core.model import Source
 from docket.storage.repos import source_repo
 
 router = APIRouter(
     tags=["sources"],
     dependencies=[Depends(require_bearer)],
 )
-
-
-def _to_dto(entry: Source) -> SourceDTO:
-    return SourceDTO(
-        id=entry.id,
-        project_id=entry.project_id,
-        title=entry.title,
-        body_md=entry.body_md,
-        kind=entry.kind,
-        uri=entry.uri,
-        tags=list(entry.tags),
-        created_at=entry.created_at,
-        updated_at=entry.updated_at,
-    )
-
-
-def _require_entry(conn: sqlite3.Connection, source_id: str) -> Source:
-    entry = source_repo.get(conn, source_id)
-    if entry is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown source '{source_id}'")
-    return entry
 
 
 @router.get(
@@ -70,7 +54,7 @@ def list_sources(
     entries = source_repo.list_for_project(conn, project_id, kind=kind, limit=limit)
     return SourceListDTO(
         project_id=project_id,
-        entries=[_to_dto(e) for e in entries],
+        entries=[SourceDTO.from_core(e) for e in entries],
     )
 
 
@@ -90,7 +74,7 @@ def search_sources(
     entries = source_repo.search(conn, project_id, q, kind=kind, limit=limit)
     return SourceListDTO(
         project_id=project_id,
-        entries=[_to_dto(e) for e in entries],
+        entries=[SourceDTO.from_core(e) for e in entries],
     )
 
 
@@ -119,7 +103,7 @@ def create_source(
         )
     except KeyError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
-    return _to_dto(entry)
+    return SourceDTO.from_core(entry)
 
 
 @router.get("/sources/{source_id}", response_model=SourceDTO)
@@ -127,8 +111,8 @@ def get_source(
     source_id: str,
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> SourceDTO:
-    entry = _require_entry(conn, source_id)
-    return _to_dto(entry)
+    entry = require_by_id(source_repo.get, conn, source_id, label="source")
+    return SourceDTO.from_core(entry)
 
 
 @router.patch(
@@ -141,7 +125,7 @@ def update_source(
     payload: SourceUpdateRequest,
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> SourceDTO:
-    _require_entry(conn, source_id)
+    require_by_id(source_repo.get, conn, source_id, label="source")
     if (
         payload.title is None
         and payload.body_md is None
@@ -166,7 +150,7 @@ def update_source(
         # Lost a race with another writer — surface as 404 so the frontend
         # refetches and reconciles.
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Source '{source_id}' vanished")
-    return _to_dto(updated)
+    return SourceDTO.from_core(updated)
 
 
 @router.delete(
@@ -178,7 +162,7 @@ def delete_source(
     source_id: str,
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> None:
-    _require_entry(conn, source_id)
+    require_by_id(source_repo.get, conn, source_id, label="source")
     source_repo.delete(conn, source_id)
 
 

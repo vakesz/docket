@@ -1,36 +1,23 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
-from docket.core.model import Item, ItemKind, ItemState, TransitionIntent
+from docket.core.model import TransitionIntent
 from docket.core.mutation import DescriptionPatch, StateChange
 from docket.core.services import suggestion_service
 from docket.core.services.suggestion_service import SuggestionError
 from docket.storage import init_db
 from docket.storage.repos import item_repo
+from tests.conftest import MakeItem
 from tests.fakes.llm import FakeLlmClient, text_turn
 
 
-def _mk_item() -> Item:
-    return Item(
-        id="S-42",
-        kind=ItemKind.STORY,
-        title="Login",
-        description_md="(needs detail)",
-        state=ItemState.NEW,
-        assignee=None,
-        parent_id=None,
-        updated_at=datetime.now(UTC),
-    )
-
-
 @pytest.fixture
-def env(tmp_path: Path):
+def env(tmp_path: Path, make_item: MakeItem):
     conn = init_db(tmp_path / "docket.db")
-    item = _mk_item()
+    item = make_item("S-42", description_md="(needs detail)")
     item_repo.upsert_item(conn, item)
     yield conn, item
     conn.close()

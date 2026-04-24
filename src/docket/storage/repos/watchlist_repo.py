@@ -19,7 +19,7 @@ from docket.storage.item_keys import (
     item_storage_key,
     item_storage_prefix,
 )
-from docket.storage.repos.item_repo import _row_to_item
+from docket.storage.repos.item_repo import row_to_item
 
 
 def pin(
@@ -91,7 +91,7 @@ def list_pinned_items(conn: sqlite3.Connection, *, provider_key: str | None = No
              ORDER BY w.pinned_at DESC
             """
         )
-    return [_row_to_item(row) for row in cursor.fetchall()]
+    return [row_to_item(row) for row in cursor.fetchall()]
 
 
 __all__ = ["is_pinned", "list_pinned_ids", "list_pinned_items", "pin", "unpin"]

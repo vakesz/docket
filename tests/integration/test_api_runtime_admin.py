@@ -15,7 +15,6 @@ endpoints have something non-trivial to flip between."""
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -30,29 +29,16 @@ from docket.config.models import (
     ScopeFilter,
 )
 from docket.config.paths import Paths
-from docket.core.model import Item, ItemKind, ItemState
+from docket.core.model import Item
 from docket.core.services.proposal_store import ProposalStore
 from docket.storage import init_db
 from docket.storage.repos import item_repo
+from tests.conftest import MakeItem
 from tests.fakes.llm import FakeLlmClient, text_turn
 from tests.fakes.provider import FakeProvider
 
 TOKEN = "test-bearer-token-abcdef"
 AUTH = {"Authorization": f"Bearer {TOKEN}"}
-
-
-def _mk_item(id_: str = "S-1", title: str = "Login", provider_key: str = "primary") -> Item:
-    return Item(
-        id=id_,
-        kind=ItemKind.STORY,
-        title=title,
-        description_md="Add login.",
-        state=ItemState.NEW,
-        assignee=None,
-        parent_id=None,
-        updated_at=datetime.now(UTC),
-        provider_key=provider_key,
-    )
 
 
 def _mk_paths(tmp_path: Path) -> Paths:
@@ -91,12 +77,12 @@ def _mk_config() -> Config:
 
 
 @pytest.fixture
-def env(tmp_path: Path):
+def env(tmp_path: Path, make_item: MakeItem):
     conn = init_db(tmp_path / "state" / "docket.db") if False else None
     # init_db requires the parent dir to exist; build via paths.ensure below
     paths = _mk_paths(tmp_path)
     conn = init_db(paths.db_file)
-    item = _mk_item()
+    item = make_item(provider_key="primary")
     item_repo.upsert_item(conn, item)
     provider_primary = FakeProvider(items=[item])
     provider_secondary = FakeProvider()

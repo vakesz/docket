@@ -9,7 +9,7 @@ from uuid import uuid4
 from docket.agent.types import ChatMessage, ToolCall
 
 
-def _row_to_message(row: sqlite3.Row) -> ChatMessage:
+def row_to_message(row: sqlite3.Row) -> ChatMessage:
     tool_calls_raw = row["tool_calls_json"]
     tool_calls: list[ToolCall] = []
     if tool_calls_raw:
@@ -87,7 +87,7 @@ def list_for_conversation(
         sql += " AND compacted = 0"
     sql += " ORDER BY created_at ASC, id ASC"
     rows = conn.execute(sql, params).fetchall()
-    return [_row_to_message(r) for r in rows]
+    return [row_to_message(r) for r in rows]
 
 
 def list_rows_for_conversation(
@@ -110,8 +110,3 @@ def mark_compacted(conn: sqlite3.Connection, ids: Iterable[str]) -> int:
     placeholders = ",".join("?" for _ in ids_list)
     cur = conn.execute(f"UPDATE messages SET compacted = 1 WHERE id IN ({placeholders})", ids_list)
     return cur.rowcount
-
-
-def row_to_message(row: sqlite3.Row) -> ChatMessage:
-    """Public alias for callers that already loaded rows directly."""
-    return _row_to_message(row)

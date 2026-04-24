@@ -24,6 +24,7 @@ from docket.storage import init_db
 from docket.storage.repos import conversation_repo, item_repo, message_repo
 from tests.fakes.llm import FakeLlmClient, text_turn, tool_turn
 from tests.fakes.provider import FakeProvider
+from tests.pilot.conftest import find_node
 
 
 def _mk_item(id_: str = "S-1") -> Item:
@@ -37,16 +38,6 @@ def _mk_item(id_: str = "S-1") -> Item:
         parent_id=None,
         updated_at=datetime.now(UTC),
     )
-
-
-def _find_node(node, target_id: str):
-    for child in node.children:
-        if child.data == target_id:
-            return child
-        found = _find_node(child, target_id)
-        if found is not None:
-            return found
-    return None
 
 
 @pytest.fixture
@@ -69,7 +60,7 @@ def chat_env(tmp_path: Path):
 
 async def _select_story(app: DocketApp, pilot) -> None:
     tree = app.query_one(ItemTree)
-    node = _find_node(tree.root, "S-1")
+    node = find_node(tree.root, "S-1")
     assert node is not None
     tree.select_node(node)
     await pilot.pause()
@@ -256,7 +247,7 @@ async def test_acceptance_checklist_mounts_from_description(tmp_path: Path) -> N
     app = DocketApp(ctx)
     async with app.run_test() as pilot:
         tree = app.query_one(ItemTree)
-        node = _find_node(tree.root, "S-2")
+        node = find_node(tree.root, "S-2")
         assert node is not None
         tree.select_node(node)
         await pilot.pause()

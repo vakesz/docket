@@ -3,11 +3,17 @@
 The API is a thin adapter: connection, provider, LLM, proposal store, and the
 (optional) agent loop all live on `app.state`, assembled in `create_app`. These
 helpers give route handlers typed access without importing `app` back into
-themselves."""
+themselves.
+
+Each public dep is its own named function so FastAPI's per-request
+dependency cache (keyed on callable identity) keeps them deduplicated across
+routes."""
 
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Callable
+from typing import cast
 
 from fastapi import HTTPException, Request, status
 
@@ -20,57 +26,84 @@ from docket.core.services.proposal_store import ProposalStore
 from docket.providers.base import WorkItemProvider
 
 
-def get_conn(request: Request) -> sqlite3.Connection:
-    conn: sqlite3.Connection | None = getattr(request.app.state, "conn", None)
-    if conn is None:
+def _state_or_raise[T](
+    request: Request,
+    attr: str,
+    tp: type[T],
+    *,
+    detail: str,
+    status_code: int = status.HTTP_503_SERVICE_UNAVAILABLE,
+) -> T:
+    """Return `request.app.state.<attr>` or raise with the given detail.
+
+    `tp` is the expected type — passed so mypy can bind the return type and
+    so we can surface misconfigured attributes as a hard error rather than a
+    silent mismatch downstream."""
+    value = getattr(request.app.state, attr, None)
+    if value is None:
+        raise HTTPException(status_code=status_code, detail=detail)
+    if not isinstance(value, tp):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="SQLite connection is not wired into the app.",
+            detail=f"app.state.{attr} has wrong type: {type(value).__name__}",
         )
-    return conn
+    return value
+
+
+def get_conn(request: Request) -> sqlite3.Connection:
+    return _state_or_raise(
+        request,
+        "conn",
+        sqlite3.Connection,
+        detail="SQLite connection is not wired into the app.",
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+    )
 
 
 def get_provider(request: Request) -> WorkItemProvider:
     runtime: RuntimeState | None = getattr(request.app.state, "runtime", None)
     if runtime is not None:
         return runtime.provider
-    provider: WorkItemProvider | None = getattr(request.app.state, "provider", None)
+    # WorkItemProvider is a Protocol, so isinstance isn't meaningful — fall
+    # back to a simpler None check and cast.
+    provider = getattr(request.app.state, "provider", None)
     if provider is None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Provider is not wired into the app.",
         )
-    return provider
+    return cast(WorkItemProvider, provider)
 
 
 def get_proposals(request: Request) -> ProposalStore:
-    store: ProposalStore | None = getattr(request.app.state, "proposals", None)
-    if store is None:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Proposal store is not wired into the app.",
-        )
-    return store
+    return _state_or_raise(
+        request,
+        "proposals",
+        ProposalStore,
+        detail="Proposal store is not wired into the app.",
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+    )
 
 
 def require_agent(request: Request) -> AgentLoop:
-    agent: AgentLoop | None = getattr(request.app.state, "agent", None)
-    if agent is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Chat is disabled — no LLM client was configured for this server.",
-        )
-    return agent
+    return _state_or_raise(
+        request,
+        "agent",
+        AgentLoop,
+        detail="Chat is disabled — no LLM client was configured for this server.",
+    )
 
 
 def require_llm(request: Request) -> LlmClient:
-    llm: LlmClient | None = getattr(request.app.state, "llm", None)
+    # LlmClient is a Protocol; keep the direct-None-check path used by
+    # get_provider.
+    llm = getattr(request.app.state, "llm", None)
     if llm is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="LLM is not configured — feature unavailable on this server.",
         )
-    return llm
+    return cast(LlmClient, llm)
 
 
 def require_not_read_only(request: Request) -> None:
@@ -82,23 +115,21 @@ def require_not_read_only(request: Request) -> None:
 
 
 def get_paths(request: Request) -> Paths:
-    paths: Paths | None = getattr(request.app.state, "paths", None)
-    if paths is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Paths are not wired — this endpoint requires `docket serve`.",
-        )
-    return paths
+    return _state_or_raise(
+        request,
+        "paths",
+        Paths,
+        detail="Paths are not wired — this endpoint requires `docket serve`.",
+    )
 
 
 def get_runtime(request: Request) -> RuntimeState:
-    runtime: RuntimeState | None = getattr(request.app.state, "runtime", None)
-    if runtime is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Runtime state is not wired — this endpoint requires `docket serve`.",
-        )
-    return runtime
+    return _state_or_raise(
+        request,
+        "runtime",
+        RuntimeState,
+        detail="Runtime state is not wired — this endpoint requires `docket serve`.",
+    )
 
 
 def get_runtime_optional(request: Request) -> RuntimeState | None:
@@ -124,13 +155,29 @@ def get_config(request: Request) -> Config:
 
     Mutations that need to persist back to disk should also use `get_paths()`
     so they can call `save_config(paths, config)`."""
-    cfg: Config | None = getattr(request.app.state, "config", None)
-    if cfg is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Config is not wired — this endpoint requires `docket serve`.",
-        )
-    return cfg
+    return _state_or_raise(
+        request,
+        "config",
+        Config,
+        detail="Config is not wired — this endpoint requires `docket serve`.",
+    )
+
+
+def require_by_id[T](
+    fetcher: Callable[[sqlite3.Connection, str], T | None],
+    conn: sqlite3.Connection,
+    entity_id: str,
+    *,
+    label: str,
+) -> T:
+    """Fetch an entity by id via `fetcher(conn, id)` or raise HTTP 404.
+
+    `label` is interpolated into the 404 message — e.g. `label="memory entry"`
+    becomes `"Unknown memory entry 'mem-123'"`."""
+    entry = fetcher(conn, entity_id)
+    if entry is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown {label} '{entity_id}'")
+    return entry
 
 
 __all__ = [
@@ -143,6 +190,7 @@ __all__ = [
     "get_runtime",
     "get_runtime_optional",
     "require_agent",
+    "require_by_id",
     "require_llm",
     "require_not_read_only",
     "require_project",

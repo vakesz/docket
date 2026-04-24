@@ -39,7 +39,7 @@ from docket.api.schemas import (
     SetupTestResultDTO,
 )
 from docket.config.loader import save_config
-from docket.config.models import Config, ProviderEntry, ScopeFilter
+from docket.config.models import Config, ScopeFilter, build_provider_entry
 from docket.config.paths import Paths
 from docket.core.services import settings_service
 from docket.providers import registry
@@ -259,12 +259,11 @@ def add_provider(
             f"invalid scope for '{key}': {e}",
         ) from e
 
-    entry = ProviderEntry(
-        type=payload.type,
+    entry = build_provider_entry(
+        type_id=payload.type,
         display_name=payload.display_name or key,
         config=normalized,
-        scopes={"default": scope},
-        active_scope="default",
+        scope=scope,
     )
 
     cfg_dump = runtime.config.model_dump(mode="json")
@@ -329,7 +328,7 @@ def update_provider(
         ) from e
 
     if payload.scope is None:
-        scopes = dict(existing.scopes)
+        scope = existing.scopes.get(existing.active_scope, ScopeFilter())
     else:
         try:
             scope = ScopeFilter(**dict(payload.scope))
@@ -338,16 +337,13 @@ def update_provider(
                 status.HTTP_422_UNPROCESSABLE_CONTENT,
                 f"invalid scope for '{key}': {e}",
             ) from e
-        # Replace the active scope slot only — leave any extra named scopes alone.
-        scopes = dict(existing.scopes)
-        scopes[existing.active_scope] = scope
 
-    entry = ProviderEntry(
-        type=existing.type,
+    entry = build_provider_entry(
+        type_id=existing.type,
         display_name=display_name,
         config=normalized,
-        scopes=scopes,
-        active_scope=existing.active_scope,
+        scope=scope,
+        existing=existing,
     )
 
     cfg_dump = runtime.config.model_dump(mode="json")

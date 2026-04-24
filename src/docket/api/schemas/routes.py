@@ -10,7 +10,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from docket.core.model import TransitionIntent
+from docket.config.models import ProjectEntry
+from docket.core.model import MemoryEntry, Source, TransitionIntent
 
 
 class PinnedStatusDTO(BaseModel):
@@ -89,6 +90,17 @@ class ProjectDTO(BaseModel):
     provider_key: str
     active: bool = False
     archived: bool = False
+
+    @classmethod
+    def from_core(cls, project_id: str, entry: ProjectEntry, *, active_id: str) -> ProjectDTO:
+        return cls(
+            id=project_id,
+            name=entry.name,
+            description=entry.description,
+            provider_key=entry.provider_key,
+            active=(project_id == active_id),
+            archived=entry.archived,
+        )
 
 
 class ProjectUpdateRequest(BaseModel):
@@ -202,6 +214,19 @@ class MemoryDTO(BaseModel):
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
+    @classmethod
+    def from_core(cls, entry: MemoryEntry) -> MemoryDTO:
+        return cls(
+            id=entry.id,
+            project_id=entry.project_id,
+            title=entry.title,
+            body_md=entry.body_md,
+            tags=list(entry.tags),
+            source=entry.source,
+            created_at=entry.created_at,
+            updated_at=entry.updated_at,
+        )
+
 
 class MemoryListDTO(BaseModel):
     """List response carries the project's memory `revision` so a frontend
@@ -241,6 +266,20 @@ class SourceDTO(BaseModel):
     tags: list[str] = Field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+    @classmethod
+    def from_core(cls, entry: Source) -> SourceDTO:
+        return cls(
+            id=entry.id,
+            project_id=entry.project_id,
+            title=entry.title,
+            body_md=entry.body_md,
+            kind=entry.kind,
+            uri=entry.uri,
+            tags=list(entry.tags),
+            created_at=entry.created_at,
+            updated_at=entry.updated_at,
+        )
 
 
 class SourceListDTO(BaseModel):

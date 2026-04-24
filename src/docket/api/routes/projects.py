@@ -28,25 +28,6 @@ router = APIRouter(
 )
 
 
-def _to_dto(
-    *,
-    project_id: str,
-    name: str,
-    description: str,
-    provider_key: str,
-    archived: bool,
-    active_id: str,
-) -> ProjectDTO:
-    return ProjectDTO(
-        id=project_id,
-        name=name,
-        description=description,
-        provider_key=provider_key,
-        active=(project_id == active_id),
-        archived=archived,
-    )
-
-
 @router.get("", response_model=list[ProjectDTO])
 def list_projects(
     include_archived: bool = False,
@@ -55,21 +36,11 @@ def list_projects(
 ) -> list[ProjectDTO]:
     """List projects from `config.toml`. Active project is flagged."""
     active_id = runtime.project_id
-    out: list[ProjectDTO] = []
-    for project_id, entry in sorted(config.projects.items(), key=lambda kv: kv[1].name.lower()):
-        if entry.archived and not include_archived:
-            continue
-        out.append(
-            _to_dto(
-                project_id=project_id,
-                name=entry.name,
-                description=entry.description,
-                provider_key=entry.provider_key,
-                archived=entry.archived,
-                active_id=active_id,
-            )
-        )
-    return out
+    return [
+        ProjectDTO.from_core(project_id, entry, active_id=active_id)
+        for project_id, entry in sorted(config.projects.items(), key=lambda kv: kv[1].name.lower())
+        if include_archived or not entry.archived
+    ]
 
 
 @router.get("/active", response_model=ProjectDTO)
@@ -90,13 +61,9 @@ def active_project(
         conn,
         provider_key=runtime.provider_key,
     )
-    entry = config.projects[project.id]
-    return _to_dto(
-        project_id=project.id,
-        name=entry.name,
-        description=entry.description,
-        provider_key=entry.provider_key,
-        archived=entry.archived,
+    return ProjectDTO.from_core(
+        project.id,
+        config.projects[project.id],
         active_id=runtime.project_id,
     )
 
@@ -110,14 +77,7 @@ def get_project(
     entry = config.projects.get(project_id)
     if entry is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown project '{project_id}'")
-    return _to_dto(
-        project_id=project_id,
-        name=entry.name,
-        description=entry.description,
-        provider_key=entry.provider_key,
-        archived=entry.archived,
-        active_id=runtime.project_id,
-    )
+    return ProjectDTO.from_core(project_id, entry, active_id=runtime.project_id)
 
 
 @router.patch(
@@ -150,14 +110,8 @@ def update_project(
         project_service.archive(config, paths, conn, project_id)
     elif payload.archived is False and entry.archived:
         project_service.unarchive(config, paths, conn, project_id)
-    refreshed = config.projects[project_id]
-    return _to_dto(
-        project_id=project_id,
-        name=refreshed.name,
-        description=refreshed.description,
-        provider_key=refreshed.provider_key,
-        archived=refreshed.archived,
-        active_id=runtime.project_id,
+    return ProjectDTO.from_core(
+        project_id, config.projects[project_id], active_id=runtime.project_id
     )
 
 
@@ -186,14 +140,7 @@ def activate_project(
     runtime.switch_provider(entry.provider_key)
     # Active project changed → memory/sources tools captured the previous one.
     rebuild_agent(request, runtime)
-    return _to_dto(
-        project_id=project_id,
-        name=entry.name,
-        description=entry.description,
-        provider_key=entry.provider_key,
-        archived=entry.archived,
-        active_id=project_id_for(entry.provider_key),
-    )
+    return ProjectDTO.from_core(project_id, entry, active_id=project_id_for(entry.provider_key))
 
 
 __all__ = ["router"]

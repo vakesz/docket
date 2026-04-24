@@ -73,6 +73,11 @@ check: lint typecheck test ## lint + typecheck + test across both trees
 gen-api: ## regenerate frontend OpenAPI types from the running backend
 	cd $(FRONTEND) && bun run gen:api
 
+.PHONY: stats
+stats: ## show LOC stats using cloc (git-tracked files only)
+	@command -v cloc >/dev/null 2>&1 || { echo "cloc not found (install with: brew install cloc)"; exit 1; }
+	@cloc --vcs=git .
+
 ## ---------- maintenance ----------
 
 .PHONY: clean

@@ -11,6 +11,7 @@ from docket.config.models import (
     StaleConfig,
     SyncConfig,
     TelemetryConfig,
+    TelemetryLevel,
 )
 from docket.config.paths import APP_NAME, Paths, resolve_paths
 
@@ -29,6 +30,7 @@ __all__ = [
     "StaleConfig",
     "SyncConfig",
     "TelemetryConfig",
+    "TelemetryLevel",
     "get_llm_api_key",
     "load_config",
     "load_env",
