@@ -142,7 +142,10 @@ def mcp_presets() -> None:
     table = Table(title=f"MCP presets ({len(presets)})")
     table.add_column("Id", style="cyan")
     table.add_column("Label", style="green")
-    table.add_column("Env vars", style="yellow")
+    # Env var names can be long (GITHUB_PERSONAL_ACCESS_TOKEN); don't let
+    # Rich wrap them in the middle of the token — apply scripts grep the
+    # output for the full var name.
+    table.add_column("Env vars", style="yellow", no_wrap=True)
     table.add_column("Description", style="dim")
     for preset in presets:
         env_names = ", ".join(var.name for var in preset.env) or "—"

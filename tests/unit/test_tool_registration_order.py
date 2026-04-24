@@ -53,6 +53,7 @@ def test_read_only_no_project(conn: object) -> None:
         "get_comments",
         "get_linked_items",
         "search_items",
+        "fetch_link",
     ]
 
 
@@ -62,6 +63,7 @@ def test_read_only_with_project(conn: object) -> None:
         "get_comments",
         "get_linked_items",
         "search_items",
+        "fetch_link",
         "list_memory",
         "recall_memory",
         "list_sources",
@@ -76,6 +78,7 @@ def test_read_write_no_project(conn: object) -> None:
         "get_comments",
         "get_linked_items",
         "search_items",
+        "fetch_link",
         "propose_transition",
         "propose_description_patch",
         "propose_new_item",
@@ -85,8 +88,8 @@ def test_read_write_no_project(conn: object) -> None:
 
 
 def test_read_write_with_project(conn: object) -> None:
-    """Full surface: RO provider, RO project (memory + sources), then RW
-    provider, then RW memory. The docstring on `build_tool_registry`
+    """Full surface: RO provider, link tools, RO project (memory + sources),
+    then RW provider, then RW memory. The docstring on `build_tool_registry`
     describes this sequence; any change here should match that docstring
     (and be deliberate — prompt cache invalidation follows)."""
     assert _names(conn, read_only=False, project_id="primary") == [
@@ -94,6 +97,7 @@ def test_read_write_with_project(conn: object) -> None:
         "get_comments",
         "get_linked_items",
         "search_items",
+        "fetch_link",
         "list_memory",
         "recall_memory",
         "list_sources",

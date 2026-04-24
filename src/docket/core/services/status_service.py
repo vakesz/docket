@@ -103,9 +103,7 @@ def collect(
     scope_key = provider_entry.active_scope if provider_entry else "—"
     resolved_provider = active_provider or "—"
 
-    project = (
-        project_repo.get(conn, project_id_for(active_provider)) if active_provider else None
-    )
+    project = project_repo.get(conn, project_id_for(active_provider)) if active_provider else None
     project_id = project.id if project else resolved_provider
     project_name = project.name if project else "—"
 

@@ -76,6 +76,54 @@ _PRESETS: tuple[MCPPreset, ...] = (
         docs_url="https://github.com/modelcontextprotocol/servers/tree/main/src/github",
         startup_timeout_seconds=20.0,
     ),
+    MCPPreset(
+        id="filesystem",
+        label="Filesystem",
+        description=(
+            "Official filesystem MCP server. Exposes read/write/search for "
+            "files under the configured root directory — useful for the "
+            "agent to look up code symbols mentioned in work items. "
+            "Default root is the user's home dir; edit the `args` list in "
+            "`config.toml` after applying to point at a specific repo "
+            "checkout (you can list more than one path)."
+        ),
+        default_name="filesystem",
+        command="npx",
+        args=["-y", "@modelcontextprotocol/server-filesystem", "~"],
+        docs_url="https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem",
+        startup_timeout_seconds=20.0,
+    ),
+    MCPPreset(
+        id="git",
+        label="Git",
+        description=(
+            "Official git MCP server. Exposes `git log`, `git show`, "
+            "`git diff`, and `git blame` over a local repo. Default "
+            "repository is `.` (whatever directory Docket is launched "
+            "from); edit the `--repository` arg in `config.toml` after "
+            "applying to pin it to a specific checkout."
+        ),
+        default_name="git",
+        command="uvx",
+        args=["mcp-server-git", "--repository", "."],
+        docs_url="https://github.com/modelcontextprotocol/servers/tree/main/src/git",
+        startup_timeout_seconds=20.0,
+    ),
+    MCPPreset(
+        id="fetch",
+        label="Fetch",
+        description=(
+            "Official fetch MCP server. Generic URL fetcher — handy when "
+            "tickets link to design docs, dashboards, or release notes "
+            "that aren't on GitHub. Overlaps with Docket's built-in "
+            "`fetch_link` tool; pick one or run both."
+        ),
+        default_name="fetch",
+        command="uvx",
+        args=["mcp-server-fetch"],
+        docs_url="https://github.com/modelcontextprotocol/servers/tree/main/src/fetch",
+        startup_timeout_seconds=20.0,
+    ),
 )
 
 

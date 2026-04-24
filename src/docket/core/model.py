@@ -148,6 +148,115 @@ class PRMatch:
     confidence: float = 0.5
 
 
+@dataclass(frozen=True)
+class PullRequestFile:
+    """One file touched by a pull request."""
+
+    path: str
+    status: str = ""  # added | modified | removed | renamed
+    additions: int = 0
+    deletions: int = 0
+
+
+@dataclass(frozen=True)
+class PullRequestReview:
+    """One review on a pull request (summary, not per-line comments)."""
+
+    author: str
+    state: str = ""  # APPROVED | CHANGES_REQUESTED | COMMENTED | DISMISSED
+    body_md: str = ""
+    submitted_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class PullRequestDetail:
+    """Full detail view of a pull request — body, state, labels, files, reviews.
+
+    Produced by `WorkItemProvider.get_pull_request`. Kept flat and JSON-ready
+    because the agent tool layer immediately serializes this to a tool
+    response. Counts (`additions`, `deletions`, `changed_files`) are the
+    provider's own totals; the `files` list may be a subset (typically the
+    first page) if the PR touches many files — the tool description
+    documents the cap."""
+
+    id: str  # owner/name#NN (same shape as item ids)
+    url: str
+    title: str
+    number: int
+    state: str  # "open" | "closed" | "merged"
+    author: str
+    body_md: str
+    head_ref: str
+    base_ref: str
+    head_sha: str
+    draft: bool = False
+    merged: bool = False
+    mergeable: bool | None = None
+    labels: list[str] = field(default_factory=list)
+    requested_reviewers: list[str] = field(default_factory=list)
+    additions: int = 0
+    deletions: int = 0
+    changed_files: int = 0
+    files: list[PullRequestFile] = field(default_factory=list)
+    reviews: list[PullRequestReview] = field(default_factory=list)
+    comments_count: int = 0
+    review_comments_count: int = 0
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class CommitDetail:
+    """A single commit's metadata plus touched-file summary.
+
+    `files` mirrors `PullRequestFile` entries. `message` is the full commit
+    message (subject + body). Diff is fetched separately (see
+    `WorkItemProvider.get_commit_diff`) so large commits don't blow up every
+    metadata call."""
+
+    sha: str
+    url: str
+    author: str
+    author_email: str
+    committer: str
+    committed_at: datetime | None
+    message: str
+    parents: list[str] = field(default_factory=list)
+    additions: int = 0
+    deletions: int = 0
+    files: list[PullRequestFile] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class CIRun:
+    """One CI run / check — generic across GitHub checks and ADO pipelines.
+
+    `status` is where the run is (queued | in_progress | completed). `conclusion`
+    is only meaningful once `status == "completed"` (success | failure |
+    cancelled | skipped | neutral | timed_out)."""
+
+    id: str
+    name: str
+    status: str
+    conclusion: str = ""
+    url: str = ""
+    head_sha: str = ""
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class CIStatus:
+    """Snapshot of CI for a ref (commit sha, branch, or PR head).
+
+    `overall` is a simple reduction: "success" only if every run succeeded,
+    "failure" if any failed, "pending" if anything is still running, "none"
+    if no runs exist. The raw runs are in `runs` for a detailed breakdown."""
+
+    ref: str
+    overall: str  # success | failure | pending | none
+    runs: list[CIRun] = field(default_factory=list)
+
+
 @dataclass
 class Project:
     """A named provider. The id is `provider_key` — memory, sources,

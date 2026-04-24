@@ -265,11 +265,16 @@ def register_readonly_tools(
         handler=search_items,
     )
 
-    # Optional: only providers that implement `find_related_prs` expose this
-    # tool. We gate with callable() so agent registries stay narrow — hiding
-    # the tool instead of returning errors keeps the model from hallucinating
-    # PR URLs on providers (like github_stub) that can't actually search.
+    # Optional provider-gated tools. Each `getattr + callable` guard hides the
+    # tool on providers that can't back it so the model never hallucinates
+    # (e.g. github_stub returns items but has no PR/commit API). All these
+    # tools are read-only — they stay registered regardless of `read_only`.
     find_prs = getattr(provider, "find_related_prs", None)
+    get_pr = getattr(provider, "get_pull_request", None)
+    get_pr_diff = getattr(provider, "get_pull_request_diff", None)
+    get_commit_fn = getattr(provider, "get_commit", None)
+    get_commit_diff_fn = getattr(provider, "get_commit_diff", None)
+    get_ci = getattr(provider, "get_ci_status", None)
     if callable(find_prs):
 
         def find_related_prs(args: dict[str, Any]) -> str:
@@ -322,6 +327,275 @@ def register_readonly_tools(
             },
             handler=find_related_prs,
         )
+
+    if callable(get_pr):
+
+        def get_pull_request(args: dict[str, Any]) -> str:
+            pr_id = str(args.get("id", "")).strip()
+            if not pr_id:
+                return json.dumps({"error": "id is required"})
+            try:
+                detail = get_pr(pr_id)
+            except NotImplementedError:
+                return json.dumps({"error": "provider does not support PR detail fetch"})
+            except Exception as e:
+                return json.dumps({"error": f"provider lookup failed: {e}"})
+            return json.dumps(_pull_request_payload(detail))
+
+        registry.register(
+            name="get_pull_request",
+            description=(
+                "Fetch full detail for a pull request by id (same "
+                "`owner/name#NN` shape as work item ids). Returns title, "
+                "state, labels, author, body_md, head/base refs, "
+                "additions/deletions totals, a list of touched files "
+                "(first pages), and any submitted reviews. Call "
+                "`get_pull_request_diff` separately for the actual patch — "
+                "diffs are large and not bundled in this response."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Pull request id in `owner/name#NN` form.",
+                    },
+                },
+                "required": ["id"],
+            },
+            handler=get_pull_request,
+        )
+
+    if callable(get_pr_diff):
+
+        def get_pull_request_diff(args: dict[str, Any]) -> str:
+            pr_id = str(args.get("id", "")).strip()
+            if not pr_id:
+                return json.dumps({"error": "id is required"})
+            try:
+                diff = get_pr_diff(pr_id)
+            except NotImplementedError:
+                return json.dumps({"error": "provider does not support PR diff fetch"})
+            except Exception as e:
+                return json.dumps({"error": f"provider lookup failed: {e}"})
+            return json.dumps({"id": pr_id, "diff": diff})
+
+        registry.register(
+            name="get_pull_request_diff",
+            description=(
+                "Fetch the unified diff for a pull request. Output is "
+                "truncated at a byte cap (the provider appends a "
+                "`diff truncated` marker) so a single huge PR can't blow "
+                "the context window. Use this *after* `get_pull_request` "
+                "to reason about what actually changed."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Pull request id in `owner/name#NN` form.",
+                    },
+                },
+                "required": ["id"],
+            },
+            handler=get_pull_request_diff,
+        )
+
+    if callable(get_commit_fn):
+
+        def get_commit(args: dict[str, Any]) -> str:
+            ref = str(args.get("ref", "")).strip()
+            if not ref:
+                return json.dumps({"error": "ref is required"})
+            try:
+                detail = get_commit_fn(ref)
+            except NotImplementedError:
+                return json.dumps({"error": "provider does not support commit fetch"})
+            except Exception as e:
+                return json.dumps({"error": f"provider lookup failed: {e}"})
+            return json.dumps(_commit_payload(detail))
+
+        registry.register(
+            name="get_commit",
+            description=(
+                "Fetch commit metadata and touched-file summary. `ref` is "
+                "`owner/name@sha` or a bare sha (resolved against the "
+                "provider's default repo). Returns author, message, "
+                "parents, additions/deletions totals, and a per-file "
+                "status list — no patch text (see `get_diff`)."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "ref": {
+                        "type": "string",
+                        "description": "Commit ref (`owner/name@sha` or bare sha).",
+                    },
+                },
+                "required": ["ref"],
+            },
+            handler=get_commit,
+        )
+
+    if callable(get_commit_diff_fn):
+
+        def get_diff(args: dict[str, Any]) -> str:
+            ref = str(args.get("ref", "")).strip()
+            if not ref:
+                return json.dumps({"error": "ref is required"})
+            try:
+                diff = get_commit_diff_fn(ref)
+            except NotImplementedError:
+                return json.dumps({"error": "provider does not support commit diff fetch"})
+            except Exception as e:
+                return json.dumps({"error": f"provider lookup failed: {e}"})
+            return json.dumps({"ref": ref, "diff": diff})
+
+        registry.register(
+            name="get_diff",
+            description=(
+                "Fetch the unified diff for a single commit. Truncated at "
+                "a byte cap the same way `get_pull_request_diff` is. "
+                "`ref` accepts `owner/name@sha` or a bare sha."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "ref": {
+                        "type": "string",
+                        "description": "Commit ref (`owner/name@sha` or bare sha).",
+                    },
+                },
+                "required": ["ref"],
+            },
+            handler=get_diff,
+        )
+
+    if callable(get_ci):
+
+        def get_ci_status(args: dict[str, Any]) -> str:
+            ref = str(args.get("ref", "")).strip()
+            if not ref:
+                return json.dumps({"error": "ref is required"})
+            try:
+                status = get_ci(ref)
+            except NotImplementedError:
+                return json.dumps({"error": "provider does not support CI status fetch"})
+            except Exception as e:
+                return json.dumps({"error": f"provider lookup failed: {e}"})
+            return json.dumps(_ci_status_payload(status))
+
+        registry.register(
+            name="get_ci_status",
+            description=(
+                "Fetch CI / check-run status for a PR id "
+                "(`owner/name#NN`), commit (`owner/name@sha`), or branch "
+                "(`owner/name@branch`). Returns an `overall` label "
+                "(success / failure / pending / none) plus each run's "
+                "status, conclusion, and URL. `none` means no CI is "
+                "configured — different from `pending`."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "ref": {
+                        "type": "string",
+                        "description": "PR id, commit ref, or branch ref.",
+                    },
+                },
+                "required": ["ref"],
+            },
+            handler=get_ci_status,
+        )
+
+
+def _pull_request_payload(detail: Any) -> dict[str, Any]:
+    return {
+        "id": detail.id,
+        "url": detail.url,
+        "title": detail.title,
+        "number": detail.number,
+        "state": detail.state,
+        "author": detail.author,
+        "body_md": detail.body_md,
+        "head_ref": detail.head_ref,
+        "base_ref": detail.base_ref,
+        "head_sha": detail.head_sha,
+        "draft": detail.draft,
+        "merged": detail.merged,
+        "mergeable": detail.mergeable,
+        "labels": list(detail.labels),
+        "requested_reviewers": list(detail.requested_reviewers),
+        "additions": detail.additions,
+        "deletions": detail.deletions,
+        "changed_files": detail.changed_files,
+        "files": [
+            {
+                "path": f.path,
+                "status": f.status,
+                "additions": f.additions,
+                "deletions": f.deletions,
+            }
+            for f in detail.files
+        ],
+        "reviews": [
+            {
+                "author": r.author,
+                "state": r.state,
+                "body_md": r.body_md,
+                "submitted_at": r.submitted_at.isoformat() if r.submitted_at else None,
+            }
+            for r in detail.reviews
+        ],
+        "comments_count": detail.comments_count,
+        "review_comments_count": detail.review_comments_count,
+        "updated_at": detail.updated_at.isoformat() if detail.updated_at else None,
+    }
+
+
+def _commit_payload(detail: Any) -> dict[str, Any]:
+    return {
+        "sha": detail.sha,
+        "url": detail.url,
+        "author": detail.author,
+        "author_email": detail.author_email,
+        "committer": detail.committer,
+        "committed_at": detail.committed_at.isoformat() if detail.committed_at else None,
+        "message": detail.message,
+        "parents": list(detail.parents),
+        "additions": detail.additions,
+        "deletions": detail.deletions,
+        "files": [
+            {
+                "path": f.path,
+                "status": f.status,
+                "additions": f.additions,
+                "deletions": f.deletions,
+            }
+            for f in detail.files
+        ],
+    }
+
+
+def _ci_status_payload(status: Any) -> dict[str, Any]:
+    return {
+        "ref": status.ref,
+        "overall": status.overall,
+        "runs": [
+            {
+                "id": r.id,
+                "name": r.name,
+                "status": r.status,
+                "conclusion": r.conclusion,
+                "url": r.url,
+                "head_sha": r.head_sha,
+                "started_at": r.started_at.isoformat() if r.started_at else None,
+                "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+            }
+            for r in status.runs
+        ],
+    }
 
 
 __all__ = ["_extract_links", "_item_summary", "register_readonly_tools"]

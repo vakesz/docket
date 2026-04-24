@@ -11,6 +11,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Callable
 
+from docket.agent.link_tools import register_link_tools
 from docket.agent.llm_client import LlmClient
 from docket.agent.loop import AgentLoop
 from docket.agent.mcp import MCPManager
@@ -44,11 +45,12 @@ def build_tool_registry(
     an LLM client. See `tests/unit/test_tool_registration_order.py` for the
     pinned sequence.
 
-    Registration order (load-bearing): provider RO → memory RO → sources
-    RO → MCP → provider mutating → memory mutating. Changing it
+    Registration order (load-bearing): provider RO → link RO → memory RO →
+    sources RO → MCP → provider mutating → memory mutating. Changing it
     invalidates every open conversation's prompt cache."""
     registry = ToolRegistry()
     register_readonly_tools(registry, conn=conn, provider=provider, provider_key=provider_key)
+    register_link_tools(registry)
     if project_id:
         register_memory_readonly_tools(registry, conn=conn, project_id=project_id)
         register_source_readonly_tools(registry, conn=conn, project_id=project_id)

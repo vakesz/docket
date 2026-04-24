@@ -31,12 +31,18 @@ from typing import Any, cast
 import httpx
 
 from docket.core.model import (
+    CIRun,
+    CIStatus,
     Comment,
+    CommitDetail,
     CreateFields,
     Item,
     ItemKind,
     ItemState,
     PRMatch,
+    PullRequestDetail,
+    PullRequestFile,
+    PullRequestReview,
     ScopeFilters,
     TransitionIntent,
 )
@@ -47,8 +53,14 @@ from docket.providers.github.state_map import to_canonical, to_native
 _DEFAULT_BASE_URL = "https://api.github.com"
 _TIMEOUT = httpx.Timeout(20.0, connect=5.0)
 _ACCEPT = "application/vnd.github+json"
+_DIFF_ACCEPT = "application/vnd.github.v3.diff"
 _PER_PAGE = 100
 _MAX_PAGES = 10
+# Cap on per-PR file pages — bounds tool latency on monster PRs.
+_PR_FILE_PAGES = 3
+# Hard ceiling on diff byte length returned to the agent so a single
+# tool call can't blow the context window.
+_DIFF_MAX_BYTES = 48 * 1024
 
 
 @dataclass
@@ -385,6 +397,262 @@ class GitHubProvider:
         out.sort(key=lambda m: m.confidence, reverse=True)
         return out
 
+    # -- PR / commit / CI detail -------------------------------------------
+
+    def get_pull_request(self, pr_id: str) -> PullRequestDetail:
+        """Fetch full PR detail: body, labels, head/base refs, files, reviews.
+
+        `pr_id` shares the `owner/name#NN` shape with item ids so the agent
+        can hand PR candidates from `find_related_prs` straight back into
+        this call. Files are fetched as a second call capped at
+        `_PR_FILE_PAGES * 100`; reviews are a third. If a PR really has
+        thousands of touched files the agent gets a representative prefix
+        plus the totals in `changed_files` / `additions` / `deletions`."""
+        owner, repo, number = _parse_id(pr_id)
+        payload = self._get(f"/repos/{owner}/{repo}/pulls/{number}")
+        if not isinstance(payload, dict):
+            raise ProviderUnreachableError(f"unexpected pull response for {pr_id}")
+        files = self._pr_files(owner, repo, number)
+        reviews = self._pr_reviews(owner, repo, number)
+        head = payload.get("head") or {}
+        base = payload.get("base") or {}
+        user = payload.get("user") or {}
+        labels_raw = payload.get("labels") or []
+        labels: list[str] = []
+        for label in labels_raw:
+            if isinstance(label, dict):
+                name = label.get("name")
+                if isinstance(name, str) and name:
+                    labels.append(name)
+            elif isinstance(label, str):
+                labels.append(label)
+        reviewers_raw = payload.get("requested_reviewers") or []
+        reviewers: list[str] = []
+        for entry in reviewers_raw:
+            if isinstance(entry, dict):
+                login = entry.get("login")
+                if isinstance(login, str) and login:
+                    reviewers.append(login)
+        merged = bool(payload.get("merged"))
+        draft = bool(payload.get("draft"))
+        state = str(payload.get("state") or "")
+        if merged:
+            state = "merged"
+        return PullRequestDetail(
+            id=pr_id,
+            url=str(payload.get("html_url") or ""),
+            title=str(payload.get("title") or ""),
+            number=int(payload.get("number") or number or 0),
+            state=state,
+            author=str(user.get("login")) if isinstance(user.get("login"), str) else "",
+            body_md=str(payload.get("body") or ""),
+            head_ref=str(head.get("ref")) if isinstance(head.get("ref"), str) else "",
+            base_ref=str(base.get("ref")) if isinstance(base.get("ref"), str) else "",
+            head_sha=str(head.get("sha")) if isinstance(head.get("sha"), str) else "",
+            draft=draft,
+            merged=merged,
+            mergeable=(
+                bool(payload["mergeable"]) if isinstance(payload.get("mergeable"), bool) else None
+            ),
+            labels=labels,
+            requested_reviewers=reviewers,
+            additions=int(payload.get("additions") or 0),
+            deletions=int(payload.get("deletions") or 0),
+            changed_files=int(payload.get("changed_files") or 0),
+            files=files,
+            reviews=reviews,
+            comments_count=int(payload.get("comments") or 0),
+            review_comments_count=int(payload.get("review_comments") or 0),
+            updated_at=_parse_iso(payload.get("updated_at")),
+        )
+
+    def get_pull_request_diff(self, pr_id: str) -> str:
+        """Fetch the unified diff for a PR, capped at `_DIFF_MAX_BYTES`.
+
+        Truncation is byte-level with a trailing marker line so the agent
+        sees that more content exists instead of reasoning over a silently
+        clipped hunk."""
+        owner, repo, number = _parse_id(pr_id)
+        return self._fetch_diff(f"/repos/{owner}/{repo}/pulls/{number}")
+
+    def get_commit(self, ref: str) -> CommitDetail:
+        """Fetch commit metadata + touched files for `owner/name@sha` or bare sha.
+
+        A bare sha is resolved against `default_repo`, which matches the
+        single-repo mode the wizard configures."""
+        owner, repo, sha = _parse_commit_ref(ref, self.default_repo)
+        payload = self._get(f"/repos/{owner}/{repo}/commits/{sha}")
+        if not isinstance(payload, dict):
+            raise ProviderUnreachableError(f"unexpected commit response for {ref}")
+        commit_raw = payload.get("commit")
+        commit_block: dict[str, Any] = commit_raw if isinstance(commit_raw, dict) else {}
+        author_raw = commit_block.get("author")
+        author_block: dict[str, Any] = author_raw if isinstance(author_raw, dict) else {}
+        committer_raw = commit_block.get("committer")
+        committer_block: dict[str, Any] = committer_raw if isinstance(committer_raw, dict) else {}
+        stats_raw = payload.get("stats")
+        stats: dict[str, Any] = stats_raw if isinstance(stats_raw, dict) else {}
+        files_raw = payload.get("files") or []
+        files: list[PullRequestFile] = []
+        for entry in files_raw:
+            if not isinstance(entry, dict):
+                continue
+            files.append(
+                PullRequestFile(
+                    path=str(entry.get("filename") or ""),
+                    status=str(entry.get("status") or ""),
+                    additions=int(entry.get("additions") or 0),
+                    deletions=int(entry.get("deletions") or 0),
+                )
+            )
+        parents_raw = payload.get("parents") or []
+        parents = [
+            str(p.get("sha"))
+            for p in parents_raw
+            if isinstance(p, dict) and isinstance(p.get("sha"), str)
+        ]
+        return CommitDetail(
+            sha=str(payload.get("sha") or sha),
+            url=str(payload.get("html_url") or ""),
+            author=str(author_block.get("name") or ""),
+            author_email=str(author_block.get("email") or ""),
+            committer=str(committer_block.get("name") or ""),
+            committed_at=_parse_iso(committer_block.get("date") or author_block.get("date")),
+            message=str(commit_block.get("message") or ""),
+            parents=parents,
+            additions=int(stats.get("additions") or 0),
+            deletions=int(stats.get("deletions") or 0),
+            files=files,
+        )
+
+    def get_commit_diff(self, ref: str) -> str:
+        """Fetch the unified diff for a single commit, capped like PR diffs."""
+        owner, repo, sha = _parse_commit_ref(ref, self.default_repo)
+        return self._fetch_diff(f"/repos/{owner}/{repo}/commits/{sha}")
+
+    def get_ci_status(self, ref: str) -> CIStatus:
+        """Fetch check-runs for a PR id, commit sha, or branch name.
+
+        PR input (`owner/name#NN`) resolves to the PR's head sha first —
+        that's where GitHub attaches check-runs. Plain `owner/name@sha` and
+        `owner/name@branch` both work directly. The overall reduction
+        treats an empty check list as `"none"` so the agent can tell
+        "no CI configured" from "CI green"."""
+        owner, repo, target = _parse_ci_ref(ref, self.default_repo)
+        # PR head-sha resolution: shortcut so the agent doesn't have to chain
+        # get_pull_request → get_ci_status(head_sha) for the common case.
+        if "#" in target:
+            pr_number = target.split("#", 1)[1]
+            pr_payload = self._get(f"/repos/{owner}/{repo}/pulls/{pr_number}")
+            head = (
+                pr_payload.get("head")
+                if isinstance(pr_payload, dict) and isinstance(pr_payload.get("head"), dict)
+                else None
+            )
+            sha = (
+                head.get("sha")
+                if isinstance(head, dict) and isinstance(head.get("sha"), str)
+                else ""
+            )
+            if not sha:
+                raise ProviderUnreachableError(f"could not resolve head sha for PR {ref}")
+            resolved_ref = str(sha)
+        else:
+            resolved_ref = target
+        payload = self._get(
+            f"/repos/{owner}/{repo}/commits/{resolved_ref}/check-runs",
+            params={"per_page": "100"},
+        )
+        check_runs_raw = payload.get("check_runs") if isinstance(payload, dict) else None
+        runs_list: list[Any] = check_runs_raw if isinstance(check_runs_raw, list) else []
+        runs: list[CIRun] = []
+        for entry in runs_list:
+            if not isinstance(entry, dict):
+                continue
+            runs.append(
+                CIRun(
+                    id=str(entry.get("id") or ""),
+                    name=str(entry.get("name") or ""),
+                    status=str(entry.get("status") or ""),
+                    conclusion=str(entry.get("conclusion") or ""),
+                    url=str(entry.get("html_url") or ""),
+                    head_sha=str(entry.get("head_sha") or resolved_ref),
+                    started_at=_parse_iso(entry.get("started_at")),
+                    completed_at=_parse_iso(entry.get("completed_at")),
+                )
+            )
+        return CIStatus(ref=resolved_ref, overall=_reduce_ci(runs), runs=runs)
+
+    # -- PR/commit detail helpers ------------------------------------------
+
+    def _pr_files(self, owner: str, repo: str, number: str) -> list[PullRequestFile]:
+        files: list[PullRequestFile] = []
+        for page in range(1, _PR_FILE_PAGES + 1):
+            payload = self._get(
+                f"/repos/{owner}/{repo}/pulls/{number}/files",
+                params={"per_page": str(_PER_PAGE), "page": str(page)},
+            )
+            if not isinstance(payload, list) or not payload:
+                break
+            for entry in payload:
+                if not isinstance(entry, dict):
+                    continue
+                files.append(
+                    PullRequestFile(
+                        path=str(entry.get("filename") or ""),
+                        status=str(entry.get("status") or ""),
+                        additions=int(entry.get("additions") or 0),
+                        deletions=int(entry.get("deletions") or 0),
+                    )
+                )
+            if len(payload) < _PER_PAGE:
+                break
+        return files
+
+    def _pr_reviews(self, owner: str, repo: str, number: str) -> list[PullRequestReview]:
+        payload = self._get(
+            f"/repos/{owner}/{repo}/pulls/{number}/reviews",
+            params={"per_page": str(_PER_PAGE)},
+        )
+        if not isinstance(payload, list):
+            return []
+        out: list[PullRequestReview] = []
+        for entry in payload:
+            if not isinstance(entry, dict):
+                continue
+            user = entry.get("user") or {}
+            out.append(
+                PullRequestReview(
+                    author=str(user.get("login")) if isinstance(user.get("login"), str) else "",
+                    state=str(entry.get("state") or ""),
+                    body_md=str(entry.get("body") or ""),
+                    submitted_at=_parse_iso(entry.get("submitted_at")),
+                )
+            )
+        return out
+
+    def _fetch_diff(self, path: str) -> str:
+        client = self._client_or_make()
+        headers = dict(self._headers())
+        headers["Accept"] = _DIFF_ACCEPT
+        try:
+            resp = client.get(path, headers=headers)
+        except httpx.HTTPError as e:
+            raise ProviderUnreachableError(f"GET {path} (diff) failed: {e}") from e
+        if resp.status_code >= 400:
+            raise ProviderUnreachableError(
+                f"GET {path} (diff) returned {resp.status_code}: {resp.text[:200]}"
+            )
+        body = resp.text
+        if len(body.encode("utf-8")) > _DIFF_MAX_BYTES:
+            encoded = body.encode("utf-8")[:_DIFF_MAX_BYTES]
+            truncated = encoded.decode("utf-8", errors="ignore")
+            return truncated + (
+                f"\n--- diff truncated at {_DIFF_MAX_BYTES} bytes "
+                "(call with a narrower commit/pull for full text) ---\n"
+            )
+        return body
+
     # -- mapping ------------------------------------------------------------
 
     def _issue_to_item(self, payload: dict[str, Any]) -> Item:
@@ -451,6 +719,60 @@ def _parse_id(id: str) -> tuple[str, str, str]:
         raise ValueError(f"invalid GitHub item id {id!r} (missing 'owner/name')")
     owner, name = repo_part.split("/", 1)
     return owner, name, number
+
+
+def _parse_commit_ref(ref: str, default_repo: str) -> tuple[str, str, str]:
+    """Parse `owner/name@sha` or bare sha against `default_repo`.
+
+    Accepted forms:
+    - `owner/name@sha`
+    - `sha` (resolves against `default_repo`)
+    - `owner/name` is rejected — a ref without `@sha` is ambiguous."""
+    if "@" in ref:
+        repo_part, sha = ref.split("@", 1)
+        if "/" not in repo_part or not sha:
+            raise ValueError(f"invalid commit ref {ref!r} (expected owner/name@sha)")
+        owner, name = repo_part.split("/", 1)
+        return owner, name, sha
+    if "/" in ref:
+        raise ValueError(f"invalid commit ref {ref!r} (missing '@sha')")
+    if "/" not in default_repo:
+        raise ValueError(f"cannot resolve bare sha without a default repo (got {default_repo!r})")
+    owner, name = default_repo.split("/", 1)
+    return owner, name, ref
+
+
+def _parse_ci_ref(ref: str, default_repo: str) -> tuple[str, str, str]:
+    """Accept PR id, commit ref, or branch name for a CI lookup.
+
+    Forms, in order of specificity:
+    - `owner/name#NN` → PR — returns (owner, name, `#NN`) so callers know
+      to resolve the head sha.
+    - `owner/name@sha` → commit — returns (owner, name, sha).
+    - `owner/name@branch` → branch name (caller resolves to head sha via
+      the `/branches/` or `/commits/{branch}` endpoint — GitHub accepts
+      branch names wherever a sha is expected).
+    - bare `sha` or `branch` → resolved against `default_repo`."""
+    if "#" in ref:
+        owner, name, number = _parse_id(ref)
+        return owner, name, f"#{number}"
+    return _parse_commit_ref(ref, default_repo)
+
+
+def _reduce_ci(runs: list[CIRun]) -> str:
+    """Collapse a list of check-runs into a single high-level label."""
+    if not runs:
+        return "none"
+    has_pending = any(r.status != "completed" for r in runs)
+    has_failure = any(
+        r.status == "completed" and r.conclusion in {"failure", "timed_out", "cancelled"}
+        for r in runs
+    )
+    if has_failure:
+        return "failure"
+    if has_pending:
+        return "pending"
+    return "success"
 
 
 def _parse_iso(value: Any) -> datetime | None:

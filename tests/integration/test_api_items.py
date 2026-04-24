@@ -78,9 +78,7 @@ def test_list_items_filters_by_tag(env: ApiEnv, make_item: MakeItem) -> None:
     assert [i["id"] for i in resp.json()] == ["S-2"]
 
 
-def test_list_items_applies_active_view_assignee_filter(
-    env: ApiEnv, make_item: MakeItem
-) -> None:
+def test_list_items_applies_active_view_assignee_filter(env: ApiEnv, make_item: MakeItem) -> None:
     env.item.assignee = "fake-user"
     item_repo.upsert_item(env.conn, env.item)
     other = make_item(
