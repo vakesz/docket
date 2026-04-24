@@ -5,7 +5,7 @@ from on-disk / in-memory representations. Only fields useful to a headless
 API caller are exposed — `provider_raw` for example is deliberately omitted
 since it leaks Azure DevOps-specific shape.
 
-Split into submodules by route group (`core`, `mutations`, `tui_parity`,
+Split into submodules by route group (`core`, `mutations`, `routes`,
 `setup`). Callers should import from `docket.api.schemas` and let this
 package re-export; submodule imports are fine too."""
 
@@ -32,19 +32,7 @@ from docket.api.schemas.mutations import (
     ProposeDescriptionRequest,
     ProposeTransitionRequest,
 )
-from docket.api.schemas.setup import (
-    SetupCompleteDTO,
-    SetupCompleteRequest,
-    SetupLlmEntry,
-    SetupProviderEntry,
-    SetupProviderFieldDTO,
-    SetupProviderTypeDTO,
-    SetupStatusDTO,
-    SetupTestLlmRequest,
-    SetupTestProviderRequest,
-    SetupTestResultDTO,
-)
-from docket.api.schemas.tui_parity import (
+from docket.api.schemas.routes import (
     MCPPresetApplyRequest,
     MCPPresetDTO,
     MCPPresetEnvDTO,
@@ -85,6 +73,18 @@ from docket.api.schemas.tui_parity import (
     SuggestionDTO,
     SuggestionStageRequest,
     SyncSummaryDTO,
+)
+from docket.api.schemas.setup import (
+    SetupCompleteDTO,
+    SetupCompleteRequest,
+    SetupLlmEntry,
+    SetupProviderEntry,
+    SetupProviderFieldDTO,
+    SetupProviderTypeDTO,
+    SetupStatusDTO,
+    SetupTestLlmRequest,
+    SetupTestProviderRequest,
+    SetupTestResultDTO,
 )
 
 __all__ = [

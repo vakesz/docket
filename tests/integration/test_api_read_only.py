@@ -102,14 +102,17 @@ def test_create_item_blocked(ro_client: TestClient) -> None:
     assert "read-only" in resp.json()["detail"].lower()
 
 
-def test_create_item_dry_run_also_blocked(ro_client: TestClient) -> None:
-    # dry_run still walks the mutation pipeline; in demo-safe mode we
-    # refuse the whole endpoint rather than letting callers peek at
-    # proposals they could never apply.
+def test_create_item_confirm_also_blocked(ro_client: TestClient) -> None:
+    # Every step of the create proposal pipeline is blocked in read-only
+    # mode — callers should never even see a staged proposal they can't apply.
     resp = ro_client.post(
-        "/items?dry_run=true",
+        "/items/proposals/any-id/confirm",
         headers=AUTH,
-        json={"kind": "task", "title": "Nope"},
+    )
+    assert resp.status_code == 403
+    resp = ro_client.post(
+        "/items/proposals/any-id/reject",
+        headers=AUTH,
     )
     assert resp.status_code == 403
 
@@ -200,6 +203,7 @@ def test_agent_registry_lacks_mutating_tools(env) -> None:
     assert "propose_description_patch" not in registry
     assert "propose_new_item" not in registry
     assert "attach_transcript" not in registry
+    assert "propose_comment" not in registry
 
 
 def test_writable_default_keeps_mutations(env) -> None:

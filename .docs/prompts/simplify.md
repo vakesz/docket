@@ -3,7 +3,6 @@
 <!-- Run: "Execute simplify.md" for plan only, or "Execute simplify.md in aggressive cleanup mode" to apply. -->
 
 Follow `CLAUDE.md` exactly. Do not weaken or remove anything it requires.
-Cross-reference `.docs/architecture.md`, `.docs/modules.md`, and `.docs/exception-audit.md` when judging whether a pattern is intended or drift.
 
 ## Goal
 
@@ -98,7 +97,6 @@ Load-bearing by design. Do not propose changes that alter:
 
 - Before removing, renaming, inlining, or consolidating, check every call site with `rg`.
 - If a symbol's purpose is unclear, mark it **needs clarification** and move on.
-- If `.docs/` disagrees with code, flag the conflict — do not resolve it yourself.
 - Prefer reshaping toward the documented flow over inventing a new abstraction.
 - Standing test: *would a typical Python / FastAPI / Typer / Textual developer write it this way?*
 - No opportunistic reformatting — every changed line must trace to a listed finding.
@@ -157,13 +155,12 @@ When the user has authorized aggressive cleanup for this session, execute the pl
    - If a gate fails, stop, diagnose root cause, and fix. Do not bypass hooks or skip checks. If the fix balloons past the batch, revert and re-plan.
    - After all gates pass, summarize: what changed, verification results, remaining blast radius.
 4. **Medium-value batches** only after explicit user go-ahead, even in aggressive mode. Same gate discipline.
-5. **Update docs alongside code.** If a change moves a module, changes a public surface, or alters a documented invariant, update `.docs/architecture.md`, `.docs/modules.md`, or `.docs/exception-audit.md` in the same batch. Doc drift is a bug.
-6. **Never touch** anything in "Preserve intentionally" or "Do not touch". Aggressive mode is not a license to rewrite load-bearing code.
-7. **Stop conditions.** Halt and report back if:
+5. **Never touch** anything in "Preserve intentionally" or "Do not touch". Aggressive mode is not a license to rewrite load-bearing code.
+6. **Stop conditions.** Halt and report back if:
    - a gate fails twice on the same batch,
    - a proposed change reveals a strategic / high-risk shift once begun,
    - a finding surfaces a 🔴 BUG outside the cleanup scope,
    - the plan runs out of high-value, low-risk items.
-8. **Final pass.** On session end, produce a short changelog: batches applied, batches deferred, remaining findings by priority, any new `.docs/exception-audit.md` entries.
+7. **Final pass.** On session end, produce a short changelog: batches applied, batches deferred, remaining findings by priority.
 
 Destructive or cross-boundary actions (removing modules with external callers, changing schema versions or persistence keys, renaming public types) still require explicit confirmation regardless of mode.

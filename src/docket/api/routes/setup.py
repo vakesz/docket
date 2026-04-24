@@ -20,8 +20,9 @@ import time
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
-from pydantic import HttpUrl, ValidationError
+from pydantic import ValidationError
 
+from docket.agent.prompt_templates import scaffold as scaffold_prompts
 from docket.api.auth import require_setup_token
 from docket.api.deps import get_paths
 from docket.api.schemas import (
@@ -35,7 +36,7 @@ from docket.api.schemas import (
     SetupTestResultDTO,
     SyncSummaryDTO,
 )
-from docket.config.loader import ConfigMissingError, load_config, save_config
+from docket.config.loader import ConfigLoadPolicy, load_config, save_config
 from docket.config.models import (
     Config,
     HttpConfig,
@@ -45,8 +46,8 @@ from docket.config.models import (
     TelemetryConfig,
 )
 from docket.config.paths import Paths
-from docket.config.prompt_templates import scaffold as scaffold_prompts
 from docket.core.services import sync_service
+from docket.providers import registry
 from docket.providers.base import ProviderError
 from docket.providers.registry import UnknownProviderError
 from docket.providers.registry import build as build_provider
@@ -59,17 +60,11 @@ router = APIRouter(prefix="/setup", tags=["setup"])
 @router.get("/status", response_model=SetupStatusDTO)
 def setup_status(paths: Paths = Depends(get_paths)) -> SetupStatusDTO:
     try:
-        cfg = load_config(paths)
-    except ConfigMissingError:
-        return SetupStatusDTO(
-            needs_setup=True,
-            config_path=str(paths.config_file),
-        )
+        cfg = load_config(paths, policy=ConfigLoadPolicy.OPTIONAL)
     except ValidationError:
-        return SetupStatusDTO(
-            needs_setup=True,
-            config_path=str(paths.config_file),
-        )
+        cfg = None
+    if cfg is None:
+        return SetupStatusDTO(needs_setup=True, config_path=str(paths.config_file))
     return SetupStatusDTO(
         needs_setup=False,
         config_path=str(paths.config_file),
@@ -182,7 +177,18 @@ def setup_complete(
     providers_cfg: dict[str, ProviderEntry] = {}
     built_providers: dict[str, Any] = {}
     for key, entry in req.providers.items():
-        normalized = _normalize_provider_config(entry.type, dict(entry.config))
+        try:
+            normalized = registry.normalize_config(entry.type, dict(entry.config))
+        except UnknownProviderError as e:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(e),
+            ) from e
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=f"invalid config for '{key}': {e}",
+            ) from e
         try:
             built = build_provider(
                 entry.type, dict(normalized), display_name=entry.display_name or key
@@ -273,21 +279,6 @@ def setup_complete(
         restart_required=True,
         initial_sync=initial_sync,
     )
-
-
-def _normalize_provider_config(type_id: str, config: dict[str, Any]) -> dict[str, Any]:
-    """Minor coercions that mirror what the interactive wizard does."""
-    if type_id == "azure_devops":
-        org = str(config.get("organization", "")).rstrip("/")
-        try:
-            config["organization"] = str(HttpUrl(org))
-        except ValidationError as e:
-            raise ValueError(f"organization must be a valid URL: {e}") from e
-        project = str(config.get("project", "")).strip()
-        if not project:
-            raise ValueError("project is required")
-        config["project"] = project
-    return config
 
 
 def _write_env_key(paths: Paths, api_key: str) -> None:

@@ -5,7 +5,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from docket.storage.schema import APPLICATION_ID, SCHEMA_VERSION, STATEMENTS
+from docket.storage.schema import APPLICATION_ID, STATEMENTS
 
 
 def connect(db_path: Path) -> sqlite3.Connection:
@@ -60,7 +60,6 @@ def _init_schema(conn: sqlite3.Connection) -> None:
     with transaction(conn):
         for stmt in STATEMENTS:
             conn.execute(stmt)
-        conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
 
 @contextmanager

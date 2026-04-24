@@ -14,11 +14,15 @@ def item_storage_key(provider_key: str, item_id: str) -> str:
     return f"{provider_key}{_ITEM_KEY_SEPARATOR}{item_id}"
 
 
-def split_item_storage_key(storage_id: str) -> tuple[str, str]:
+def item_id_from_storage_key(storage_id: str) -> str:
+    """Extract the provider-native item id from a storage key.
+
+    All repos that decode keys operate inside a provider-scoped context, so
+    the `provider_key` half of the split is never needed — drop the tuple
+    and return just the id."""
     if _ITEM_KEY_SEPARATOR not in storage_id:
-        return "", storage_id
-    provider_key, item_id = storage_id.split(_ITEM_KEY_SEPARATOR, 1)
-    return provider_key, item_id
+        return storage_id
+    return storage_id.split(_ITEM_KEY_SEPARATOR, 1)[1]
 
 
 def item_storage_prefix(provider_key: str) -> str:
@@ -26,7 +30,7 @@ def item_storage_prefix(provider_key: str) -> str:
 
 
 __all__ = [
+    "item_id_from_storage_key",
     "item_storage_key",
     "item_storage_prefix",
-    "split_item_storage_key",
 ]

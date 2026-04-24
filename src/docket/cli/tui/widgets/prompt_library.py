@@ -8,8 +8,7 @@ from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Select, Static, TextArea
 
-from docket.config.paths import Paths
-from docket.config.prompt_templates import (
+from docket.agent.prompt_templates import (
     get_template,
     list_templates,
     read_prompt,
@@ -17,6 +16,7 @@ from docket.config.prompt_templates import (
     scaffold,
     write_prompt,
 )
+from docket.config.paths import Paths
 
 
 class PromptLibraryModal(ModalScreen[None]):
@@ -126,9 +126,8 @@ class PromptLibraryModal(ModalScreen[None]):
 
     def _selected_key(self) -> str | None:
         value = self.query_one("#prompt-key", Select).value
-        if value is Select.BLANK:
+        if value is Select.BLANK or not isinstance(value, str):
             return None
-        assert isinstance(value, str)
         return value
 
     def _load_selected_prompt(self) -> None:

@@ -160,7 +160,9 @@ class NewItemModal(ModalScreen["NewItemRequest | None"]):
         if kind_value is Select.BLANK or not title:
             self.app.notify("kind and title are required", severity="warning")
             return
-        assert isinstance(kind_value, ItemKind)
+        if not isinstance(kind_value, ItemKind):
+            self.app.notify("kind must be selected", severity="warning")
+            return
         description_md = self.query_one("#desc", TextArea).text
         parent_id = (self.query_one("#parent", Input).value or "").strip() or None
         assignee = (self.query_one("#assignee", Input).value or "").strip() or None

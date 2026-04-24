@@ -16,15 +16,13 @@ from __future__ import annotations
 
 import os
 import secrets
-from copy import deepcopy
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import ValidationError
 
 from docket.api.auth import require_bearer
 from docket.api.deps import get_paths, get_runtime, require_not_read_only
-from docket.api.routes.setup import _normalize_provider_config, _write_env_key
+from docket.api.routes.setup import _write_env_key
 from docket.api.runtime import RuntimeState
 from docket.api.schemas import (
     SettingsDTO,
@@ -43,6 +41,8 @@ from docket.api.schemas import (
 from docket.config.loader import save_config
 from docket.config.models import Config, ProviderEntry, ScopeFilter
 from docket.config.paths import Paths
+from docket.core.services import settings_service
+from docket.providers import registry
 from docket.providers.base import ProviderError
 from docket.providers.registry import UnknownProviderError
 from docket.providers.registry import build as build_provider
@@ -55,42 +55,9 @@ router = APIRouter(
 )
 
 
-_RESTART_SECTIONS = frozenset({"providers", "active_provider", "llm", "http", "sync"})
-
-
-def _mask_config(cfg: Config) -> dict[str, Any]:
-    data = cfg.model_dump(mode="json")
-    token = cfg.http.token
-    if token:
-        data.setdefault("http", {})["token"] = (
-            "••••••••" + token[-4:] if len(token) > 4 else "••••••••"
-        )
-    else:
-        data.setdefault("http", {})["token"] = ""
-    return data
-
-
-def _deep_merge(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
-    out = deepcopy(base)
-    for key, value in patch.items():
-        if isinstance(value, dict) and isinstance(out.get(key), dict):
-            out[key] = _deep_merge(out[key], value)
-        else:
-            out[key] = deepcopy(value)
-    return out
-
-
-def _has_real_changes(
-    section: str, old: dict[str, Any], new: dict[str, Any], patch: dict[str, Any]
-) -> bool:
-    if section not in patch:
-        return False
-    return old.get(section) != new.get(section)
-
-
 @router.get("", response_model=SettingsDTO)
 def get_settings(runtime: RuntimeState = Depends(get_runtime)) -> SettingsDTO:
-    return SettingsDTO(config=_mask_config(runtime.config))
+    return SettingsDTO(config=settings_service.mask_http_token(runtime.config))
 
 
 @router.patch(
@@ -103,42 +70,19 @@ def patch_settings(
     paths: Paths = Depends(get_paths),
     runtime: RuntimeState = Depends(get_runtime),
 ) -> SettingsUpdatedDTO:
-    # The client may have received a masked token and echoed it back. Drop any
-    # masked value so we don't overwrite the real one with bullets.
-    patch = deepcopy(payload.patch or {})
-    http_patch = patch.get("http")
-    if isinstance(http_patch, dict) and "token" in http_patch:
-        val = http_patch["token"]
-        if isinstance(val, str) and val.startswith("••••••••"):
-            http_patch.pop("token", None)
-            if not http_patch:
-                patch.pop("http", None)
-
-    base = runtime.config.model_dump(mode="json")
-    merged_raw = _deep_merge(base, patch)
     try:
-        merged = Config.model_validate(merged_raw)
-    except Exception as e:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            f"Config validation failed: {e}",
-        ) from e
+        result = settings_service.patch_settings(runtime.config, payload.patch or {})
+    except settings_service.SettingsValidationError as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
 
-    save_config(paths, merged)
-
-    requires_restart: list[str] = []
-    new_dump = merged.model_dump(mode="json")
-    for section in _RESTART_SECTIONS:
-        if _has_real_changes(section, base, new_dump, patch):
-            requires_restart.append(section)
-
+    save_config(paths, result.config)
     # Update in-memory config so subsequent reads reflect the patch. Provider
     # dict is NOT rebuilt here — that's what requires_restart communicates.
-    runtime.config = merged
+    runtime.config = result.config
 
     return SettingsUpdatedDTO(
-        config=_mask_config(merged),
-        requires_restart=sorted(requires_restart),
+        config=settings_service.mask_http_token(result.config),
+        requires_restart=result.requires_restart,
     )
 
 
@@ -289,7 +233,9 @@ def add_provider(
         )
 
     try:
-        normalized = _normalize_provider_config(payload.type, dict(payload.config))
+        normalized = registry.normalize_config(payload.type, dict(payload.config))
+    except UnknownProviderError as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
     except ValueError as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
 
@@ -338,7 +284,7 @@ def add_provider(
     runtime.providers[key] = built
 
     return SettingsUpdatedDTO(
-        config=_mask_config(merged),
+        config=settings_service.mask_http_token(merged),
         requires_restart=["providers"],
     )
 
@@ -365,7 +311,9 @@ def update_provider(
     existing = runtime.config.providers[key]
 
     try:
-        normalized = _normalize_provider_config(existing.type, dict(payload.config))
+        normalized = registry.normalize_config(existing.type, dict(payload.config))
+    except UnknownProviderError as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
     except ValueError as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
 
@@ -420,7 +368,7 @@ def update_provider(
     runtime.providers[key] = built
 
     return SettingsUpdatedDTO(
-        config=_mask_config(merged),
+        config=settings_service.mask_http_token(merged),
         requires_restart=["providers"],
     )
 
@@ -473,7 +421,7 @@ def remove_provider(
     runtime.providers.pop(key, None)
 
     return SettingsUpdatedDTO(
-        config=_mask_config(merged),
+        config=settings_service.mask_http_token(merged),
         requires_restart=["providers"],
     )
 

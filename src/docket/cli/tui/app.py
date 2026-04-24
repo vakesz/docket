@@ -21,28 +21,28 @@ from docket.cli.tui.errors import humanize as humanize_error
 from docket.cli.tui.errors import retry_hint
 from docket.cli.tui.pane_layout import PaneLayoutMixin
 from docket.cli.tui.panes import FullscreenToggle, Pane
+from docket.cli.tui.review_flow import ReviewFlowMixin
+from docket.cli.tui.suggestion_flow import SuggestionFlowMixin
 from docket.cli.tui.tui_context import TuiContext
-from docket.cli.tui.widgets.batch_diff_modal import BatchDecision, BatchDiffModal
 from docket.cli.tui.widgets.chat_pane import ChatPane, TurnFinished, UserTurnRequest
-from docket.cli.tui.widgets.diff_modal import DiffModal
 from docket.cli.tui.widgets.help_modal import HelpModal
 from docket.cli.tui.widgets.item_detail import ItemDetail
 from docket.cli.tui.widgets.item_tree import ItemSelected, ItemTree
 from docket.cli.tui.widgets.mcp_pane import MCPPane
 from docket.cli.tui.widgets.memory_pane import MemoryPane
-from docket.cli.tui.widgets.new_item_modal import NewItemModal, NewItemRequest
+from docket.cli.tui.widgets.new_item_modal import NewItemModal
 from docket.cli.tui.widgets.prompt_library import PromptLibraryModal
 from docket.cli.tui.widgets.quick_open import QuickOpenModal, QuickOpenResult
 from docket.cli.tui.widgets.settings_modal import SettingsModal
 from docket.cli.tui.widgets.source_pane import SourcePane
 from docket.cli.tui.widgets.status_bar import StatusBar
-from docket.cli.tui.widgets.suggestion_modal import SuggestionModal
 from docket.cli.tui.widgets.theme_picker import ThemePicker
 from docket.config import save_config
 from docket.config.models import Config, ProviderEntry
 from docket.core.model import (
     ItemKind,
     ItemState,
+    SyncSummary,
     TransitionIntent,
     project_id_for,
 )
@@ -50,12 +50,10 @@ from docket.core.mutation import ItemCreate
 from docket.core.services import (
     conversation_service,
     mutation_service,
-    suggestion_service,
     sync_service,
     visual_filter,
 )
 from docket.core.services.proposal_store import ProposalStore
-from docket.core.services.suggestion_service import Suggestion, SuggestionError
 from docket.providers import registry
 from docket.providers.base import GroupingStrategy
 from docket.storage.repos import (
@@ -80,24 +78,13 @@ def _docket_commands_provider() -> type[Provider]:
     return DocketCommands
 
 
-def _format_suggestion_for_chat(suggestion: Suggestion) -> str:
-    """Render a suggestion as an editable chat draft.
-
-    Kept close to the frontend's `refinementDraft` so the UX is consistent
-    when the user moves between TUI and web — same opening line, same
-    sectioning, same trailing prompt."""
-    lines: list[str] = [f"About the suggested next action ({suggestion.intent.value}):"]
-    patch = (suggestion.description_patch_md or "").strip()
-    if patch:
-        lines += ["", "Proposed description patch:", patch]
-    if suggestion.open_questions:
-        lines += ["", "Open questions:"]
-        lines += [f"- {q}" for q in suggestion.open_questions]
-    lines += ["", "I'd like to refine this before staging — what do you think?"]
-    return "\n".join(lines)
-
-
-class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
+class DocketApp(
+    BackgroundTasksMixin,
+    PaneLayoutMixin,
+    ReviewFlowMixin,
+    SuggestionFlowMixin,
+    App[None],
+):
     """Three-pane terminal UI for browsing and triaging work items."""
 
     # Replace the default palette providers entirely: Textual's built-in theme
@@ -334,10 +321,14 @@ class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
             self.query_one(StatusBar).pending_count = len(self._proposals)
 
     def _set_thinking(self, value: bool) -> None:
-        """Toggle the status-bar 'thinking…' segment. Safe from worker threads
-        because reactive assignments are atomic."""
+        """Toggle both the status-bar segment and the in-pane indicator. The
+        status bar alone was easy to miss — the pane indicator sits right next
+        to the prompt so the user can see when a turn is in flight. Safe from
+        worker threads because reactive assignments are atomic."""
         with contextlib.suppress(Exception):
             self.query_one(StatusBar).thinking = value
+        with contextlib.suppress(Exception):
+            self.query_one(ChatPane).set_thinking(value)
 
     def _resolve_project_name(self) -> str:
         """Display name for the active project (= active provider), or empty
@@ -586,13 +577,16 @@ class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
             self.call_from_thread(chat.append_delta, delta)
 
         def on_message(msg: ChatMessage) -> None:
-            if msg.role == "assistant" and msg.content:
-                # Final (or intermediate) assistant text already streamed via delta.
+            if msg.role == "assistant":
+                # Content itself was already streamed via on_delta — don't
+                # double-render. But an assistant message can carry both
+                # preamble text AND tool_calls, so check tool_calls regardless
+                # of whether content is present.
+                if msg.tool_calls:
+                    names = ", ".join(tc.name for tc in msg.tool_calls)
+                    self.call_from_thread(chat.note, f"→ calling {names}")
                 return
-            if msg.role == "assistant" and msg.tool_calls:
-                names = ", ".join(tc.name for tc in msg.tool_calls)
-                self.call_from_thread(chat.note, f"→ calling {names}")
-            elif msg.role == "tool":
+            if msg.role == "tool":
                 preview = (msg.content or "")[:80].replace("\n", " ")
                 self.call_from_thread(chat.note, f"← {msg.name}: {preview}")
 
@@ -628,17 +622,24 @@ class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
             self.call_from_thread(self._refresh_pending_count)
             self.call_from_thread(self._open_next_pending)
 
-    def action_refresh(self) -> None:
-        self.notify(f"Syncing from {self.tui_ctx.provider_key or 'active provider'}…")
+    def _run_sync(
+        self,
+        sync_fn: Callable[..., SyncSummary],
+        *,
+        label: str,
+        start_message: str,
+        success_message: Callable[[SyncSummary], str],
+    ) -> None:
+        self.notify(start_message)
         try:
-            summary = sync_service.refresh(
+            summary = sync_fn(
                 self.tui_ctx.conn,
                 self.tui_ctx.provider,
                 provider_key=self.tui_ctx.provider_key,
             )
         except Exception as e:  # provider failure → toast, not crash
             self.notify(
-                f"{humanize_error(e, action='Sync')} {retry_hint('r', 'sync')}",
+                f"{humanize_error(e, action=label)} {retry_hint('r', 'sync')}",
                 severity="error",
             )
             self._set_offline(True)
@@ -646,33 +647,25 @@ class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
         self._set_offline(False)
         self._mark_sync_now()
         self._reload_tree()
-        self.notify(
-            f"Synced {summary.upserted}, archived {summary.archived}",
-            severity="information",
+        self.notify(success_message(summary), severity="information")
+
+    def action_refresh(self) -> None:
+        self._run_sync(
+            sync_service.refresh,
+            label="Sync",
+            start_message=f"Syncing from {self.tui_ctx.provider_key or 'active provider'}…",
+            success_message=lambda s: f"Synced {s.upserted}, archived {s.archived}",
         )
 
     def action_full_refresh(self) -> None:
         provider_label = self.tui_ctx.provider_key or "active provider"
-        self.notify(f"Running full sync for {provider_label}…")
-        try:
-            summary = sync_service.full_refresh(
-                self.tui_ctx.conn,
-                self.tui_ctx.provider,
-                provider_key=self.tui_ctx.provider_key,
-            )
-        except Exception as e:  # provider failure → toast, not crash
-            self.notify(
-                f"{humanize_error(e, action='Full sync')} {retry_hint('r', 'sync')}",
-                severity="error",
-            )
-            self._set_offline(True)
-            return
-        self._set_offline(False)
-        self._mark_sync_now()
-        self._reload_tree()
-        self.notify(
-            f"Full sync complete: {summary.upserted} cached, archived {summary.archived}",
-            severity="information",
+        self._run_sync(
+            sync_service.full_refresh,
+            label="Full sync",
+            start_message=f"Running full sync for {provider_label}…",
+            success_message=(
+                lambda s: f"Full sync complete: {s.upserted} cached, archived {s.archived}"
+            ),
         )
 
     def action_focus_filter(self) -> None:
@@ -805,93 +798,6 @@ class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
         label = "hidden" if self.tui_ctx.hide_done else "visible"
         self.notify(f"Done items {label}.", severity="information")
 
-    def action_suggest_next(self) -> None:
-        if self._selected_item_id is None:
-            self.notify("Select an item first.", severity="warning")
-            return
-        if self.tui_ctx.llm is None:
-            self.notify("Chat/LLM is disabled.", severity="warning")
-            return
-        item_id = self._selected_item_id
-        self.notify("Thinking about the next action…")
-        self.run_worker(
-            lambda iid=item_id: self._run_suggestion(iid),
-            group="suggestion",
-            exclusive=True,
-            thread=True,
-        )
-
-    def _run_suggestion(self, item_id: str) -> None:
-        item = item_repo.get_item(
-            self.tui_ctx.conn, item_id, provider_key=self.tui_ctx.provider_key
-        )
-        if item is None:
-            self.call_from_thread(self.notify, f"Item {item_id} is gone.", severity="error")
-            return
-        llm = self.tui_ctx.llm
-        if llm is None:
-            self.call_from_thread(self.notify, "Chat/LLM is disabled.", severity="warning")
-            return
-        try:
-            suggestion = suggestion_service.suggest_next_action(
-                self.tui_ctx.conn,
-                llm,
-                item,
-            )
-        except SuggestionError as e:
-            self.call_from_thread(self.notify, f"Suggestion failed: {e}", severity="error")
-            return
-        except Exception as e:
-            log.exception("suggestion failed for %s", item_id)
-            self.call_from_thread(self.notify, f"Suggestion failed: {e}", severity="error")
-            return
-        self.call_from_thread(self._show_suggestion_modal, suggestion)
-
-    def _show_suggestion_modal(self, suggestion: Suggestion) -> None:
-        def on_decision(decision: str | None) -> None:
-            if decision == "refine":
-                self._refine_suggestion_in_chat(suggestion)
-                return
-            if decision != "accept":
-                self.notify("Suggestion dismissed.", severity="information")
-                return
-            if self._blocked_read_only():
-                return
-            try:
-                staged = suggestion_service.stage_suggestion(
-                    self.tui_ctx.conn,
-                    suggestion,
-                    provider_key=self.tui_ctx.provider_key,
-                )
-            except Exception as e:
-                self.notify(f"Failed to stage: {e}", severity="error")
-                return
-            self._proposals.add(staged.state_change, source="suggestion")
-            if staged.description_patch is not None:
-                self._proposals.add(staged.description_patch, source="suggestion")
-            self._refresh_pending_count()
-            self.notify(
-                f"Staged {1 if staged.description_patch is None else 2} proposal(s); "
-                "press 'd' to review.",
-                severity="information",
-            )
-            self._open_next_pending()
-
-        self.push_screen(SuggestionModal(suggestion), on_decision)
-
-    def _refine_suggestion_in_chat(self, suggestion: Suggestion) -> None:
-        """Hand a suggestion to the chat pane as an editable draft.
-
-        Mirrors the frontend "Refine in chat" affordance — the user can edit
-        the draft before pressing Enter, and nothing is staged unless they
-        come back to Suggest later or the agent stages something itself."""
-        chat = self.query_one(ChatPane)
-        chat.seed_input(_format_suggestion_for_chat(suggestion))
-        self.notify(
-            "Suggestion moved to chat — edit and press Enter to refine.",
-            severity="information",
-        )
-
     def _blocked_read_only(self) -> bool:
         """Toast and return True if the user just tried to stage a mutation
         while the app is in read-only mode."""
@@ -905,35 +811,33 @@ class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
         that flows through the diff modal — same confirm gate as every other write."""
         if self._blocked_read_only():
             return
+        self.run_worker(self._new_item_flow(), group="new-item", exclusive=False)
 
-        def on_result(result: NewItemRequest | None) -> None:
-            if result is None:
-                return
-            proposal = ItemCreate(item_kind=result.kind, fields=result.fields)
-            self._proposals.add(proposal, source="form")
-            self._refresh_pending_count()
-            self._open_next_pending()
-
-        self.push_screen(
+    async def _new_item_flow(self) -> None:
+        result = await self.push_screen_wait(
             NewItemModal(
                 self.tui_ctx.conn,
                 default_kind=self.tui_ctx.default_new_item_kind,
                 provider_key=self.tui_ctx.provider_key,
-            ),
-            on_result,
+            )
         )
+        if result is None:
+            return
+        self._proposals.add(ItemCreate(item_kind=result.kind, fields=result.fields), source="form")
+        self._refresh_pending_count()
+        self._open_next_pending()
 
     def action_open_settings(self) -> None:
         if self.tui_ctx.paths is None or self.tui_ctx.config is None:
             self.notify("Settings are unavailable in this session.", severity="warning")
             return
+        self.run_worker(self._open_settings_flow(), group="settings", exclusive=False)
 
-        def on_result(result: Config | None) -> None:
-            if result is None:
-                return
+    async def _open_settings_flow(self) -> None:
+        assert self.tui_ctx.paths is not None and self.tui_ctx.config is not None
+        result = await self.push_screen_wait(SettingsModal(self.tui_ctx.paths, self.tui_ctx.config))
+        if result is not None:
             self._apply_saved_config(result)
-
-        self.push_screen(SettingsModal(self.tui_ctx.paths, self.tui_ctx.config), on_result)
 
     def action_edit_prompts(self) -> None:
         if self.tui_ctx.paths is None:
@@ -1165,65 +1069,6 @@ class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
             severity="information",
         )
 
-    def action_review_pending(self) -> None:
-        if len(self._proposals) == 0:
-            self.notify("No pending proposals.", severity="information")
-            return
-        self._open_next_pending()
-
-    def _open_next_pending(self) -> None:
-        from docket.core.mutation import Proposal
-
-        count = len(self._proposals)
-        if count == 0:
-            return
-        if count >= 2:
-            # Batch review: one modal covers the whole queue so the user can
-            # apply-all / apply-selected / reject-all in a single pass.
-            self._open_batch_review()
-            return
-
-        pending = self._proposals.peek_next()
-        if pending is None:
-            return
-
-        def on_decision(edited: Proposal | None) -> None:
-            # peek_next did not remove; we drain here.
-            popped = self._proposals.pop(pending.proposal.id)
-            self._refresh_pending_count()
-            if popped is None:
-                return
-            if edited is None:
-                self.notify("Rejected.", severity="warning")
-                return
-            # The modal returns the (possibly edited) proposal — use that
-            # when confirming so description-patch edits flow through.
-            try:
-                result = mutation_service.confirm(
-                    self.tui_ctx.conn,
-                    self.tui_ctx.provider,
-                    edited,
-                    provider_key=self.tui_ctx.provider_key,
-                )
-            except Exception as e:
-                self.notify(
-                    f"{humanize_error(e, action='Apply')} {retry_hint('d', 'review')}",
-                    severity="error",
-                )
-                return
-            self._reload_tree()
-            if result.attachment_url:
-                self.notify(f"Uploaded → {result.attachment_url}", severity="information")
-            elif result.item is not None:
-                self.notify(f"Applied · {result.item.id} now {result.item.state.value}")
-            else:
-                self.notify("Applied.")
-            # Chain-drain: if more pending, pop up the next modal.
-            if len(self._proposals) > 0:
-                self._open_next_pending()
-
-        self.push_screen(DiffModal(pending.proposal, source=pending.source), on_decision)
-
     def _apply_saved_config(self, config: Config) -> None:
         """Update the in-memory settings after the modal persists config.toml.
 
@@ -1256,56 +1101,6 @@ class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
             "Settings saved. View and prompt behavior updated now; provider and timer changes apply on the next launch.",
             severity="information",
         )
-
-    def _open_batch_review(self) -> None:
-        """Open the batch modal with a snapshot of every pending proposal.
-
-        Snapshotting up front means new proposals that land while the modal
-        is open stay queued for the next review pass — we don't want the
-        list shifting under the user mid-review."""
-        pendings = self._proposals.list()
-        if not pendings:
-            return
-
-        def on_batch_decision(decision: BatchDecision | None) -> None:
-            if decision is None:
-                # Cancel: queue unchanged, user can come back later.
-                return
-            # Drop rejected ids first — they never touch the provider.
-            rejected = sum(1 for pid in decision.reject if self._proposals.pop(pid) is not None)
-            applied = 0
-            failed = 0
-            for pid in decision.apply:
-                popped = self._proposals.pop(pid)
-                if popped is None:
-                    continue
-                try:
-                    mutation_service.confirm(
-                        self.tui_ctx.conn,
-                        self.tui_ctx.provider,
-                        popped.proposal,
-                        provider_key=self.tui_ctx.provider_key,
-                    )
-                    applied += 1
-                except Exception as e:
-                    log.exception("batch apply failed for %s", pid)
-                    self.notify(
-                        f"{humanize_error(e, action=f'Apply {pid}')}",
-                        severity="error",
-                    )
-                    failed += 1
-            self._refresh_pending_count()
-            if applied or rejected or failed:
-                self._reload_tree()
-                parts = [f"applied {applied}", f"rejected {rejected}"]
-                if failed:
-                    parts.append(f"failed {failed}")
-                self.notify("Batch · " + ", ".join(parts) + ".")
-            # If more proposals trickled in while we were reviewing, chain.
-            if len(self._proposals) > 0:
-                self._open_next_pending()
-
-        self.push_screen(BatchDiffModal(pendings), on_batch_decision)
 
 
 __all__ = ["DocketApp", "Pane", "TuiContext"]

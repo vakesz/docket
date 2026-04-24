@@ -17,10 +17,17 @@ import contextlib
 import json
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
+from typing import TypeGuard, get_args
 
 from docket.agent.llm_client import LlmClient, accumulate_stream
 from docket.agent.tools import ToolRegistry
-from docket.agent.types import ChatMessage, CompletionResult, StreamDelta, ToolCall, Usage
+from docket.agent.types import ChatMessage, ChatRole, CompletionResult, StreamDelta, ToolCall, Usage
+
+_CHAT_ROLES: frozenset[str] = frozenset(get_args(ChatRole))
+
+
+def _is_chat_role(value: str) -> TypeGuard[ChatRole]:
+    return value in _CHAT_ROLES
 
 
 @dataclass
@@ -194,12 +201,12 @@ def message_from_json(payload: dict[str, object]) -> ChatMessage:
                     arguments=args if isinstance(args, dict) else {},
                 )
             )
-    role_val = str(payload.get("role", "user"))
+    role_raw = str(payload.get("role", "user"))
+    role: ChatRole = role_raw if _is_chat_role(role_raw) else "user"
     tool_call_id = payload.get("tool_call_id")
     name = payload.get("name")
-    # Narrow to the Literal via constructor — ChatMessage accepts the string.
     return ChatMessage(
-        role=role_val,  # type: ignore[arg-type]
+        role=role,
         content=str(payload.get("content") or ""),
         tool_calls=tool_calls,
         tool_call_id=tool_call_id if isinstance(tool_call_id, str) else None,

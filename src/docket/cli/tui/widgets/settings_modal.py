@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import ClassVar
+from collections.abc import Callable
+from typing import ClassVar, Literal, overload
 
 from textual.app import ComposeResult
 from textual.binding import Binding, BindingType
@@ -15,44 +16,27 @@ from docket.config.paths import Paths
 _NEW_SCOPE = "__new__"
 
 
-def _parse_float(raw: str, *, field_name: str) -> float:
-    text = raw.strip()
+def _parse_scalar[T: (int, float)](
+    raw: str, converter: Callable[[str], T], *, field_name: str
+) -> T:
     try:
-        return float(text)
+        return converter(raw.strip())
     except ValueError as exc:
-        raise ValueError(f"{field_name} must be a number.") from exc
+        noun = "an integer" if converter is int else "a number"
+        raise ValueError(f"{field_name} must be {noun}.") from exc
 
 
-def _parse_int(raw: str, *, field_name: str) -> int:
-    text = raw.strip()
-    try:
-        return int(text)
-    except ValueError as exc:
-        raise ValueError(f"{field_name} must be an integer.") from exc
-
-
-def _parse_map(raw: str, *, value_type: str) -> dict[str, float] | dict[str, int]:
+@overload
+def _parse_map(raw: str, *, value_type: Literal["float"]) -> dict[str, float]: ...
+@overload
+def _parse_map(raw: str, *, value_type: Literal["int"]) -> dict[str, int]: ...
+def _parse_map(
+    raw: str, *, value_type: Literal["float", "int"]
+) -> dict[str, float] | dict[str, int]:
     text = raw.strip()
     if not text:
         return {}
-    if value_type == "float":
-        result: dict[str, float] = {}
-        for chunk in text.split(","):
-            entry = chunk.strip()
-            if not entry:
-                continue
-            if "=" not in entry:
-                raise ValueError(
-                    "Override mappings must look like `Provider=123`, separated by commas."
-                )
-            key, value = entry.split("=", 1)
-            provider = key.strip()
-            if not provider:
-                raise ValueError("Override mappings need a provider name before `=`.")
-            result[provider] = _parse_float(value, field_name=f"{provider} override")
-        return result
-
-    result_int: dict[str, int] = {}
+    entries: list[tuple[str, str]] = []
     for chunk in text.split(","):
         entry = chunk.strip()
         if not entry:
@@ -65,8 +49,10 @@ def _parse_map(raw: str, *, value_type: str) -> dict[str, float] | dict[str, int
         provider = key.strip()
         if not provider:
             raise ValueError("Override mappings need a provider name before `=`.")
-        result_int[provider] = _parse_int(value, field_name=f"{provider} override")
-    return result_int
+        entries.append((provider, value))
+    if value_type == "float":
+        return {p: _parse_scalar(v, float, field_name=f"{p} override") for p, v in entries}
+    return {p: _parse_scalar(v, int, field_name=f"{p} override") for p, v in entries}
 
 
 def _format_map(raw: dict[str, float] | dict[str, int]) -> str:
@@ -369,9 +355,8 @@ class SettingsModal(ModalScreen[Config | None]):
         if event.select.id != "scope-select":
             return
         selected = event.value
-        if selected is Select.BLANK:
+        if selected is Select.BLANK or not isinstance(selected, str):
             return
-        assert isinstance(selected, str)
         entry = self._active_entry
         scopes = entry.scopes if entry is not None else {}
         scope = scopes.get(selected, ScopeFilter())
@@ -446,34 +431,38 @@ class SettingsModal(ModalScreen[Config | None]):
         raw["llm"]["deployment"] = self.query_one("#llm-deployment", Input).value.strip()
         raw["http"]["enabled"] = self.query_one("#http-enabled", Checkbox).value
         raw["http"]["bind"] = self.query_one("#http-bind", Input).value.strip()
-        raw["http"]["port"] = _parse_int(
-            self.query_one("#http-port", Input).value, field_name="HTTP port"
+        raw["http"]["port"] = _parse_scalar(
+            self.query_one("#http-port", Input).value, int, field_name="HTTP port"
         )
         raw["http"]["token"] = self.query_one("#http-token", Input).value.strip()
         raw["telemetry"]["enabled"] = self.query_one("#telemetry-enabled", Checkbox).value
         level_value = self.query_one("#telemetry-level", Select).value
         if isinstance(level_value, str):
             raw["telemetry"]["level"] = level_value
-        raw["llm"]["compaction_threshold_tokens"] = _parse_int(
+        raw["llm"]["compaction_threshold_tokens"] = _parse_scalar(
             self.query_one("#llm-compaction", Input).value,
+            int,
             field_name="Compaction threshold",
         )
-        raw["llm"]["external_watch_interval_seconds"] = _parse_float(
+        raw["llm"]["external_watch_interval_seconds"] = _parse_scalar(
             self.query_one("#llm-watch", Input).value,
+            float,
             field_name="External watch interval",
         )
         raw["ui"]["default_new_item_kind"] = default_kind
         raw["ui"]["show_acceptance_criteria"] = self.query_one("#ui-show-criteria", Checkbox).value
-        raw["sync"]["background_interval_seconds"] = _parse_float(
+        raw["sync"]["background_interval_seconds"] = _parse_scalar(
             self.query_one("#sync-background", Input).value,
+            float,
             field_name="Background sync interval",
         )
         raw["sync"]["min_interval_seconds_by_provider"] = _parse_map(
             self.query_one("#sync-min-overrides", Input).value,
             value_type="float",
         )
-        raw["stale"]["threshold_days"] = _parse_int(
+        raw["stale"]["threshold_days"] = _parse_scalar(
             self.query_one("#stale-threshold", Input).value,
+            int,
             field_name="Stale threshold",
         )
         raw["stale"]["threshold_days_by_provider"] = _parse_map(

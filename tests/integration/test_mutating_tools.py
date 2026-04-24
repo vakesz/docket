@@ -10,7 +10,7 @@ from docket.agent.mutating_tools import register_mutating_tools
 from docket.agent.tool_defs import register_readonly_tools
 from docket.agent.tools import ToolRegistry
 from docket.core.model import Item, ItemKind, ItemState
-from docket.core.mutation import DescriptionPatch, ItemCreate, StateChange
+from docket.core.mutation import CommentAdd, DescriptionPatch, ItemCreate, StateChange
 from docket.core.services.proposal_store import ProposalStore
 from docket.storage import init_db
 from docket.storage.repos import item_repo
@@ -116,6 +116,29 @@ def test_propose_new_item_no_duplicates_omits_key(env) -> None:
     payload = json.loads(out)
     assert payload["status"] == "pending_confirmation"
     assert "similar" not in payload
+
+
+def test_propose_comment_stages_pending_proposal(env) -> None:
+    _, provider, store, reg, item = env
+    out = reg.dispatch(
+        "propose_comment",
+        {"id": item.id, "body_md": "Triaged — no repro yet."},
+    )
+    payload = json.loads(out)
+    assert payload["status"] == "pending_confirmation"
+    assert payload["kind"] == "comment_add"
+    assert "Triaged" in payload["diff"]
+    pending = store.list()[0]
+    assert isinstance(pending.proposal, CommentAdd)
+    # Provider untouched until confirmation.
+    assert provider.comments.get(item.id, []) == []
+
+
+def test_propose_comment_rejects_empty_body(env) -> None:
+    _, _, store, reg, item = env
+    out = reg.dispatch("propose_comment", {"id": item.id, "body_md": "   "})
+    assert "non-empty body_md" in json.loads(out)["error"]
+    assert len(store) == 0
 
 
 def test_unknown_item_returns_error(env) -> None:

@@ -16,18 +16,15 @@ import json
 import sqlite3
 from typing import Any
 
+from docket.agent._helpers import (
+    DEFAULT_LIST_LIMIT,
+    DEFAULT_SEARCH_LIMIT,
+    MAX_LIST_LIMIT,
+    MAX_SEARCH_LIMIT,
+    clamp_limit,
+)
 from docket.agent.tools import ToolRegistry
 from docket.storage.repos import source_repo
-
-_DEFAULT_LIST_LIMIT = 25
-_DEFAULT_SEARCH_LIMIT = 10
-
-
-def _clamp_limit(raw: Any, default: int, max_val: int) -> int:
-    try:
-        return max(1, min(int(raw), max_val))
-    except (TypeError, ValueError):
-        return default
 
 
 def _entry_summary(entry: Any) -> dict[str, Any]:
@@ -53,7 +50,9 @@ def register_source_readonly_tools(
     sources from another project by mistake."""
 
     def list_sources(args: dict[str, Any]) -> str:
-        limit = _clamp_limit(args.get("limit", _DEFAULT_LIST_LIMIT), _DEFAULT_LIST_LIMIT, 200)
+        limit = clamp_limit(
+            args.get("limit", DEFAULT_LIST_LIMIT), DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT
+        )
         kind_raw = args.get("kind")
         kind = str(kind_raw).strip() if isinstance(kind_raw, str) else None
         entries = source_repo.list_for_project(conn, project_id, kind=kind or None, limit=limit)
@@ -77,7 +76,9 @@ def register_source_readonly_tools(
         query = str(args.get("query", "")).strip()
         if not query:
             return json.dumps({"error": "query is required"})
-        limit = _clamp_limit(args.get("limit", _DEFAULT_SEARCH_LIMIT), _DEFAULT_SEARCH_LIMIT, 50)
+        limit = clamp_limit(
+            args.get("limit", DEFAULT_SEARCH_LIMIT), DEFAULT_SEARCH_LIMIT, MAX_SEARCH_LIMIT
+        )
         kind_raw = args.get("kind")
         kind = str(kind_raw).strip() if isinstance(kind_raw, str) else None
         entries = source_repo.search(conn, project_id, query, kind=kind or None, limit=limit)
@@ -107,9 +108,9 @@ def register_source_readonly_tools(
                 },
                 "limit": {
                     "type": "integer",
-                    "default": _DEFAULT_LIST_LIMIT,
+                    "default": DEFAULT_LIST_LIMIT,
                     "minimum": 1,
-                    "maximum": 200,
+                    "maximum": MAX_LIST_LIMIT,
                 },
             },
         },
@@ -144,9 +145,9 @@ def register_source_readonly_tools(
                 },
                 "limit": {
                     "type": "integer",
-                    "default": _DEFAULT_SEARCH_LIMIT,
+                    "default": DEFAULT_SEARCH_LIMIT,
                     "minimum": 1,
-                    "maximum": 50,
+                    "maximum": MAX_SEARCH_LIMIT,
                 },
             },
             "required": ["query"],

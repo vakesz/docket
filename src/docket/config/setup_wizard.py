@@ -32,7 +32,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 
-from docket.config.loader import load_config, save_config
+from docket.agent.prompt_templates import scaffold as scaffold_prompts
+from docket.config.loader import ConfigLoadPolicy, load_config, save_config
 from docket.config.models import (
     Config,
     HttpConfig,
@@ -41,7 +42,6 @@ from docket.config.models import (
     TelemetryConfig,
 )
 from docket.config.paths import Paths, resolve_paths
-from docket.config.prompt_templates import scaffold as scaffold_prompts
 from docket.core.services import sync_service
 from docket.providers import registry
 from docket.providers.azure_devops import AzureDevOpsProvider, discover
@@ -160,11 +160,15 @@ def _print_existing_providers(cfg: Config) -> None:
 
 def _load_existing_state(paths: Paths) -> WizardState:
     state = WizardState(paths=paths)
-    if not paths.config_file.exists():
-        return state
     try:
-        cfg = load_config(paths)
-    except (ValidationError, Exception):
+        cfg = load_config(paths, policy=ConfigLoadPolicy.OPTIONAL)
+    except ValidationError as e:
+        console.print(
+            f"[yellow]Existing config at {paths.config_file} is malformed "
+            f"({e.error_count()} issues); starting the wizard fresh.[/yellow]"
+        )
+        return state
+    if cfg is None:
         return state
     state.existing = cfg
     state.telemetry_enabled = cfg.telemetry.enabled
@@ -942,115 +946,6 @@ def _build_config_from_state(state: WizardState) -> Config:
     )
 
 
-# ---- provider subcommands ----------------------------------------------------
-
-
-def provider_list() -> None:
-    """Print the currently-configured providers."""
-    paths = resolve_paths()
-    if not paths.config_file.exists():
-        console.print("[yellow]No config.toml yet — run `docket setup` first.[/yellow]")
-        raise SystemExit(1)
-    cfg = load_config(paths)
-    if not cfg.providers:
-        console.print("[yellow]No providers configured yet.[/yellow]")
-        return
-    for key, entry in cfg.providers.items():
-        active = " (active)" if key == cfg.active_provider else ""
-        console.print(
-            f"[cyan]{key}[/cyan] · {entry.display_name} · [dim]{entry.type}[/dim]{active}"
-        )
-        for scope_name, _scope in entry.scopes.items():
-            star = "*" if scope_name == entry.active_scope else " "
-            console.print(f"  {star} {scope_name}")
-
-
-def provider_add(
-    name: str,
-    type_id: str,
-    *,
-    display_name: str | None = None,
-    make_active: bool = False,
-) -> None:
-    """Register a new provider entry. Per-type validation lives here so the
-    registry can stay dumb — this is the single authoritative surface where
-    the wizard-shaped config emerges."""
-    from docket.providers.registry import types as registry_types
-
-    paths = resolve_paths()
-    paths.ensure()
-    known = registry_types()
-    if type_id not in known:
-        console.print(f"[red]Unknown provider type '{type_id}'[/red] (known: {', '.join(known)}).")
-        raise SystemExit(2)
-
-    config: dict[str, object] = {}
-    label_hint = ""
-    if type_id == "azure_devops":
-        org = Prompt.ask("Azure DevOps organization URL").strip().rstrip("/")
-        if not _looks_like_http_url(org):
-            console.print("[red]Organization must be a full URL.[/red]")
-            raise SystemExit(2)
-        project = Prompt.ask("Project name").strip()
-        if not project:
-            console.print("[red]Project name is required.[/red]")
-            raise SystemExit(2)
-        config = {"organization": str(HttpUrl(org)), "project": project}
-        org_slug = (
-            urlparse(str(config["organization"])).path.strip("/")
-            or urlparse(str(config["organization"])).netloc
-        )
-        label_hint = (
-            f"Azure DevOps · {org_slug}/{project}" if org_slug else f"Azure DevOps · {project}"
-        )
-    elif type_id == "github":
-        host = _pick_github_host()
-        default_repo = _pick_github_repo(host=host.hostname if host else None)
-        config = {"default_repo": default_repo}
-        if host and host.api_base_url != "https://api.github.com":
-            config["base_url"] = host.api_base_url
-        prefix = host.hostname if host and host.hostname != "github.com" else "GitHub"
-        label_hint = f"{prefix} · {default_repo}"
-    elif type_id == "github_stub":
-        default_repo = Prompt.ask("Default repo (owner/name)", default="example/repo").strip()
-        config = {"default_repo": default_repo}
-        label_hint = f"GitHub (stub) · {default_repo}"
-    else:
-        # Custom provider types (from entry points) self-validate via the
-        # factory on first build; the wizard just records an empty config
-        # so the user can hand-edit config.toml.
-        console.print(
-            f"[dim]No wizard prompts for '{type_id}' — config starts empty. "
-            "Edit config.toml to fill it in.[/dim]"
-        )
-
-    cfg = load_config(paths) if paths.config_file.exists() else Config()
-    if name in cfg.providers and not Confirm.ask(
-        f"Provider '{name}' already exists. Overwrite?", default=False
-    ):
-        return
-
-    if display_name is None:
-        default_label = label_hint or name
-        console.print(
-            "Label for this provider — shown in the TUI and web provider switcher. "
-            "Press enter to accept the suggested default."
-        )
-        display_name = Prompt.ask("Display name", default=default_label).strip() or default_label
-
-    cfg.providers[name] = ProviderEntry(
-        type=type_id,
-        display_name=display_name,
-        config=config,
-        scopes={"default": ScopeFilter()},
-        active_scope="default",
-    )
-    if make_active or not cfg.active_provider:
-        cfg.active_provider = name
-    save_config(paths, cfg)
-    console.print(f"[green]✓ added provider '{name}'[/green] as [cyan]{display_name}[/cyan]")
-
-
 def _pick_github_repo(*, host: str | None = None) -> str:
     """Offer discovered repos for the active `gh` session, or fall back to typing.
 
@@ -1117,8 +1012,7 @@ def _pick_github_repo(*, host: str | None = None) -> str:
         # below, the user needs to know why discovery returned nothing.
         for detail in discovery_errors:
             console.print(
-                f"[yellow]GitHub discovery issue on [cyan]{host_label}[/cyan] "
-                f"({detail})[/yellow]"
+                f"[yellow]GitHub discovery issue on [cyan]{host_label}[/cyan] ({detail})[/yellow]"
             )
 
     if not repos:
@@ -1148,23 +1042,3 @@ def _prompt_github_repo_manual() -> str:
         if "/" in raw and not raw.startswith("/") and not raw.endswith("/"):
             return raw
         console.print("[red]Please enter an owner/name pair, e.g. `anthropics/claude-code`.[/red]")
-
-
-def provider_remove(name: str) -> None:
-    paths = resolve_paths()
-    if not paths.config_file.exists():
-        console.print("[yellow]No config.toml yet — nothing to remove.[/yellow]")
-        raise SystemExit(1)
-    cfg = load_config(paths)
-    if name not in cfg.providers:
-        console.print(
-            f"[red]Unknown provider '{name}' (have: {', '.join(sorted(cfg.providers))}).[/red]"
-        )
-        raise SystemExit(2)
-    if not Confirm.ask(f"Remove provider '{name}'?", default=False):
-        return
-    del cfg.providers[name]
-    if cfg.active_provider == name:
-        cfg.active_provider = next(iter(cfg.providers), "")
-    save_config(paths, cfg)
-    console.print(f"[green]✓ removed provider '{name}'[/green]")

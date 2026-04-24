@@ -277,16 +277,50 @@ export function useLinked(id: string | undefined) {
   });
 }
 
-export function useCreateItem() {
+export function useStageItemCreate() {
+  return useMutation({
+    mutationFn: (body: DTO["CreateItemRequest"]) => api.post<DTO["ProposalDTO"]>("/items", body),
+  });
+}
+
+export function useConfirmItemCreate() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ body, dryRun }: { body: DTO["CreateItemRequest"]; dryRun?: boolean }) =>
-      api.post<DTO["ProposalDTO"] | DTO["MutationConfirmedDTO"]>(
-        "/items",
-        body,
-        dryRun ? { dry_run: true } : undefined,
+    mutationFn: (proposalId: string) =>
+      api.post<DTO["MutationConfirmedDTO"]>(
+        `/items/proposals/${encodeURIComponent(proposalId)}/confirm`,
       ),
-    onSuccess: () => qc.invalidateQueries({ queryKey: [...qk.all, "items"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [...qk.all, "items"] });
+      qc.invalidateQueries({ queryKey: qk.pinned() });
+      qc.invalidateQueries({ queryKey: qk.status() });
+    },
+  });
+}
+
+export function useRejectItemCreate() {
+  return useMutation({
+    mutationFn: (proposalId: string) =>
+      api.post<void>(`/items/proposals/${encodeURIComponent(proposalId)}/reject`),
+  });
+}
+
+export function useSearchItems(
+  q: string,
+  opts?: { kind?: ItemKind | null; limit?: number; enabled?: boolean },
+) {
+  const trimmed = q.trim();
+  const enabled = (opts?.enabled ?? true) && trimmed.length >= 3;
+  return useQuery({
+    queryKey: qk.itemSearch(trimmed, opts?.kind ?? null, opts?.limit),
+    enabled,
+    staleTime: 5_000,
+    queryFn: ({ signal }) => {
+      const params: Record<string, string | number> = { q: trimmed };
+      if (opts?.kind) params.kind = opts.kind;
+      if (opts?.limit) params.limit = opts.limit;
+      return api.get<DTO["ItemDTO"][]>("/items/search", params, signal);
+    },
   });
 }
 

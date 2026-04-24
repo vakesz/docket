@@ -5,14 +5,13 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from docket.core.model import Conversation
-from docket.storage.item_keys import item_storage_key, split_item_storage_key
+from docket.storage.item_keys import item_id_from_storage_key, item_storage_key
 
 
 def _row_to_conversation(row: sqlite3.Row) -> Conversation:
-    _, item_id = split_item_storage_key(row["item_id"])
     return Conversation(
         id=row["id"],
-        item_id=item_id,
+        item_id=item_id_from_storage_key(row["item_id"]),
         started_at=datetime.fromisoformat(row["started_at"]),
         archived_at=datetime.fromisoformat(row["archived_at"]) if row["archived_at"] else None,
         tokens_in=row["tokens_in"],

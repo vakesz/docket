@@ -124,6 +124,91 @@ async def test_tool_call_produces_note_line(chat_env) -> None:
     assert msgs[-1].content == "Summary."
 
 
+async def test_tool_then_text_keeps_chronological_order(chat_env) -> None:
+    """After `tool` → `text`, the transcript must read user → call → result →
+    assistant. Previously the assistant bubble mounted up-front stayed at the
+    top and later deltas were silently dropped because _active_assistant had
+    been cleared by note()."""
+    from textual.widgets import Markdown, Static
+
+    ctx, client, _ = chat_env
+    client.script = [
+        tool_turn("tc-1", "get_item", '{"id":"S-1"}'),
+        text_turn("Final answer."),
+    ]
+    app = DocketApp(ctx)
+    async with app.run_test() as pilot:
+        await _select_story(app, pilot)
+        prompt = app.query_one(ChatPane).query_one("#prompt")
+        prompt.value = "summarize"
+        await prompt.action_submit()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+
+        chat = app.query_one(ChatPane)
+        transcript = chat.query_one("#transcript")
+        # Direct children only — Markdown has Static descendants that would
+        # otherwise pollute a `query(Static)` traversal.
+        kinds: list[str] = []
+        for c in transcript.children:
+            matched = c.classes & {"msg-user", "msg-tool", "msg-assistant", "msg-system"}
+            if matched:
+                kinds.append(next(iter(matched)))
+        # user submission → tool call note → tool result note → final assistant.
+        # No stale empty assistant row at the top.
+        assert kinds == ["msg-user", "msg-tool", "msg-tool", "msg-assistant"]
+        final = transcript.children[-1]
+        # Finalized assistant segments render as Markdown so headings/lists
+        # display correctly, not as raw source text.
+        assert isinstance(final, Markdown)
+        rendered = " ".join(str(s.render()) for s in final.query(Static).results())
+        assert "Final answer." in rendered
+
+
+async def test_assistant_response_renders_as_markdown(chat_env) -> None:
+    """Once a turn completes, the assistant row must be a Markdown widget so
+    headings, lists, and fenced code blocks render — not raw markdown text
+    in a plain Static."""
+    from textual.widgets import Markdown
+
+    ctx, client, _ = chat_env
+    client.script = [text_turn("# Plan\n\n- step one\n- step two\n\n`code` inline.")]
+    app = DocketApp(ctx)
+    async with app.run_test() as pilot:
+        await _select_story(app, pilot)
+        prompt = app.query_one(ChatPane).query_one("#prompt")
+        prompt.value = "hi"
+        await prompt.action_submit()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+
+        transcript = app.query_one(ChatPane).query_one("#transcript")
+        assistants = [c for c in transcript.children if "msg-assistant" in c.classes]
+        assert len(assistants) == 1
+        assert isinstance(assistants[0], Markdown)
+
+
+async def test_thinking_indicator_toggles_with_turn(chat_env) -> None:
+    """The in-pane thinking indicator must be hidden before a turn, and hidden
+    again once the turn completes."""
+    ctx, client, _ = chat_env
+    client.script = [text_turn("ok")]
+    app = DocketApp(ctx)
+    async with app.run_test() as pilot:
+        await _select_story(app, pilot)
+        chat = app.query_one(ChatPane)
+        indicator = chat.query_one("#thinking-indicator")
+        assert "active" not in indicator.classes  # idle at start
+
+        prompt = chat.query_one("#prompt")
+        prompt.value = "hi"
+        await prompt.action_submit()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+
+        assert "active" not in indicator.classes  # cleared after finish_turn
+
+
 async def test_t_starts_new_thread(chat_env) -> None:
     ctx, client, _ = chat_env
     client.script = [text_turn("one")]

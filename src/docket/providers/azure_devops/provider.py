@@ -194,7 +194,7 @@ class AzureDevOpsProvider:
 
     def transition(self, id: str, intent: TransitionIntent) -> Item:
         current = self.get_item(id)
-        plan = plan_for_intent(current.kind, intent)
+        plan = plan_for_intent(intent)
         new_tags = merge_tags(current.tags, plan)
         patch: list[dict[str, Any]] = []
         if plan.state is not None:

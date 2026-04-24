@@ -296,6 +296,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/items/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search Items
+         * @description Return cached items whose indexed content loosely matches `q`.
+         *
+         *     Backs the create-item duplicate-candidate panel: OR-semantics FTS5 search
+         *     scoped to the active provider. Empty `q` returns `[]`.
+         */
+        get: operations["search_items_items_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/items/{item_id}/comments": {
         parameters: {
             query?: never;
@@ -537,7 +560,16 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        put?: never;
+        /**
+         * Update Provider
+         * @description Update an existing provider's display_name and config in place.
+         *
+         *     `type` and `key` are immutable here — those identify the provider in
+         *     project metadata, cached items, and downstream tool names, so changing
+         *     them mid-stream would orphan rows. Callers who need a different type
+         *     should remove + re-add.
+         */
+        put: operations["update_provider_settings_providers__key__put"];
         post?: never;
         /**
          * Remove Provider
@@ -1724,6 +1756,8 @@ export interface components {
              * @default false
              */
             active: boolean;
+            /** Supported Kinds */
+            supported_kinds?: string[];
         };
         /** ProviderSwitchRequest */
         ProviderSwitchRequest: {
@@ -2845,6 +2879,40 @@ export interface operations {
             };
         };
     };
+    search_items_items_search_get: {
+        parameters: {
+            query?: {
+                /** @description Title substring to find duplicate candidates for. */
+                q?: string;
+                limit?: number;
+                kind?: components["schemas"]["ItemKind"] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemDTO"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_comments_items__item_id__comments_get: {
         parameters: {
             query?: {
@@ -3230,6 +3298,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SettingsProviderAddRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsUpdatedDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_provider_settings_providers__key__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SettingsProviderUpdateRequest"];
             };
         };
         responses: {

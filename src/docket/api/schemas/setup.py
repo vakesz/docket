@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from docket.api.schemas.tui_parity import SyncSummaryDTO
+from docket.api.schemas.routes import SyncSummaryDTO
 
 
 class SetupStatusDTO(BaseModel):

@@ -5,14 +5,13 @@ from collections.abc import Iterable
 from datetime import datetime
 
 from docket.core.model import Comment
-from docket.storage.item_keys import item_storage_key, split_item_storage_key
+from docket.storage.item_keys import item_id_from_storage_key, item_storage_key
 
 
 def _row_to_comment(row: sqlite3.Row) -> Comment:
-    _, item_id = split_item_storage_key(row["item_id"])
     return Comment(
         id=row["id"],
-        item_id=item_id,
+        item_id=item_id_from_storage_key(row["item_id"]),
         author=row["author"],
         body_md=row["body_md"],
         created_at=datetime.fromisoformat(row["created_at"]),

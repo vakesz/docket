@@ -1,5 +1,5 @@
 from docket.config.env import get_llm_api_key, load_env, load_project_env
-from docket.config.loader import ConfigMissingError, load_config, save_config
+from docket.config.loader import ConfigLoadPolicy, ConfigMissingError, load_config, save_config
 from docket.config.models import (
     Config,
     HttpConfig,
@@ -17,6 +17,7 @@ from docket.config.paths import APP_NAME, Paths, resolve_paths
 __all__ = [
     "APP_NAME",
     "Config",
+    "ConfigLoadPolicy",
     "ConfigMissingError",
     "HttpConfig",
     "LlmConfig",

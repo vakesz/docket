@@ -85,6 +85,13 @@ class SetupField:
 
 ProviderFactory = Callable[[dict[str, Any], str], WorkItemProvider]
 
+ProviderConfigNormalizer = Callable[[dict[str, Any]], dict[str, Any]]
+"""Normalizer called before a provider config is validated and persisted.
+
+Receives the raw wizard/API input and returns a cleaned dict (strip whitespace,
+canonicalize URLs, fill template defaults). Raise `ValueError` with a
+human-readable message on invalid input; the HTTP/CLI surfaces will relay it."""
+
 
 GroupingStrategy = Literal["by_kind", "by_state_bucket"]
 """How the TUI's backlog tree should group items for this provider.
@@ -98,6 +105,9 @@ GroupingStrategy = Literal["by_kind", "by_state_bucket"]
 """
 
 
+_ALL_KINDS: tuple[ItemKind, ...] = tuple(ItemKind)
+
+
 @dataclass(frozen=True)
 class ProviderSpec:
     """Static description of a provider type — what the registry knows about it.
@@ -109,7 +119,12 @@ class ProviderSpec:
 
     `grouping` tells the TUI how to arrange the backlog tree — see
     `GroupingStrategy`. Defaulting to `"by_kind"` keeps the existing Azure
-    DevOps behavior for any spec that doesn't explicitly opt in."""
+    DevOps behavior for any spec that doesn't explicitly opt in.
+
+    `supported_kinds` is the ordered set of kinds this provider can create.
+    Surfaces render it as the choices in the new-item picker; it does not gate
+    reads (cached items already carry a translated `ItemKind`). Defaults to all
+    canonical kinds so non-overriding specs keep full-range behavior."""
 
     type_id: str
     display_name: str
@@ -117,3 +132,5 @@ class ProviderSpec:
     setup_fields: tuple[SetupField, ...] = field(default_factory=tuple)
     requires_cli: tuple[str, ...] = field(default_factory=tuple)
     grouping: GroupingStrategy = "by_kind"
+    supported_kinds: tuple[ItemKind, ...] = _ALL_KINDS
+    normalize_config: ProviderConfigNormalizer | None = None

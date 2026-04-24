@@ -4,10 +4,14 @@ import { useCallback, useRef, useState } from "react";
 import { ApiError, api, type DTO } from "~/api/client";
 import { qk } from "~/api/keys";
 
-export type ChatMessage =
-  | { kind: "user"; id: string; turnId: string; text: string }
-  | { kind: "assistant"; id: string; turnId: string; text: string; streaming: boolean }
-  | { kind: "tool"; id: string; turnId: string; name: string; text: string };
+import {
+  applyStreamEvent,
+  type ChatMessage,
+  initialState,
+  type ReducerState,
+} from "./chatStreamReducer";
+
+export type { ChatMessage } from "./chatStreamReducer";
 
 interface UseChatStreamOpts {
   itemId: string;
@@ -17,10 +21,12 @@ interface UseChatStreamOpts {
 /**
  * Drives one agent turn over `/items/{id}/conversation/messages`.
  *
- * We keep a local message list separate from the query cache — the cache only
- * stores the persisted transcript, while this hook accumulates the live SSE
- * stream (assistant deltas, tool calls, staged proposals). On `done` we
- * invalidate the conversation query so the cache picks up the server copy.
+ * Bubbles are appended in SSE arrival order: each "run" of `delta` events
+ * opens one assistant bubble, a tool event seals that bubble and appends a
+ * tool row, and the next delta opens a fresh assistant bubble below the tool.
+ * This keeps chronological order (thinking → tool → thinking → final) instead
+ * of pinning all assistant text to the first slot and stacking tools beneath
+ * it. See `chatStreamReducer.ts` for the pure state-transition logic.
  */
 export function useChatStream({ itemId, onProposal }: UseChatStreamOpts) {
   const qc = useQueryClient();
@@ -48,13 +54,24 @@ export function useChatStream({ itemId, onProposal }: UseChatStreamOpts) {
       if (!text.trim() || streaming) return;
       setError(null);
       const turnId = `turn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const userId = `user-${turnId}`;
-      const assistantId = `assistant-${turnId}`;
-      setMessages((prev) => [
-        ...prev,
-        { kind: "user", id: userId, turnId, text },
-        { kind: "assistant", id: assistantId, turnId, text: "", streaming: true },
-      ]);
+      const firstAssistantId = `assistant-${turnId}-0`;
+      // Local mutable state for this turn — we apply the reducer to this and
+      // then publish the resulting message list to React. Keeping the state
+      // local (instead of using a useReducer) avoids stale-closure races with
+      // rapid-fire delta callbacks.
+      let state: ReducerState = initialState(turnId, text, firstAssistantId);
+      const ctx = {
+        turnId,
+        mkToolCallId: () => `tool-call-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        mkToolId: () => `tool-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      };
+
+      const publish = () =>
+        setMessages((prev) => [...prev.filter((m) => m.turnId !== turnId), ...state.messages]);
+
+      // Seed user + empty assistant so the "thinking…" placeholder shows
+      // immediately after submission.
+      setMessages((prev) => [...prev, ...state.messages]);
       setStreaming(true);
 
       const ctrl = new AbortController();
@@ -69,27 +86,23 @@ export function useChatStream({ itemId, onProposal }: UseChatStreamOpts) {
           if (ev.event === "delta") {
             const parsed = parseDelta(ev.data);
             if (parsed) {
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantId && m.kind === "assistant"
-                    ? { ...m, text: m.text + parsed }
-                    : m,
-                ),
-              );
+              state = applyStreamEvent(state, { kind: "delta", text: parsed }, ctx);
+              publish();
             }
           } else if (ev.event === "message") {
             const msg = parseMessage(ev.data);
-            if (msg?.role === "tool") {
-              setMessages((prev) => [
-                ...prev,
-                {
-                  kind: "tool",
-                  id: `tool-${Date.now()}-${Math.random()}`,
-                  turnId,
-                  name: msg.name ?? "tool",
-                  text: msg.content,
-                },
-              ]);
+            if (!msg) continue;
+            if (msg.role === "assistant" && msg.tool_calls.length > 0) {
+              const names = msg.tool_calls.map((tc) => tc.name).join(", ");
+              state = applyStreamEvent(state, { kind: "assistant_tool_calls", names }, ctx);
+              publish();
+            } else if (msg.role === "tool") {
+              state = applyStreamEvent(
+                state,
+                { kind: "tool", name: msg.name ?? "tool", content: msg.content },
+                ctx,
+              );
+              publish();
             }
           } else if (ev.event === "proposal") {
             const proposal = parseProposal(ev.data);
@@ -107,11 +120,8 @@ export function useChatStream({ itemId, onProposal }: UseChatStreamOpts) {
         }
       } finally {
         setStreaming(false);
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantId && m.kind === "assistant" ? { ...m, streaming: false } : m,
-          ),
-        );
+        state = applyStreamEvent(state, { kind: "seal" }, ctx);
+        publish();
         if (completed) {
           // The server transcript is the source of truth once a turn finishes.
           await Promise.allSettled([
@@ -141,20 +151,47 @@ function parseDelta(data: string): string | null {
   }
 }
 
+interface ParsedToolCall {
+  id?: string;
+  name: string;
+  arguments?: string;
+}
+
 interface ParsedMessage {
   role: string;
   content: string;
   name?: string;
+  tool_calls: ParsedToolCall[];
 }
 
 function parseMessage(data: string): ParsedMessage | null {
   try {
-    const parsed = JSON.parse(data) as ParsedMessage;
+    const parsed = JSON.parse(data) as {
+      role?: unknown;
+      content?: unknown;
+      name?: unknown;
+      tool_calls?: unknown;
+    };
     if (typeof parsed.role !== "string") return null;
+    const toolCalls: ParsedToolCall[] = [];
+    if (Array.isArray(parsed.tool_calls)) {
+      for (const tc of parsed.tool_calls) {
+        if (!tc || typeof tc !== "object") continue;
+        const record = tc as Record<string, unknown>;
+        const name = typeof record.name === "string" ? record.name : null;
+        if (!name) continue;
+        toolCalls.push({
+          name,
+          id: typeof record.id === "string" ? record.id : undefined,
+          arguments: typeof record.arguments === "string" ? record.arguments : undefined,
+        });
+      }
+    }
     return {
       role: parsed.role,
       content: typeof parsed.content === "string" ? parsed.content : "",
-      name: parsed.name,
+      name: typeof parsed.name === "string" ? parsed.name : undefined,
+      tool_calls: toolCalls,
     };
   } catch (err) {
     console.warn("chat: dropped malformed SSE message", { err, data });

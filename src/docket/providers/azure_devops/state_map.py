@@ -88,36 +88,40 @@ _TAG_WONTFIX = "wontfix"
 _SOFT_TAGS = (_TAG_BLOCKED, _TAG_NEEDS_INFO, _TAG_WONTFIX)
 
 
-def plan_for_intent(kind: ItemKind, intent: TransitionIntent) -> TransitionPlan:
-    """Map a canonical intent to an Azure DevOps state + tag mutation. Per-kind differences
-    land here as `kind` gains a meaningful role (e.g. if Task has no Resolved)."""
-    if intent is TransitionIntent.START_WORK:
-        return TransitionPlan(state="Active", tags_to_remove=_SOFT_TAGS)
-    if intent is TransitionIntent.PAUSE:
-        return TransitionPlan(state="New", tags_to_remove=_SOFT_TAGS)
-    if intent is TransitionIntent.BLOCK:
-        return TransitionPlan(
-            state="Active",
-            tags_to_add=(_TAG_BLOCKED,),
-            tags_to_remove=(_TAG_NEEDS_INFO, _TAG_WONTFIX),
-        )
-    if intent is TransitionIntent.NEEDS_INFO:
-        return TransitionPlan(
-            state="Active",
-            tags_to_add=(_TAG_NEEDS_INFO,),
-            tags_to_remove=(_TAG_BLOCKED, _TAG_WONTFIX),
-        )
-    if intent is TransitionIntent.CLOSE_DONE:
-        return TransitionPlan(state="Closed", tags_to_remove=_SOFT_TAGS)
-    if intent is TransitionIntent.CLOSE_WONTFIX:
-        return TransitionPlan(
-            state="Closed",
-            tags_to_add=(_TAG_WONTFIX,),
-            tags_to_remove=(_TAG_BLOCKED, _TAG_NEEDS_INFO),
-        )
-    if intent is TransitionIntent.REOPEN:
-        return TransitionPlan(state="Active", tags_to_remove=_SOFT_TAGS)
-    raise ValueError(f"unknown intent {intent!r} for kind {kind!r}")
+def plan_for_intent(intent: TransitionIntent) -> TransitionPlan:
+    """Map a canonical intent to an Azure DevOps state + tag mutation.
+
+    The Agile template uses the same state vocabulary for every work-item kind,
+    so the plan does not depend on kind today. If a template arrives where Task
+    drops Resolved (or similar per-kind difference), re-introduce a kind argument.
+    """
+    match intent:
+        case TransitionIntent.START_WORK:
+            return TransitionPlan(state="Active", tags_to_remove=_SOFT_TAGS)
+        case TransitionIntent.PAUSE:
+            return TransitionPlan(state="New", tags_to_remove=_SOFT_TAGS)
+        case TransitionIntent.BLOCK:
+            return TransitionPlan(
+                state="Active",
+                tags_to_add=(_TAG_BLOCKED,),
+                tags_to_remove=(_TAG_NEEDS_INFO, _TAG_WONTFIX),
+            )
+        case TransitionIntent.NEEDS_INFO:
+            return TransitionPlan(
+                state="Active",
+                tags_to_add=(_TAG_NEEDS_INFO,),
+                tags_to_remove=(_TAG_BLOCKED, _TAG_WONTFIX),
+            )
+        case TransitionIntent.CLOSE_DONE:
+            return TransitionPlan(state="Closed", tags_to_remove=_SOFT_TAGS)
+        case TransitionIntent.CLOSE_WONTFIX:
+            return TransitionPlan(
+                state="Closed",
+                tags_to_add=(_TAG_WONTFIX,),
+                tags_to_remove=(_TAG_BLOCKED, _TAG_NEEDS_INFO),
+            )
+        case TransitionIntent.REOPEN:
+            return TransitionPlan(state="Active", tags_to_remove=_SOFT_TAGS)
 
 
 def merge_tags(current: list[str], plan: TransitionPlan) -> list[str]:

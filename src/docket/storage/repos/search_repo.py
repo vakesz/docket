@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 import sqlite3
 
-from docket.storage.item_keys import split_item_storage_key
+from docket.storage.item_keys import item_id_from_storage_key
 
 _WORD = re.compile(r"\w+", flags=re.UNICODE)
 
@@ -34,7 +34,7 @@ def _build_fts_query(raw: str) -> str:
 
 
 def _decode_ids(rows: list[sqlite3.Row]) -> list[str]:
-    return [split_item_storage_key(row[0])[1] for row in rows]
+    return [item_id_from_storage_key(row[0]) for row in rows]
 
 
 def search(

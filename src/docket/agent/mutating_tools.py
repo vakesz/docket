@@ -125,6 +125,20 @@ def register_mutating_tools(
         extra = {"similar": similar} if similar else None
         return pending_payload(proposal, extra=extra)
 
+    def propose_comment(args: dict[str, Any]) -> str:
+        item_id = str(args.get("id", "")).strip()
+        body_md = args.get("body_md")
+        if not item_id or not isinstance(body_md, str) or not body_md.strip():
+            return json.dumps({"error": "id and non-empty body_md are required"})
+        try:
+            proposal = mutation_service.propose_comment(
+                conn, item_id, body_md, provider_key=provider_key, provider=provider
+            )
+        except KeyError as e:
+            return json.dumps({"error": str(e)})
+        store.add(proposal)
+        return pending_payload(proposal)
+
     def attach_transcript(args: dict[str, Any]) -> str:
         item_id = str(args.get("id") or active_item() or "").strip()
         if not item_id:
@@ -238,6 +252,25 @@ def register_mutating_tools(
             },
         },
         handler=attach_transcript,
+    )
+    registry.register(
+        name="propose_comment",
+        description=(
+            "Stage a new comment on a work item for user confirmation. Returns a preview; "
+            "the comment is only posted after the human approves it in the UI."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "id": {"type": "string", "description": "Work item id"},
+                "body_md": {
+                    "type": "string",
+                    "description": "Comment body in Markdown.",
+                },
+            },
+            "required": ["id", "body_md"],
+        },
+        handler=propose_comment,
     )
 
 

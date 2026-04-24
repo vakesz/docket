@@ -13,7 +13,7 @@ from docket.agent.prompt import (
     build_system_message,
     configure_prompt_loader,
 )
-from docket.config.prompt_templates import scaffold
+from docket.agent.prompt_templates import scaffold
 from docket.core.model import Item, ItemKind, ItemState
 
 

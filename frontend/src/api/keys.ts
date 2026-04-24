@@ -33,6 +33,8 @@ export const qk = {
     archived?: boolean;
     parent_id?: string | null;
   }) => [...qk.all, "items", filter ?? {}] as const,
+  itemSearch: (q: string, kind?: ItemKind | null, limit?: number) =>
+    [...qk.all, "items", "search", q, kind ?? null, limit ?? null] as const,
   item: (id: string) => [...qk.all, "item", id] as const,
   comments: (id: string) => [...qk.all, "item", id, "comments"] as const,
   linked: (id: string) => [...qk.all, "item", id, "linked"] as const,

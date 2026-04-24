@@ -9,10 +9,10 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from docket.agent import prompt_templates
 from docket.api.auth import require_bearer
 from docket.api.deps import get_paths, require_not_read_only
 from docket.api.schemas import PromptDTO, PromptSummaryDTO, PromptUpdateRequest
-from docket.config import prompt_templates
 from docket.config.paths import Paths
 
 router = APIRouter(

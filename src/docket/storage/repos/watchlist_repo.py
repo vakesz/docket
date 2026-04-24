@@ -14,7 +14,11 @@ import sqlite3
 from datetime import UTC, datetime
 
 from docket.core.model import Item
-from docket.storage.item_keys import item_storage_key, item_storage_prefix, split_item_storage_key
+from docket.storage.item_keys import (
+    item_id_from_storage_key,
+    item_storage_key,
+    item_storage_prefix,
+)
 from docket.storage.repos.item_repo import _row_to_item
 
 
@@ -58,7 +62,7 @@ def list_pinned_ids(conn: sqlite3.Connection, *, provider_key: str | None = None
         )
     else:
         cursor = conn.execute("SELECT id FROM watchlist ORDER BY pinned_at DESC")
-    return [split_item_storage_key(row[0])[1] for row in cursor.fetchall()]
+    return [item_id_from_storage_key(row[0]) for row in cursor.fetchall()]
 
 
 def list_pinned_items(conn: sqlite3.Connection, *, provider_key: str | None = None) -> list[Item]:

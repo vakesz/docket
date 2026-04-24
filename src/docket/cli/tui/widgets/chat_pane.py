@@ -3,7 +3,7 @@ from __future__ import annotations
 from textual.app import ComposeResult
 from textual.containers import Vertical, VerticalScroll
 from textual.message import Message
-from textual.widgets import Checkbox, Input, Static
+from textual.widgets import Checkbox, Input, Markdown, Static
 
 from docket.agent.types import ChatMessage, StreamDelta, Usage
 from docket.config.env import get_price_input_per_1m, get_price_output_per_1m
@@ -88,6 +88,14 @@ class ChatPane(Vertical):
         border: none;
         background: transparent;
     }
+    ChatPane #thinking-indicator {
+        height: 1;
+        padding: 0 2 0 2;
+        color: $accent;
+        text-style: italic;
+        display: none;
+    }
+    ChatPane #thinking-indicator.active { display: block; }
     ChatPane #empty-hint {
         height: 1fr;
         content-align: center middle;
@@ -117,6 +125,8 @@ class ChatPane(Vertical):
         padding: 0 1 1 0;
         background: transparent;
     }
+    ChatPane Markdown.msg-assistant { margin: 0 1 1 0; }
+    ChatPane Markdown.msg-assistant MarkdownBlock { margin: 0; }
     ChatPane .msg-tool {
         color: $text-muted;
         padding: 0 1 1 0;
@@ -148,6 +158,7 @@ class ChatPane(Vertical):
             classes="visible",
         )
         yield VerticalScroll(id="transcript")
+        yield Static("thinking…", id="thinking-indicator")
         yield Static("", id="ledger")
         yield Static(
             "Ask the agent to comment, transition, or rewrite — confirms appear as proposals.",
@@ -161,6 +172,7 @@ class ChatPane(Vertical):
         self._item = item
         self._active_assistant = None
         self._active_text = ""
+        self.set_thinking(False)
         transcript = self.query_one("#transcript", VerticalScroll)
         transcript.remove_children()
         title = self.query_one("#chat-title", Static)
@@ -205,7 +217,10 @@ class ChatPane(Vertical):
             elif m.role == "assistant":
                 if m.content:
                     transcript.mount(
-                        Static(f"[b]assistant[/b]  {m.content}", classes="msg-assistant")
+                        Markdown(
+                            f"**assistant**\n\n{m.content}",
+                            classes="msg-assistant",
+                        )
                     )
                 for tc in m.tool_calls:
                     transcript.mount(
@@ -222,28 +237,61 @@ class ChatPane(Vertical):
         t.scroll_end(animate=False)
 
     def begin_assistant(self) -> None:
+        """Mark the start of an agent turn. We don't mount the assistant row
+        yet — the first delta (or tool note) does that lazily so the
+        transcript reflects real arrival order instead of a placeholder
+        "…" pinned above later tool rows."""
+        self._active_assistant = None
         self._active_text = ""
-        self._active_assistant = Static("[b]assistant[/b]  ", classes="msg-assistant")
-        t = self.query_one("#transcript", VerticalScroll)
-        t.mount(self._active_assistant)
-        t.scroll_end(animate=False)
 
     def append_delta(self, delta: StreamDelta) -> None:
-        if delta.text and self._active_assistant is not None:
-            self._active_text += delta.text
-            self._active_assistant.update(f"[b]assistant[/b]  {self._active_text}")
-            self.query_one("#transcript", VerticalScroll).scroll_end(animate=False)
+        if not delta.text:
+            return
+        if self._active_assistant is None:
+            # Either the first delta of the turn, or a delta that arrived
+            # after a tool note cleared the active row. Either way, open a
+            # fresh assistant Static so subsequent text renders below the
+            # preceding tool/system rows in arrival order.
+            self._active_text = ""
+            self._active_assistant = Static("[b]assistant[/b]  ", classes="msg-assistant")
+            self.query_one("#transcript", VerticalScroll).mount(self._active_assistant)
+        self._active_text += delta.text
+        self._active_assistant.update(f"[b]assistant[/b]  {self._active_text}")
+        self.query_one("#transcript", VerticalScroll).scroll_end(animate=False)
 
     def note(self, text: str, *, cls: str = "msg-tool") -> None:
         """Append a one-line note — typically a tool call or system event."""
-        self._active_assistant = None  # next assistant text starts a new row
+        # Seal any in-flight assistant segment as rendered markdown before
+        # appending the note, so code blocks/lists from the preceding text
+        # render even when a tool call interrupts the stream.
+        self._finalize_active_assistant()
         t = self.query_one("#transcript", VerticalScroll)
         t.mount(Static(f"[i]{text}[/i]", classes=cls))
         t.scroll_end(animate=False)
 
-    def finish_turn(self, usage: Usage) -> None:
+    def _finalize_active_assistant(self) -> None:
+        """Swap the streaming assistant Static for a rendered Markdown widget.
+
+        Streaming uses a plain Static so per-delta updates are cheap. Once a
+        segment seals (tool call, new segment, or turn end), we replace it
+        with a Markdown widget in the same transcript slot so headings,
+        lists, and fenced code actually render."""
+        if self._active_assistant is None:
+            return
+        if self._active_text:
+            transcript = self.query_one("#transcript", VerticalScroll)
+            md = Markdown(
+                f"**assistant**\n\n{self._active_text}",
+                classes="msg-assistant",
+            )
+            transcript.mount(md, before=self._active_assistant)
+        self._active_assistant.remove()
         self._active_assistant = None
         self._active_text = ""
+
+    def finish_turn(self, usage: Usage) -> None:
+        self._finalize_active_assistant()
+        self.set_thinking(False)
         line = f"tokens in: {usage.tokens_in}  out: {usage.tokens_out}"
         cost_cents = 0
         price_in = get_price_input_per_1m()
@@ -260,6 +308,16 @@ class ChatPane(Vertical):
 
     def set_status(self, text: str) -> None:
         self.query_one("#ledger", Static).update(text)
+
+    def set_thinking(self, value: bool) -> None:
+        """Show/hide the in-pane thinking indicator. Kept inside the pane (and
+        not only in the status bar) so the user sees the agent is working
+        without having to glance at the bottom of the screen."""
+        indicator = self.query_one("#thinking-indicator", Static)
+        if value:
+            indicator.add_class("active")
+        else:
+            indicator.remove_class("active")
 
     def seed_input(self, text: str) -> None:
         """Pre-fill the prompt input with `text` and focus it.

@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import binascii
 import sqlite3
+from collections.abc import Callable
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -31,6 +32,7 @@ from docket.api.schemas import (
     ProposeDescriptionRequest,
     ProposeTransitionRequest,
 )
+from docket.core.mutation import Proposal
 from docket.core.services import mutation_service
 from docket.core.services.proposal_store import ProposalStore
 from docket.providers.base import WorkItemProvider
@@ -42,6 +44,18 @@ router = APIRouter(
 )
 
 
+def _stage(store: ProposalStore, build: Callable[[], Proposal]) -> ProposalDTO:
+    """Shared plumbing for every `*/propose` endpoint: run the service call,
+    translate "item not found" into a 404, and hand the result off to the
+    proposal store before serializing."""
+    try:
+        proposal = build()
+    except KeyError as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
+    store.add(proposal, source="api")
+    return ProposalDTO.from_core(proposal)
+
+
 @router.post("/transition/propose", response_model=ProposalDTO)
 def propose_transition(
     item_id: str,
@@ -50,17 +64,12 @@ def propose_transition(
     store: ProposalStore = Depends(get_proposals),
     provider_key: str = Depends(get_active_provider_key),
 ) -> ProposalDTO:
-    try:
-        proposal = mutation_service.propose_transition(
-            conn,
-            item_id,
-            payload.intent,
-            provider_key=provider_key,
-        )
-    except KeyError as e:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
-    store.add(proposal, source="api")
-    return ProposalDTO.from_core(proposal)
+    return _stage(
+        store,
+        lambda: mutation_service.propose_transition(
+            conn, item_id, payload.intent, provider_key=provider_key
+        ),
+    )
 
 
 @router.post("/description/propose", response_model=ProposalDTO)
@@ -71,17 +80,12 @@ def propose_description(
     store: ProposalStore = Depends(get_proposals),
     provider_key: str = Depends(get_active_provider_key),
 ) -> ProposalDTO:
-    try:
-        proposal = mutation_service.propose_description_patch(
-            conn,
-            item_id,
-            payload.new_description_md,
-            provider_key=provider_key,
-        )
-    except KeyError as e:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
-    store.add(proposal, source="api")
-    return ProposalDTO.from_core(proposal)
+    return _stage(
+        store,
+        lambda: mutation_service.propose_description_patch(
+            conn, item_id, payload.new_description_md, provider_key=provider_key
+        ),
+    )
 
 
 @router.post("/attachment/propose", response_model=ProposalDTO)
@@ -96,19 +100,17 @@ def propose_attachment(
         content = base64.b64decode(payload.content_base64, validate=True)
     except (binascii.Error, ValueError) as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Invalid base64 content: {e}") from e
-    try:
-        proposal = mutation_service.propose_attachment(
+    return _stage(
+        store,
+        lambda: mutation_service.propose_attachment(
             conn,
             item_id,
             filename=payload.filename,
             content=content,
             content_type=payload.content_type,
             provider_key=provider_key,
-        )
-    except KeyError as e:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
-    store.add(proposal, source="api")
-    return ProposalDTO.from_core(proposal)
+        ),
+    )
 
 
 @router.post("/comment/propose", response_model=ProposalDTO)
@@ -121,17 +123,12 @@ def propose_comment(
 ) -> ProposalDTO:
     if not payload.body_md.strip():
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Comment body cannot be empty")
-    try:
-        proposal = mutation_service.propose_comment(
-            conn,
-            item_id,
-            payload.body_md,
-            provider_key=provider_key,
-        )
-    except KeyError as e:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
-    store.add(proposal, source="api")
-    return ProposalDTO.from_core(proposal)
+    return _stage(
+        store,
+        lambda: mutation_service.propose_comment(
+            conn, item_id, payload.body_md, provider_key=provider_key
+        ),
+    )
 
 
 @router.get("/{proposal_id}", response_model=ProposalDTO)

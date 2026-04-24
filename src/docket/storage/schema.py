@@ -9,7 +9,6 @@ schema; it does not attempt to upgrade older databases.
 from __future__ import annotations
 
 APPLICATION_ID = 0x49545600
-SCHEMA_VERSION = 1
 
 STATEMENTS: tuple[str, ...] = (
     """

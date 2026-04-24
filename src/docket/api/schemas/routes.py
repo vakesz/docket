@@ -1,4 +1,7 @@
-"""TUI-parity DTOs: pins, suggestions, prompts, scopes, providers, settings, sync."""
+"""DTOs shared by the non-mutation HTTP routes: pins, suggestions, prompts, scopes,
+providers, settings, sync, sources, memory, MCP. These started as a TUI-parity
+set but the HTTP surface is now the canonical consumer, so the schema lives
+alongside the other route schemas."""
 
 from __future__ import annotations
 
@@ -66,6 +69,7 @@ class ProviderDTO(BaseModel):
     scopes: list[str] = Field(default_factory=list)
     active_scope: str = ""
     active: bool = False
+    supported_kinds: list[str] = Field(default_factory=list)
 
 
 class ProviderSwitchRequest(BaseModel):

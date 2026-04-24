@@ -2,8 +2,10 @@ import { useNavigate } from "@tanstack/react-router";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useMemo, useRef, useState } from "react";
 import type { DTO } from "~/api/client";
-import { useItems, usePinned, useSettings } from "~/api/hooks";
+import { useItems, usePinned, useSettings, useStatus } from "~/api/hooks";
 import { FreshnessStamp, useStaleThreshold } from "~/components/items/ItemFreshness";
+import { NewItemButton } from "~/components/items/NewItemButton";
+import { NewItemModal } from "~/components/items/NewItemModal";
 import { cn } from "~/lib/cn";
 import { displayTag, formatKind, formatState } from "~/lib/format";
 import { freshnessTone } from "~/lib/staleness";
@@ -36,8 +38,11 @@ export function ItemsList({ selectedId }: Props) {
   const [query, setQuery] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [tagsExpanded, setTagsExpanded] = useState(false);
+  const [newItemOpen, setNewItemOpen] = useState(false);
 
   const settings = useSettings();
+  const status = useStatus();
+  const readOnly = status.data?.read_only ?? false;
   const staleThresholdDays = useStaleThreshold();
   // `ui.tag_filter_collapse_limit` in config.toml; 0 means "never collapse".
   const tagCollapseLimit = readTagCollapseLimit(settings.data?.config);
@@ -114,13 +119,20 @@ export function ItemsList({ selectedId }: Props) {
   return (
     <div className="flex h-full flex-col bg-bg">
       <div className="flex flex-col gap-2 border-b border-border p-2">
-        <input
-          type="search"
-          placeholder="Filter by title, id, tag…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="w-full rounded border border-border bg-bg px-2 py-1 text-sm text-fg focus:border-accent focus:outline-none"
-        />
+        <div className="flex items-center gap-2">
+          <input
+            type="search"
+            placeholder="Filter by title, id, tag…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="min-w-0 flex-1 rounded border border-border bg-bg px-2 py-1 text-sm text-fg focus:border-accent focus:outline-none"
+          />
+          <NewItemButton
+            disabled={readOnly}
+            disabledReason="Read-only mode — mutations disabled"
+            onClick={() => setNewItemOpen(true)}
+          />
+        </div>
         <div className="flex flex-wrap items-center gap-1">
           {visibleKinds.length > 2 &&
             visibleKinds.map((k) => (
@@ -256,6 +268,17 @@ export function ItemsList({ selectedId }: Props) {
         </div>
       )}
 
+      {newItemOpen && (
+        <NewItemModal
+          defaultKind={readDefaultKind(settings.data?.config)}
+          onClose={() => setNewItemOpen(false)}
+          onCreated={(itemId) => {
+            setNewItemOpen(false);
+            navigate({ to: "/items/$itemId", params: { itemId } });
+          }}
+        />
+      )}
+
       <div ref={parentRef} className="flex-1 overflow-auto">
         {items.isPending ? (
           <EmptyMessage text="Loading…" />
@@ -376,6 +399,18 @@ function ItemRow({
       )}
     </button>
   );
+}
+
+function readDefaultKind(config: Record<string, unknown> | undefined): ItemKind {
+  const ui =
+    config && typeof config.ui === "object" && config.ui !== null
+      ? (config.ui as Record<string, unknown>)
+      : null;
+  const raw = ui ? ui.default_new_item_kind : undefined;
+  const allowed: ItemKind[] = ["epic", "feature", "story", "task", "bug"];
+  return typeof raw === "string" && (allowed as string[]).includes(raw)
+    ? (raw as ItemKind)
+    : "task";
 }
 
 function readTagCollapseLimit(config: Record<string, unknown> | undefined): number {

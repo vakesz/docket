@@ -10,6 +10,7 @@ from docket.api.auth import require_bearer
 from docket.api.deps import (
     get_active_provider_key,
     get_conn,
+    get_proposals,
     get_provider,
     get_runtime_optional,
     require_not_read_only,
@@ -25,8 +26,9 @@ from docket.api.schemas import (
 from docket.core.model import Item, ItemKind, ItemState
 from docket.core.mutation import ItemCreate
 from docket.core.services import mutation_service, visual_filter
+from docket.core.services.proposal_store import ProposalStore
 from docket.providers.base import WorkItemProvider
-from docket.storage.repos import comment_repo, item_repo
+from docket.storage.repos import comment_repo, item_repo, search_repo
 
 
 def get_item_or_fetch(
@@ -101,6 +103,35 @@ def list_items(
     return [ItemDTO.from_core(i) for i in items]
 
 
+@router.get("/search", response_model=list[ItemDTO])
+def search_items(
+    q: str = Query("", description="Title substring to find duplicate candidates for."),
+    limit: int = Query(5, ge=1, le=50),
+    kind: ItemKind | None = Query(None),
+    conn: sqlite3.Connection = Depends(get_conn),
+    provider_key: str = Depends(get_active_provider_key),
+) -> list[ItemDTO]:
+    """Return cached items whose indexed content loosely matches `q`.
+
+    Backs the create-item duplicate-candidate panel: OR-semantics FTS5 search
+    scoped to the active provider. Empty `q` returns `[]`."""
+    stripped = q.strip()
+    if not stripped:
+        return []
+    ids = search_repo.search_similar(conn, stripped, provider_key=provider_key)
+    out: list[ItemDTO] = []
+    for iid in ids:
+        if len(out) >= limit:
+            break
+        item = item_repo.get_item(conn, iid, provider_key=provider_key)
+        if item is None:
+            continue
+        if kind is not None and item.kind is not kind:
+            continue
+        out.append(ItemDTO.from_core(item))
+    return out
+
+
 # Sub-path routes must come before the bare `/{item_id:path}` catch-all,
 # otherwise `:path` greedy-matches and swallows `/comments`, `/linked` into
 # the item id.
@@ -160,33 +191,68 @@ def get_item(
 @router.post(
     "",
     status_code=status.HTTP_201_CREATED,
+    response_model=ProposalDTO,
     dependencies=[Depends(require_not_read_only)],
 )
 def create_item(
     payload: CreateItemRequest,
+    store: ProposalStore = Depends(get_proposals),
+) -> ProposalDTO:
+    """Stage a work-item creation as a proposal.
+
+    Mirrors the propose/confirm/reject flow used for edits: the caller
+    receives a `ProposalDTO` (with `id` and a human-readable `diff`) and
+    must follow up with `POST /items/proposals/{proposal_id}/confirm` to
+    actually create the item, or `/reject` to discard it. Nothing hits the
+    provider until confirm."""
+    proposal = ItemCreate(item_kind=payload.kind, fields=payload.to_create_fields())
+    store.add(proposal, source="api")
+    return ProposalDTO.from_core(proposal)
+
+
+@router.post(
+    "/proposals/{proposal_id}/confirm",
+    response_model=MutationConfirmedDTO,
+    dependencies=[Depends(require_not_read_only)],
+)
+def confirm_item_create(
+    proposal_id: str,
     conn: sqlite3.Connection = Depends(get_conn),
     provider: WorkItemProvider = Depends(get_provider),
-    dry_run: bool = Query(False, description="Return the proposal without creating."),
+    store: ProposalStore = Depends(get_proposals),
     provider_key: str = Depends(get_active_provider_key),
-) -> ProposalDTO | MutationConfirmedDTO:
-    """Create a work item through the mutation pipeline.
-
-    With `dry_run=true`, returns a `ProposalDTO` the caller can preview. Without,
-    executes the create and returns the stored result (still via
-    `mutation_service.confirm`, so any provider-side validation runs)."""
-    proposal = ItemCreate(item_kind=payload.kind, fields=payload.to_create_fields())
-    if dry_run:
-        return ProposalDTO.from_core(proposal)
+) -> MutationConfirmedDTO:
+    pending = store.pop(proposal_id)
+    if pending is None or not isinstance(pending.proposal, ItemCreate):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown proposal '{proposal_id}'")
     try:
-        result = mutation_service.confirm(conn, provider, proposal, provider_key=provider_key)
+        result = mutation_service.confirm(
+            conn, provider, pending.proposal, provider_key=provider_key
+        )
     except Exception as e:
+        # Re-stage so the caller can retry or inspect — matches the per-item
+        # mutations confirm endpoint.
+        store.add(pending.proposal, source=pending.source)
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Create failed: {e}") from e
-    item_dto = ItemDTO.from_core(result.item) if result.item else None
     return MutationConfirmedDTO(
         proposal_id=result.proposal_id,
         dry_run=result.dry_run,
-        item=item_dto,
+        item=ItemDTO.from_core(result.item) if result.item else None,
     )
+
+
+@router.post(
+    "/proposals/{proposal_id}/reject",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_not_read_only)],
+)
+def reject_item_create(
+    proposal_id: str,
+    store: ProposalStore = Depends(get_proposals),
+) -> None:
+    popped = store.pop(proposal_id)
+    if popped is None or not isinstance(popped.proposal, ItemCreate):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown proposal '{proposal_id}'")
 
 
 __all__ = ["get_item_or_fetch", "router"]

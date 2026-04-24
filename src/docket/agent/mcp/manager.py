@@ -15,7 +15,6 @@ not a critical dependency.
 from __future__ import annotations
 
 import json
-import logging
 import time
 from typing import Any
 
@@ -25,8 +24,7 @@ from docket.config.models import MCPServerEntry
 from docket.core.services import mcp_service
 from docket.telemetry.logging import elapsed_ms, get_logger
 
-log = logging.getLogger(__name__)
-_event_log = get_logger(__name__)
+_log = get_logger(__name__)
 
 
 class MCPManager:
@@ -69,17 +67,17 @@ class MCPManager:
             try:
                 entry = mcp_service.validate_entry(entry)
             except mcp_service.InvalidServerConfigError as exc:
-                log.warning("mcp.%s: invalid config (%s); skipping", name, exc)
-                _event_log.warning(
+                _log.warning(
                     "mcp_bind",
                     project=project_id,
                     tool_name=name,
                     outcome="error",
                     error_type="invalid_config",
+                    reason=str(exc),
                 )
                 continue
             if not entry.enabled:
-                _event_log.debug(
+                _log.debug(
                     "mcp_bind",
                     project=project_id,
                     tool_name=name,
@@ -87,11 +85,7 @@ class MCPManager:
                 )
                 continue
             if not entry.command:
-                log.warning(
-                    "mcp.%s: skipping — entry has no `command` configured",
-                    name,
-                )
-                _event_log.warning(
+                _log.warning(
                     "mcp_bind",
                     project=project_id,
                     tool_name=name,
@@ -104,19 +98,15 @@ class MCPManager:
             try:
                 client.start()
             except Exception as exc:
-                log.warning(
-                    "mcp.%s: failed to start (%s); skipping. command=%r args=%r",
-                    name,
-                    exc,
-                    entry.command,
-                    list(entry.args),
-                )
-                _event_log.warning(
+                _log.warning(
                     "mcp_bind",
                     project=project_id,
                     tool_name=name,
                     outcome="error",
                     error_type=type(exc).__name__,
+                    reason=str(exc),
+                    command=entry.command,
+                    args=list(entry.args),
                     latency_ms=elapsed_ms(started),
                 )
                 # `start()` already calls `close()` on failure, but be
@@ -125,13 +115,7 @@ class MCPManager:
                 continue
             self._clients[name] = client
             tool_count = len(client.list_tools())
-            log.info(
-                "mcp.%s: connected (%d tool%s)",
-                name,
-                tool_count,
-                "" if tool_count == 1 else "s",
-            )
-            _event_log.info(
+            _log.info(
                 "mcp_bind",
                 project=project_id,
                 tool_name=name,
@@ -161,12 +145,11 @@ class MCPManager:
             for tool in tools:
                 qualified = f"mcp__{server_name}__{tool.name}"
                 if qualified in seen:
-                    log.warning(
-                        "mcp: tool name collision on %r (previously registered by %r, "
-                        "now overwritten by %r); the second handler wins",
-                        qualified,
-                        seen[qualified],
-                        server_name,
+                    _log.warning(
+                        "mcp_tool_collision",
+                        tool_name=qualified,
+                        previous=seen[qualified],
+                        winner=server_name,
                     )
                 seen[qualified] = server_name
                 description = tool.description or f"MCP tool from {server_name}"
@@ -191,7 +174,7 @@ class MCPManager:
             try:
                 client.close()
             except Exception:
-                log.debug("mcp.%s: close raised", name, exc_info=True)
+                _log.debug("mcp_close_raised", tool_name=name, exc_info=True)
         self._clients.clear()
 
 

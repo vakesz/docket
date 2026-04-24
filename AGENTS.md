@@ -145,7 +145,7 @@ Future target:
 
 ## Global Invariants
 
-- Prompt hot reload is mtime-keyed; edits apply on the next turn without restart (`src/docket/agent/prompt.py`, `src/docket/config/prompt_templates.py`).
+- Prompt hot reload is mtime-keyed; edits apply on the next turn without restart (`src/docket/agent/prompt.py`, `src/docket/agent/prompt_templates.py`).
 - Conversation compaction summarizes older messages into a synthetic `system` row and marks originals as `compacted=1` so transcripts stay complete while live prompt history stays short (`src/docket/core/services/compaction_service.py`, `src/docket/storage/repos/message_repo.py`).
 - External item changes are injected back into active conversations as system messages so the assistant does not keep reasoning over stale ticket state (`src/docket/core/services/external_update_service.py`).
 - Source documents are intentionally excluded from the always-on prompt prefix; the agent reads them on demand through tools, so source edits do not invalidate the prompt cache (`src/docket/core/services/source_service.py`, `src/docket/storage/repos/source_repo.py`).

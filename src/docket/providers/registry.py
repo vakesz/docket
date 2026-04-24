@@ -15,7 +15,13 @@ from __future__ import annotations
 import importlib.metadata
 from typing import Any
 
+from pydantic import HttpUrl, ValidationError
+
+from docket.core.model import ItemKind
 from docket.providers.base import ProviderFactory, ProviderSpec, SetupField, WorkItemProvider
+from docket.telemetry.logging import get_logger
+
+_log = get_logger(__name__)
 
 _REGISTRY: dict[str, ProviderSpec] = {}
 _ENTRY_POINTS_LOADED = False
@@ -61,6 +67,24 @@ def spec(type_id: str) -> ProviderSpec | None:
     return _REGISTRY.get(type_id)
 
 
+def normalize_config(type_id: str, config: dict[str, Any]) -> dict[str, Any]:
+    """Apply the registered normalizer for `type_id`, returning a cleaned config.
+
+    Providers opt in by setting `ProviderSpec.normalize_config`. For specs
+    without a normalizer this is a no-op pass-through. `ValueError` from the
+    normalizer surfaces to the caller — the setup and settings routes map it
+    to HTTP 400 so the user sees what was wrong."""
+    load_entry_points()
+    spec_obj = _REGISTRY.get(type_id)
+    if spec_obj is None:
+        raise UnknownProviderError(
+            f"unknown provider type '{type_id}' (known: {sorted(_REGISTRY)})"
+        )
+    if spec_obj.normalize_config is None:
+        return config
+    return spec_obj.normalize_config(config)
+
+
 def load_entry_points() -> None:
     """Pull in `docket.providers` entry points exactly once per process.
 
@@ -76,11 +100,15 @@ def load_entry_points() -> None:
         try:
             loader = ep.load()
             loader()
-        except Exception:
-            # Silent by design — a broken third-party plugin should not brick
-            # the app. Users will notice when the provider doesn't appear in
-            # the type list.
-            continue
+        except Exception as exc:
+            # Don't brick the app on a broken third-party plugin; log loudly so
+            # operators can still notice when a provider failed to register.
+            _log.warning(
+                "provider.plugin_load_failed",
+                entry_point=ep.name,
+                module=ep.value,
+                error=repr(exc),
+            )
 
 
 def _register_builtins() -> None:
@@ -117,6 +145,18 @@ def _register_builtins() -> None:
             display_name=display_name,
         )
 
+    def _azure_devops_normalize(config: dict[str, Any]) -> dict[str, Any]:
+        org = str(config.get("organization", "")).rstrip("/")
+        try:
+            config["organization"] = str(HttpUrl(org))
+        except ValidationError as e:
+            raise ValueError(f"organization must be a valid URL: {e}") from e
+        project = str(config.get("project", "")).strip()
+        if not project:
+            raise ValueError("project is required")
+        config["project"] = project
+        return config
+
     register(
         ProviderSpec(
             type_id="azure_devops",
@@ -141,6 +181,7 @@ def _register_builtins() -> None:
                     help="Case-sensitive project name.",
                 ),
             ),
+            normalize_config=_azure_devops_normalize,
         )
     )
     register(
@@ -160,6 +201,7 @@ def _register_builtins() -> None:
                 ),
             ),
             grouping="by_state_bucket",
+            supported_kinds=(ItemKind.EPIC, ItemKind.STORY, ItemKind.TASK, ItemKind.BUG),
         )
     )
     register(
@@ -177,6 +219,7 @@ def _register_builtins() -> None:
                 ),
             ),
             grouping="by_state_bucket",
+            supported_kinds=(ItemKind.EPIC, ItemKind.STORY, ItemKind.TASK, ItemKind.BUG),
         )
     )
 
@@ -191,6 +234,7 @@ __all__ = [
     "UnknownProviderError",
     "build",
     "load_entry_points",
+    "normalize_config",
     "register",
     "spec",
     "specs",

@@ -209,6 +209,13 @@ function LiveMessage({
   message: ChatMessage;
   issueLinks: IssueLinkContext;
 }) {
+  if (message.kind === "tool_call") {
+    return (
+      <div className="mb-3 rounded border border-dashed border-border px-3 py-1.5 font-mono text-xs text-fg-muted">
+        → calling {message.names}
+      </div>
+    );
+  }
   return (
     <div
       className={cn(

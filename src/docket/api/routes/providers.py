@@ -13,6 +13,7 @@ from docket.api.auth import require_bearer
 from docket.api.deps import get_runtime, require_not_read_only
 from docket.api.runtime import RuntimeState
 from docket.api.schemas import ProviderDTO, ProviderSwitchRequest
+from docket.providers.registry import spec as provider_spec
 
 router = APIRouter(
     prefix="/providers",
@@ -24,6 +25,8 @@ router = APIRouter(
 def _to_dto(runtime: RuntimeState, key: str) -> ProviderDTO:
     entry = runtime.config.providers[key]
     active_scope = runtime.scope_key if key == runtime.provider_key else entry.active_scope
+    spec = provider_spec(entry.type)
+    kinds = [k.value for k in spec.supported_kinds] if spec is not None else []
     return ProviderDTO(
         key=key,
         type=entry.type,
@@ -31,6 +34,7 @@ def _to_dto(runtime: RuntimeState, key: str) -> ProviderDTO:
         scopes=sorted(entry.scopes),
         active_scope=active_scope,
         active=(key == runtime.provider_key),
+        supported_kinds=kinds,
     )
 
 

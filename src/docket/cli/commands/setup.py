@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import typer
 
-from docket.config import setup_wizard
+from docket.config import provider_crud, setup_wizard
 
 setup_app = typer.Typer(
     name="setup",
@@ -42,7 +42,7 @@ def _setup_root(
 @provider_app.command("list")
 def _provider_list() -> None:
     """Show the configured providers and their scopes."""
-    setup_wizard.provider_list()
+    provider_crud.provider_list()
 
 
 @provider_app.command("add")
@@ -66,7 +66,7 @@ def _provider_add(
     ),
 ) -> None:
     """Register a new provider entry in config.toml."""
-    setup_wizard.provider_add(
+    provider_crud.provider_add(
         name,
         type_id,
         display_name=display_name,
@@ -79,4 +79,4 @@ def _provider_remove(
     name: str = typer.Argument(..., help="Provider id to remove."),
 ) -> None:
     """Remove a provider entry from config.toml."""
-    setup_wizard.provider_remove(name)
+    provider_crud.provider_remove(name)

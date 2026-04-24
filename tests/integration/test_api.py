@@ -295,9 +295,9 @@ def test_linked_delegates_to_provider(client: TestClient, env) -> None:
 # -- create (mutation pipeline) ---------------------------------------------
 
 
-def test_create_dry_run_returns_proposal(client: TestClient) -> None:
+def test_create_stage_returns_proposal(client: TestClient) -> None:
     resp = client.post(
-        "/items?dry_run=true",
+        "/items",
         headers=AUTH_HEADERS,
         json={"kind": "task", "title": "Do thing"},
     )
@@ -305,19 +305,80 @@ def test_create_dry_run_returns_proposal(client: TestClient) -> None:
     body = resp.json()
     assert body["kind"] == "item_create"
     assert body["details"]["title"] == "Do thing"
+    assert body["id"]
 
 
-def test_create_commits_through_provider(client: TestClient, env) -> None:
+def test_create_stage_then_confirm_commits_through_provider(client: TestClient, env) -> None:
     _, provider, _, _, _, _ = env
-    resp = client.post(
+    staged = client.post(
         "/items",
         headers=AUTH_HEADERS,
         json={"kind": "task", "title": "Ship it"},
     )
-    assert resp.status_code == 201
-    body = resp.json()
+    assert staged.status_code == 201
+    proposal_id = staged.json()["id"]
+
+    confirmed = client.post(
+        f"/items/proposals/{proposal_id}/confirm",
+        headers=AUTH_HEADERS,
+    )
+    assert confirmed.status_code == 200
+    body = confirmed.json()
     assert body["item"]["title"] == "Ship it"
     assert any(i.title == "Ship it" for i in provider.items)
+
+
+def test_create_reject_discards_proposal(client: TestClient) -> None:
+    staged = client.post(
+        "/items",
+        headers=AUTH_HEADERS,
+        json={"kind": "task", "title": "Throwaway"},
+    )
+    proposal_id = staged.json()["id"]
+    rejected = client.post(
+        f"/items/proposals/{proposal_id}/reject",
+        headers=AUTH_HEADERS,
+    )
+    assert rejected.status_code == 204
+    # Second reject should 404 — the proposal is gone.
+    follow_up = client.post(
+        f"/items/proposals/{proposal_id}/reject",
+        headers=AUTH_HEADERS,
+    )
+    assert follow_up.status_code == 404
+
+
+def test_create_confirm_unknown_proposal_returns_404(client: TestClient) -> None:
+    resp = client.post(
+        "/items/proposals/does-not-exist/confirm",
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 404
+
+
+def test_search_items_returns_similar(client: TestClient) -> None:
+    resp = client.get("/items/search", params={"q": "login"}, headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body) == 1
+    assert body[0]["id"] == "S-1"
+
+
+def test_search_items_empty_query(client: TestClient) -> None:
+    resp = client.get("/items/search", params={"q": "  "}, headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_providers_list_exposes_supported_kinds(client: TestClient) -> None:
+    resp = client.get("/providers", headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body, "expected at least one provider"
+    kinds = body[0]["supported_kinds"]
+    # github_stub (test fixture) excludes FEATURE
+    assert "task" in kinds
+    assert "feature" not in kinds
 
 
 # -- mutation propose/confirm/reject -----------------------------------------

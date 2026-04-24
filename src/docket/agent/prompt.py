@@ -23,8 +23,8 @@ from __future__ import annotations
 from pathlib import Path
 from threading import Lock
 
+from docket.agent import prompt_templates
 from docket.agent.types import ChatMessage
-from docket.config import prompt_templates
 from docket.core.model import Comment, Item, MemoryEntry
 
 DEFAULT_SYSTEM_BASE = prompt_templates.DEFAULT_SYSTEM_BASE
