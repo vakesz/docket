@@ -2,27 +2,16 @@ from __future__ import annotations
 
 import os
 import secrets
-from typing import TYPE_CHECKING
 
 import typer
 from rich.console import Console
 
+from docket.cli.commands._llm import build_llm_client
 from docket.cli.context import prepare
 from docket.config import ConfigMissingError
-from docket.config.env import (
-    get_llm_api_key,
-    get_llm_api_version,
-    get_llm_deployment,
-    get_llm_endpoint,
-    get_read_only,
-    get_setup_token,
-)
+from docket.config.env import get_read_only, get_setup_token
 from docket.config.paths import resolve_paths
 from docket.telemetry import init_logging
-
-if TYPE_CHECKING:
-    from docket.agent.llm_client import AzureOpenAIClient
-    from docket.config.models import LlmConfig
 
 console = Console()
 
@@ -112,7 +101,7 @@ def serve_command(
 
         llm: LlmClient | None = None
         if not no_chat:
-            llm = _build_llm_client(ctx.config.llm)
+            llm = build_llm_client(ctx.config.llm)
 
         scope_key = ctx.scope_key_for()
         runtime = RuntimeState(
@@ -142,35 +131,3 @@ def serve_command(
         uvicorn.run(app, host=bind, port=listen_port, log_level=_resolve_log_level())
     finally:
         ctx.close()
-
-
-def _build_llm_client(llm_cfg: LlmConfig) -> AzureOpenAIClient | None:
-    """Build the LLM client. `.env` wins over config.toml so users can keep all
-    LLM settings in one place alongside the API key."""
-    api_key = get_llm_api_key()
-    endpoint = get_llm_endpoint() or (str(llm_cfg.endpoint) if llm_cfg.endpoint else None)
-    deployment = get_llm_deployment() or llm_cfg.deployment
-    api_version = get_llm_api_version()
-    if not api_key or not endpoint:
-        missing = [
-            label
-            for label, value in (
-                ("AZURE_OPENAI_API_KEY", api_key),
-                ("AZURE_OPENAI_ENDPOINT", endpoint),
-            )
-            if not value
-        ]
-        console.print(
-            f"[yellow]Chat disabled[/yellow]: set {', '.join(missing)} in "
-            "your .env (repo-local or ~/.config/docket/.env), or run `docket setup` "
-            "to persist the endpoint into config.toml."
-        )
-        return None
-    from docket.agent.llm_client import AzureOpenAIClient
-
-    return AzureOpenAIClient(
-        endpoint=endpoint,
-        api_key=api_key,
-        deployment=deployment,
-        api_version=api_version,
-    )

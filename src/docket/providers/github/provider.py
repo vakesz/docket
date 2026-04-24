@@ -405,8 +405,7 @@ class GitHubProvider:
                     tags.append(name)
             elif isinstance(label, str):
                 tags.append(label)
-        is_pr = _is_pull_request_payload(payload)
-        kind = _guess_kind(tags, is_pr=is_pr)
+        kind = _guess_kind(tags)
         state = str(payload.get("state", ""))
         reason = payload.get("state_reason") or ""
         item_state: ItemState = to_canonical(state, str(reason))
@@ -439,7 +438,6 @@ class GitHubProvider:
                 "github_state": state,
                 "github_state_reason": str(reason),
                 "number": number,
-                "is_pr": is_pr,
             },
         )
 
@@ -471,9 +469,7 @@ def _is_pull_request_payload(payload: dict[str, Any]) -> bool:
     return "pull_request" in payload
 
 
-def _guess_kind(tags: list[str], *, is_pr: bool) -> ItemKind:
-    if is_pr:
-        return ItemKind.TASK
+def _guess_kind(tags: list[str]) -> ItemKind:
     lowered = {t.lower() for t in tags}
     if "bug" in lowered:
         return ItemKind.BUG

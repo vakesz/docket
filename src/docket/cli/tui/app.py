@@ -280,8 +280,7 @@ class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
         """Grouping strategy declared by the active provider's spec.
 
         Falls back to `"by_kind"` when the config isn't available (pilot
-        tests) or the provider's type id isn't registered — matches the
-        legacy behavior so nothing regresses for Azure DevOps."""
+        tests) or the provider's type id isn't registered."""
         entry = self._active_provider_entry()
         if entry is None:
             return "by_kind"

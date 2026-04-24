@@ -31,14 +31,6 @@ def load_project_env() -> None:
     _project_env_loaded = True
 
 
-def reset_project_env_cache() -> None:
-    """Re-enable `load_project_env()` for the next call. Test-only helper:
-    CWD-dependent tests that want to re-evaluate the `.env` lookup can call
-    this between cases."""
-    global _project_env_loaded
-    _project_env_loaded = False
-
-
 def load_env(paths: Paths) -> None:
     """Load secrets from $XDG_CONFIG_HOME/docket/.env if present.
 
