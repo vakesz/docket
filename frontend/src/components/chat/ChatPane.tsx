@@ -5,6 +5,7 @@ import { Markdown } from "~/components/detail/Markdown";
 import { ProposalCard } from "~/components/mutations/ProposalCard";
 import { cn } from "~/lib/cn";
 import { type IssueLinkContext, issueLinkContextFromUrl } from "~/lib/issueLinks";
+import { useChatPaneController } from "./ChatPaneContext";
 import { type ChatMessage, useChatStream } from "./useChatStream";
 
 export function ChatPane({ itemId }: { itemId: string }) {
@@ -12,10 +13,12 @@ export function ChatPane({ itemId }: { itemId: string }) {
   const history = useConversation(itemId);
   const startThread = useStartThread();
   const item = useItem(itemId);
+  const chatController = useChatPaneController();
   const issueLinks = issueLinkContextFromUrl(item.data?.url);
   const [draft, setDraft] = useState("");
   const [proposals, setProposals] = useState<DTO["ProposalDTO"][]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const promptRef = useRef<HTMLTextAreaElement>(null);
 
   const { messages, streaming, error, send, reset } = useChatStream({
     itemId,
@@ -38,6 +41,25 @@ export function ChatPane({ itemId }: { itemId: string }) {
       behavior: "smooth",
     });
   }, [messages, history.data]);
+
+  // Drain any seeded draft from the chat controller (e.g. "Refine in chat" on
+  // a suggestion). Only seed when this pane is the active receiver — opening
+  // the chat is the caller's responsibility — and clear immediately so the
+  // same seed can't replay on re-mount or item switch.
+  useEffect(() => {
+    if (!chatController.pendingSeed) return;
+    setDraft(chatController.pendingSeed);
+    chatController.clearSeed();
+    // Defer focus so the textarea is mounted and visible by the time we ask
+    // for it (the parent route only renders ChatPane when `open` is true).
+    queueMicrotask(() => {
+      const el = promptRef.current;
+      if (!el) return;
+      el.focus();
+      const end = el.value.length;
+      el.setSelectionRange(end, end);
+    });
+  }, [chatController.pendingSeed, chatController.clearSeed]);
 
   const disabled = !status.data?.chat_enabled;
 
@@ -111,7 +133,14 @@ export function ChatPane({ itemId }: { itemId: string }) {
         }}
         className="border-t border-border p-2"
       >
+        {!disabled && (
+          <p className="mb-1 text-[10px] text-fg-faint">
+            Ask the agent to comment, transition, or rewrite — changes appear here as yellow cards
+            to confirm.
+          </p>
+        )}
         <textarea
+          ref={promptRef}
           value={draft}
           disabled={disabled || streaming}
           onChange={(e) => setDraft(e.target.value)}

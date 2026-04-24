@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 from textual.app import ComposeResult
 from textual.binding import Binding, BindingType
@@ -10,16 +10,23 @@ from textual.widgets import Static
 
 from docket.core.services.suggestion_service import Suggestion
 
+SuggestionDecision = Literal["accept", "reject", "refine"]
 
-class SuggestionModal(ModalScreen[bool]):
+
+class SuggestionModal(ModalScreen[SuggestionDecision]):
     """Preview of a structured triage recommendation.
 
-    Dismisses with `True` if the user accepts (caller stages proposals),
-    `False` on reject, `None` on escape (treated as reject)."""
+    Dismisses with one of:
+      - "accept"  → caller stages proposals
+      - "reject"  → caller discards (also used for escape)
+      - "refine"  → caller hands the suggestion to the chat pane as an
+                    editable draft so the user can discuss before staging
+    `None` (escape with no decision) is treated as reject by the caller."""
 
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("y", "confirm", "Accept", priority=True),
         Binding("n", "reject", "Reject", priority=True),
+        Binding("r", "refine", "Refine in chat", priority=True),
         Binding("escape", "reject", "Reject", priority=True),
     ]
 
@@ -75,12 +82,16 @@ class SuggestionModal(ModalScreen[bool]):
                         id="questions",
                     )
             yield Static(
-                "[b]y[/b] accept & stage  ·  [b]n[/b] reject  ·  [b]esc[/b] cancel",
+                "[b]y[/b] accept & stage  ·  [b]r[/b] refine in chat  ·  "
+                "[b]n[/b] reject  ·  [b]esc[/b] cancel",
                 id="hint",
             )
 
     def action_confirm(self) -> None:
-        self.dismiss(True)
+        self.dismiss("accept")
 
     def action_reject(self) -> None:
-        self.dismiss(False)
+        self.dismiss("reject")
+
+    def action_refine(self) -> None:
+        self.dismiss("refine")

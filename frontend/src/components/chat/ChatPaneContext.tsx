@@ -7,9 +7,21 @@ const SESSION_KEY = "docket.chatPaneOpen";
 export interface ChatPaneController {
   open: boolean;
   setOpen: (next: boolean) => void;
+  // One-shot draft handed to ChatPane (e.g. from "Discuss in chat" on a
+  // suggestion). ChatPane reads it once and then calls clearSeed so a stale
+  // value can't ambush the next item or thread.
+  pendingSeed: string | null;
+  seed: (text: string) => void;
+  clearSeed: () => void;
 }
 
-const NO_OP: ChatPaneController = { open: false, setOpen: () => {} };
+const NO_OP: ChatPaneController = {
+  open: false,
+  setOpen: () => {},
+  pendingSeed: null,
+  seed: () => {},
+  clearSeed: () => {},
+};
 
 const ChatPaneContext = createContext<ChatPaneController | null>(null);
 
@@ -29,6 +41,7 @@ function readSession(): boolean {
  */
 export function ChatPaneProvider({ children }: { children: React.ReactNode }) {
   const [open, setOpenState] = useState<boolean>(readSession);
+  const [pendingSeed, setPendingSeed] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -37,7 +50,10 @@ export function ChatPaneProvider({ children }: { children: React.ReactNode }) {
   }, [open]);
 
   const setOpen = useCallback((next: boolean) => setOpenState(next), []);
-  const value: ChatPaneController = { open, setOpen };
+  const seed = useCallback((text: string) => setPendingSeed(text), []);
+  const clearSeed = useCallback(() => setPendingSeed(null), []);
+
+  const value: ChatPaneController = { open, setOpen, pendingSeed, seed, clearSeed };
 
   return <ChatPaneContext.Provider value={value}>{children}</ChatPaneContext.Provider>;
 }

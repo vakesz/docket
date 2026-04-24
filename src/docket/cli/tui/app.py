@@ -80,6 +80,23 @@ def _docket_commands_provider() -> type[Provider]:
     return DocketCommands
 
 
+def _format_suggestion_for_chat(suggestion: Suggestion) -> str:
+    """Render a suggestion as an editable chat draft.
+
+    Kept close to the frontend's `refinementDraft` so the UX is consistent
+    when the user moves between TUI and web — same opening line, same
+    sectioning, same trailing prompt."""
+    lines: list[str] = [f"About the suggested next action ({suggestion.intent.value}):"]
+    patch = (suggestion.description_patch_md or "").strip()
+    if patch:
+        lines += ["", "Proposed description patch:", patch]
+    if suggestion.open_questions:
+        lines += ["", "Open questions:"]
+        lines += [f"- {q}" for q in suggestion.open_questions]
+    lines += ["", "I'd like to refine this before staging — what do you think?"]
+    return "\n".join(lines)
+
+
 class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
     """Three-pane terminal UI for browsing and triaging work items."""
 
@@ -832,8 +849,11 @@ class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
         self.call_from_thread(self._show_suggestion_modal, suggestion)
 
     def _show_suggestion_modal(self, suggestion: Suggestion) -> None:
-        def on_decision(accepted: bool | None) -> None:
-            if not accepted:
+        def on_decision(decision: str | None) -> None:
+            if decision == "refine":
+                self._refine_suggestion_in_chat(suggestion)
+                return
+            if decision != "accept":
                 self.notify("Suggestion dismissed.", severity="information")
                 return
             if self._blocked_read_only():
@@ -859,6 +879,19 @@ class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
             self._open_next_pending()
 
         self.push_screen(SuggestionModal(suggestion), on_decision)
+
+    def _refine_suggestion_in_chat(self, suggestion: Suggestion) -> None:
+        """Hand a suggestion to the chat pane as an editable draft.
+
+        Mirrors the frontend "Refine in chat" affordance — the user can edit
+        the draft before pressing Enter, and nothing is staged unless they
+        come back to Suggest later or the agent stages something itself."""
+        chat = self.query_one(ChatPane)
+        chat.seed_input(_format_suggestion_for_chat(suggestion))
+        self.notify(
+            "Suggestion moved to chat — edit and press Enter to refine.",
+            severity="information",
+        )
 
     def _blocked_read_only(self) -> bool:
         """Toast and return True if the user just tried to stage a mutation

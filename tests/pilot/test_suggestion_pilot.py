@@ -6,10 +6,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from textual.widgets import Input
 
 from docket.cli.tui.app import DocketApp
 from docket.cli.tui.tui_context import TuiContext
 from docket.cli.tui.widgets.batch_diff_modal import BatchDiffModal
+from docket.cli.tui.widgets.chat_pane import ChatPane
 from docket.cli.tui.widgets.item_tree import ItemTree
 from docket.cli.tui.widgets.suggestion_modal import SuggestionModal
 from docket.core.model import Item, ItemKind, ItemState, ScopeFilters
@@ -126,6 +128,43 @@ async def test_suggest_reject_leaves_store_empty(pilot_env) -> None:
         await pilot.pause()
 
         assert len(app._proposals) == 0
+
+
+async def test_suggest_refine_seeds_chat_input(pilot_env) -> None:
+    ctx, client, provider, _ = pilot_env
+    client.script = [
+        text_turn(
+            '{"intent": "needs_info", '
+            '"description_patch_md": "Need repro steps.", '
+            '"open_questions": ["which browser?"]}'
+        )
+    ]
+
+    app = DocketApp(ctx)
+    async with app.run_test() as pilot:
+        await _select_story(app, pilot)
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        await app.run_action("suggest_next")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        await pilot.pause()
+
+        assert isinstance(app.screen, SuggestionModal)
+        await pilot.press("r")
+        await pilot.pause()
+
+        # Modal closed and nothing was staged — refining is a handoff,
+        # not a stage.
+        assert not isinstance(app.screen, SuggestionModal)
+        assert len(app._proposals) == 0
+        assert provider.items[0].state == ItemState.NEW
+
+        # Chat pane prompt is pre-filled with the suggestion as a draft.
+        prompt = app.query_one(ChatPane).query_one("#prompt", Input)
+        assert "needs_info" in prompt.value
+        assert "Need repro steps." in prompt.value
+        assert "which browser?" in prompt.value
 
 
 async def test_suggest_without_selection_notifies(pilot_env) -> None:

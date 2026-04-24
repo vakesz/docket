@@ -76,6 +76,11 @@ class ChatPane(Vertical):
         color: $text-muted;
         height: auto;
     }
+    ChatPane #agent-hint {
+        padding: 0 2 0 2;
+        color: $text-disabled;
+        height: 1;
+    }
     ChatPane #transcript {
         height: 1fr;
         margin: 0 2 1 2;
@@ -144,6 +149,10 @@ class ChatPane(Vertical):
         )
         yield VerticalScroll(id="transcript")
         yield Static("", id="ledger")
+        yield Static(
+            "Ask the agent to comment, transition, or rewrite — confirms appear as proposals.",
+            id="agent-hint",
+        )
         yield Input(placeholder="Ask about this ticket… (enter to send)", id="prompt")
 
     # -- public API used by the app -----------------------------------------
@@ -251,6 +260,21 @@ class ChatPane(Vertical):
 
     def set_status(self, text: str) -> None:
         self.query_one("#ledger", Static).update(text)
+
+    def seed_input(self, text: str) -> None:
+        """Pre-fill the prompt input with `text` and focus it.
+
+        Used by handoff flows like "Refine in chat" on a suggestion: the
+        suggestion content lands here as an editable draft so the user can
+        tweak it before pressing Enter to send.
+        """
+        prompt = self.query_one("#prompt", Input)
+        prompt.value = text
+        # Keep the prompt enabled; if the pane has no item bound (`disabled`
+        # is True from `bind_item(None)`), there's nothing useful to seed.
+        if not prompt.disabled:
+            prompt.focus()
+            prompt.cursor_position = len(text)
 
     def set_show_acceptance_criteria(self, enabled: bool) -> None:
         self._show_acceptance_criteria = enabled

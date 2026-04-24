@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { DTO } from "~/api/client";
-import { useStageSuggestion, useSuggestion } from "~/api/hooks";
+import { useStageSuggestion, useStatus, useSuggestion } from "~/api/hooks";
+import { useChatPaneController } from "~/components/chat/ChatPaneContext";
 import { cn } from "~/lib/cn";
 import { formatIntent } from "~/lib/format";
 import { Markdown } from "./Markdown";
@@ -10,10 +11,38 @@ interface Props {
   onStaged: (proposals: DTO["ProposalDTO"][]) => void;
 }
 
+/** Format a suggestion as a chat draft the user can edit before sending. */
+function refinementDraft(s: DTO["SuggestionDTO"]): string {
+  const lines: string[] = [`About the suggested next action (${formatIntent(s.intent)}):`];
+  const patch = (s.description_patch_md ?? "").trim();
+  if (patch) {
+    lines.push("", "Proposed description patch:", patch);
+  }
+  if ((s.open_questions?.length ?? 0) > 0) {
+    lines.push("", "Open questions:");
+    for (const q of s.open_questions ?? []) {
+      lines.push(`- ${q}`);
+    }
+  }
+  lines.push("", "I'd like to refine this before staging — what do you think?");
+  return lines.join("\n");
+}
+
 export function SuggestBlock({ itemId, onStaged }: Props) {
   const getSuggestion = useSuggestion();
   const stage = useStageSuggestion();
+  const status = useStatus();
+  const chatController = useChatPaneController();
   const [suggestion, setSuggestion] = useState<DTO["SuggestionDTO"] | null>(null);
+  const chatEnabled = status.data?.chat_enabled ?? false;
+
+  const handleRefineInChat = () => {
+    if (!suggestion) return;
+    chatController.setOpen(true);
+    chatController.seed(refinementDraft(suggestion));
+    // Hand off completely — the suggestion now lives as an editable chat draft.
+    setSuggestion(null);
+  };
 
   return (
     <div className="flex flex-col gap-2 rounded border border-border bg-surface p-3">
@@ -53,7 +82,21 @@ export function SuggestBlock({ itemId, onStaged }: Props) {
               ))}
             </ul>
           )}
-          <div className="flex justify-end">
+          {stage.error && <div className="text-xs text-danger">{stage.error.message}</div>}
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              disabled={!chatEnabled}
+              onClick={handleRefineInChat}
+              title={
+                chatEnabled
+                  ? "Hand the suggestion to the chat agent so you can refine it before staging."
+                  : "Chat is disabled — configure Azure OpenAI in Settings to refine suggestions."
+              }
+              className="rounded border border-accent bg-accent/10 px-3 py-1 text-xs font-medium text-accent hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Refine in chat
+            </button>
             <button
               type="button"
               disabled={stage.isPending}
@@ -66,7 +109,15 @@ export function SuggestBlock({ itemId, onStaged }: Props) {
                       description_patch_md: suggestion.description_patch_md,
                     },
                   },
-                  { onSuccess: (list) => onStaged(list) },
+                  {
+                    onSuccess: (list) => {
+                      onStaged(list);
+                      // Clear the suggestion once the proposal cards take over
+                      // — otherwise the same intent/diff sits in two places at
+                      // once and looks like there's still pending action here.
+                      setSuggestion(null);
+                    },
+                  },
                 )
               }
               className="rounded bg-accent px-3 py-1 text-xs font-semibold text-accent-fg hover:bg-accent/90 disabled:opacity-50"
