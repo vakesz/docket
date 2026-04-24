@@ -13,6 +13,8 @@ from docket.core.mutation import (
     CommentAdd,
     DescriptionPatch,
     ItemCreate,
+    MemoryDelete,
+    MemoryWrite,
     Proposal,
     StateChange,
     render_diff,
@@ -29,7 +31,13 @@ class ProposalDTO(BaseModel):
 
     id: str
     kind: Literal[
-        "state_change", "description_patch", "attachment_upload", "item_create", "comment_add"
+        "state_change",
+        "description_patch",
+        "attachment_upload",
+        "item_create",
+        "comment_add",
+        "memory_write",
+        "memory_delete",
     ]
     item_id: str | None = None
     diff: str
@@ -37,36 +45,46 @@ class ProposalDTO(BaseModel):
 
     @classmethod
     def from_core(cls, p: Proposal) -> ProposalDTO:
-        item_id: str | None
+        item_id: str | None = None
         details: dict[str, Any] = {}
-        if isinstance(p, StateChange):
-            item_id = p.item.id
-            details = {"intent": p.intent.value, "current_state": p.item.state.value}
-        elif isinstance(p, DescriptionPatch):
-            item_id = p.item.id
-            details = {"new_description_md": p.new_md}
-        elif isinstance(p, AttachmentUpload):
-            item_id = p.item.id
-            details = {
-                "filename": p.filename,
-                "content_type": p.content_type,
-                "size_bytes": len(p.content),
-            }
-        elif isinstance(p, ItemCreate):
-            item_id = None
-            details = {
-                "kind": p.item_kind.value,
-                "title": p.fields.title,
-                "parent_id": p.fields.parent_id,
-                "assignee": p.fields.assignee,
-                "tags": list(p.fields.tags),
-                "description_md": p.fields.description_md,
-            }
-        elif isinstance(p, CommentAdd):
-            item_id = p.item.id
-            details = {"body_md": p.body_md}
-        else:  # pragma: no cover - exhaustive
-            raise TypeError(f"unknown proposal type: {type(p)!r}")
+        match p:
+            case StateChange():
+                item_id = p.item.id
+                details = {"intent": p.intent.value, "current_state": p.item.state.value}
+            case DescriptionPatch():
+                item_id = p.item.id
+                details = {"new_description_md": p.new_md}
+            case AttachmentUpload():
+                item_id = p.item.id
+                details = {
+                    "filename": p.filename,
+                    "content_type": p.content_type,
+                    "size_bytes": len(p.content),
+                }
+            case ItemCreate():
+                details = {
+                    "kind": p.item_kind.value,
+                    "title": p.fields.title,
+                    "parent_id": p.fields.parent_id,
+                    "assignee": p.fields.assignee,
+                    "tags": list(p.fields.tags),
+                    "description_md": p.fields.description_md,
+                }
+            case CommentAdd():
+                item_id = p.item.id
+                details = {"body_md": p.body_md}
+            case MemoryWrite():
+                details = {
+                    "project_id": p.project_id,
+                    "title": p.title,
+                    "body_md": p.body_md,
+                    "tags": list(p.tags),
+                    "memory_id": p.memory_id,
+                }
+            case MemoryDelete():
+                details = {"project_id": p.project_id, "memory_id": p.memory_id}
+            case _:
+                raise TypeError(f"unknown proposal type: {type(p)!r}")
         return cls(id=p.id, kind=p.kind, item_id=item_id, diff=render_diff(p), details=details)
 
 

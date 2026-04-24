@@ -16,7 +16,8 @@ from pathlib import Path
 
 import pytest
 
-from docket.cli.tui import DocketApp, TuiContext
+from docket.cli.tui.app import DocketApp
+from docket.cli.tui.tui_context import TuiContext
 from docket.cli.tui.widgets.batch_diff_modal import BatchDiffModal
 from docket.cli.tui.widgets.diff_modal import DiffModal
 from docket.cli.tui.widgets.new_item_modal import NewItemModal

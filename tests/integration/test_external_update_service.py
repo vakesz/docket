@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from docket.core.model import Item, ItemKind, ItemState
-from docket.core.services import conversation_service, external_update_service
+from docket.core.services import external_update_service
 from docket.core.services.external_update_service import EXTERNAL_UPDATE_MARKER
 from docket.storage import init_db
 from docket.storage.repos import conversation_repo, item_repo, message_repo
@@ -98,7 +98,7 @@ def test_no_conversation_means_no_message_injected(env) -> None:
 def test_injection_only_into_active_not_archived(env) -> None:
     conn, provider, item = env
     archived = conversation_repo.create(conn, item.id)
-    conversation_service.archive_thread(conn, archived.id)
+    conversation_repo.archive(conn, archived.id)
     active = conversation_repo.create(conn, item.id)
 
     newer = datetime.now(UTC) + timedelta(seconds=1)

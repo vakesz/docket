@@ -39,7 +39,7 @@ from docket.api.schemas import (
 from docket.core.services import conversation_service
 from docket.core.services.proposal_store import ProposalStore
 from docket.providers.base import WorkItemProvider
-from docket.storage.repos import conversation_repo
+from docket.storage.repos import conversation_repo, message_repo
 
 log = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ def get_history(
     convo = conversation_repo.get_active_for_item(conn, item_id, provider_key=provider_key)
     if convo is None:
         return ConversationHistoryDTO(conversation=None, messages=[])
-    history = conversation_service.history(conn, convo.id)
+    history = message_repo.list_for_conversation(conn, convo.id)
     return ConversationHistoryDTO(
         conversation=ConversationDTO.from_core(convo),
         messages=[_message_dto(m) for m in history],

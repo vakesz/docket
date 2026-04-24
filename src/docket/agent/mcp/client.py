@@ -120,13 +120,20 @@ class MCPClient:
             args=list(self._entry.args),
             env=dict(self._entry.env) or None,
         )
+        # Bound the handshake so a misbehaving server can't hang the
+        # supervisor forever. `close()` signals `_shutdown`, but that
+        # only unblocks us once we're parked on `wait()` below — if the
+        # server is wedged inside `initialize()` / `list_tools()`, the
+        # shutdown event never gets a chance to fire.
+        handshake_timeout = max(self._entry.startup_timeout_seconds, 0.1)
         try:
             async with (
                 stdio_client(params) as (read, write),
                 ClientSession(read, write) as session,
             ):
-                await session.initialize()
-                listed = await session.list_tools()
+                async with asyncio.timeout(handshake_timeout):
+                    await session.initialize()
+                    listed = await session.list_tools()
                 self._tools = list(listed.tools)
                 self._session = session
                 self._ready.set()

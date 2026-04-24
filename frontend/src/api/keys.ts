@@ -19,6 +19,7 @@ export const qk = {
 
   status: () => [...qk.all, "status"] as const,
   settings: () => [...qk.all, "settings"] as const,
+  settingsProviderTypes: () => [...qk.all, "settings", "providerTypes"] as const,
 
   providers: () => [...qk.all, "providers"] as const,
   activeProvider: () => [...qk.all, "providers", "active"] as const,
@@ -42,4 +43,11 @@ export const qk = {
 
   prompts: () => [...qk.all, "prompts"] as const,
   prompt: (key: string) => [...qk.all, "prompts", key] as const,
+
+  activeProject: () => [...qk.all, "projects", "active"] as const,
+
+  mcpServers: (projectId: string) => [...qk.all, "mcp", projectId, "servers"] as const,
+  mcpServer: (projectId: string, name: string) =>
+    [...qk.all, "mcp", projectId, "server", name] as const,
+  mcpPresets: () => [...qk.all, "mcp", "presets"] as const,
 };

@@ -7,7 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from docket.cli.tui import DocketApp, TuiContext
+from docket.cli.tui.app import DocketApp
+from docket.cli.tui.tui_context import TuiContext
 from docket.cli.tui.widgets.batch_diff_modal import BatchDiffModal
 from docket.cli.tui.widgets.item_tree import ItemTree
 from docket.cli.tui.widgets.suggestion_modal import SuggestionModal

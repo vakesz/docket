@@ -28,10 +28,6 @@ from docket.core.model import Project, project_id_for
 from docket.storage.repos import project_repo
 
 
-def _default_name(provider_key: str) -> str:
-    return provider_key or "default"
-
-
 def mirror_into_db(config: Config, conn: sqlite3.Connection) -> None:
     """Reflect `config.projects` into the SQLite mirror.
 
@@ -71,9 +67,9 @@ def upsert(
     creates a default-named entry if missing and is a no-op otherwise."""
     project_id = project_id_for(provider_key)
     existing = config.projects.get(project_id)
-    final_name = (
-        name if name is not None else (existing.name if existing else None)
-    ) or _default_name(provider_key)
+    final_name = (name if name is not None else (existing.name if existing else None)) or (
+        provider_key or "default"
+    )
     final_description = (
         description if description is not None else (existing.description if existing else "")
     )

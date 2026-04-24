@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useStatus } from "~/api/hooks";
 import { cn } from "~/lib/cn";
 import { formatRelative } from "~/lib/format";
@@ -6,6 +7,13 @@ import { SyncButton } from "./SyncButton";
 export function StatusFooter() {
   const status = useStatus(30_000);
   const s = status.data;
+  // Tick every 15s so `formatRelative(last_sync_at)` advances between polls
+  // instead of freezing at whatever we rendered when `useStatus` last fired.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((n) => n + 1), 15_000);
+    return () => clearInterval(id);
+  }, []);
 
   return (
     <footer className="flex h-7 items-center gap-3 border-t border-border bg-surface px-3 font-mono text-[11px] text-fg-muted">

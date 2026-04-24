@@ -9,7 +9,7 @@ from docket.cli.confirm import apply_mutation
 from docket.cli.context import prepare_or_wizard
 from docket.cli.guard import abort_if_read_only
 from docket.core.model import CreateFields, ItemKind
-from docket.core.services import mutation_service
+from docket.core.mutation import ItemCreate
 
 console = Console()
 
@@ -44,7 +44,7 @@ def new_command(
 
     ctx = prepare_or_wizard()
     try:
-        proposal = mutation_service.propose_create(ik, fields)
+        proposal = ItemCreate(item_kind=ik, fields=fields)
         apply_mutation(
             ctx.conn,
             ctx.provider,

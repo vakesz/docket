@@ -45,19 +45,11 @@ def open_thread(conn: sqlite3.Connection, item_id: str, *, provider_key: str = "
     return conversation_repo.create(conn, item_id, provider_key=provider_key)
 
 
-def archive_thread(conn: sqlite3.Connection, convo_id: str) -> None:
-    conversation_repo.archive(conn, convo_id)
-
-
 def new_thread(conn: sqlite3.Connection, item_id: str, *, provider_key: str = "") -> Conversation:
     active = conversation_repo.get_active_for_item(conn, item_id, provider_key=provider_key)
     if active is not None:
-        archive_thread(conn, active.id)
+        conversation_repo.archive(conn, active.id)
     return conversation_repo.create(conn, item_id, provider_key=provider_key)
-
-
-def history(conn: sqlite3.Connection, convo_id: str) -> list[ChatMessage]:
-    return message_repo.list_for_conversation(conn, convo_id)
 
 
 def send_user_message(
@@ -86,7 +78,7 @@ def send_user_message(
             convo_id=convo.id,
             threshold_tokens=compaction_threshold_tokens,
         )
-    past = history(conn, convo.id)
+    past = message_repo.list_for_conversation(conn, convo.id)
 
     prefix = _build_prefix(conn, item, project_id=project_id)
     user_msg = ChatMessage(role="user", content=text)

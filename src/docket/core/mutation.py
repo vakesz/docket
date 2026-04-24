@@ -108,78 +108,78 @@ Proposal = (
 
 def render_diff(proposal: Proposal) -> str:
     """Human-readable preview used by the CLI/TUI/API confirm step."""
-    if isinstance(proposal, StateChange):
-        return (
-            f"[{proposal.item.id}] {proposal.item.title}\n"
-            f"  state: {proposal.item.state.value} ──({proposal.intent.value})──▶ ?\n"
-            f"  (exact target state depends on provider mapping)"
-        )
-    if isinstance(proposal, DescriptionPatch):
-        old = (proposal.item.description_md or "").splitlines(keepends=False)
-        new = (proposal.new_md or "").splitlines(keepends=False)
-        diff = difflib.unified_diff(
-            old,
-            new,
-            fromfile=f"{proposal.item.id}:description (current)",
-            tofile=f"{proposal.item.id}:description (proposed)",
-            lineterm="",
-        )
-        body = "\n".join(diff)
-        return body or f"[{proposal.item.id}] description unchanged"
-    if isinstance(proposal, AttachmentUpload):
-        size = len(proposal.content)
-        return (
-            f"[{proposal.item.id}] upload attachment\n"
-            f"  filename: {proposal.filename}\n"
-            f"  content-type: {proposal.content_type}\n"
-            f"  size: {size} bytes"
-        )
-    if isinstance(proposal, ItemCreate):
-        lines = [
-            f"create {proposal.item_kind.value}: {proposal.fields.title}",
-        ]
-        if proposal.fields.parent_id:
-            lines.append(f"  parent: {proposal.fields.parent_id}")
-        if proposal.fields.assignee:
-            lines.append(f"  assignee: {proposal.fields.assignee}")
-        if proposal.fields.tags:
-            lines.append(f"  tags: {', '.join(proposal.fields.tags)}")
-        if proposal.fields.description_md:
-            preview = proposal.fields.description_md[:200]
-            if len(proposal.fields.description_md) > 200:
-                preview += " …"
-            lines.append(f"  description: {preview}")
-        return "\n".join(lines)
-    if isinstance(proposal, CommentAdd):
-        body = proposal.body_md or ""
-        header = f"[{proposal.item.id}] add comment"
-        if not body.strip():
-            return f"{header}\n  (empty)"
-        return f"{header}\n" + "\n".join(f"  > {line}" for line in body.splitlines())
-    if isinstance(proposal, MemoryWrite):
-        action = "update" if proposal.memory_id else "create"
-        header = f"memory {action}: {proposal.title}"
-        if not proposal.memory_id:
-            new_lines = (proposal.body_md or "").splitlines()
-            return header + "\n" + "\n".join(f"  + {line}" for line in new_lines[:20])
-        old = (proposal.previous_body_md or "").splitlines()
-        new = (proposal.body_md or "").splitlines()
-        diff = difflib.unified_diff(
-            old,
-            new,
-            fromfile=f"memory:{proposal.memory_id} (current)",
-            tofile=f"memory:{proposal.memory_id} (proposed)",
-            lineterm="",
-        )
-        body_diff = "\n".join(diff)
-        title_line = ""
-        if proposal.previous_title and proposal.previous_title != proposal.title:
-            title_line = f"  title: {proposal.previous_title!r} → {proposal.title!r}\n"
-        return header + "\n" + title_line + (body_diff or "  (body unchanged)")
-    if isinstance(proposal, MemoryDelete):
-        suffix = f" — '{proposal.title}'" if proposal.title else ""
-        return f"memory delete: {proposal.memory_id}{suffix}"
-    raise TypeError(f"unknown proposal type: {type(proposal)!r}")
+    match proposal:
+        case StateChange():
+            return (
+                f"[{proposal.item.id}] {proposal.item.title}\n"
+                f"  state: {proposal.item.state.value} ──({proposal.intent.value})──▶ ?\n"
+                f"  (exact target state depends on provider mapping)"
+            )
+        case DescriptionPatch():
+            old = (proposal.item.description_md or "").splitlines(keepends=False)
+            new = (proposal.new_md or "").splitlines(keepends=False)
+            diff = difflib.unified_diff(
+                old,
+                new,
+                fromfile=f"{proposal.item.id}:description (current)",
+                tofile=f"{proposal.item.id}:description (proposed)",
+                lineterm="",
+            )
+            body = "\n".join(diff)
+            return body or f"[{proposal.item.id}] description unchanged"
+        case AttachmentUpload():
+            size = len(proposal.content)
+            return (
+                f"[{proposal.item.id}] upload attachment\n"
+                f"  filename: {proposal.filename}\n"
+                f"  content-type: {proposal.content_type}\n"
+                f"  size: {size} bytes"
+            )
+        case ItemCreate():
+            lines = [f"create {proposal.item_kind.value}: {proposal.fields.title}"]
+            if proposal.fields.parent_id:
+                lines.append(f"  parent: {proposal.fields.parent_id}")
+            if proposal.fields.assignee:
+                lines.append(f"  assignee: {proposal.fields.assignee}")
+            if proposal.fields.tags:
+                lines.append(f"  tags: {', '.join(proposal.fields.tags)}")
+            if proposal.fields.description_md:
+                preview = proposal.fields.description_md[:200]
+                if len(proposal.fields.description_md) > 200:
+                    preview += " …"
+                lines.append(f"  description: {preview}")
+            return "\n".join(lines)
+        case CommentAdd():
+            body = proposal.body_md or ""
+            header = f"[{proposal.item.id}] add comment"
+            if not body.strip():
+                return f"{header}\n  (empty)"
+            return f"{header}\n" + "\n".join(f"  > {line}" for line in body.splitlines())
+        case MemoryWrite():
+            action = "update" if proposal.memory_id else "create"
+            header = f"memory {action}: {proposal.title}"
+            if not proposal.memory_id:
+                new_lines = (proposal.body_md or "").splitlines()
+                return header + "\n" + "\n".join(f"  + {line}" for line in new_lines[:20])
+            old = (proposal.previous_body_md or "").splitlines()
+            new = (proposal.body_md or "").splitlines()
+            diff = difflib.unified_diff(
+                old,
+                new,
+                fromfile=f"memory:{proposal.memory_id} (current)",
+                tofile=f"memory:{proposal.memory_id} (proposed)",
+                lineterm="",
+            )
+            body_diff = "\n".join(diff)
+            title_line = ""
+            if proposal.previous_title and proposal.previous_title != proposal.title:
+                title_line = f"  title: {proposal.previous_title!r} → {proposal.title!r}\n"
+            return header + "\n" + title_line + (body_diff or "  (body unchanged)")
+        case MemoryDelete():
+            suffix = f" — '{proposal.title}'" if proposal.title else ""
+            return f"memory delete: {proposal.memory_id}{suffix}"
+        case _:
+            raise TypeError(f"unknown proposal type: {type(proposal)!r}")
 
 
 def pending_payload(proposal: Proposal, *, extra: dict[str, Any] | None = None) -> str:

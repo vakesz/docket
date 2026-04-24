@@ -22,6 +22,7 @@ from docket.telemetry import init_logging
 
 if TYPE_CHECKING:
     from docket.agent.llm_client import AzureOpenAIClient
+    from docket.config.models import LlmConfig
 
 console = Console()
 
@@ -111,7 +112,7 @@ def serve_command(
 
         llm: LlmClient | None = None
         if not no_chat:
-            llm = _build_llm_client()
+            llm = _build_llm_client(ctx.config.llm)
 
         scope_key = ctx.scope_key_for()
         runtime = RuntimeState(
@@ -143,19 +144,30 @@ def serve_command(
         ctx.close()
 
 
-def _build_llm_client() -> AzureOpenAIClient | None:
-    from docket.agent.llm_client import AzureOpenAIClient
-
+def _build_llm_client(llm_cfg: LlmConfig) -> AzureOpenAIClient | None:
+    """Build the LLM client. `.env` wins over config.toml so users can keep all
+    LLM settings in one place alongside the API key."""
     api_key = get_llm_api_key()
-    endpoint = get_llm_endpoint()
-    deployment = get_llm_deployment()
+    endpoint = get_llm_endpoint() or (str(llm_cfg.endpoint) if llm_cfg.endpoint else None)
+    deployment = get_llm_deployment() or llm_cfg.deployment
     api_version = get_llm_api_version()
     if not api_key or not endpoint:
+        missing = [
+            label
+            for label, value in (
+                ("AZURE_OPENAI_API_KEY", api_key),
+                ("AZURE_OPENAI_ENDPOINT", endpoint),
+            )
+            if not value
+        ]
         console.print(
-            "[yellow]Chat disabled[/yellow]: set AZURE_OPENAI_API_KEY and "
-            "AZURE_OPENAI_ENDPOINT in your .env to enable /conversation endpoints."
+            f"[yellow]Chat disabled[/yellow]: set {', '.join(missing)} in "
+            "your .env (repo-local or ~/.config/docket/.env), or run `docket setup` "
+            "to persist the endpoint into config.toml."
         )
         return None
+    from docket.agent.llm_client import AzureOpenAIClient
+
     return AzureOpenAIClient(
         endpoint=endpoint,
         api_key=api_key,

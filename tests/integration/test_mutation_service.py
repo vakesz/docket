@@ -7,7 +7,7 @@ import pytest
 
 from docket.core import Item, ItemKind, ItemState, TransitionIntent
 from docket.core.model import CreateFields
-from docket.core.mutation import render_diff
+from docket.core.mutation import ItemCreate, render_diff
 from docket.core.services import mutation_service, sync_service
 from docket.storage import init_db
 from docket.storage.repos import item_repo
@@ -80,7 +80,7 @@ def test_attachment_upload_records_attachment_and_returns_url(tmp_path: Path) ->
 def test_create_item_upserts_into_cache(tmp_path: Path) -> None:
     conn, prov = _seed(tmp_path)
     fields = CreateFields(title="New bug", description_md="repro steps", tags=["p0"])
-    proposal = mutation_service.propose_create(ItemKind.BUG, fields)
+    proposal = ItemCreate(item_kind=ItemKind.BUG, fields=fields)
     result = mutation_service.confirm(conn, prov, proposal)
     assert result.item is not None
     assert result.item.kind is ItemKind.BUG

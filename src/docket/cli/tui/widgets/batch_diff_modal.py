@@ -31,8 +31,11 @@ from textual.widgets import Checkbox, Static
 
 from docket.core.mutation import (
     AttachmentUpload,
+    CommentAdd,
     DescriptionPatch,
     ItemCreate,
+    MemoryDelete,
+    MemoryWrite,
     Proposal,
     StateChange,
     render_diff,
@@ -144,15 +147,25 @@ def _summary(proposal: Proposal, source: str) -> str:
 
     Bracketed ids are escaped so Rich doesn't treat `[S-1]` as markup."""
     tag = f"\\[{source}]"
-    if isinstance(proposal, StateChange):
-        return f"{tag} {proposal.kind} · \\[{proposal.item.id}] → {proposal.intent.value}"
-    if isinstance(proposal, DescriptionPatch):
-        return f"{tag} {proposal.kind} · \\[{proposal.item.id}] description"
-    if isinstance(proposal, AttachmentUpload):
-        return f"{tag} {proposal.kind} · \\[{proposal.item.id}] + {proposal.filename}"
-    if isinstance(proposal, ItemCreate):
-        return f"{tag} {proposal.kind} · new {proposal.item_kind.value}: {proposal.fields.title}"
-    return f"{tag} {proposal.kind}"
+    match proposal:
+        case StateChange():
+            return f"{tag} {proposal.kind} · \\[{proposal.item.id}] → {proposal.intent.value}"
+        case DescriptionPatch():
+            return f"{tag} {proposal.kind} · \\[{proposal.item.id}] description"
+        case AttachmentUpload():
+            return f"{tag} {proposal.kind} · \\[{proposal.item.id}] + {proposal.filename}"
+        case ItemCreate():
+            return (
+                f"{tag} {proposal.kind} · new {proposal.item_kind.value}: {proposal.fields.title}"
+            )
+        case CommentAdd():
+            return f"{tag} {proposal.kind} · \\[{proposal.item.id}] comment"
+        case MemoryWrite():
+            verb = "update" if proposal.memory_id else "create"
+            return f"{tag} {proposal.kind} · memory {verb}: {proposal.title}"
+        case MemoryDelete():
+            suffix = f" — '{proposal.title}'" if proposal.title else ""
+            return f"{tag} {proposal.kind} · memory delete: {proposal.memory_id}{suffix}"
 
 
 __all__ = ["BatchDecision", "BatchDiffModal"]

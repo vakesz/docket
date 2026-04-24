@@ -55,6 +55,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/items/{item_id}/mutations/comment/propose": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Propose Comment */
+        post: operations["propose_comment_items__item_id__mutations_comment_propose_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/items/{item_id}/mutations/{proposal_id}": {
         parameters: {
             query?: never;
@@ -391,6 +408,152 @@ export interface paths {
         patch: operations["patch_settings_settings_patch"];
         trace?: never;
     };
+    "/settings/llm-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rotate Llm Key
+         * @description Set / clear AZURE_OPENAI_API_KEY in the XDG `.env` file.
+         *
+         *     Also updates the current process's `os.environ` so components that read
+         *     `get_llm_api_key()` at call time see the new value. The live `LlmClient`
+         *     still holds the old key in its SDK config — fully rebinding chat requires
+         *     a restart, which we signal via `requires_restart=True` when the key
+         *     actually changed.
+         */
+        post: operations["rotate_llm_key_settings_llm_key_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/settings/http-token/regenerate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Regenerate Http Token
+         * @description Mint a fresh bearer token and persist it.
+         *
+         *     The caller must save the returned token immediately — `GET /settings`
+         *     will mask it on subsequent reads. A restart is still required: the
+         *     running app's `app.state.bearer_token` is not rewritten here because the
+         *     client would be logged out mid-flight; telling the user to restart keeps
+         *     the contract simple and matches how the wizard treats it.
+         */
+        post: operations["regenerate_http_token_settings_http_token_regenerate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/settings/providers/types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Provider Types
+         * @description Bearer-authed equivalent of `GET /setup/providers/types`.
+         *
+         *     Same shape — the wizard UI on the frontend consumes both forms from the
+         *     same component, but post-bootstrap callers use this path so they don't
+         *     need the setup token.
+         */
+        get: operations["provider_types_settings_providers_types_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/settings/providers/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test Provider Draft
+         * @description Dry-run a provider config without persisting it.
+         */
+        post: operations["test_provider_draft_settings_providers_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/settings/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Provider
+         * @description Register a new provider entry at runtime.
+         *
+         *     Mirrors `docket setup provider add` / the wizard, but scoped to a running
+         *     server. Validates the config by building a live provider instance and
+         *     adds it to both the on-disk config and the in-memory `runtime.providers`
+         *     dict so the frontend can switch to it immediately.
+         */
+        post: operations["add_provider_settings_providers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/settings/providers/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Provider
+         * @description Drop a provider entry from config.toml and the running runtime.
+         *
+         *     Refuses to remove the currently-active provider — the caller must switch
+         *     first. Removing the last provider is allowed; the UI is responsible for
+         *     warning the user that chat / sync / mutations will 503 until another is
+         *     added.
+         */
+        delete: operations["remove_provider_settings_providers__key__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/scopes": {
         parameters: {
             query?: never;
@@ -455,6 +618,322 @@ export interface paths {
         /** Set Active Provider */
         put: operations["set_active_provider_providers_active_put"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/memory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Memory */
+        get: operations["list_memory_projects__project_id__memory_get"];
+        put?: never;
+        /** Create Memory */
+        post: operations["create_memory_projects__project_id__memory_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/memory/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search Memory */
+        get: operations["search_memory_projects__project_id__memory_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/memory/{memory_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Memory */
+        get: operations["get_memory_memory__memory_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Memory */
+        delete: operations["delete_memory_memory__memory_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Memory */
+        patch: operations["update_memory_memory__memory_id__patch"];
+        trace?: never;
+    };
+    "/projects/{project_id}/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Sources */
+        get: operations["list_sources_projects__project_id__sources_get"];
+        put?: never;
+        /** Create Source */
+        post: operations["create_source_projects__project_id__sources_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/sources/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search Sources */
+        get: operations["search_sources_projects__project_id__sources_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sources/{source_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Source */
+        get: operations["get_source_sources__source_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Source */
+        delete: operations["delete_source_sources__source_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Source */
+        patch: operations["update_source_sources__source_id__patch"];
+        trace?: never;
+    };
+    "/projects/{project_id}/mcp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Mcp Servers */
+        get: operations["list_mcp_servers_projects__project_id__mcp_get"];
+        put?: never;
+        /** Create Mcp Server */
+        post: operations["create_mcp_server_projects__project_id__mcp_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/mcp/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Mcp Server */
+        get: operations["get_mcp_server_projects__project_id__mcp__name__get"];
+        put?: never;
+        post?: never;
+        /** Delete Mcp Server */
+        delete: operations["delete_mcp_server_projects__project_id__mcp__name__delete"];
+        options?: never;
+        head?: never;
+        /** Update Mcp Server */
+        patch: operations["update_mcp_server_projects__project_id__mcp__name__patch"];
+        trace?: never;
+    };
+    "/projects/{project_id}/mcp/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test Mcp Server Draft
+         * @description Validate a draft MCP server config without saving it.
+         */
+        post: operations["test_mcp_server_draft_projects__project_id__mcp_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/mcp/{name}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test Mcp Server
+         * @description Spawn the configured MCP server, complete the handshake, list its
+         *     tools, then close. Lets the UI verify a fresh entry without restarting
+         *     the running fleet.
+         */
+        post: operations["test_mcp_server_projects__project_id__mcp__name__test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mcp/presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Mcp Presets
+         * @description Return the catalog of known-good MCP server presets.
+         *
+         *     Read-only and project-independent — both bootstrap and full servers can
+         *     serve this so the setup UI can show presets before any project exists.
+         */
+        get: operations["list_mcp_presets_mcp_presets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/mcp/presets/{preset_id}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply Mcp Preset
+         * @description Instantiate a preset as a concrete MCP server on this project.
+         *
+         *     The preset supplies `command`/`args`/`transport`; the caller supplies env
+         *     values (typically an API token) via `payload.env`. Returns 400 if the
+         *     preset or a required env var is missing, 409 on name conflict.
+         */
+        post: operations["apply_mcp_preset_projects__project_id__mcp_presets__preset_id__apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Projects
+         * @description List projects from `config.toml`. Active project is flagged.
+         */
+        get: operations["list_projects_projects_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Active Project
+         * @description Return the currently-active project.
+         *
+         *     Lazily creates a default entry in `config.toml` the first time a new
+         *     provider is queried, so the UI never sees an empty body for the active
+         *     project.
+         */
+        get: operations["active_project_projects_active_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Project */
+        get: operations["get_project_projects__project_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Project
+         * @description Rename / re-describe / archive a project. Persists to `config.toml`.
+         */
+        patch: operations["update_project_projects__project_id__patch"];
+        trace?: never;
+    };
+    "/projects/{project_id}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Activate Project */
+        post: operations["activate_project_projects__project_id__activate_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -764,6 +1243,325 @@ export interface components {
          * @enum {string}
          */
         ItemState: "new" | "active" | "blocked" | "needs_info" | "resolved" | "closed";
+        /**
+         * MCPPresetApplyRequest
+         * @description Body for `POST /projects/{id}/mcp/presets/{preset_id}/apply`.
+         *
+         *     `name` overrides the preset's own default server name; leave unset to use
+         *     the preset default. `env` must contain all env vars the preset marks
+         *     `required`.
+         */
+        MCPPresetApplyRequest: {
+            /** Name */
+            name?: string | null;
+            /** Env */
+            env?: {
+                [key: string]: string;
+            };
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+        };
+        /**
+         * MCPPresetDTO
+         * @description A frozen recipe for a known MCP server.
+         *
+         *     Surfaces turn this into a real `MCPServerDTO` by calling
+         *     `POST /mcp/presets/{id}/apply` with the env values filled in.
+         */
+        MCPPresetDTO: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Description */
+            description: string;
+            /** Default Name */
+            default_name: string;
+            /** Command */
+            command: string;
+            /** Args */
+            args?: string[];
+            /** Env */
+            env?: components["schemas"]["MCPPresetEnvDTO"][];
+            /**
+             * Docs Url
+             * @default
+             */
+            docs_url: string;
+            /**
+             * Transport
+             * @default stdio
+             */
+            transport: string;
+            /**
+             * Startup Timeout Seconds
+             * @default 15
+             */
+            startup_timeout_seconds: number;
+        };
+        /**
+         * MCPPresetEnvDTO
+         * @description One env-var slot a preset asks the caller to supply.
+         */
+        MCPPresetEnvDTO: {
+            /** Name */
+            name: string;
+            /** Description */
+            description: string;
+            /**
+             * Required
+             * @default true
+             */
+            required: boolean;
+            /**
+             * Placeholder
+             * @default
+             */
+            placeholder: string;
+        };
+        /** MCPPresetListDTO */
+        MCPPresetListDTO: {
+            /** Presets */
+            presets?: components["schemas"]["MCPPresetDTO"][];
+        };
+        /** MCPServerCreateRequest */
+        MCPServerCreateRequest: {
+            /** Name */
+            name: string;
+            /** Command */
+            command: string;
+            /** Args */
+            args?: string[];
+            /** Env */
+            env?: {
+                [key: string]: string;
+            };
+            /**
+             * Transport
+             * @default stdio
+             */
+            transport: string;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Startup Timeout Seconds
+             * @default 10
+             */
+            startup_timeout_seconds: number;
+        };
+        /**
+         * MCPServerDTO
+         * @description One MCP server attached to a project, as exposed over HTTP.
+         *
+         *     Mirrors `docket.config.models.MCPServerEntry` plus the project id and the
+         *     user-facing `name` (the dict key in `ProjectEntry.mcp`).
+         */
+        MCPServerDTO: {
+            /** Project Id */
+            project_id: string;
+            /** Name */
+            name: string;
+            /**
+             * Transport
+             * @default stdio
+             */
+            transport: string;
+            /**
+             * Command
+             * @default
+             */
+            command: string;
+            /** Args */
+            args?: string[];
+            /** Env */
+            env?: {
+                [key: string]: string;
+            };
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Startup Timeout Seconds
+             * @default 10
+             */
+            startup_timeout_seconds: number;
+        };
+        /** MCPServerListDTO */
+        MCPServerListDTO: {
+            /** Project Id */
+            project_id: string;
+            /** Entries */
+            entries?: components["schemas"]["MCPServerDTO"][];
+        };
+        /**
+         * MCPServerTestRequest
+         * @description Draft MCP server config to validate without persisting it.
+         */
+        MCPServerTestRequest: {
+            /** Name */
+            name: string;
+            /** Command */
+            command: string;
+            /** Args */
+            args?: string[];
+            /** Env */
+            env?: {
+                [key: string]: string;
+            };
+            /**
+             * Transport
+             * @default stdio
+             */
+            transport: string;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Startup Timeout Seconds
+             * @default 10
+             */
+            startup_timeout_seconds: number;
+        };
+        /**
+         * MCPServerTestResultDTO
+         * @description Outcome of `POST /projects/{id}/mcp/{name}/test`.
+         *
+         *     `tools` is the discovered tool catalog (qualified `mcp__<name>__<tool>`)
+         *     on success; `error` carries a short human-readable reason on failure.
+         */
+        MCPServerTestResultDTO: {
+            /** Name */
+            name: string;
+            /** Ok */
+            ok: boolean;
+            /** Tools */
+            tools?: string[];
+            /** Tool Details */
+            tool_details?: components["schemas"]["MCPToolDTO"][];
+            /**
+             * Error
+             * @default
+             */
+            error: string;
+        };
+        /**
+         * MCPServerUpdateRequest
+         * @description PATCH body. Only fields you set are written; others are left alone.
+         *
+         *     Pass `args=[]` or `env={}` to explicitly clear those collections.
+         */
+        MCPServerUpdateRequest: {
+            /** Command */
+            command?: string | null;
+            /** Args */
+            args?: string[] | null;
+            /** Env */
+            env?: {
+                [key: string]: string;
+            } | null;
+            /** Transport */
+            transport?: string | null;
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Startup Timeout Seconds */
+            startup_timeout_seconds?: number | null;
+        };
+        /** MCPToolDTO */
+        MCPToolDTO: {
+            /** Id */
+            id: string;
+            /** Server Name */
+            server_name: string;
+            /** Name */
+            name: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Input Schema */
+            input_schema?: {
+                [key: string]: unknown;
+            };
+        };
+        /** MemoryCreateRequest */
+        MemoryCreateRequest: {
+            /** Title */
+            title: string;
+            /**
+             * Body Md
+             * @default
+             */
+            body_md: string;
+            /** Tags */
+            tags?: string[];
+        };
+        /**
+         * MemoryDTO
+         * @description One memory entry as exposed over HTTP. Bodies are full markdown —
+         *     list endpoints include them so a frontend can render previews without
+         *     a per-row follow-up call.
+         */
+        MemoryDTO: {
+            /** Id */
+            id: string;
+            /** Project Id */
+            project_id: string;
+            /** Title */
+            title: string;
+            /**
+             * Body Md
+             * @default
+             */
+            body_md: string;
+            /** Tags */
+            tags?: string[];
+            /**
+             * Source
+             * @default user
+             */
+            source: string;
+            /** Created At */
+            created_at?: string | null;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /**
+         * MemoryListDTO
+         * @description List response carries the project's memory `revision` so a frontend
+         *     can compare against a cached value and skip re-rendering when nothing
+         *     has changed. The same revision is keyed into the LLM prompt prefix.
+         */
+        MemoryListDTO: {
+            /** Project Id */
+            project_id: string;
+            /**
+             * Revision
+             * @default 0
+             */
+            revision: number;
+            /** Entries */
+            entries?: components["schemas"]["MemoryDTO"][];
+        };
+        /** MemoryUpdateRequest */
+        MemoryUpdateRequest: {
+            /** Title */
+            title?: string | null;
+            /** Body Md */
+            body_md?: string | null;
+            /** Tags */
+            tags?: string[] | null;
+        };
         /** MutationConfirmedDTO */
         MutationConfirmedDTO: {
             /** Proposal Id */
@@ -781,6 +1579,49 @@ export interface components {
             item_id: string;
             /** Pinned */
             pinned: boolean;
+        };
+        /**
+         * ProjectDTO
+         * @description Project surface for the HTTP API.
+         *
+         *     `id` is the provider key used everywhere internally; UIs render `name`.
+         *     `active` is true when this is the currently-active project for the
+         *     runtime. `description` is human-edited.
+         */
+        ProjectDTO: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Provider Key */
+            provider_key: string;
+            /**
+             * Active
+             * @default false
+             */
+            active: boolean;
+            /**
+             * Archived
+             * @default false
+             */
+            archived: boolean;
+        };
+        /**
+         * ProjectUpdateRequest
+         * @description PATCH body. Only fields you set are written; others are left alone.
+         */
+        ProjectUpdateRequest: {
+            /** Name */
+            name?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Archived */
+            archived?: boolean | null;
         };
         /** PromptDTO */
         PromptDTO: {
@@ -827,7 +1668,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "state_change" | "description_patch" | "attachment_upload" | "item_create" | "comment_add";
+            kind: "state_change" | "description_patch" | "attachment_upload" | "item_create" | "comment_add" | "memory_write" | "memory_delete";
             /** Item Id */
             item_id?: string | null;
             /** Diff */
@@ -849,15 +1690,15 @@ export interface components {
              */
             content_type: string;
         };
-        /** ProposeDescriptionRequest */
-        ProposeDescriptionRequest: {
-            /** New Description Md */
-            new_description_md: string;
-        };
         /** ProposeCommentRequest */
         ProposeCommentRequest: {
             /** Body Md */
             body_md: string;
+        };
+        /** ProposeDescriptionRequest */
+        ProposeDescriptionRequest: {
+            /** New Description Md */
+            new_description_md: string;
         };
         /** ProposeTransitionRequest */
         ProposeTransitionRequest: {
@@ -944,6 +1785,47 @@ export interface components {
             };
         };
         /**
+         * SettingsHttpTokenDTO
+         * @description Response for HTTP token regeneration.
+         *
+         *     The new token is returned once in plain text so the caller can persist
+         *     it. Subsequent `GET /settings` calls return it masked.
+         */
+        SettingsHttpTokenDTO: {
+            /** Token */
+            token: string;
+            /**
+             * Requires Restart
+             * @default true
+             */
+            requires_restart: boolean;
+        };
+        /** SettingsLlmKeyDTO */
+        SettingsLlmKeyDTO: {
+            /** Ok */
+            ok: boolean;
+            /** Configured */
+            configured: boolean;
+            /**
+             * Requires Restart
+             * @default false
+             */
+            requires_restart: boolean;
+        };
+        /**
+         * SettingsLlmKeyRequest
+         * @description Rotate the LLM API key.
+         *
+         *     Persists to the XDG-managed `.env` file so `docket serve` picks it up on
+         *     next start. Leaving `api_key` empty clears the entry (chat 503s until
+         *     re-set). Triggers a rebind of the live LLM client when possible so the
+         *     change takes effect without restart.
+         */
+        SettingsLlmKeyRequest: {
+            /** Api Key */
+            api_key: string;
+        };
+        /**
          * SettingsPatchRequest
          * @description Deep-partial merge onto the current Config.
          *
@@ -956,6 +1838,38 @@ export interface components {
             patch?: {
                 [key: string]: unknown;
             };
+        };
+        /**
+         * SettingsProviderAddRequest
+         * @description Add a provider entry to config.toml at runtime.
+         *
+         *     Shape mirrors `SetupProviderEntry` but is handled under /settings so
+         *     bootstrap-token gating doesn't apply. `make_active=true` also flips
+         *     `active_provider` to the new key.
+         */
+        SettingsProviderAddRequest: {
+            /** Key */
+            key: string;
+            /** Type */
+            type: string;
+            /**
+             * Display Name
+             * @default
+             */
+            display_name: string;
+            /** Config */
+            config?: {
+                [key: string]: unknown;
+            };
+            /** Scope */
+            scope?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Make Active
+             * @default false
+             */
+            make_active: boolean;
         };
         /** SettingsUpdatedDTO */
         SettingsUpdatedDTO: {
@@ -1010,6 +1924,12 @@ export interface components {
              * @default true
              */
             telemetry_enabled: boolean;
+            /**
+             * Telemetry Level
+             * @default DEBUG
+             * @enum {string}
+             */
+            telemetry_level: "DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL";
             /**
              * Run Initial Sync
              * @default true
@@ -1152,6 +2072,85 @@ export interface components {
             ok: boolean;
             /** Error */
             error?: string | null;
+        };
+        /** SourceCreateRequest */
+        SourceCreateRequest: {
+            /** Title */
+            title: string;
+            /**
+             * Body Md
+             * @default
+             */
+            body_md: string;
+            /**
+             * Kind
+             * @default
+             */
+            kind: string;
+            /**
+             * Uri
+             * @default
+             */
+            uri: string;
+            /** Tags */
+            tags?: string[];
+        };
+        /**
+         * SourceDTO
+         * @description One source document. Like memory, list endpoints include the body
+         *     so a frontend can render previews in one round-trip.
+         */
+        SourceDTO: {
+            /** Id */
+            id: string;
+            /** Project Id */
+            project_id: string;
+            /** Title */
+            title: string;
+            /**
+             * Body Md
+             * @default
+             */
+            body_md: string;
+            /**
+             * Kind
+             * @default
+             */
+            kind: string;
+            /**
+             * Uri
+             * @default
+             */
+            uri: string;
+            /** Tags */
+            tags?: string[];
+            /** Created At */
+            created_at?: string | null;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /**
+         * SourceListDTO
+         * @description No revision counter: sources are not part of the prompt prefix.
+         */
+        SourceListDTO: {
+            /** Project Id */
+            project_id: string;
+            /** Entries */
+            entries?: components["schemas"]["SourceDTO"][];
+        };
+        /** SourceUpdateRequest */
+        SourceUpdateRequest: {
+            /** Title */
+            title?: string | null;
+            /** Body Md */
+            body_md?: string | null;
+            /** Kind */
+            kind?: string | null;
+            /** Uri */
+            uri?: string | null;
+            /** Tags */
+            tags?: string[] | null;
         };
         /** StatusDTO */
         StatusDTO: {
@@ -1323,6 +2322,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ProposeAttachmentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    propose_comment_items__item_id__mutations_comment_propose_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProposeCommentRequest"];
             };
         };
         responses: {
@@ -1723,6 +2757,8 @@ export interface operations {
                 tag?: string | null;
                 archived?: boolean;
                 parent_id?: string | null;
+                /** @description Apply the active saved view as a post-cache filter. Set false to see every cached item regardless of view. */
+                apply_view?: boolean;
             };
             header?: never;
             path?: never;
@@ -2055,6 +3091,176 @@ export interface operations {
             };
         };
     };
+    rotate_llm_key_settings_llm_key_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SettingsLlmKeyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsLlmKeyDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    regenerate_http_token_settings_http_token_regenerate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsHttpTokenDTO"];
+                };
+            };
+        };
+    };
+    provider_types_settings_providers_types_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupProviderTypeDTO"][];
+                };
+            };
+        };
+    };
+    test_provider_draft_settings_providers_test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetupTestProviderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupTestResultDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_provider_settings_providers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SettingsProviderAddRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsUpdatedDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_provider_settings_providers__key__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsUpdatedDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_scopes_scopes_get: {
         parameters: {
             query?: never;
@@ -2188,6 +3394,841 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProviderDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_memory_projects__project_id__memory_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryListDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_memory_projects__project_id__memory_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemoryCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_memory_projects__project_id__memory_search_get: {
+        parameters: {
+            query: {
+                /** @description FTS query. */
+                q: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryListDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_memory_memory__memory_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                memory_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_memory_memory__memory_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                memory_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_memory_memory__memory_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                memory_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemoryUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_sources_projects__project_id__sources_get: {
+        parameters: {
+            query?: {
+                /** @description Filter by kind. */
+                kind?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceListDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_source_projects__project_id__sources_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_sources_projects__project_id__sources_search_get: {
+        parameters: {
+            query: {
+                /** @description FTS query. */
+                q: string;
+                /** @description Filter by kind. */
+                kind?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceListDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_source_sources__source_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_source_sources__source_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_source_sources__source_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_mcp_servers_projects__project_id__mcp_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPServerListDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_mcp_server_projects__project_id__mcp_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MCPServerCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPServerDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_mcp_server_projects__project_id__mcp__name__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPServerDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_mcp_server_projects__project_id__mcp__name__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_mcp_server_projects__project_id__mcp__name__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MCPServerUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPServerDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_mcp_server_draft_projects__project_id__mcp_test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MCPServerTestRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPServerTestResultDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_mcp_server_projects__project_id__mcp__name__test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPServerTestResultDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_mcp_presets_mcp_presets_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPPresetListDTO"];
+                };
+            };
+        };
+    };
+    apply_mcp_preset_projects__project_id__mcp_presets__preset_id__apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                preset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MCPPresetApplyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPServerDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_projects_projects_get: {
+        parameters: {
+            query?: {
+                include_archived?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDTO"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    active_project_projects_active_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDTO"];
+                };
+            };
+        };
+    };
+    get_project_projects__project_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_project_projects__project_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    activate_project_projects__project_id__activate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDTO"];
                 };
             };
             /** @description Validation Error */

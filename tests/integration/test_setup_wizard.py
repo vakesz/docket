@@ -144,6 +144,7 @@ def test_wizard_uses_discovery_selections_end_to_end(
             "3",  # iteration path picker → platform\Sprint 42
             "2",  # assignee picker → @me
             "DEBUG",  # telemetry log level
+            "",  # llm endpoint blank → skip chat wiring
         ],
         confirm_answers=[True, True, True],  # scope ok; telemetry enabled; http enabled
     )
@@ -190,6 +191,7 @@ def test_wizard_falls_back_when_discovery_fails(
             "",  # iteration
             "2",  # assignee picker → @me (1=any, 2=@me)
             "DEBUG",  # telemetry log level
+            "",  # llm endpoint blank → skip chat wiring
         ],
         confirm_answers=[True, True, True],  # scope ok; telemetry enabled; http enabled
     )
@@ -238,6 +240,7 @@ def test_wizard_rejects_bare_org_name_then_accepts_full_url(
             "",  # iteration
             "2",  # assignee → @me (1=any, 2=@me)
             "DEBUG",  # telemetry log level
+            "",  # llm endpoint blank → skip chat wiring
         ],
         confirm_answers=[True, True, True],  # scope ok; telemetry enabled; http enabled
     )
@@ -276,6 +279,7 @@ def test_wizard_enables_http_and_mints_token(
             "",  # iteration
             "2",  # assignee → @me (1=any, 2=@me)
             "DEBUG",  # telemetry log level
+            "",  # llm endpoint blank → skip chat wiring
         ],
         confirm_answers=[True, True, True],  # scope ok; telemetry; http enabled
     )
@@ -314,6 +318,7 @@ def test_wizard_http_disabled_leaves_token_empty(
             "",
             "2",  # assignee → @me (1=any, 2=@me)
             "DEBUG",  # telemetry log level
+            "",  # llm endpoint blank → skip chat wiring
         ],
         confirm_answers=[True, True, False],  # scope ok; telemetry; http DISABLED
     )

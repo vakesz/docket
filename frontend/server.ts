@@ -12,17 +12,18 @@
  */
 import { statSync } from "node:fs";
 import { join, normalize } from "node:path";
-
 // @ts-expect-error — built artifact exists after `bun run build`.
 import ssrHandler from "./dist/server/server.js";
+import { resolveBackendConfig } from "./resolve-backend-config";
 
 const PORT = Number.parseInt(process.env.PORT ?? "3000", 10);
-const API_TARGET = process.env.DOCKET_API_URL ?? "http://127.0.0.1:8765";
-const API_TOKEN = process.env.DOCKET_API_TOKEN ?? "";
+const { apiUrl: API_TARGET, apiToken: API_TOKEN } = resolveBackendConfig();
 const CLIENT_DIR = join(import.meta.dir, "dist", "client");
 
 if (!API_TOKEN) {
-  console.warn("[docket-frontend] DOCKET_API_TOKEN is empty — /api/* requests will be unauthenticated.");
+  console.warn(
+    "[docket-frontend] DOCKET_API_TOKEN is empty — /api/* requests will be unauthenticated.",
+  );
 }
 
 async function proxyApi(req: Request): Promise<Response> {
@@ -39,8 +40,7 @@ async function proxyApi(req: Request): Promise<Response> {
   const init: RequestInit & { duplex?: "half" } = {
     method: req.method,
     headers,
-    body:
-      req.method === "GET" || req.method === "HEAD" ? undefined : (req.body ?? undefined),
+    body: req.method === "GET" || req.method === "HEAD" ? undefined : (req.body ?? undefined),
     redirect: "manual",
   };
   if (init.body) init.duplex = "half";
@@ -87,4 +87,5 @@ const server = Bun.serve({
   },
 });
 
+// biome-ignore lint/suspicious/noConsole: startup banner for operators
 console.log(`[docket-frontend] ready on http://${server.hostname}:${server.port} → ${API_TARGET}`);

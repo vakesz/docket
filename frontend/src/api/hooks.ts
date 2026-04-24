@@ -84,6 +84,74 @@ export function usePatchSettings() {
   });
 }
 
+export function useRotateLlmKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: DTO["SettingsLlmKeyRequest"]) =>
+      api.post<DTO["SettingsLlmKeyDTO"]>("/settings/llm-key", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.settings() });
+      qc.invalidateQueries({ queryKey: qk.status() });
+    },
+  });
+}
+
+export function useRegenerateHttpToken() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api.post<DTO["SettingsHttpTokenDTO"]>(
+        "/settings/http-token/regenerate",
+        {} as Record<string, never>,
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.settings() });
+    },
+  });
+}
+
+export function useSettingsProviderTypes(enabled = true) {
+  return useQuery({
+    queryKey: qk.settingsProviderTypes(),
+    queryFn: ({ signal }) =>
+      api.get<DTO["SetupProviderTypeDTO"][]>("/settings/providers/types", undefined, signal),
+    enabled,
+  });
+}
+
+export function useTestSettingsProvider() {
+  return useMutation({
+    mutationFn: (body: DTO["SetupTestProviderRequest"]) =>
+      api.post<DTO["SetupTestResultDTO"]>("/settings/providers/test", body),
+  });
+}
+
+export function useAddProvider() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: DTO["SettingsProviderAddRequest"]) =>
+      api.post<DTO["SettingsUpdatedDTO"]>("/settings/providers", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.settings() });
+      qc.invalidateQueries({ queryKey: qk.providers() });
+      qc.invalidateQueries({ queryKey: qk.status() });
+    },
+  });
+}
+
+export function useRemoveProvider() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (key: string) =>
+      api.delete<DTO["SettingsUpdatedDTO"]>(`/settings/providers/${encodeURIComponent(key)}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.settings() });
+      qc.invalidateQueries({ queryKey: qk.providers() });
+      qc.invalidateQueries({ queryKey: qk.status() });
+    },
+  });
+}
+
 // ---------- Providers and scopes --------------------------------------------
 
 export function useProviders() {
@@ -403,6 +471,124 @@ export function useResetPrompt() {
     onSuccess: (_data, key) => {
       qc.invalidateQueries({ queryKey: qk.prompts() });
       qc.invalidateQueries({ queryKey: qk.prompt(key) });
+    },
+  });
+}
+
+// ---------- Projects ---------------------------------------------------------
+
+export function useActiveProject() {
+  return useQuery({
+    queryKey: qk.activeProject(),
+    queryFn: ({ signal }) => api.get<DTO["ProjectDTO"]>("/projects/active", undefined, signal),
+  });
+}
+
+// ---------- MCP --------------------------------------------------------------
+
+export function useMcpServers(projectId: string | undefined) {
+  return useQuery({
+    queryKey: projectId ? qk.mcpServers(projectId) : qk.mcpServers("__none__"),
+    enabled: Boolean(projectId),
+    queryFn: ({ signal }) =>
+      api.get<DTO["MCPServerListDTO"]>(
+        `/projects/${encodeURIComponent(projectId ?? "")}/mcp`,
+        undefined,
+        signal,
+      ),
+  });
+}
+
+export function useCreateMcpServer(projectId: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: DTO["MCPServerCreateRequest"]) =>
+      api.post<DTO["MCPServerDTO"]>(`/projects/${encodeURIComponent(projectId ?? "")}/mcp`, body),
+    onSuccess: () => {
+      if (!projectId) return;
+      qc.invalidateQueries({ queryKey: qk.mcpServers(projectId) });
+      qc.invalidateQueries({ queryKey: qk.status() });
+    },
+  });
+}
+
+export function useUpdateMcpServer(projectId: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, body }: { name: string; body: DTO["MCPServerUpdateRequest"] }) =>
+      api.patch<DTO["MCPServerDTO"]>(
+        `/projects/${encodeURIComponent(projectId ?? "")}/mcp/${encodeURIComponent(name)}`,
+        body,
+      ),
+    onSuccess: (_data, { name }) => {
+      if (!projectId) return;
+      qc.invalidateQueries({ queryKey: qk.mcpServers(projectId) });
+      qc.invalidateQueries({ queryKey: qk.mcpServer(projectId, name) });
+      qc.invalidateQueries({ queryKey: qk.status() });
+    },
+  });
+}
+
+export function useDeleteMcpServer(projectId: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api.delete<void>(
+        `/projects/${encodeURIComponent(projectId ?? "")}/mcp/${encodeURIComponent(name)}`,
+      ),
+    onSuccess: () => {
+      if (!projectId) return;
+      qc.invalidateQueries({ queryKey: qk.mcpServers(projectId) });
+      qc.invalidateQueries({ queryKey: qk.status() });
+    },
+  });
+}
+
+/** Test a saved server by name. Spawns the subprocess, runs the handshake,
+ * lists tools, then cleans up. Blocking: may take up to the server's
+ * startup timeout. */
+export function useTestMcpServer(projectId: string | undefined) {
+  return useMutation({
+    mutationFn: (name: string) =>
+      api.post<DTO["MCPServerTestResultDTO"]>(
+        `/projects/${encodeURIComponent(projectId ?? "")}/mcp/${encodeURIComponent(name)}/test`,
+      ),
+  });
+}
+
+/** Test a draft server config without saving it. Same blocking caveats as
+ * `useTestMcpServer`; useful when iterating on a new entry. */
+export function useTestMcpServerDraft(projectId: string | undefined) {
+  return useMutation({
+    mutationFn: (body: DTO["MCPServerTestRequest"]) =>
+      api.post<DTO["MCPServerTestResultDTO"]>(
+        `/projects/${encodeURIComponent(projectId ?? "")}/mcp/test`,
+        body,
+      ),
+  });
+}
+
+export function useMcpPresets() {
+  return useQuery({
+    queryKey: qk.mcpPresets(),
+    queryFn: ({ signal }) => api.get<DTO["MCPPresetListDTO"]>("/mcp/presets", undefined, signal),
+  });
+}
+
+export function useApplyMcpPreset(projectId: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ presetId, body }: { presetId: string; body: DTO["MCPPresetApplyRequest"] }) =>
+      api.post<DTO["MCPServerDTO"]>(
+        `/projects/${encodeURIComponent(projectId ?? "")}/mcp/presets/${encodeURIComponent(
+          presetId,
+        )}/apply`,
+        body,
+      ),
+    onSuccess: () => {
+      if (!projectId) return;
+      qc.invalidateQueries({ queryKey: qk.mcpServers(projectId) });
+      qc.invalidateQueries({ queryKey: qk.status() });
     },
   });
 }

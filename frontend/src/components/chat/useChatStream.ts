@@ -135,7 +135,8 @@ function parseDelta(data: string): string | null {
   try {
     const parsed = JSON.parse(data) as { text?: string };
     return parsed.text ?? null;
-  } catch {
+  } catch (err) {
+    console.warn("chat: dropped malformed SSE delta", { err, data });
     return null;
   }
 }
@@ -155,7 +156,8 @@ function parseMessage(data: string): ParsedMessage | null {
       content: typeof parsed.content === "string" ? parsed.content : "",
       name: parsed.name,
     };
-  } catch {
+  } catch (err) {
+    console.warn("chat: dropped malformed SSE message", { err, data });
     return null;
   }
 }
@@ -163,7 +165,8 @@ function parseMessage(data: string): ParsedMessage | null {
 function parseProposal(data: string): DTO["ProposalDTO"] | null {
   try {
     return JSON.parse(data) as DTO["ProposalDTO"];
-  } catch {
+  } catch (err) {
+    console.warn("chat: dropped malformed SSE proposal", { err, data });
     return null;
   }
 }

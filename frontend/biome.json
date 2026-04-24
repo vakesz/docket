@@ -14,10 +14,10 @@
       "**/*.mjs",
       "**/*.cjs",
       "**/*.json",
-      "!**/node_modules/**",
-      "!**/.output/**",
-      "!**/.nitro/**",
-      "!**/dist/**",
+      "!**/node_modules",
+      "!**/.output",
+      "!**/.nitro",
+      "!**/dist",
       "!src/routeTree.gen.ts",
       "!src/api/schema.d.ts"
     ]

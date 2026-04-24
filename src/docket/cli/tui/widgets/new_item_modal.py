@@ -3,7 +3,7 @@
 Triggered by `n` in the main app. Collects kind + title + description (plus
 optional parent / assignee / tags), surfaces duplicate candidates from the
 FTS5 cache as the user types the title, and funnels the result through the
-same `mutation_service.propose_create` pipeline as any other write.
+same proposal-first pipeline as any other write.
 
 Dismissal:
   - `NewItemRequest(kind, fields)` on submit

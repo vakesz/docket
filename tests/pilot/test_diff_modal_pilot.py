@@ -13,7 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from docket.cli.tui import DocketApp, TuiContext
+from docket.cli.tui.app import DocketApp
+from docket.cli.tui.tui_context import TuiContext
 from docket.cli.tui.widgets.chat_pane import ChatPane
 from docket.cli.tui.widgets.diff_modal import DiffModal
 from docket.cli.tui.widgets.item_tree import ItemTree

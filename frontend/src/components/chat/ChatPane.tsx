@@ -26,6 +26,9 @@ export function ChatPane({ itemId }: { itemId: string }) {
   useEffect(() => {
     reset();
     setProposals([]);
+    // Also abort on unmount so navigating away mid-stream doesn't leave
+    // the fetch reader + AbortController orphaned on a dead component.
+    return reset;
   }, [itemId, reset]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll on every new chunk / history refresh.

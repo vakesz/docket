@@ -148,11 +148,27 @@ class MCPManager:
         prompt prefix stays cache-stable across runs as long as the
         config doesn't change.
         """
+        # Track qualified names we've already registered so we can warn
+        # when two servers advertise tools that collide on the fully
+        # qualified `mcp__<server>__<tool>` form. `ToolRegistry.register`
+        # silently overwrites duplicates, so without this warning a
+        # collision would be invisible until someone notices a tool
+        # calling the wrong handler.
+        seen: dict[str, str] = {}
         for server_name in sorted(self._clients):
             client = self._clients[server_name]
             tools = sorted(client.list_tools(), key=lambda t: t.name)
             for tool in tools:
                 qualified = f"mcp__{server_name}__{tool.name}"
+                if qualified in seen:
+                    log.warning(
+                        "mcp: tool name collision on %r (previously registered by %r, "
+                        "now overwritten by %r); the second handler wins",
+                        qualified,
+                        seen[qualified],
+                        server_name,
+                    )
+                seen[qualified] = server_name
                 description = tool.description or f"MCP tool from {server_name}"
                 # MCP `inputSchema` is always a JSON Schema object; the
                 # agent's tool schema layer expects a dict in the same

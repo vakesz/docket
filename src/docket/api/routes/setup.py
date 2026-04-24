@@ -291,14 +291,19 @@ def _normalize_provider_config(type_id: str, config: dict[str, Any]) -> dict[str
 
 
 def _write_env_key(paths: Paths, api_key: str) -> None:
-    """Persist AZURE_OPENAI_API_KEY into XDG config .env so `docket serve` picks it up."""
+    """Persist AZURE_OPENAI_API_KEY into XDG config .env so `docket serve` picks it up.
+
+    Passing an empty string removes the entry. The runtime value is NOT
+    rewritten by this function — callers can update `os.environ` directly if
+    they want the change to take effect without restart."""
     env_path = paths.env_file
     lines: list[str] = []
     if env_path.exists():
         lines = env_path.read_text(encoding="utf-8").splitlines()
         lines = [ln for ln in lines if not ln.strip().startswith("AZURE_OPENAI_API_KEY=")]
-    lines.append(f"AZURE_OPENAI_API_KEY={api_key}")
-    env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    if api_key:
+        lines.append(f"AZURE_OPENAI_API_KEY={api_key}")
+    env_path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
     with contextlib.suppress(OSError):
         os.chmod(env_path, 0o600)
 

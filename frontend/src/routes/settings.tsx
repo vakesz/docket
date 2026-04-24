@@ -19,6 +19,7 @@ import {
   Save,
   Search,
   Server,
+  ServerCog,
   Settings2,
   Sparkles,
   Trash2,
@@ -32,17 +33,24 @@ import {
   useRef,
   useState,
 } from "react";
-
+import type { DTO } from "~/api/client";
 import {
+  useAddProvider,
   useManualSync,
   usePatchSettings,
   usePrompt,
   usePrompts,
   usePutPrompt,
+  useRegenerateHttpToken,
+  useRemoveProvider,
   useResetPrompt,
+  useRotateLlmKey,
   useSettings,
+  useSettingsProviderTypes,
+  useTestSettingsProvider,
 } from "~/api/hooks";
 import type { components } from "~/api/schema";
+import { McpPage } from "~/components/mcp/McpPage";
 import { ThemePicker } from "~/components/shell/ThemePicker";
 import { docketCodeMirrorTheme } from "~/lib/cmTheme";
 import { cn } from "~/lib/cn";
@@ -55,7 +63,16 @@ type ConfigMap = Record<string, unknown>;
 
 type Mode = "form" | "raw";
 
-type SectionKey = "providers" | "llm" | "http" | "ui" | "telemetry" | "sync" | "stale" | "prompts";
+type SectionKey =
+  | "providers"
+  | "llm"
+  | "http"
+  | "ui"
+  | "telemetry"
+  | "sync"
+  | "stale"
+  | "prompts"
+  | "mcp";
 
 type SectionMeta = {
   key: SectionKey;
@@ -120,6 +137,13 @@ const SECTIONS: SectionMeta[] = [
     label: "Prompts",
     description: "Edit the markdown prompt templates the agent uses.",
     icon: Sparkles,
+    requiresRestart: false,
+  },
+  {
+    key: "mcp",
+    label: "MCP servers",
+    description: "Manage Model Context Protocol servers attached to the active project.",
+    icon: ServerCog,
     requiresRestart: false,
   },
 ];
@@ -283,8 +307,8 @@ function SettingsPage() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
-        // The prompts panel owns its own save shortcut.
-        if (activeSection === "prompts") return;
+        // The prompts and MCP panels own their own save shortcut.
+        if (activeSection === "prompts" || activeSection === "mcp") return;
         event.preventDefault();
         if (canSave) save();
       }
@@ -408,20 +432,28 @@ function SettingsPage() {
               <ModeButton
                 active={mode === "form"}
                 onClick={() => switchMode("form")}
-                disabled={activeSection === "prompts" || (mode === "raw" && !formCanSwitchToForm)}
+                disabled={
+                  activeSection === "prompts" ||
+                  activeSection === "mcp" ||
+                  (mode === "raw" && !formCanSwitchToForm)
+                }
                 icon={FormInput}
                 label="Form"
               />
               <ModeButton
                 active={mode === "raw"}
                 onClick={() => switchMode("raw")}
-                disabled={activeSection === "prompts"}
+                disabled={activeSection === "prompts" || activeSection === "mcp"}
                 icon={Braces}
                 label="Raw JSON"
               />
             </div>
             {activeSection === "prompts" ? (
               <p className="mt-2 px-2 text-[11px] text-fg-muted">Prompts have their own editor.</p>
+            ) : activeSection === "mcp" ? (
+              <p className="mt-2 px-2 text-[11px] text-fg-muted">
+                MCP servers have their own editor.
+              </p>
             ) : mode === "raw" && rawParsed.error ? (
               <p className="mt-2 px-2 text-[11px] text-danger">
                 Fix JSON to switch back to form mode.
@@ -434,6 +466,8 @@ function SettingsPage() {
         <section className="flex min-h-0 flex-col overflow-hidden">
           {activeSection === "prompts" ? (
             <PromptsPanel />
+          ) : activeSection === "mcp" ? (
+            <McpPage />
           ) : (
             <>
               <header className="flex flex-wrap items-center gap-3 border-b border-border bg-surface/70 px-6 py-4 backdrop-blur">
@@ -629,6 +663,24 @@ function ProvidersForm({
   const initialActive = getString(initialConfig, "active_provider") ?? "";
   const active = draftActive ?? initialActive;
 
+  const [showAdd, setShowAdd] = useState(false);
+  const remove = useRemoveProvider();
+  const [removeError, setRemoveError] = useState<string | null>(null);
+
+  const onRemove = (key: string) => {
+    if (key === initialActive) {
+      setRemoveError(
+        `Cannot remove '${key}' — it is the currently-active provider. Switch to another provider first (save the change, restart), then remove.`,
+      );
+      return;
+    }
+    if (!window.confirm(`Remove provider "${key}"? This cannot be undone.`)) return;
+    setRemoveError(null);
+    remove.mutate(key, {
+      onError: (err) => setRemoveError((err as Error).message),
+    });
+  };
+
   return (
     <>
       <FormField
@@ -637,7 +689,7 @@ function ProvidersForm({
       >
         {providerKeys.length === 0 ? (
           <p className="rounded-xl border border-dashed border-border px-3 py-2 text-sm text-fg-muted">
-            No providers configured. Use the setup wizard to add one.
+            No providers configured. Add one below to get started.
           </p>
         ) : (
           <Select
@@ -649,11 +701,26 @@ function ProvidersForm({
       </FormField>
 
       <div className="flex flex-col gap-3">
-        <Label>Configured providers</Label>
+        <div className="flex items-center justify-between gap-2">
+          <Label>Configured providers</Label>
+          <button
+            type="button"
+            onClick={() => setShowAdd(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-fg hover:bg-surface-alt"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add provider
+          </button>
+        </div>
         <p className="text-xs text-fg-muted">
-          Provider configuration lives in <code>config.toml</code>. To add a new provider or change
-          credentials, use the setup wizard or the Raw JSON mode.
+          Add, test, and remove providers here. Credentials for existing providers still live in{" "}
+          <code>config.toml</code> — use Raw JSON mode to edit them in-place.
         </p>
+        {removeError && (
+          <Notice tone="error" title="Remove failed">
+            {removeError}
+          </Notice>
+        )}
         <div className="grid gap-2 sm:grid-cols-2">
           {providerKeys.length === 0 ? (
             <div className="text-sm text-fg-muted">None.</div>
@@ -666,6 +733,7 @@ function ProvidersForm({
               const scopes = asRecord(entry.scopes);
               const scopeCount = scopes ? Object.keys(scopes).length : 0;
               const isActive = k === active;
+              const isRuntimeActive = k === initialActive;
               return (
                 <div
                   key={k}
@@ -676,11 +744,26 @@ function ProvidersForm({
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="font-medium text-fg">{display}</div>
-                    {isActive && (
-                      <span className="rounded-full bg-accent/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-accent">
-                        active
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {isActive && (
+                        <span className="rounded-full bg-accent/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-accent">
+                          active
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => onRemove(k)}
+                        disabled={isRuntimeActive || remove.isPending}
+                        title={
+                          isRuntimeActive
+                            ? "Cannot remove the currently-active provider."
+                            : `Remove provider '${k}'`
+                        }
+                        className="inline-flex items-center rounded-lg p-1 text-fg-muted hover:bg-surface-alt hover:text-danger disabled:cursor-not-allowed disabled:opacity-30"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
                   <div className="mt-1 font-mono text-[11px] text-fg-muted">
                     {k} · {type}
@@ -694,7 +777,271 @@ function ProvidersForm({
           )}
         </div>
       </div>
+
+      {showAdd && (
+        <AddProviderModal
+          existingKeys={providerKeys}
+          onClose={() => setShowAdd(false)}
+          onAdded={() => setShowAdd(false)}
+        />
+      )}
     </>
+  );
+}
+
+// ---------- Add-provider modal ---------------------------------------------
+
+type ProviderTypeDTO = DTO["SetupProviderTypeDTO"];
+type ProviderFieldDTO = DTO["SetupProviderFieldDTO"];
+
+function AddProviderModal({
+  existingKeys,
+  onClose,
+  onAdded,
+}: {
+  existingKeys: string[];
+  onClose: () => void;
+  onAdded: (key: string) => void;
+}) {
+  const types = useSettingsProviderTypes();
+  const testMutation = useTestSettingsProvider();
+  const addMutation = useAddProvider();
+
+  const [selectedType, setSelectedType] = useState<string>("");
+  const [key, setKey] = useState<string>("");
+  const [displayName, setDisplayName] = useState<string>("");
+  const [makeActive, setMakeActive] = useState(false);
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  const [testResult, setTestResult] = useState<DTO["SetupTestResultDTO"] | null>(null);
+
+  const spec = useMemo<ProviderTypeDTO | null>(
+    () => types.data?.find((t) => t.id === selectedType) ?? null,
+    [types.data, selectedType],
+  );
+
+  useEffect(() => {
+    if (!selectedType && types.data && types.data.length > 0) {
+      setSelectedType(types.data[0]?.id ?? "");
+    }
+  }, [types.data, selectedType]);
+
+  useEffect(() => {
+    // Default the config key to the type id, suffixed when it collides with
+    // an existing entry — mirrors the CLI wizard's behavior.
+    if (!selectedType) return;
+    if (existingKeys.includes(key)) return;
+    if (!existingKeys.includes(selectedType)) {
+      setKey((prev) => prev || selectedType);
+      return;
+    }
+    let i = 2;
+    while (existingKeys.includes(`${selectedType}-${i}`)) i += 1;
+    setKey((prev) => prev || `${selectedType}-${i}`);
+  }, [selectedType, existingKeys, key]);
+
+  const onField = (k: string, v: string) => {
+    setFieldValues((prev) => ({ ...prev, [k]: v }));
+    setTestResult(null);
+  };
+
+  const missingRequired = useMemo(() => {
+    if (!spec) return true;
+    return (spec.fields ?? []).some((f) => f.required && !(fieldValues[f.key] ?? "").trim());
+  }, [spec, fieldValues]);
+
+  const keyInvalid = !key.trim() || existingKeys.includes(key);
+
+  const runTest = () => {
+    if (!spec || missingRequired) return;
+    setTestResult(null);
+    testMutation.mutate(
+      { type: spec.id, config: fieldValues },
+      { onSuccess: (r) => setTestResult(r) },
+    );
+  };
+
+  const runAdd = () => {
+    if (!spec || keyInvalid || missingRequired) return;
+    addMutation.mutate(
+      {
+        key: key.trim(),
+        type: spec.id,
+        display_name: displayName.trim() || key.trim(),
+        config: fieldValues,
+        scope: {},
+        make_active: makeActive,
+      },
+      { onSuccess: () => onAdded(key.trim()) },
+    );
+  };
+
+  // Esc closes
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-xl">
+        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+          <div>
+            <h3 className="text-base font-semibold text-fg">Add provider</h3>
+            <p className="text-xs text-fg-muted">
+              Register a new backend at runtime. A server restart is required before it becomes
+              fully wired in the agent loop.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-border px-2 py-1 text-xs text-fg-muted hover:bg-surface-alt"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="flex flex-1 flex-col gap-4 overflow-auto px-5 py-4">
+          {types.isPending ? (
+            <p className="text-sm text-fg-muted">Loading provider types…</p>
+          ) : types.error ? (
+            <Notice tone="error" title="Failed to load provider types">
+              {(types.error as Error).message}
+            </Notice>
+          ) : (
+            <>
+              <FormField label="Provider type">
+                <Select
+                  value={selectedType}
+                  options={(types.data ?? []).map((t) => ({
+                    value: t.id,
+                    label: `${t.display} (${t.id})`,
+                  }))}
+                  onChange={setSelectedType}
+                />
+              </FormField>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FormField
+                  label="Config key"
+                  help="Short id used internally (e.g. in tool names, tickets). Must be unique."
+                >
+                  <TextInput value={key} onChange={setKey} placeholder="github-work" />
+                </FormField>
+                <FormField label="Display name" help="Shown in the UI.">
+                  <TextInput value={displayName} onChange={setDisplayName} placeholder={key} />
+                </FormField>
+              </div>
+              {keyInvalid && key.trim() && (
+                <p className="text-xs text-danger">
+                  Provider '{key}' already exists. Pick a different key.
+                </p>
+              )}
+
+              {spec?.requires_cli && spec.requires_cli.length > 0 && (
+                <Notice tone="warning" title="CLI auth required">
+                  {`This provider uses the \`${spec.requires_cli.join(", ")}\` CLI(s). Make sure you're signed in on the server host before adding.`}
+                </Notice>
+              )}
+
+              {(spec?.fields ?? []).map((f) => (
+                <ProviderFieldInput
+                  key={f.key}
+                  field={f}
+                  value={fieldValues[f.key] ?? ""}
+                  onChange={(v) => onField(f.key, v)}
+                />
+              ))}
+
+              <FormField label="Make active">
+                <Toggle
+                  checked={makeActive}
+                  onChange={setMakeActive}
+                  label={makeActive ? "Will become active" : "Keep current active provider"}
+                />
+              </FormField>
+
+              {testResult && (
+                <Notice
+                  tone={testResult.ok ? "ok" : "error"}
+                  title={testResult.ok ? "Provider reachable" : "Provider test failed"}
+                >
+                  {testResult.ok
+                    ? "Connection test passed. You can add the provider now."
+                    : (testResult.error ?? "Unknown error")}
+                </Notice>
+              )}
+              {addMutation.error && (
+                <Notice tone="error" title="Add failed">
+                  {(addMutation.error as Error).message}
+                </Notice>
+              )}
+            </>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
+          <button
+            type="button"
+            onClick={runTest}
+            disabled={!spec || missingRequired || testMutation.isPending}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-sm font-medium text-fg hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {testMutation.isPending ? "Testing…" : "Test connection"}
+          </button>
+          <button
+            type="button"
+            onClick={runAdd}
+            disabled={
+              !spec ||
+              keyInvalid ||
+              missingRequired ||
+              addMutation.isPending ||
+              (!!testResult && !testResult.ok)
+            }
+            className="inline-flex items-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-accent-fg hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Plus className="h-4 w-4" />
+            {addMutation.isPending ? "Adding…" : "Add provider"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProviderFieldInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: ProviderFieldDTO;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const inputType = field.kind === "secret" ? "password" : field.kind === "url" ? "url" : "text";
+  return (
+    <FormField
+      label={field.label + (field.required ? "" : " (optional)")}
+      help={field.help || undefined}
+    >
+      <TextInput
+        type={inputType}
+        value={value}
+        onChange={onChange}
+        placeholder={field.placeholder || undefined}
+      />
+    </FormField>
   );
 }
 
@@ -729,6 +1076,8 @@ function LlmForm({
         />
       </FormField>
 
+      <LlmKeyRotation />
+
       <div className="grid gap-4 sm:grid-cols-2">
         <FormField label="Compaction threshold" help="Tokens before older messages get summarized.">
           <NumberInput
@@ -754,6 +1103,49 @@ function LlmForm({
         </FormField>
       </div>
     </>
+  );
+}
+
+function LlmKeyRotation() {
+  const [draft, setDraft] = useState("");
+  const rotate = useRotateLlmKey();
+  const submit = () => {
+    if (!draft.trim() && !rotate.isPending) return;
+    rotate.mutate({ api_key: draft.trim() }, { onSuccess: () => setDraft("") });
+  };
+  return (
+    <FormField
+      label="API key"
+      help="Azure OpenAI key. Stored in the XDG `.env` file — never in config.toml. Leave empty to clear (disables chat)."
+    >
+      <div className="flex w-full gap-2">
+        <TextInput
+          type="password"
+          value={draft}
+          onChange={setDraft}
+          placeholder="Enter a new key to rotate"
+        />
+        <button
+          type="button"
+          onClick={submit}
+          disabled={rotate.isPending}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-sm font-medium text-fg hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <RotateCcw className="h-4 w-4" />
+          {rotate.isPending ? "Saving…" : "Rotate"}
+        </button>
+      </div>
+      {rotate.error && <p className="text-xs text-danger">{(rotate.error as Error).message}</p>}
+      {rotate.isSuccess && rotate.data && (
+        <p className="text-xs text-fg-muted">
+          {rotate.data.configured
+            ? rotate.data.requires_restart
+              ? "Key updated. Restart `docket serve` for chat to pick up the new key."
+              : "Key written to .env."
+            : "Key cleared. Chat will 503 until a new key is set."}
+        </p>
+      )}
+    </FormField>
   );
 }
 
@@ -804,16 +1196,55 @@ function HttpForm({
 
       <FormField
         label="Bearer token"
-        help="Leave empty to keep the current token. Type a new value to replace it."
+        help="Leave empty to keep the current token. Type a new value to replace it, or click Regenerate for a random one."
       >
-        <TextInput
-          type="password"
-          value={tokenInDraft}
-          onChange={(v) => onChange((cur) => setOrUnset(cur, "token", v))}
-          placeholder={initialToken ? initialToken : "(no token set)"}
-        />
+        <div className="flex w-full gap-2">
+          <TextInput
+            type="password"
+            value={tokenInDraft}
+            onChange={(v) => onChange((cur) => setOrUnset(cur, "token", v))}
+            placeholder={initialToken ? initialToken : "(no token set)"}
+          />
+          <HttpTokenRegenButton />
+        </div>
       </FormField>
     </>
+  );
+}
+
+function HttpTokenRegenButton() {
+  const regen = useRegenerateHttpToken();
+  const [revealed, setRevealed] = useState<string | null>(null);
+  const trigger = () => {
+    if (regen.isPending) return;
+    regen.mutate(undefined, { onSuccess: (data) => setRevealed(data.token) });
+  };
+  const copy = () => {
+    if (!revealed) return;
+    void navigator.clipboard?.writeText(revealed);
+  };
+  return (
+    <div className="flex shrink-0 flex-col gap-1">
+      <button
+        type="button"
+        onClick={trigger}
+        disabled={regen.isPending}
+        className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-sm font-medium text-fg hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <RefreshCw className="h-4 w-4" />
+        {regen.isPending ? "…" : "Regenerate"}
+      </button>
+      {revealed && (
+        <button
+          type="button"
+          onClick={copy}
+          className="text-[10px] font-mono text-fg-muted hover:text-fg"
+          title="Copy to clipboard"
+        >
+          Copy new token
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -827,6 +1258,7 @@ function UiForm({
   const theme = getString(value, "theme") ?? "";
   const defaultKind = getString(value, "default_new_item_kind") ?? "task";
   const showAcceptance = getBoolean(value, "show_acceptance_criteria") ?? true;
+  const hideDone = getBoolean(value, "hide_done") ?? true;
   const tagLimit = getNumberValue(value, "tag_filter_collapse_limit");
 
   return (
@@ -869,6 +1301,17 @@ function UiForm({
       </FormField>
 
       <FormField
+        label="Hide done items"
+        help="Hide resolved/closed items from the backlog on startup. The TUI's `c` key toggles this at runtime."
+      >
+        <Toggle
+          checked={hideDone}
+          onChange={(v) => onChange((cur) => ({ ...cur, hide_done: v }))}
+          label={hideDone ? "Hidden" : "Shown"}
+        />
+      </FormField>
+
+      <FormField
         label="Tag filter collapse limit"
         help="Number of tag chips shown before the “+N more” toggle. 0 disables collapsing."
       >
@@ -884,6 +1327,8 @@ function UiForm({
   );
 }
 
+const LOG_LEVELS = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] as const;
+
 function TelemetryForm({
   value,
   onChange,
@@ -892,14 +1337,27 @@ function TelemetryForm({
   onChange: (updater: (current: ConfigMap) => ConfigMap) => void;
 }) {
   const enabled = getBoolean(value, "enabled") ?? true;
+  const level = getString(value, "level") ?? "DEBUG";
   return (
-    <FormField label="Telemetry" help="Anonymous diagnostics for the local runtime.">
-      <Toggle
-        checked={enabled}
-        onChange={(v) => onChange((cur) => ({ ...cur, enabled: v }))}
-        label={enabled ? "Enabled" : "Disabled"}
-      />
-    </FormField>
+    <>
+      <FormField label="Telemetry" help="Anonymous diagnostics for the local runtime.">
+        <Toggle
+          checked={enabled}
+          onChange={(v) => onChange((cur) => ({ ...cur, enabled: v }))}
+          label={enabled ? "Enabled" : "Disabled"}
+        />
+      </FormField>
+      <FormField
+        label="Log level"
+        help="Stdlib logging level. DEBUG captures the most context; raise to reduce log volume."
+      >
+        <Select
+          value={level}
+          options={LOG_LEVELS.map((l) => ({ value: l, label: l }))}
+          onChange={(v) => onChange((cur) => ({ ...cur, level: v }))}
+        />
+      </FormField>
+    </>
   );
 }
 
@@ -1426,7 +1884,7 @@ function Notice({
 }: {
   title: string;
   children: string;
-  tone: "error" | "warning";
+  tone: "error" | "warning" | "ok";
 }) {
   return (
     <div
@@ -1434,7 +1892,9 @@ function Notice({
         "rounded-2xl border px-4 py-3 text-sm",
         tone === "error"
           ? "border-danger bg-danger-bg text-danger-fg"
-          : "border-warning bg-warning-bg text-warning-fg",
+          : tone === "ok"
+            ? "border-success bg-success-bg text-success-fg"
+            : "border-warning bg-warning-bg text-warning-fg",
       )}
     >
       <div className="flex items-start gap-3">

@@ -46,6 +46,7 @@ from docket.core.model import (
     TransitionIntent,
     project_id_for,
 )
+from docket.core.mutation import ItemCreate
 from docket.core.services import (
     conversation_service,
     mutation_service,
@@ -61,6 +62,7 @@ from docket.storage.repos import (
     comment_repo,
     conversation_repo,
     item_repo,
+    message_repo,
     search_repo,
     watchlist_repo,
 )
@@ -405,7 +407,7 @@ class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
             if active is None:
                 chat.show_history([])
             else:
-                history = conversation_service.history(self.tui_ctx.conn, active.id)
+                history = message_repo.list_for_conversation(self.tui_ctx.conn, active.id)
                 chat.show_history(history)
             # Fetch fresh details (attachments, up-to-date description, comments)
             # from the provider in the background — the WIQL sync batch can't carry
@@ -867,15 +869,15 @@ class DocketApp(BackgroundTasksMixin, PaneLayoutMixin, App[None]):
         return False
 
     def action_new_item(self) -> None:
-        """Open the new-ticket form. Submit routes through propose_create
-        and the diff modal — same confirm gate as every other write."""
+        """Open the new-ticket form. Submit stages an `ItemCreate` proposal
+        that flows through the diff modal — same confirm gate as every other write."""
         if self._blocked_read_only():
             return
 
         def on_result(result: NewItemRequest | None) -> None:
             if result is None:
                 return
-            proposal = mutation_service.propose_create(result.kind, result.fields)
+            proposal = ItemCreate(item_kind=result.kind, fields=result.fields)
             self._proposals.add(proposal, source="form")
             self._refresh_pending_count()
             self._open_next_pending()

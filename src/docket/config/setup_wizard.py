@@ -8,7 +8,7 @@ Output shape: each backend is an entry under `providers`, with
 
 `--step=<name>` jumps directly to a step and writes config atomically on
 completion. Step names are provider-agnostic: provider, auth, connection,
-scope, telemetry, http, prompts, sync, default.
+scope, telemetry, http, llm, prompts, sync, default.
 
 Auto-discovery: each provider's onboarding uses its CLI session (az/gh) to
 populate numbered pickers so users rarely have to type values they could
@@ -56,6 +56,7 @@ STEP_NAMES: tuple[str, ...] = (
     "scope",
     "telemetry",
     "http",
+    "llm",
     "prompts",
     "sync",
     "default",
@@ -82,6 +83,8 @@ class WizardState:
     http_bind: str = "127.0.0.1"
     http_port: int = 8765
     http_token: str = ""
+    llm_endpoint: str = ""
+    llm_deployment: str = "gpt-5"
     # Discovered hints (used to pre-populate assignee pickers).
     signed_in_email: str | None = None
     # Whether this entry should become the active provider after saving.
@@ -112,6 +115,7 @@ def run_wizard(start_at: str | None = None) -> None:
         ("scope", _step_provider_scope),
         ("telemetry", _step_telemetry),
         ("http", _step_http_surface),
+        ("llm", _step_llm),
         ("prompts", _step_prompt_templates),
         ("sync", _step_initial_sync),
         ("default", _step_make_active),
@@ -161,6 +165,8 @@ def _load_existing_state(paths: Paths) -> WizardState:
     state.http_bind = cfg.http.bind
     state.http_port = cfg.http.port
     state.http_token = cfg.http.token
+    state.llm_endpoint = str(cfg.llm.endpoint) if cfg.llm.endpoint else ""
+    state.llm_deployment = cfg.llm.deployment
     key = cfg.active_provider or next(iter(cfg.providers), "")
     entry = cfg.providers.get(key) if key else None
     if entry is not None:
@@ -642,7 +648,60 @@ def _step_http_surface(state: WizardState) -> None:
     console.print(f"[dim]Bind:[/dim] {state.http_bind}  [dim]Port:[/dim] {state.http_port}")
 
 
-# ---- step 7: prompts --------------------------------------------------------
+# ---- step 7: llm ------------------------------------------------------------
+
+
+def _step_llm(state: WizardState) -> None:
+    """Capture Azure OpenAI endpoint + deployment for config.toml's `[llm]`.
+
+    The API key has no config.toml home and stays in `.env`; we surface its
+    presence so the user knows whether chat will actually start after setup.
+    Leaving the endpoint blank disables chat — `/conversation` endpoints will
+    return 503 until a value is set (via this step or `AZURE_OPENAI_ENDPOINT`
+    in `.env`, which overrides config.toml at runtime)."""
+    env_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT", "").strip()
+    env_deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT", "").strip()
+    console.print(
+        "Chat / suggestions use an Azure OpenAI deployment. Endpoint + deployment "
+        "persist to config.toml; the API key stays in .env (no config.toml home). "
+        "Leave the endpoint blank to disable chat."
+    )
+
+    endpoint_default = state.llm_endpoint or env_endpoint
+    if env_endpoint and not state.llm_endpoint:
+        console.print("[dim]Pre-filled from AZURE_OPENAI_ENDPOINT.[/dim]")
+    while True:
+        raw = Prompt.ask(
+            "Azure OpenAI endpoint URL (blank to disable chat)",
+            default=endpoint_default,
+        ).strip()
+        if not raw:
+            state.llm_endpoint = ""
+            console.print("[dim]Skipped — /conversation endpoints will return 503.[/dim]")
+            return
+        try:
+            HttpUrl(raw)
+        except ValidationError:
+            console.print("[red]Not a valid URL — try again.[/red]")
+            continue
+        state.llm_endpoint = raw
+        break
+
+    deployment_default = state.llm_deployment or env_deployment or "gpt-5"
+    state.llm_deployment = (
+        Prompt.ask("Deployment name", default=deployment_default).strip() or deployment_default
+    )
+
+    if os.environ.get("AZURE_OPENAI_API_KEY", "").strip():
+        console.print("[green]✓ AZURE_OPENAI_API_KEY detected in the environment.[/green]")
+    else:
+        console.print(
+            "[yellow]Heads up[/yellow]: AZURE_OPENAI_API_KEY is not set. "
+            "Add it to your .env before `docket serve` to enable chat."
+        )
+
+
+# ---- step 8: prompts --------------------------------------------------------
 
 
 def _step_prompt_templates(state: WizardState) -> None:
@@ -660,7 +719,7 @@ def _step_prompt_templates(state: WizardState) -> None:
         console.print(f"Templates already present at {state.paths.prompts_dir} — no changes.")
 
 
-# ---- step 8: initial sync ---------------------------------------------------
+# ---- step 9: initial sync ---------------------------------------------------
 
 
 def _step_initial_sync(state: WizardState) -> None:
@@ -686,7 +745,7 @@ def _step_initial_sync(state: WizardState) -> None:
         conn.close()
 
 
-# ---- step 9: default provider ----------------------------------------------
+# ---- step 10: default provider ----------------------------------------------
 
 
 def _step_make_active(state: WizardState) -> None:
@@ -711,8 +770,10 @@ def _step_make_active(state: WizardState) -> None:
 
 def _build_config_from_state(state: WizardState) -> Config:
     """Compose the Config object by layering the new provider entry onto
-    whatever was loaded. Non-wizard fields (llm, ui, sync, stale) survive
-    untouched so partial runs with `--step=<name>` don't clobber them."""
+    whatever was loaded. Non-wizard fields (ui, sync, stale) survive
+    untouched so partial runs with `--step=<name>` don't clobber them;
+    the llm step rewrites only endpoint + deployment, leaving advanced
+    knobs (compaction threshold, watch interval) alone."""
     providers = dict(state.existing.providers)
     existing_entry = providers.get(state.provider_key)
     scopes = dict(existing_entry.scopes) if existing_entry else {}
@@ -740,6 +801,12 @@ def _build_config_from_state(state: WizardState) -> Config:
                 bind=state.http_bind,
                 port=state.http_port,
                 token=state.http_token,
+            ),
+            "llm": state.existing.llm.model_copy(
+                update={
+                    "endpoint": HttpUrl(state.llm_endpoint) if state.llm_endpoint else None,
+                    "deployment": state.llm_deployment,
+                }
             ),
         }
     )
@@ -813,7 +880,7 @@ def provider_add(
             "Edit config.toml to fill it in.[/dim]"
         )
 
-    cfg = _load_or_empty(paths)
+    cfg = load_config(paths) if paths.config_file.exists() else Config()
     if name in cfg.providers and not Confirm.ask(
         f"Provider '{name}' already exists. Overwrite?", default=False
     ):
@@ -922,9 +989,3 @@ def provider_remove(name: str) -> None:
         cfg.active_provider = next(iter(cfg.providers), "")
     save_config(paths, cfg)
     console.print(f"[green]✓ removed provider '{name}'[/green]")
-
-
-def _load_or_empty(paths: Paths) -> Config:
-    if paths.config_file.exists():
-        return load_config(paths)
-    return Config()

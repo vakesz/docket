@@ -23,6 +23,7 @@ from docket.api.schemas import (
     ProposalDTO,
 )
 from docket.core.model import Item, ItemKind, ItemState
+from docket.core.mutation import ItemCreate
 from docket.core.services import mutation_service, visual_filter
 from docket.providers.base import WorkItemProvider
 from docket.storage.repos import comment_repo, item_repo
@@ -173,7 +174,7 @@ def create_item(
     With `dry_run=true`, returns a `ProposalDTO` the caller can preview. Without,
     executes the create and returns the stored result (still via
     `mutation_service.confirm`, so any provider-side validation runs)."""
-    proposal = mutation_service.propose_create(payload.kind, payload.to_create_fields())
+    proposal = ItemCreate(item_kind=payload.kind, fields=payload.to_create_fields())
     if dry_run:
         return ProposalDTO.from_core(proposal)
     try:

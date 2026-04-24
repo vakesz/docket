@@ -394,6 +394,7 @@ function ReviewStep({
       http_port: 8765,
       http_token: "",
       telemetry_enabled: true,
+      telemetry_level: "DEBUG",
       run_initial_sync: true,
     };
     complete.mutate(body);

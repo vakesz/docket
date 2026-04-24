@@ -17,7 +17,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from docket.core.model import Comment, CreateFields, Item, ItemKind, MemoryEntry, TransitionIntent
+from docket.core.model import Comment, Item, MemoryEntry, TransitionIntent
 from docket.core.mutation import (
     AttachmentUpload,
     CommentAdd,
@@ -28,7 +28,7 @@ from docket.core.mutation import (
     Proposal,
     StateChange,
 )
-from docket.providers.base import WorkItemProvider
+from docket.providers.base import ProviderError, WorkItemProvider
 from docket.storage import transaction
 from docket.storage.item_keys import item_storage_key
 from docket.storage.repos import comment_repo, item_repo, memory_repo, project_repo
@@ -86,10 +86,6 @@ def propose_attachment(
     return AttachmentUpload(
         item=item, filename=filename, content=content, content_type=content_type
     )
-
-
-def propose_create(kind: ItemKind, fields: CreateFields) -> ItemCreate:
-    return ItemCreate(item_kind=kind, fields=fields)
 
 
 def propose_comment(
@@ -268,8 +264,8 @@ def _execute(
             # failures — the write already succeeded; next read reconciles via `?refresh=true`.
             try:
                 fresh = provider.get_comments(proposal.item.id)
-            except Exception:
-                _log.debug("comment_refresh_failed", item_id=proposal.item.id, exc_info=True)
+            except (ProviderError, TimeoutError, sqlite3.Error):
+                _log.warning("comment_refresh_failed", item_id=proposal.item.id, exc_info=True)
                 fresh = None
             active_key = proposal.item.provider_key or provider_key
             if fresh is not None:
@@ -279,8 +275,8 @@ def _execute(
                     )
             try:
                 refreshed_item = provider.get_item(proposal.item.id)
-            except Exception:
-                _log.debug("item_refresh_failed", item_id=proposal.item.id, exc_info=True)
+            except (ProviderError, TimeoutError, sqlite3.Error):
+                _log.warning("item_refresh_failed", item_id=proposal.item.id, exc_info=True)
                 refreshed_item = None
             if refreshed_item is not None:
                 _refresh_cache(conn, refreshed_item, active_key)

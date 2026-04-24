@@ -120,6 +120,48 @@ class SettingsUpdatedDTO(BaseModel):
     requires_restart: list[str] = Field(default_factory=list)
 
 
+class SettingsLlmKeyRequest(BaseModel):
+    """Rotate the LLM API key.
+
+    Persists to the XDG-managed `.env` file so `docket serve` picks it up on
+    next start. Leaving `api_key` empty clears the entry (chat 503s until
+    re-set). Triggers a rebind of the live LLM client when possible so the
+    change takes effect without restart."""
+
+    api_key: str
+
+
+class SettingsLlmKeyDTO(BaseModel):
+    ok: bool
+    configured: bool
+    requires_restart: bool = False
+
+
+class SettingsHttpTokenDTO(BaseModel):
+    """Response for HTTP token regeneration.
+
+    The new token is returned once in plain text so the caller can persist
+    it. Subsequent `GET /settings` calls return it masked."""
+
+    token: str
+    requires_restart: bool = True
+
+
+class SettingsProviderAddRequest(BaseModel):
+    """Add a provider entry to config.toml at runtime.
+
+    Shape mirrors `SetupProviderEntry` but is handled under /settings so
+    bootstrap-token gating doesn't apply. `make_active=true` also flips
+    `active_provider` to the new key."""
+
+    key: str
+    type: str
+    display_name: str = ""
+    config: dict[str, Any] = Field(default_factory=dict)
+    scope: dict[str, Any] = Field(default_factory=dict)
+    make_active: bool = False
+
+
 class SyncSummaryDTO(BaseModel):
     upserted: int
     archived: int

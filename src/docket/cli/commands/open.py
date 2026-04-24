@@ -67,7 +67,8 @@ def run_open_tui(
     back in as new flags get added — a missing positional here is a
     compile-time error rather than a runtime truthy sentinel."""
     from docket.agent.llm_client import LlmClient
-    from docket.cli.tui import DocketApp, TuiContext
+    from docket.cli.tui.app import DocketApp
+    from docket.cli.tui.tui_context import TuiContext
 
     # Either the flag or DOCKET_READ_ONLY=1 enables the mode — whichever
     # comes first, same outcome.

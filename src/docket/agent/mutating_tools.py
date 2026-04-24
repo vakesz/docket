@@ -21,7 +21,7 @@ from typing import Any
 from docket.agent.tools import ToolRegistry
 from docket.agent.transcript import filename_for, next_version, render_markdown
 from docket.core.model import CreateFields, ItemKind, TransitionIntent
-from docket.core.mutation import pending_payload
+from docket.core.mutation import ItemCreate, pending_payload
 from docket.core.redaction import redact_secrets
 from docket.core.services import mutation_service
 from docket.core.services.proposal_store import ProposalStore
@@ -117,7 +117,7 @@ def register_mutating_tools(
             assignee=args.get("assignee") or None,
             tags=list(args.get("tags") or []),
         )
-        proposal = mutation_service.propose_create(kind, fields)
+        proposal = ItemCreate(item_kind=kind, fields=fields)
         store.add(proposal)
         # Surface potential duplicates so the agent can reconsider — still
         # stage the proposal so the human has final say in the diff modal.
