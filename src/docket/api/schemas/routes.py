@@ -229,12 +229,7 @@ class MemoryDTO(BaseModel):
 
 
 class MemoryListDTO(BaseModel):
-    """List response carries the project's memory `revision` so a frontend
-    can compare against a cached value and skip re-rendering when nothing
-    has changed. The same revision is keyed into the LLM prompt prefix."""
-
     project_id: str
-    revision: int = 0
     entries: list[MemoryDTO] = Field(default_factory=list)
 
 
@@ -283,8 +278,6 @@ class SourceDTO(BaseModel):
 
 
 class SourceListDTO(BaseModel):
-    """No revision counter: sources are not part of the prompt prefix."""
-
     project_id: str
     entries: list[SourceDTO] = Field(default_factory=list)
 

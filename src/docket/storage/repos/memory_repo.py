@@ -1,22 +1,10 @@
-"""Persistence for per-project `MemoryEntry` rows + revision counters.
+"""Persistence for per-project `MemoryEntry` rows.
 
 Memory is the agent's durable knowledge of a project: glossary terms, design
 decisions, conventions, pitfalls. Each row is plain Markdown so a human can
 read and edit it directly. Rows are scoped to a project (`projects.id` FK)
-and recreated when the project is removed.
-
-Two tables back this:
-
-- `memory` — the rows themselves, with FTS5 indexed via triggers in schema.py.
-- `memory_revisions` — one int per project, bumped on every write. The
-  prompt-prefix builder reads it to key the LLM's prompt cache: same
-  revision → same bytes → cache hit.
-
-Writes always go through `bump_revision` so the prefix invalidates on
-exactly the same boundary the model sees the change. Each mutating
-function wraps the row write + FTS triggers + revision bump in one
-transaction so they land atomically.
-"""
+and recreated when the project is removed. The `memory` table is FTS5-indexed
+via triggers in schema.py."""
 
 from __future__ import annotations
 
@@ -96,7 +84,6 @@ def create(
                 now.isoformat(),
             ),
         )
-        bump_revision(conn, project_id)
     return MemoryEntry(
         id=memory_id,
         project_id=project_id,
@@ -117,7 +104,7 @@ def update(
     body_md: str | None = None,
     tags: list[str] | None = None,
 ) -> MemoryEntry | None:
-    """Patch one row, bump the owning project's revision. No-op fields stay."""
+    """Patch one row in place. No-op fields stay."""
     existing = get(conn, memory_id)
     if existing is None:
         return None
@@ -138,7 +125,6 @@ def update(
         row = conn.execute(
             f"UPDATE memory SET {', '.join(cols)} WHERE id = ? RETURNING *", params
         ).fetchone()
-        bump_revision(conn, existing.project_id)
     return _row_to_entry(row) if row else None
 
 
@@ -148,7 +134,6 @@ def delete(conn: sqlite3.Connection, memory_id: str) -> bool:
         return False
     with transaction(conn):
         conn.execute("DELETE FROM memory WHERE id = ?", (memory_id,))
-        bump_revision(conn, row["project_id"])
     return True
 
 
@@ -223,42 +208,10 @@ def search(
     return [_row_to_entry(r) for r in rows]
 
 
-# -- revisions ---------------------------------------------------------------
-
-
-def get_revision(conn: sqlite3.Connection, project_id: str) -> int:
-    """Current memory revision for a project; 0 when no rows exist yet.
-
-    The prompt-prefix builder includes this number in its cache key so any
-    write invalidates exactly one project's cache without touching others."""
-    row = conn.execute(
-        "SELECT revision FROM memory_revisions WHERE project_id = ?", (project_id,)
-    ).fetchone()
-    return int(row["revision"]) if row else 0
-
-
-def bump_revision(conn: sqlite3.Connection, project_id: str) -> int:
-    """Increment (or initialize) the project's revision counter; return new value."""
-    now = datetime.now(UTC).isoformat()
-    conn.execute(
-        """
-        INSERT INTO memory_revisions (project_id, revision, updated_at)
-        VALUES (?, 1, ?)
-        ON CONFLICT(project_id) DO UPDATE SET
-            revision = revision + 1,
-            updated_at = excluded.updated_at
-        """,
-        (project_id, now),
-    )
-    return get_revision(conn, project_id)
-
-
 __all__ = [
-    "bump_revision",
     "create",
     "delete",
     "get",
-    "get_revision",
     "list_for_project",
     "search",
     "update",

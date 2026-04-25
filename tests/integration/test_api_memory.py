@@ -97,7 +97,6 @@ def test_create_memory_round_trips(client: TestClient) -> None:
     assert lst.status_code == 200
     body = lst.json()
     assert body["project_id"] == pid
-    assert body["revision"] >= 1
     assert len(body["entries"]) == 1
 
 

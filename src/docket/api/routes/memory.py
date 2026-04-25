@@ -46,10 +46,8 @@ def list_memory(
 ) -> MemoryListDTO:
     require_project(config, project_id)
     entries = memory_repo.list_for_project(conn, project_id, limit=limit)
-    revision = memory_repo.get_revision(conn, project_id)
     return MemoryListDTO(
         project_id=project_id,
-        revision=revision,
         entries=[MemoryDTO.from_core(e) for e in entries],
     )
 
@@ -67,10 +65,8 @@ def search_memory(
 ) -> MemoryListDTO:
     require_project(config, project_id)
     entries = memory_repo.search(conn, project_id, q, limit=limit)
-    revision = memory_repo.get_revision(conn, project_id)
     return MemoryListDTO(
         project_id=project_id,
-        revision=revision,
         entries=[MemoryDTO.from_core(e) for e in entries],
     )
 

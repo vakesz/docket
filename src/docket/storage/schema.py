@@ -216,8 +216,6 @@ STATEMENTS: tuple[str, ...] = (
     # ---------------------------------------------------------------------
     # Per-project memory: durable agent knowledge (glossary, decisions,
     # conventions). Rows belong to a project; deleting the project cascades.
-    # `memory_revisions` carries a per-project counter that the prompt
-    # prefix builder reads — same revision → same bytes → prompt cache hit.
     # ---------------------------------------------------------------------
     """
     CREATE TABLE IF NOT EXISTS memory (
@@ -232,13 +230,6 @@ STATEMENTS: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_memory_project_updated ON memory(project_id, updated_at DESC)",
-    """
-    CREATE TABLE IF NOT EXISTS memory_revisions (
-        project_id  TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
-        revision    INTEGER NOT NULL DEFAULT 0,
-        updated_at  TEXT NOT NULL
-    )
-    """,
     """
     CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
         memory_id UNINDEXED,

@@ -1,7 +1,7 @@
 """Memory repo tests.
 
-Covers direct CRUD, FTS search, revision counter behavior, and the
-`_require_project` guard that protects the FK to `projects(id)`."""
+Covers direct CRUD, FTS search, and the `_require_project` guard that
+protects the FK to `projects(id)`."""
 
 from __future__ import annotations
 
@@ -25,10 +25,9 @@ def _minimal_config(project_id: str):
     return Config(projects={project_id: ProjectEntry(provider_key=project_id, name="Main")})
 
 
-def test_add_entry_persists_and_bumps_revision(tmp_path: Path) -> None:
+def test_add_entry_persists(tmp_path: Path) -> None:
     conn = init_db(tmp_path / "docket.db")
     pid = _seed_project(conn)
-    assert memory_repo.get_revision(conn, pid) == 0
 
     entry = memory_repo.create(
         conn, project_id=pid, title="Glossary", body_md="**ALM**: …", tags=["ref"]
@@ -37,7 +36,6 @@ def test_add_entry_persists_and_bumps_revision(tmp_path: Path) -> None:
     assert entry.title == "Glossary"
     assert entry.tags == ["ref"]
     assert entry.source == "user"
-    assert memory_repo.get_revision(conn, pid) == 1
 
     rows = memory_repo.list_for_project(conn, pid)
     assert len(rows) == 1
@@ -49,13 +47,11 @@ def test_edit_entry_updates_only_supplied_fields(tmp_path: Path) -> None:
     conn = init_db(tmp_path / "docket.db")
     pid = _seed_project(conn)
     entry = memory_repo.create(conn, project_id=pid, title="A", body_md="x")
-    rev_before = memory_repo.get_revision(conn, pid)
 
     updated = memory_repo.update(conn, entry.id, body_md="y")
     assert updated is not None
     assert updated.title == "A"  # unchanged
     assert updated.body_md == "y"
-    assert memory_repo.get_revision(conn, pid) == rev_before + 1
     conn.close()
 
 

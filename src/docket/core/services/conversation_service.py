@@ -403,14 +403,11 @@ def _build_prefix(
 ) -> list[ChatMessage]:
     comments = comment_repo.list_comments(conn, item.id, provider_key=item.provider_key)
     memory: list[MemoryEntry] = []
-    revision = 0
     if project_id:
         # Best-effort: a missing project (fresh DB, mid-onboarding) just means
         # no memory yet. Don't fail the chat turn over it.
         try:
             memory = memory_repo.list_for_project(conn, project_id)
-            revision = memory_repo.get_revision(conn, project_id)
         except KeyError:
             memory = []
-            revision = 0
-    return build_prefix(item, comments, memory=memory, memory_revision=revision)
+    return build_prefix(item, comments, memory=memory)

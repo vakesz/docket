@@ -366,17 +366,13 @@ def build_prefix(
     comments: list[Comment],
     *,
     memory: list[MemoryEntry] | None = None,
-    memory_revision: int = 0,
 ) -> list[ChatMessage]:
     """Cacheable prefix. Everything after this is turn-specific.
 
     Memory is inserted between the system base and the snapshot when
     non-empty; an empty memory list collapses to the same two-message
     prefix the original implementation produced, preserving cache hits
-    for projects without notes. `memory_revision` is intentionally NOT
-    interpolated into any message — it's accepted here so the calling
-    layer can pass it through for documentation/cache-key purposes
-    without altering the byte stream."""
+    for projects without notes."""
     messages: list[ChatMessage] = [build_system_message(item)]
     memory_msg = build_memory_message(memory or [])
     if memory_msg is not None:
