@@ -33,7 +33,7 @@ from docket.cli.tui.pane_layout import (
     toggle_fullscreen,
 )
 from docket.cli.tui.panes import FullscreenToggle, Pane
-from docket.cli.tui.review_flow import ReviewFlowMixin
+from docket.cli.tui.review_flow import review_pending
 from docket.cli.tui.suggestion_flow import SuggestionFlowMixin
 from docket.cli.tui.tui_context import TuiContext
 from docket.cli.tui.view_resolver import (
@@ -89,7 +89,6 @@ def _docket_commands_provider() -> type[Provider]:
 
 
 class DocketApp(
-    ReviewFlowMixin,
     SuggestionFlowMixin,
     App[None],
 ):
@@ -290,6 +289,17 @@ class DocketApp(
 
     def action_set_default_provider(self) -> None:
         config_actions.set_default_provider(self)
+
+    # --- review-flow delegate --------------------------------------------------
+    def action_review_pending(self) -> None:
+        review_pending(self)
+
+    def _open_next_pending(self) -> None:
+        # Delegate kept on DocketApp because suggestion_flow.py (still a mixin)
+        # and the worker callbacks below reach for it via `self`.
+        from docket.cli.tui.review_flow import _open_next_pending
+
+        _open_next_pending(self)
 
     def _init_status_bar(self) -> None:
         """Populate the static status-bar segments (provider name, scope key).
