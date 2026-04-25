@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from docket.core.model import MemoryEntry
 from docket.storage.db import transaction
 from docket.storage.repos import project_repo
-from docket.storage.repos._tags import clean_tags, clean_title, parse_tags
+from docket.storage.repos._tags import clean_tags, clean_title, fts_quote, parse_tags
 
 
 def _row_to_entry(row: sqlite3.Row) -> MemoryEntry:
@@ -194,7 +194,6 @@ def search(
     cleaned = query.strip()
     if not cleaned:
         return []
-    quoted = '"' + cleaned.replace('"', '""') + '"'
     rows = conn.execute(
         """
         SELECT m.* FROM memory_fts f
@@ -203,7 +202,7 @@ def search(
         ORDER BY bm25(memory_fts)
         LIMIT ?
         """,
-        (project_id, quoted, max(1, limit)),
+        (project_id, fts_quote(cleaned), max(1, limit)),
     ).fetchall()
     return [_row_to_entry(r) for r in rows]
 

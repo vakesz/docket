@@ -30,3 +30,11 @@ def clean_tags(tags: list[str] | None) -> list[str]:
 def clean_title(title: str) -> str:
     """Trim whitespace; fall back to `(untitled)` if nothing survives."""
     return title.strip() or "(untitled)"
+
+
+def fts_quote(query: str) -> str:
+    """Wrap a user-typed FTS5 query so punctuation can't break the syntax.
+
+    Returns the FTS5 phrase form (`"..."`); doubles any embedded `"` so the
+    SQLite parser sees one quoted token regardless of input."""
+    return '"' + query.replace('"', '""') + '"'

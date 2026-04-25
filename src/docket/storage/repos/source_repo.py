@@ -21,7 +21,7 @@ from datetime import UTC, datetime
 from docket.core.model import Source
 from docket.storage.db import transaction
 from docket.storage.repos import project_repo
-from docket.storage.repos._tags import clean_tags, clean_title, parse_tags
+from docket.storage.repos._tags import clean_tags, clean_title, fts_quote, parse_tags
 
 
 def _row_to_entry(row: sqlite3.Row) -> Source:
@@ -143,13 +143,15 @@ def update(
     params.append(datetime.now(UTC).isoformat())
     params.append(source_id)
     with transaction(conn):
-        conn.execute(f"UPDATE sources SET {', '.join(cols)} WHERE id = ?", params)
-    return get(conn, source_id)
+        row = conn.execute(
+            f"UPDATE sources SET {', '.join(cols)} WHERE id = ? RETURNING *", params
+        ).fetchone()
+    return _row_to_entry(row) if row else None
 
 
 def delete(conn: sqlite3.Connection, source_id: str) -> bool:
-    existing = get(conn, source_id)
-    if existing is None:
+    row = conn.execute("SELECT project_id FROM sources WHERE id = ?", (source_id,)).fetchone()
+    if row is None:
         return False
     with transaction(conn):
         conn.execute("DELETE FROM sources WHERE id = ?", (source_id,))
@@ -172,13 +174,12 @@ def search(
     cleaned = query.strip()
     if not cleaned:
         return []
-    quoted = '"' + cleaned.replace('"', '""') + '"'
     sql = (
         "SELECT s.* FROM sources_fts f "
         "JOIN sources s ON s.id = f.source_id "
         "WHERE f.project_id = ? AND sources_fts MATCH ?"
     )
-    params: list[object] = [project_id, quoted]
+    params: list[object] = [project_id, fts_quote(cleaned)]
     if kind is not None and kind.strip():
         sql += " AND s.kind = ?"
         params.append(kind.strip())
