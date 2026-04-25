@@ -24,7 +24,7 @@ from typing import Any
 from docket.agent._helpers import arg_error, required_str, str_list
 from docket.agent.tools import ToolRegistry
 from docket.agent.types import ChatMessage
-from docket.core.model import CreateFields, ItemKind, TransitionIntent
+from docket.core.model import CreateFields, Item, ItemKind, TransitionIntent
 from docket.core.mutation import (
     AttachmentUpload,
     CommentAdd,
@@ -141,9 +141,25 @@ def register_mutating_tools(
     routinely miss the sync window).
     """
 
-    def propose_transition(args: dict[str, Any]) -> str:
+    def _resolve_item(args: dict[str, Any]) -> Item | str:
+        """Resolve `args["id"]` to a cached `Item`, or return an error JSON
+        payload string. Callers narrow with `isinstance(result, str)`."""
         try:
             item_id = required_str(args, "id")
+        except ValueError as e:
+            return arg_error(str(e))
+        try:
+            return mutation_service.require_cached_item(
+                conn, item_id, provider_key=provider_key, provider=provider
+            )
+        except KeyError as e:
+            return arg_error(str(e))
+
+    def propose_transition(args: dict[str, Any]) -> str:
+        item = _resolve_item(args)
+        if isinstance(item, str):
+            return item
+        try:
             intent_raw = required_str(args, "intent")
         except ValueError as e:
             return arg_error(str(e))
@@ -152,30 +168,17 @@ def register_mutating_tools(
         except ValueError:
             allowed = [i.value for i in TransitionIntent]
             return json.dumps({"error": f"unknown intent '{intent_raw}'", "allowed": allowed})
-        try:
-            item = mutation_service.require_cached_item(
-                conn, item_id, provider_key=provider_key, provider=provider
-            )
-        except KeyError as e:
-            return arg_error(str(e))
         proposal = StateChange(item=item, intent=intent)
         store.add(proposal)
         return pending_payload(proposal)
 
     def propose_description_patch(args: dict[str, Any]) -> str:
-        try:
-            item_id = required_str(args, "id")
-        except ValueError as e:
-            return arg_error(str(e))
+        item = _resolve_item(args)
+        if isinstance(item, str):
+            return item
         new_md = args.get("new_description_md")
         if not isinstance(new_md, str):
             return arg_error("new_description_md is required")
-        try:
-            item = mutation_service.require_cached_item(
-                conn, item_id, provider_key=provider_key, provider=provider
-            )
-        except KeyError as e:
-            return arg_error(str(e))
         proposal = DescriptionPatch(item=item, new_md=new_md)
         store.add(proposal)
         return pending_payload(proposal)
@@ -208,19 +211,12 @@ def register_mutating_tools(
         return pending_payload(proposal, extra=extra)
 
     def propose_comment(args: dict[str, Any]) -> str:
-        try:
-            item_id = required_str(args, "id")
-        except ValueError as e:
-            return arg_error(str(e))
+        item = _resolve_item(args)
+        if isinstance(item, str):
+            return item
         body_md = args.get("body_md")
         if not isinstance(body_md, str) or not body_md.strip():
             return arg_error("non-empty body_md is required")
-        try:
-            item = mutation_service.require_cached_item(
-                conn, item_id, provider_key=provider_key, provider=provider
-            )
-        except KeyError as e:
-            return arg_error(str(e))
         proposal = CommentAdd(item=item, body_md=body_md)
         store.add(proposal)
         return pending_payload(proposal)
