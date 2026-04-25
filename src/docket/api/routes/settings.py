@@ -19,9 +19,9 @@ import secrets
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import ValidationError
 
 from docket.api._provider_setup import (
+    build_and_validate_provider_entry,
     persist_config_change,
     provider_type_dtos,
     test_provider_draft,
@@ -43,12 +43,9 @@ from docket.api.schemas import (
     SetupTestResultDTO,
 )
 from docket.config.loader import save_config
-from docket.config.models import ScopeFilter, build_provider_entry
+from docket.config.models import ScopeFilter
 from docket.config.paths import Paths
 from docket.core.services import settings_service
-from docket.providers import registry
-from docket.providers.registry import UnknownProviderError
-from docket.providers.registry import build as build_provider
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -200,38 +197,12 @@ def add_provider(
             f"Provider '{key}' already exists. Remove it first or pick a new key.",
         )
 
-    try:
-        normalized = registry.normalize_config(payload.type, dict(payload.config))
-    except UnknownProviderError as e:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
-    except ValueError as e:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
-
-    try:
-        built = build_provider(
-            payload.type, dict(normalized), display_name=payload.display_name or key
-        )
-    except UnknownProviderError as e:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
-    except (ValueError, ValidationError) as e:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            f"invalid config for '{key}': {e}",
-        ) from e
-
-    try:
-        scope = ScopeFilter(**dict(payload.scope))
-    except ValidationError as e:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            f"invalid scope for '{key}': {e}",
-        ) from e
-
-    entry = build_provider_entry(
+    entry, built = build_and_validate_provider_entry(
+        key=key,
         type_id=payload.type,
-        display_name=payload.display_name or key,
-        config=normalized,
-        scope=scope,
+        display_name=payload.display_name,
+        config=dict(payload.config),
+        scope=dict(payload.scope),
     )
 
     def _add(cfg: dict[str, Any]) -> None:
@@ -269,40 +240,18 @@ def update_provider(
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown provider '{key}'")
     existing = runtime.config.providers[key]
 
-    try:
-        normalized = registry.normalize_config(existing.type, dict(payload.config))
-    except UnknownProviderError as e:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
-    except ValueError as e:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
-
     display_name = payload.display_name or existing.display_name or key
-    try:
-        built = build_provider(existing.type, dict(normalized), display_name=display_name)
-    except UnknownProviderError as e:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
-    except (ValueError, ValidationError) as e:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            f"invalid config for '{key}': {e}",
-        ) from e
-
     if payload.scope is None:
-        scope = existing.scopes.get(existing.active_scope, ScopeFilter())
+        scope_dict = existing.scopes.get(existing.active_scope, ScopeFilter()).model_dump()
     else:
-        try:
-            scope = ScopeFilter(**dict(payload.scope))
-        except ValidationError as e:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_CONTENT,
-                f"invalid scope for '{key}': {e}",
-            ) from e
+        scope_dict = dict(payload.scope)
 
-    entry = build_provider_entry(
+    entry, built = build_and_validate_provider_entry(
+        key=key,
         type_id=existing.type,
         display_name=display_name,
-        config=normalized,
-        scope=scope,
+        config=dict(payload.config),
+        scope=scope_dict,
         existing=existing,
     )
 

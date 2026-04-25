@@ -21,9 +21,10 @@ from docket.api.schemas import (
     SetupTestResultDTO,
 )
 from docket.config.loader import save_config
-from docket.config.models import Config
+from docket.config.models import Config, ProviderEntry, ScopeFilter, build_provider_entry
 from docket.config.paths import Paths
-from docket.providers.base import ProviderError
+from docket.providers import registry
+from docket.providers.base import ProviderError, WorkItemProvider
 from docket.providers.registry import UnknownProviderError
 from docket.providers.registry import build as build_provider
 from docket.providers.registry import specs as provider_specs
@@ -73,6 +74,70 @@ def test_provider_draft(type_id: str, config: dict[str, Any]) -> SetupTestResult
     return SetupTestResultDTO(ok=True)
 
 
+def build_and_validate_provider_entry(
+    *,
+    key: str,
+    type_id: str,
+    display_name: str | None,
+    config: dict[str, Any],
+    scope: dict[str, Any],
+    existing: ProviderEntry | None = None,
+) -> tuple[ProviderEntry, WorkItemProvider]:
+    """Normalize + validate a provider draft and return the persistable entry.
+
+    Wraps the four-step recipe shared by `/setup/complete`,
+    `/settings/providers` (POST), and `/settings/providers/{key}` (PUT):
+
+    1. `registry.normalize_config` — canonicalize fields the spec opts in to.
+    2. `registry.build` — instantiate the provider so we know the credentials
+       work syntactically before we persist anything.
+    3. `ScopeFilter(**scope)` — validate the scope filter shape.
+    4. `build_provider_entry` — assemble the final `ProviderEntry`,
+       optionally merging an `existing` entry's extra scope slots.
+
+    Returns `(entry, built_provider)` so the caller can both write the entry
+    to config and swap the live runtime instance. Raises `HTTPException(422)`
+    with a stable detail format on any validation error so route handlers
+    don't repeat the boilerplate."""
+    resolved_name = display_name or key
+    try:
+        normalized = registry.normalize_config(type_id, dict(config))
+    except UnknownProviderError as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
+    except ValueError as e:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"invalid config for '{key}': {e}",
+        ) from e
+
+    try:
+        built = build_provider(type_id, dict(normalized), display_name=resolved_name)
+    except UnknownProviderError as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
+    except (ValueError, ValidationError) as e:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"invalid config for '{key}': {e}",
+        ) from e
+
+    try:
+        scope_filter = ScopeFilter(**dict(scope))
+    except ValidationError as e:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"invalid scope for '{key}': {e}",
+        ) from e
+
+    entry = build_provider_entry(
+        type_id=type_id,
+        display_name=resolved_name,
+        config=normalized,
+        scope=scope_filter,
+        existing=existing,
+    )
+    return entry, built
+
+
 def persist_config_change(
     runtime: RuntimeState,
     paths: Paths,
@@ -99,6 +164,7 @@ def persist_config_change(
 
 
 __all__ = [
+    "build_and_validate_provider_entry",
     "persist_config_change",
     "provider_type_dtos",
     "test_provider_draft",

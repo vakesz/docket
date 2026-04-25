@@ -17,13 +17,13 @@ import secrets
 import signal
 import threading
 import time
-from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import ValidationError
 
 from docket.agent.prompt import scaffold as scaffold_prompts
 from docket.api._provider_setup import (
+    build_and_validate_provider_entry,
     provider_type_dtos,
     test_provider_draft,
 )
@@ -43,17 +43,12 @@ from docket.config.loader import ConfigLoadPolicy, load_config, save_config
 from docket.config.models import (
     HttpConfig,
     ProviderEntry,
-    ScopeFilter,
     TelemetryConfig,
-    build_provider_entry,
     compose_config,
 )
 from docket.config.paths import Paths
 from docket.core.services import sync_service
-from docket.providers import registry
-from docket.providers.base import ProviderError
-from docket.providers.registry import UnknownProviderError
-from docket.providers.registry import build as build_provider
+from docket.providers.base import ProviderError, WorkItemProvider
 from docket.storage import init_db
 
 router = APIRouter(prefix="/setup", tags=["setup"])
@@ -153,48 +148,17 @@ def setup_complete(
         existing_cfg = None
 
     providers_cfg: dict[str, ProviderEntry] = {}
-    built_providers: dict[str, Any] = {}
+    built_providers: dict[str, WorkItemProvider] = {}
     for key, entry in req.providers.items():
-        try:
-            normalized = registry.normalize_config(entry.type, dict(entry.config))
-        except UnknownProviderError as e:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=str(e),
-            ) from e
-        except ValueError as e:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=f"invalid config for '{key}': {e}",
-            ) from e
-        try:
-            built = build_provider(
-                entry.type, dict(normalized), display_name=entry.display_name or key
-            )
-        except UnknownProviderError as e:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=str(e),
-            ) from e
-        except (ValueError, ValidationError) as e:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=f"invalid config for '{key}': {e}",
-            ) from e
-        try:
-            scope = ScopeFilter(**dict(entry.scope))
-        except ValidationError as e:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=f"invalid scope for '{key}': {e}",
-            ) from e
-        providers_cfg[key] = build_provider_entry(
+        provider_entry, built = build_and_validate_provider_entry(
+            key=key,
             type_id=entry.type,
-            display_name=entry.display_name or key,
-            config=normalized,
-            scope=scope,
+            display_name=entry.display_name,
+            config=dict(entry.config),
+            scope=dict(entry.scope),
             existing=existing_cfg.providers.get(key) if existing_cfg else None,
         )
+        providers_cfg[key] = provider_entry
         built_providers[key] = built
 
     llm_endpoint = req.llm.endpoint if req.llm is not None else None
