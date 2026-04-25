@@ -34,7 +34,7 @@ from docket.cli.tui.pane_layout import (
 )
 from docket.cli.tui.panes import FullscreenToggle, Pane
 from docket.cli.tui.review_flow import review_pending
-from docket.cli.tui.suggestion_flow import SuggestionFlowMixin
+from docket.cli.tui.suggestion_flow import suggest_next
 from docket.cli.tui.tui_context import TuiContext
 from docket.cli.tui.view_resolver import (
     active_provider_entry,
@@ -88,10 +88,7 @@ def _docket_commands_provider() -> type[Provider]:
     return DocketCommands
 
 
-class DocketApp(
-    SuggestionFlowMixin,
-    App[None],
-):
+class DocketApp(App[None]):
     """Three-pane terminal UI for browsing and triaging work items."""
 
     # Replace the default palette providers entirely: Textual's built-in theme
@@ -295,11 +292,15 @@ class DocketApp(
         review_pending(self)
 
     def _open_next_pending(self) -> None:
-        # Delegate kept on DocketApp because suggestion_flow.py (still a mixin)
-        # and the worker callbacks below reach for it via `self`.
+        # Delegate kept on DocketApp because the worker callbacks below reach
+        # for it via `self.call_from_thread(self._open_next_pending)`.
         from docket.cli.tui.review_flow import _open_next_pending
 
         _open_next_pending(self)
+
+    # --- suggestion-flow delegate ----------------------------------------------
+    def action_suggest_next(self) -> None:
+        suggest_next(self)
 
     def _init_status_bar(self) -> None:
         """Populate the static status-bar segments (provider name, scope key).
