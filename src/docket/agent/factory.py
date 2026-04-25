@@ -11,6 +11,9 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Callable
 
+from docket.agent._commit_tools import register_commit_tools
+from docket.agent._item_tools import register_item_tools
+from docket.agent._pr_tools import register_pr_tools
 from docket.agent.link_tools import register_link_tools
 from docket.agent.llm_client import LlmClient
 from docket.agent.loop import AgentLoop
@@ -22,11 +25,28 @@ from docket.agent.memory_tools import (
 from docket.agent.mutating_tools import register_mutating_tools
 from docket.agent.question_tool import register_ask_user_tool
 from docket.agent.source_tools import register_source_readonly_tools
-from docket.agent.tool_defs import register_readonly_tools
 from docket.agent.tools import ToolRegistry
 from docket.core.services.proposal_store import ProposalStore
 from docket.core.services.question_store import QuestionStore
 from docket.providers.base import WorkItemProvider
+
+
+def register_readonly_tools(
+    registry: ToolRegistry,
+    *,
+    conn: sqlite3.Connection,
+    provider: WorkItemProvider,
+    provider_key: str = "",
+) -> None:
+    """Register the full read-only tool surface on `registry`.
+
+    Registration order (load-bearing): item tools → PR tools → commit/CI
+    tools. The PR and commit groups are provider-gated; each tool is
+    registered only if the provider backs it. Reorder at the cost of every
+    open conversation's cached prompt prefix."""
+    register_item_tools(registry, conn=conn, provider=provider, provider_key=provider_key)
+    register_pr_tools(registry, provider=provider)
+    register_commit_tools(registry, provider=provider)
 
 
 def build_tool_registry(
@@ -145,4 +165,4 @@ def build_agent(
     return loop
 
 
-__all__ = ["build_agent", "build_tool_registry"]
+__all__ = ["build_agent", "build_tool_registry", "register_readonly_tools"]

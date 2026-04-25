@@ -13,7 +13,7 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
-from docket.agent.tool_defs import register_readonly_tools
+from docket.agent.factory import register_readonly_tools
 from docket.agent.tools import ToolRegistry
 from docket.core.model import Comment, Item, ItemKind, ItemState
 from docket.storage import init_db

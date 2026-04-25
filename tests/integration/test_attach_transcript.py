@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from docket.agent.mutating_tools import register_mutating_tools
-from docket.agent.tool_defs import register_readonly_tools
+from docket.agent.factory import register_readonly_tools
 from docket.agent.tools import ToolRegistry
 from docket.agent.types import ChatMessage
 from docket.core.mutation import AttachmentUpload
