@@ -39,13 +39,6 @@ from docket.cli.tui.pane_layout import (
 )
 from docket.cli.tui.review_flow import review_pending
 from docket.cli.tui.suggestion_flow import suggest_next
-from docket.cli.tui.view_resolver import (
-    active_provider_entry,
-    active_view_filter,
-    resolve_project_name,
-    resolve_stale_threshold,
-    resolve_sync_interval,
-)
 from docket.cli.tui.widgets.chat_pane import (
     AnswerQuestionRequest,
     ChatPane,
@@ -274,13 +267,31 @@ class DocketApp(App[None]):
             )
 
     def _active_view_filter(self) -> visual_filter.ResolvedFilter:
-        return active_view_filter(self.tui_ctx)
+        return visual_filter.resolve(self.tui_ctx.scope, self.tui_ctx.provider)
+
+    def _provider_display_key(self) -> str:
+        # Per-provider override dicts (stale threshold, sync floor) are keyed
+        # by the human display name rather than the multi-provider config id —
+        # the settings surfaces predate `provider_key`.
+        prov = self.tui_ctx.provider
+        name = getattr(prov, "display_name", None) or type(prov).__name__
+        return str(name)
 
     def _resolved_stale_threshold(self) -> int | None:
-        return resolve_stale_threshold(self.tui_ctx)
+        per_provider = self.tui_ctx.stale_threshold_by_provider or {}
+        value = per_provider.get(self._provider_display_key(), self.tui_ctx.stale_threshold_days)
+        return value if value and value > 0 else None
 
     def _resolved_sync_interval(self) -> float:
-        return resolve_sync_interval(self.tui_ctx)
+        # 0 means disabled — and stays disabled even with a floor set, because
+        # the floor only protects an already-enabled timer from exceeding the
+        # provider's rate limit.
+        base = self.tui_ctx.background_sync_interval_seconds
+        if base <= 0:
+            return 0.0
+        floors = self.tui_ctx.background_sync_min_interval_by_provider or {}
+        floor = floors.get(self._provider_display_key(), 0.0)
+        return max(base, floor)
 
     # --- item-selection delegates ----------------------------------------------
     # Sibling mixins (config_actions, review_flow, suggestion_flow) and tests
@@ -394,7 +405,12 @@ class DocketApp(App[None]):
             self.query_one(ChatPane).set_thinking(value)
 
     def _resolve_project_name(self) -> str:
-        return resolve_project_name(self.tui_ctx)
+        cfg = self.tui_ctx.config
+        if cfg is None:
+            return ""
+        pid = project_id_for(self.tui_ctx.provider_key)
+        entry = cfg.projects.get(pid)
+        return entry.name if entry else ""
 
     def _rebuild_agent(self) -> None:
         """Rebuild the agent, rebinding all tool closures to the current provider/project.
@@ -982,7 +998,11 @@ class DocketApp(App[None]):
         )
 
     def _active_provider_entry(self) -> ProviderEntry | None:
-        return active_provider_entry(self.tui_ctx)
+        config = self.tui_ctx.config
+        if config is None:
+            return None
+        key = self.tui_ctx.provider_key
+        return config.providers.get(key) if key else None
 
 
 __all__ = ["DocketApp", "Pane", "TuiContext"]

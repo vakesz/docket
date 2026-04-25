@@ -21,16 +21,13 @@ from textual import events
 from textual.widgets import Input
 
 from docket.cli.tui.pane_layout import defocus_chat_prompt
-from docket.cli.tui.view_resolver import (
-    resolve_grouping,
-    resolve_list_item_states,
-)
 from docket.cli.tui.widgets.chat_pane import ChatPane
 from docket.cli.tui.widgets.item_detail import ItemDetail
 from docket.cli.tui.widgets.item_tree import ItemSelected, ItemTree
 from docket.cli.tui.widgets.quick_open import QuickOpenModal, QuickOpenResult
 from docket.core.model import ItemState
 from docket.core.services import visual_filter
+from docket.providers import registry
 from docket.providers.base import GroupingStrategy
 from docket.storage.repos import (
     comment_repo,
@@ -52,11 +49,31 @@ def reload_tree(app: DocketApp) -> None:
 
 
 def resolved_grouping(app: DocketApp) -> GroupingStrategy:
-    return resolve_grouping(app.tui_ctx)
+    """Grouping strategy declared by the active provider's spec.
+
+    Falls back to `"by_kind"` when the config isn't available (pilot tests)
+    or the provider's type id isn't registered."""
+    entry = app._active_provider_entry()
+    if entry is None:
+        return "by_kind"
+    spec = registry.spec(entry.type)
+    if spec is None:
+        return "by_kind"
+    return spec.grouping
 
 
 def list_item_states(app: DocketApp) -> tuple[ItemState, ...] | None:
-    return resolve_list_item_states(app.tui_ctx)
+    """States to pass to `item_repo.list_items`. `None` means "no filter"
+    — for the "show done" toggle — and matches calling `list_items` with no
+    `states=` argument."""
+    if not app.tui_ctx.hide_done:
+        return None
+    return (
+        ItemState.NEW,
+        ItemState.ACTIVE,
+        ItemState.BLOCKED,
+        ItemState.NEEDS_INFO,
+    )
 
 
 def apply_filter(app: DocketApp, raw: str) -> None:
