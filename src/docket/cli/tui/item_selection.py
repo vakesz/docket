@@ -303,9 +303,7 @@ def toggle_pin(app: DocketApp) -> None:
         app.notify("Select an item first.", severity="warning")
         return
     item_id = app._selected_item_id
-    if watchlist_repo.is_pinned(
-        app.tui_ctx.conn, item_id, provider_key=app.tui_ctx.provider_key
-    ):
+    if watchlist_repo.is_pinned(app.tui_ctx.conn, item_id, provider_key=app.tui_ctx.provider_key):
         watchlist_repo.unpin(app.tui_ctx.conn, item_id, provider_key=app.tui_ctx.provider_key)
         app.notify(f"Unpinned {item_id}.", severity="information")
     else:

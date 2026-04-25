@@ -45,9 +45,7 @@ def status_command(
         resolved_provider = active_provider or "—"
 
         project = (
-            project_repo.get(ctx.conn, project_id_for(active_provider))
-            if active_provider
-            else None
+            project_repo.get(ctx.conn, project_id_for(active_provider)) if active_provider else None
         )
         project_id = project.id if project else resolved_provider
         project_name = project.name if project else "—"
@@ -113,7 +111,9 @@ def status_command(
             f"[dim]({conv_active} active · {conv_archived} archived)[/dim]",
         )
         cache.add_row("Messages", f"{_scalar(ctx.conn, 'SELECT COUNT(*) FROM messages'):>6}", "")
-        cache.add_row("Memory entries", f"{_scalar(ctx.conn, 'SELECT COUNT(*) FROM memory'):>6}", "")
+        cache.add_row(
+            "Memory entries", f"{_scalar(ctx.conn, 'SELECT COUNT(*) FROM memory'):>6}", ""
+        )
         cache.add_row("Sources", f"{_scalar(ctx.conn, 'SELECT COUNT(*) FROM sources'):>6}", "")
         cache.add_row("Watchlist", f"{_scalar(ctx.conn, 'SELECT COUNT(*) FROM watchlist'):>6}", "")
         cache.add_row("Projects", f"{_scalar(ctx.conn, 'SELECT COUNT(*) FROM projects'):>6}", "")

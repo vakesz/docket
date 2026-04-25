@@ -102,9 +102,7 @@ class MCPPane(ListEditPane):
             "`mcp__<name>__<tool>`. Save rebinds the live fleet; "
             "Test spawns the subprocess and lists its tools."
         )
-        self._hint = (
-            "Ctrl+S save  ·  Ctrl+N new  ·  Ctrl+T test  ·  Ctrl+D delete  ·  Esc close"
-        )
+        self._hint = "Ctrl+S save  ·  Ctrl+N new  ·  Ctrl+T test  ·  Ctrl+D delete  ·  Esc close"
 
     # ListEditRow uses entry_id as the immutable lookup key, which doubles
     # as the server name here. Aliasing keeps the existing pilot tests'

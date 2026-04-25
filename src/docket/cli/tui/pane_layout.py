@@ -160,11 +160,7 @@ def cycle_pane_focus(app: DocketApp, direction: int) -> None:
     # defocused the chat prompt), Tab should re-enter that pane's target
     # rather than jump to the next pane — otherwise a single Esc+Tab would
     # skip past the pane the user was working in.
-    if (
-        isinstance(focused, Pane)
-        and isinstance(focused.id, str)
-        and focused.id in app._PANE_IDS
-    ):
+    if isinstance(focused, Pane) and isinstance(focused.id, str) and focused.id in app._PANE_IDS:
         pane_idx = app._PANE_IDS.index(focused.id)
         if 0 <= pane_idx < len(targets):
             targets[pane_idx].focus()

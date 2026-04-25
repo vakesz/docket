@@ -64,9 +64,7 @@ def suggest_next(app: DocketApp) -> None:
 
 
 def _run_suggestion(app: DocketApp, item_id: str) -> None:
-    item = item_repo.get_item(
-        app.tui_ctx.conn, item_id, provider_key=app.tui_ctx.provider_key
-    )
+    item = item_repo.get_item(app.tui_ctx.conn, item_id, provider_key=app.tui_ctx.provider_key)
     if item is None:
         app.call_from_thread(app.notify, f"Item {item_id} is gone.", severity="error")
         return
@@ -122,8 +120,7 @@ async def _suggestion_modal_flow(app: DocketApp, suggestion: Suggestion) -> None
         app._proposals.add(staged.description_patch, source="suggestion")
     app._refresh_pending_count()
     app.notify(
-        f"Staged {1 if staged.description_patch is None else 2} proposal(s); "
-        "press 'd' to review.",
+        f"Staged {1 if staged.description_patch is None else 2} proposal(s); press 'd' to review.",
         severity="information",
     )
     app._open_next_pending()

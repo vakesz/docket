@@ -79,9 +79,7 @@ class MemoryPane(ListEditPane):
         title = self.query_one("#title-input", Input).value.strip()
         body_md = self.query_one("#editor", TextArea).text
         tags = [
-            t.strip()
-            for t in self.query_one("#tags-input", Input).value.split(",")
-            if t.strip()
+            t.strip() for t in self.query_one("#tags-input", Input).value.split(",") if t.strip()
         ]
         if not title:
             self.app.notify("Title is required.", severity="warning")
