@@ -61,9 +61,7 @@ export function McpPresetPickerModal({
   };
 
   const missingRequired = selected
-    ? (selected.env ?? [])
-        .filter((e) => e.required && !envValues[e.name]?.trim())
-        .map((e) => e.name)
+    ? (selected.env ?? []).filter((e) => !envValues[e.name]?.trim()).map((e) => e.name)
     : [];
 
   const canApply =
@@ -192,11 +190,9 @@ export function McpPresetPickerModal({
                 <div key={env.name}>
                   <div className="flex items-center gap-2">
                     <Label>{env.name}</Label>
-                    {env.required && (
-                      <span className="rounded-full bg-danger-bg px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-danger-fg">
-                        required
-                      </span>
-                    )}
+                    <span className="rounded-full bg-danger-bg px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-danger-fg">
+                      required
+                    </span>
                   </div>
                   <input
                     type="password"

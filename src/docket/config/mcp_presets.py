@@ -2,9 +2,13 @@
 
 Hand-editing the stdio command / args / env for well-known MCP servers is
 error-prone and defeats the point of "run `docket setup`, be done". A preset
-is a named, frozen recipe: transport + command + args + env-var placeholders
-that the user fills in. Surfaces (CLI, HTTP) resolve the preset into a real
+is a named, frozen recipe: command + args + env-var placeholders that the
+user fills in. Surfaces (CLI, HTTP) resolve the preset into a real
 `MCPServerEntry` by overlaying caller-supplied env values.
+
+Every bundled preset is a stdio server — the runtime supports other
+transports for hand-rolled `MCPServerEntry` rows, but no preset has needed
+SSE or HTTP yet. If one does, surface that knob on the preset directly.
 
 To add a new preset, append a new `MCPPreset` to `_PRESETS`. The schema is
 intentionally shallow — anything that needs conditional logic belongs in a
@@ -22,13 +26,12 @@ from docket.config.models import MCPServerEntry
 class MCPPresetEnvVar:
     """One environment variable the preset needs the user to supply.
 
-    `required` controls whether the surface should refuse to apply the preset
-    when the value is missing. `placeholder` shows what the value looks like
-    (never a real token) and is used for form hints."""
+    `placeholder` shows what the value looks like (never a real token) and
+    is used for form hints. Every preset env var is required — there's no
+    optional knob today, and `apply_preset` rejects missing values."""
 
     name: str
     description: str
-    required: bool = True
     placeholder: str = ""
 
 
@@ -48,7 +51,6 @@ class MCPPreset:
     args: list[str] = field(default_factory=list)
     env: list[MCPPresetEnvVar] = field(default_factory=list)
     docs_url: str = ""
-    transport: str = "stdio"
     startup_timeout_seconds: float = 15.0
 
 
@@ -152,14 +154,14 @@ def apply_preset(
     preset_id: str,
     *,
     env: dict[str, str] | None = None,
-    enabled: bool = True,
 ) -> MCPServerEntry:
     """Resolve a preset into a ready-to-save `MCPServerEntry`.
 
     `env` supplies values for the preset's declared env vars plus any extras
-    the user wants. Missing values for `required=True` vars raise
-    `MissingPresetEnvError` — the caller should surface a clear prompt rather
-    than saving a half-configured server."""
+    the user wants. Missing required values raise `MissingPresetEnvError` —
+    the caller should surface a clear prompt rather than saving a
+    half-configured server. The returned entry is `enabled=True`; callers
+    that want to stage a disabled server should override after the fact."""
     preset = get_preset(preset_id)
     supplied = dict(env or {})
     merged: dict[str, str] = {}
@@ -168,7 +170,7 @@ def apply_preset(
         value = supplied.pop(var.name, "")
         if value:
             merged[var.name] = value
-        elif var.required:
+        else:
             missing.append(var.name)
     if missing:
         raise MissingPresetEnvError(
@@ -177,11 +179,11 @@ def apply_preset(
     # Anything left in `supplied` is a user-supplied extra — keep it.
     merged.update(supplied)
     return MCPServerEntry(
-        transport=preset.transport,
+        transport="stdio",
         command=preset.command,
         args=list(preset.args),
         env=merged,
-        enabled=enabled,
+        enabled=True,
         startup_timeout_seconds=preset.startup_timeout_seconds,
     )
 

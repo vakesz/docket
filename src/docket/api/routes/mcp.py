@@ -293,13 +293,11 @@ def _preset_dto(preset: MCPPreset) -> MCPPresetDTO:
             MCPPresetEnvDTO(
                 name=var.name,
                 description=var.description,
-                required=var.required,
                 placeholder=var.placeholder,
             )
             for var in preset.env
         ],
         docs_url=preset.docs_url,
-        transport=preset.transport,
         startup_timeout_seconds=preset.startup_timeout_seconds,
     )
 
@@ -341,7 +339,7 @@ def apply_mcp_preset(
     require_project(config, project_id)
     try:
         preset = get_preset(preset_id)
-        entry = apply_preset(preset_id, env=dict(payload.env), enabled=payload.enabled)
+        entry = apply_preset(preset_id, env=dict(payload.env))
         server_name = (payload.name or preset.default_name).strip() or preset.default_name
         entry = mcp_service.add_server(
             config,
@@ -352,7 +350,7 @@ def apply_mcp_preset(
             args=list(entry.args),
             env=dict(entry.env),
             transport=entry.transport,
-            enabled=entry.enabled,
+            enabled=payload.enabled,
             startup_timeout_seconds=entry.startup_timeout_seconds,
         )
     except mcp_service.UnknownPresetError as exc:

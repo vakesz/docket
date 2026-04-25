@@ -176,7 +176,7 @@ def mcp_add_preset(
         project = ctx.active_project()
         try:
             preset = get_preset(preset_id)
-            entry = apply_preset(preset_id, env=_split_env(env), enabled=enabled)
+            entry = apply_preset(preset_id, env=_split_env(env))
             server_name = (name or preset.default_name).strip() or preset.default_name
             mcp_service.add_server(
                 ctx.config,
@@ -187,7 +187,7 @@ def mcp_add_preset(
                 args=list(entry.args),
                 env=dict(entry.env),
                 transport=entry.transport,
-                enabled=entry.enabled,
+                enabled=enabled,
                 startup_timeout_seconds=entry.startup_timeout_seconds,
             )
         except UnknownPresetError as exc:

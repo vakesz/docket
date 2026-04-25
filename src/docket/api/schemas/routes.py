@@ -357,11 +357,13 @@ class MCPServerTestResultDTO(BaseModel):
 
 
 class MCPPresetEnvDTO(BaseModel):
-    """One env-var slot a preset asks the caller to supply."""
+    """One env-var slot a preset asks the caller to supply.
+
+    Every slot is required — there is no optional knob today. Surfaces
+    should refuse to apply the preset until every name has a value."""
 
     name: str
     description: str
-    required: bool = True
     placeholder: str = ""
 
 
@@ -369,7 +371,8 @@ class MCPPresetDTO(BaseModel):
     """A frozen recipe for a known MCP server.
 
     Surfaces turn this into a real `MCPServerDTO` by calling
-    `POST /mcp/presets/{id}/apply` with the env values filled in."""
+    `POST /mcp/presets/{id}/apply` with the env values filled in. All
+    bundled presets are stdio; the transport isn't surfaced here."""
 
     id: str
     label: str
@@ -379,7 +382,6 @@ class MCPPresetDTO(BaseModel):
     args: list[str] = Field(default_factory=list)
     env: list[MCPPresetEnvDTO] = Field(default_factory=list)
     docs_url: str = ""
-    transport: str = "stdio"
     startup_timeout_seconds: float = 15.0
 
 
@@ -391,8 +393,8 @@ class MCPPresetApplyRequest(BaseModel):
     """Body for `POST /projects/{id}/mcp/presets/{preset_id}/apply`.
 
     `name` overrides the preset's own default server name; leave unset to use
-    the preset default. `env` must contain all env vars the preset marks
-    `required`."""
+    the preset default. `env` must contain values for every env var the
+    preset declares."""
 
     name: str | None = None
     env: dict[str, str] = Field(default_factory=dict)
