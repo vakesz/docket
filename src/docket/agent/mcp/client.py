@@ -30,6 +30,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.types import TextContent, Tool
 
+from docket.agent._helpers import arg_error
 from docket.config.models import MCPServerEntry
 
 log = logging.getLogger(__name__)
@@ -165,21 +166,19 @@ class MCPClient:
         as a JSON `{"error": ...}` string the agent loop can inspect.
         """
         if self._session is None or self._loop is None or self._closed:
-            return json.dumps({"error": f"MCP server '{self.name}' is not connected"})
+            return arg_error(f"MCP server '{self.name}' is not connected")
         coro = self._call_tool_async(tool_name, arguments)
         future = asyncio.run_coroutine_threadsafe(coro, self._loop)
         try:
             return future.result(timeout=_CALL_TIMEOUT_SECONDS)
         except TimeoutError:
             future.cancel()
-            return json.dumps(
-                {
-                    "error": f"MCP tool '{tool_name}' on '{self.name}' "
-                    f"timed out after {_CALL_TIMEOUT_SECONDS:.0f}s"
-                }
+            return arg_error(
+                f"MCP tool '{tool_name}' on '{self.name}' "
+                f"timed out after {_CALL_TIMEOUT_SECONDS:.0f}s"
             )
         except Exception as exc:
-            return json.dumps({"error": f"MCP tool '{tool_name}' failed: {exc}"})
+            return arg_error(f"MCP tool '{tool_name}' failed: {exc}")
 
     async def _call_tool_async(self, tool_name: str, arguments: dict[str, Any]) -> str:
         # `_session` is checked in the sync wrapper; reassert here for type
@@ -196,7 +195,7 @@ class MCPClient:
                 rendered_parts.append(json.dumps({"non_text_content": block.type}))
         rendered = "\n".join(rendered_parts) if rendered_parts else ""
         if result.isError:
-            return json.dumps({"error": rendered or "MCP tool reported error"})
+            return arg_error(rendered or "MCP tool reported error")
         return rendered
 
     def close(self) -> None:

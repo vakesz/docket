@@ -14,10 +14,10 @@ not a critical dependency.
 
 from __future__ import annotations
 
-import json
 import time
 from typing import Any
 
+from docket.agent._helpers import arg_error
 from docket.agent.mcp.client import MCPClient
 from docket.agent.tools import ToolHandler, ToolRegistry
 from docket.config.models import MCPServerEntry
@@ -189,7 +189,7 @@ def _make_handler(client: MCPClient, tool_name: str) -> ToolHandler:
         try:
             return client.call_tool(tool_name, arguments)
         except Exception as exc:
-            return json.dumps({"error": f"MCP call failed: {exc}"})
+            return arg_error(f"MCP call failed: {exc}")
 
     return handler
 

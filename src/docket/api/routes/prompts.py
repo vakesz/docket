@@ -30,6 +30,13 @@ def _is_customized(paths: Paths, template: PromptTemplate) -> bool:
     return (paths.prompts_dir / template.filename).exists()
 
 
+def _require_template(key: str) -> PromptTemplate:
+    try:
+        return get_template(key)
+    except KeyError as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown prompt '{key}'") from e
+
+
 @router.get("", response_model=list[PromptSummaryDTO])
 def list_prompts(paths: Paths = Depends(get_paths)) -> list[PromptSummaryDTO]:
     return [
@@ -45,10 +52,7 @@ def list_prompts(paths: Paths = Depends(get_paths)) -> list[PromptSummaryDTO]:
 
 @router.get("/{key}", response_model=PromptDTO)
 def get_prompt(key: str, paths: Paths = Depends(get_paths)) -> PromptDTO:
-    try:
-        template = get_template(key)
-    except KeyError as e:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown prompt '{key}'") from e
+    template = _require_template(key)
     content = read_prompt(paths.prompts_dir, key)
     return PromptDTO(
         key=template.key,
@@ -69,10 +73,7 @@ def put_prompt(
     payload: PromptUpdateRequest,
     paths: Paths = Depends(get_paths),
 ) -> PromptDTO:
-    try:
-        template = get_template(key)
-    except KeyError as e:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown prompt '{key}'") from e
+    template = _require_template(key)
     write_prompt(paths.prompts_dir, key, payload.content_md)
     return PromptDTO(
         key=template.key,
@@ -97,10 +98,7 @@ def reset_prompt(
     The customized flag stays `True` because reset rewrites the file to the
     default rather than deleting it. Clients can distinguish by reading the
     content — the returned `content_md` is exactly the canonical template."""
-    try:
-        template = get_template(key)
-    except KeyError as e:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown prompt '{key}'") from e
+    template = _require_template(key)
     reset_prompt_file(paths.prompts_dir, key)
     return PromptDTO(
         key=template.key,

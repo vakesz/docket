@@ -18,6 +18,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from docket.agent._helpers import arg_error
 from docket.agent.types import ToolSchema
 from docket.telemetry.logging import elapsed_ms, get_logger
 
@@ -69,7 +70,7 @@ class ToolRegistry:
                 outcome="unknown_tool",
                 latency_ms=0,
             )
-            return json.dumps({"error": f"unknown tool '{name}'"})
+            return arg_error(f"unknown tool '{name}'")
         started = time.monotonic_ns()
         try:
             result = tool.handler(arguments)

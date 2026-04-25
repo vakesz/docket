@@ -70,6 +70,10 @@ class Command:
 class DocketCommands(Provider):
     """Exposes Docket's main actions in the command palette."""
 
+    @property
+    def _docket_app(self) -> DocketApp:
+        return self.app  # type: ignore[return-value]
+
     async def search(self, query: str) -> Hits:
         matcher = self.matcher(query)
         for command in self._commands():
@@ -117,7 +121,7 @@ class DocketCommands(Provider):
         return [(c, True) for c in recent_cmds] + [(c, False) for c in rest]
 
     def _recent_ids(self) -> list[str]:
-        app: DocketApp = self.app  # type: ignore[assignment]
+        app = self._docket_app
         conn = getattr(app.tui_ctx, "conn", None)
         if conn is None:
             return []
@@ -130,7 +134,7 @@ class DocketCommands(Provider):
 
     def _wrap(self, command: Command) -> Callable[[], None]:
         """Return a callback that records usage, then fires the real action."""
-        app: DocketApp = self.app  # type: ignore[assignment]
+        app = self._docket_app
 
         def _fire() -> None:
             conn = getattr(app.tui_ctx, "conn", None)
@@ -143,7 +147,7 @@ class DocketCommands(Provider):
         return _fire
 
     def _commands(self) -> list[Command]:
-        app: DocketApp = self.app  # type: ignore[assignment]
+        app = self._docket_app
         commands: list[Command] = [
             Command(
                 id="show-help",

@@ -24,6 +24,7 @@ from urllib.parse import urlparse
 import httpx
 from markdownify import markdownify as md
 
+from docket.agent._helpers import arg_error
 from docket.agent.tools import ToolRegistry
 from docket.telemetry.logging import get_logger
 
@@ -48,14 +49,12 @@ def register_link_tools(registry: ToolRegistry) -> None:
     def fetch_link(args: dict[str, Any]) -> str:
         url = str(args.get("url", "")).strip()
         if not url:
-            return json.dumps({"error": "url is required"})
+            return arg_error("url is required")
         parsed = urlparse(url)
         if parsed.scheme not in {"http", "https"}:
-            return json.dumps(
-                {"error": f"only http/https urls are allowed (got scheme '{parsed.scheme}')"}
-            )
+            return arg_error(f"only http/https urls are allowed (got scheme '{parsed.scheme}')")
         if not parsed.netloc:
-            return json.dumps({"error": "url must include a host"})
+            return arg_error("url must include a host")
         try:
             with httpx.Client(
                 timeout=_FETCH_TIMEOUT,
