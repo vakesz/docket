@@ -23,6 +23,7 @@ import {
   ServerCog,
   Settings2,
   Sparkles,
+  Star,
   Trash2,
 } from "lucide-react";
 import {
@@ -54,6 +55,7 @@ import {
 import type { components } from "~/api/schema";
 import { McpPage } from "~/components/mcp/McpPage";
 import { ThemePicker } from "~/components/shell/ThemePicker";
+import { ToolDisplayPicker } from "~/components/shell/ToolDisplayPicker";
 import { docketCodeMirrorTheme } from "~/lib/cmTheme";
 import { cn } from "~/lib/cn";
 
@@ -753,6 +755,16 @@ function ProvidersForm({
                           active
                         </span>
                       )}
+                      {!isActive && (
+                        <button
+                          type="button"
+                          onClick={() => onChange((cur) => ({ ...cur, _active: k }))}
+                          title="Make this the active provider — Docket will open with it at startup."
+                          className="inline-flex items-center rounded-lg p-1 text-fg-muted hover:bg-surface-alt hover:text-accent"
+                        >
+                          <Star className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => setEditingKey(k)}
@@ -780,7 +792,9 @@ function ProvidersForm({
                     {k} · {type}
                   </div>
                   <div className="mt-1 text-xs text-fg-muted">
-                    {scopeCount} scope{scopeCount === 1 ? "" : "s"} · active “{activeScope}”
+                    {scopeCount === 1
+                      ? `1 scope: “${activeScope}”`
+                      : `${scopeCount} scopes · selected: “${activeScope}”`}
                   </div>
                 </div>
               );
@@ -1378,6 +1392,13 @@ function UiForm({
         help="Color theme for this web UI. Stored in your browser; does not affect the TUI."
       >
         <ThemePicker />
+      </FormField>
+
+      <FormField
+        label="Chat tool messages"
+        help="How tool-call results render in the chat pane. Stored in your browser; does not affect the TUI."
+      >
+        <ToolDisplayPicker />
       </FormField>
 
       <div className="grid gap-4 sm:grid-cols-2">

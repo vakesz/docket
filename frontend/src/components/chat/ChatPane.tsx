@@ -1,3 +1,4 @@
+import { ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { DTO } from "~/api/client";
 import { useConversation, useItem, useStartThread, useStatus } from "~/api/hooks";
@@ -5,6 +6,7 @@ import { Markdown } from "~/components/detail/Markdown";
 import { ProposalCard } from "~/components/mutations/ProposalCard";
 import { cn } from "~/lib/cn";
 import { type IssueLinkContext, issueLinkContextFromUrl } from "~/lib/issueLinks";
+import { type ToolDisplayMode, useToolDisplayMode } from "~/lib/uiPrefs";
 import { useChatPaneController } from "./ChatPaneContext";
 import { type ChatMessage, useChatStream } from "./useChatStream";
 
@@ -24,6 +26,7 @@ export function ChatPane({ itemId }: { itemId: string }) {
     itemId,
     onProposal: (p) => setProposals((prev) => [...prev.filter((x) => x.id !== p.id), p]),
   });
+  const [toolDisplayMode] = useToolDisplayMode();
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: setProposals is stable; we intentionally reset when the viewed item changes.
   useEffect(() => {
@@ -98,10 +101,16 @@ export function ChatPane({ itemId }: { itemId: string }) {
                 key={`h-${m.role}-${i}-${m.content.length}`}
                 message={m}
                 issueLinks={issueLinks}
+                toolDisplayMode={toolDisplayMode}
               />
             ))}
             {messages.map((m) => (
-              <LiveMessage key={m.id} message={m} issueLinks={issueLinks} />
+              <LiveMessage
+                key={m.id}
+                message={m}
+                issueLinks={issueLinks}
+                toolDisplayMode={toolDisplayMode}
+              />
             ))}
             {proposals.length > 0 && (
               <div className="mt-3 flex flex-col gap-2">
@@ -168,9 +177,11 @@ export function ChatPane({ itemId }: { itemId: string }) {
 function PersistedMessage({
   message,
   issueLinks,
+  toolDisplayMode,
 }: {
   message: DTO["ChatRoleDTO"];
   issueLinks: IssueLinkContext;
+  toolDisplayMode: ToolDisplayMode;
 }) {
   if (message.role === "system") return null;
   const role = message.role;
@@ -178,26 +189,23 @@ function PersistedMessage({
   // render as a blank "No description." card. The following `tool` rows already
   // show what was called, so skip these instead of showing a misleading card.
   if (role === "assistant" && !message.content.trim()) return null;
+  if (role === "tool") {
+    return (
+      <ToolMessage name={message.name ?? null} content={message.content} mode={toolDisplayMode} />
+    );
+  }
   return (
     <div
       className={cn(
         "mb-3 rounded px-3 py-2 text-sm",
-        role === "user"
-          ? "bg-surface-alt text-fg"
-          : role === "tool"
-            ? "bg-warning-bg text-warning-fg"
-            : "bg-surface text-fg",
+        role === "user" ? "bg-surface-alt text-fg" : "bg-surface text-fg",
       )}
     >
       <div className="mb-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
         {role}
         {message.name ? ` · ${message.name}` : ""}
       </div>
-      {role === "tool" ? (
-        <pre className="whitespace-pre-wrap font-mono text-xs">{message.content}</pre>
-      ) : (
-        <Markdown source={message.content} issueLinks={issueLinks} />
-      )}
+      <Markdown source={message.content} issueLinks={issueLinks} />
     </div>
   );
 }
@@ -205,41 +213,81 @@ function PersistedMessage({
 function LiveMessage({
   message,
   issueLinks,
+  toolDisplayMode,
 }: {
   message: ChatMessage;
   issueLinks: IssueLinkContext;
+  toolDisplayMode: ToolDisplayMode;
 }) {
   if (message.kind === "tool_call") {
+    if (toolDisplayMode === "hide") return null;
     return (
       <div className="mb-3 rounded border border-dashed border-border px-3 py-1.5 font-mono text-xs text-fg-muted">
         → calling {message.names}
       </div>
     );
   }
+  if (message.kind === "tool") {
+    return <ToolMessage name={message.name} content={message.text} mode={toolDisplayMode} />;
+  }
   return (
     <div
       className={cn(
         "mb-3 rounded px-3 py-2 text-sm",
-        message.kind === "user"
-          ? "bg-surface-alt text-fg"
-          : message.kind === "tool"
-            ? "bg-warning-bg text-warning-fg"
-            : "bg-surface text-fg",
+        message.kind === "user" ? "bg-surface-alt text-fg" : "bg-surface text-fg",
       )}
     >
       <div className="mb-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
         {message.kind}
-        {message.kind === "tool" ? ` · ${message.name}` : ""}
         {message.kind === "assistant" && message.streaming ? " · streaming" : ""}
       </div>
-      {message.kind === "tool" ? (
-        <pre className="whitespace-pre-wrap font-mono text-xs">{message.text}</pre>
-      ) : (
-        <Markdown
-          source={message.text || (message.kind === "assistant" ? "…" : "")}
-          issueLinks={issueLinks}
+      <Markdown
+        source={message.text || (message.kind === "assistant" ? "…" : "")}
+        issueLinks={issueLinks}
+      />
+    </div>
+  );
+}
+
+function ToolMessage({
+  name,
+  content,
+  mode,
+}: {
+  name: string | null;
+  content: string;
+  mode: ToolDisplayMode;
+}) {
+  // The mode controls *initial* expansion only. Once the user clicks the
+  // header, that message owns its open state and ignores later mode changes,
+  // so toggling the setting won't snap-collapse a result they just opened.
+  const [open, setOpen] = useState(mode === "show");
+
+  if (mode === "hide") return null;
+
+  const label = name ? `tool · ${name}` : "tool";
+  const firstLine = content.split("\n", 1)[0]?.trim() ?? "";
+  const preview = firstLine.length > 100 ? `${firstLine.slice(0, 100)}…` : firstLine;
+
+  return (
+    <div className="mb-3 overflow-hidden rounded bg-warning-bg text-warning-fg">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-warning-bg/70"
+        aria-expanded={open}
+      >
+        <ChevronRight
+          className={cn("h-3 w-3 shrink-0 transition-transform", open && "rotate-90")}
         />
-      )}
+        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+          {label}
+        </span>
+        {!open && preview && (
+          <span className="truncate font-mono text-[11px] text-fg-faint">{preview}</span>
+        )}
+      </button>
+      {open && <pre className="whitespace-pre-wrap px-3 pb-2 font-mono text-xs">{content}</pre>}
     </div>
   );
 }

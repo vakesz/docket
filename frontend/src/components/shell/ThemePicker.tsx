@@ -24,12 +24,20 @@ import {
  */
 export function ThemePicker() {
   const [theme, setTheme] = useState<ThemeId>("system");
+  // Gate the persist/apply effect until the stored theme has been read.
+  // Without this, the first mount runs the effect with the placeholder
+  // `system` and wipes the saved theme from localStorage (visible under
+  // React Strict Mode, where the read effect re-runs after the wipe and
+  // sees an empty store).
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     setTheme(readStoredTheme());
+    setHydrated(true);
   }, []);
 
   useEffect(() => {
+    if (!hydrated) return;
     applyTheme(theme);
     if (theme in ADAPTIVE_VARIANTS) {
       if (theme === "system") {
@@ -44,7 +52,7 @@ export function ThemePicker() {
       return () => mql.removeEventListener("change", onChange);
     }
     window.localStorage.setItem(STORAGE_KEY, theme);
-  }, [theme]);
+  }, [theme, hydrated]);
 
   const groups = useMemo(() => {
     const adaptive = THEMES.filter((t) => t.category === "adaptive");
