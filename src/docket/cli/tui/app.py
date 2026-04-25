@@ -27,11 +27,12 @@ from docket.cli.tui.background_tasks import (
 from docket.cli.tui.errors import humanize as humanize_error
 from docket.cli.tui.errors import retry_hint
 from docket.cli.tui.pane_layout import (
+    FullscreenToggle,
+    Pane,
     cycle_pane_focus,
     resize_focused_pane,
     toggle_fullscreen,
 )
-from docket.cli.tui.panes import FullscreenToggle, Pane
 from docket.cli.tui.review_flow import review_pending
 from docket.cli.tui.suggestion_flow import suggest_next
 from docket.cli.tui.tui_context import TuiContext
