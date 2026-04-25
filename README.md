@@ -116,7 +116,7 @@ Docket stores everything under XDG paths resolved by `platformdirs`. `XDG_CONFIG
 
 Key files: `config.toml` (providers, scopes, projects, LLM, HTTP token, UI prefs), `.env` (optional secrets like `AZURE_OPENAI_API_KEY`), `prompts/` (`system_base.md` + `kind_<kind>.md`, hot-reloaded), `docket.db` (SQLite cache), `logs/docket.log` (rotating JSON, 1 MB × 3).
 
-The setup wizard writes `config.toml` atomically after every step; partial runs resume via `docket setup --step=<name>` (`provider`, `auth`, `connection`, `scope`, `telemetry`, `http`, `llm`, `prompts`, `sync`, `default`).
+The setup wizard writes `config.toml` atomically after every step; partial runs resume via `docket setup --step=<name>` (`provider`, `auth`, `connection`, `label`, `scope`, `telemetry`, `http`, `llm`, `prompts`, `sync`, `default`).
 
 ### Environment variables
 

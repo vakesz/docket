@@ -91,7 +91,7 @@ Load-bearing by design. Do not propose changes that alter:
 - watchlist row independence from `items(id)`
 - prompt hot reload, conversation compaction, external update injection, bootstrap app split
 - anything else in CLAUDE.md's "Non-Negotiable Rules" or "Global Invariants"
-- architectural tests: `tests/test_import_boundary.py`, `tests/test_state_map_reverse.py`, `tests/test_github_stub_provider.py`, `tests/test_cli_read_only.py`, `tests/test_api_read_only.py`, `tests/test_read_only_mode.py`, `tests/test_prompt_loader.py`
+- architectural tests: `tests/unit/test_import_boundary.py`, `tests/unit/test_state_map_reverse.py`, `tests/unit/test_tool_registration_order.py`, `tests/integration/test_github_stub_provider.py`, `tests/integration/test_cli_read_only.py`, `tests/integration/test_api_read_only.py`, `tests/pilot/test_read_only_mode.py`, `tests/integration/test_prompt_loader.py`
 
 ## Safety rules
 

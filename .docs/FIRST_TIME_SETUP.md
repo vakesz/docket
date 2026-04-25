@@ -72,7 +72,7 @@ The wizard is idempotent — re-running it overwrites only the fields you confir
 uv run docket setup --step=llm     # only re-run the LLM step
 ```
 
-Step names, in order: `provider` · `auth` · `connection` · `scope` · `telemetry` · `http` · `llm` · `prompts` · `sync` · `default`.
+Step names, in order: `provider` · `auth` · `connection` · `label` · `scope` · `telemetry` · `http` · `llm` · `prompts` · `sync` · `default`. The `label` step prompts for the human-readable display name shown in the TUI/web provider switcher.
 
 The top-level wizard:
 
