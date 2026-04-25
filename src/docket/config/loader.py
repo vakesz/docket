@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import tomllib
 from enum import StrEnum
-from pathlib import Path
 from typing import Any, Literal, overload
 
 import tomli_w
@@ -49,17 +48,5 @@ def save_config(paths: Paths, config: Config) -> None:
     data = config.model_dump(mode="json", exclude_none=True)
     tmp = paths.config_file.with_suffix(".toml.tmp")
     with tmp.open("wb") as f:
-        tomli_w.dump(_coerce_for_toml(data), f)
+        tomli_w.dump(data, f)
     tmp.replace(paths.config_file)
-
-
-def _coerce_for_toml(value: Any) -> Any:
-    """Pydantic emits HttpUrl, Path, etc. as strings in JSON mode. tomli-w only accepts
-    primitives — pass-through. This hook lets us add future coercions without touching callers."""
-    if isinstance(value, dict):
-        return {k: _coerce_for_toml(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_coerce_for_toml(v) for v in value]
-    if isinstance(value, Path):
-        return str(value)
-    return value
