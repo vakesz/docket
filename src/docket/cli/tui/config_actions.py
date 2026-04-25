@@ -22,6 +22,7 @@ from docket.cli.tui.widgets.settings_modal import SettingsModal
 from docket.cli.tui.widgets.theme_picker import ThemePicker
 from docket.config import save_config
 from docket.config.models import Config
+from docket.config.paths import Paths
 from docket.core.model import ItemKind
 
 if TYPE_CHECKING:
@@ -49,15 +50,15 @@ def apply_saved_theme(app: DocketApp) -> None:
 
 
 def open_settings(app: DocketApp) -> None:
-    if app.tui_ctx.paths is None or app.tui_ctx.config is None:
+    paths, config = app.tui_ctx.paths, app.tui_ctx.config
+    if paths is None or config is None:
         app.notify("Settings are unavailable in this session.", severity="warning")
         return
-    app.run_worker(_open_settings_flow(app), group="settings", exclusive=False)
+    app.run_worker(_open_settings_flow(app, paths, config), group="settings", exclusive=False)
 
 
-async def _open_settings_flow(app: DocketApp) -> None:
-    assert app.tui_ctx.paths is not None and app.tui_ctx.config is not None
-    result = await app.push_screen_wait(SettingsModal(app.tui_ctx.paths, app.tui_ctx.config))
+async def _open_settings_flow(app: DocketApp, paths: Paths, config: Config) -> None:
+    result = await app.push_screen_wait(SettingsModal(paths, config))
     if result is not None:
         apply_saved_config(app, result)
 

@@ -5,7 +5,7 @@ from pathlib import Path
 import typer
 
 from docket._console import console
-from docket.cli.commands._utils import DryRun
+from docket.cli.commands._utils import DryRun, enum_from_arg
 from docket.cli.confirm import apply_mutation
 from docket.cli.context import prepare_or_wizard
 from docket.cli.guard import abort_if_read_only
@@ -28,11 +28,7 @@ def new_command(
 ) -> None:
     """Create a new work item."""
     abort_if_read_only(console)
-    try:
-        ik = ItemKind(kind)
-    except ValueError as e:
-        console.print(f"[red]{e}[/red]")
-        raise typer.Exit(2) from e
+    ik = enum_from_arg(kind, ItemKind, "kind")
     fields = CreateFields(
         title=title,
         description_md=description_file.read_text(encoding="utf-8") if description_file else "",

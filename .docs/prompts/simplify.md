@@ -1,9 +1,5 @@
 # Review this Python codebase and produce a simplification plan
 
-<!-- Run: "Execute simplify.md" for plan only, or "Execute simplify.md in aggressive cleanup mode" to apply. -->
-
-Follow `CLAUDE.md` exactly. Do not weaken or remove anything it requires.
-
 ## Goal
 
 Identify the highest-value opportunities to simplify the codebase **and improve its long-term maintainability** without changing intended behavior.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
@@ -28,6 +29,14 @@ from docket.core.services import mutation_service, visual_filter
 from docket.core.services.proposal_store import ProposalStore
 from docket.providers.base import WorkItemProvider
 from docket.storage.repos import comment_repo, item_repo, search_repo
+
+
+def _provider_call_or_502[T](fn: Callable[[], T]) -> T:
+    """Run `fn` and translate any provider error into an HTTP 502."""
+    try:
+        return fn()
+    except Exception as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Provider lookup failed: {e}") from e
 
 
 def get_item_or_fetch(
@@ -139,10 +148,7 @@ def get_comments(
     provider_key: str = Depends(get_active_provider_key),
 ) -> list[CommentDTO]:
     if refresh:
-        try:
-            fresh = provider.get_comments(item_id)
-        except Exception as e:
-            raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Provider lookup failed: {e}") from e
+        fresh = _provider_call_or_502(lambda: provider.get_comments(item_id))
         comment_repo.replace_comments_for_item(conn, item_id, fresh, provider_key=provider_key)
         return [CommentDTO.from_core(c) for c in fresh]
     return [
@@ -156,10 +162,7 @@ def get_linked(
     item_id: str,
     provider: WorkItemProvider = Depends(get_provider),
 ) -> list[ItemDTO]:
-    try:
-        linked = provider.get_linked(item_id)
-    except Exception as e:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Provider lookup failed: {e}") from e
+    linked = _provider_call_or_502(lambda: provider.get_linked(item_id))
     return [ItemDTO.from_core(i) for i in linked]
 
 
@@ -172,10 +175,7 @@ def get_item(
     provider_key: str = Depends(get_active_provider_key),
 ) -> ItemDTO:
     if refresh:
-        try:
-            fresh = provider.get_item(item_id)
-        except Exception as e:
-            raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Provider lookup failed: {e}") from e
+        fresh = _provider_call_or_502(lambda: provider.get_item(item_id))
         if provider_key:
             fresh.provider_key = provider_key
         item_repo.upsert_item(conn, fresh)

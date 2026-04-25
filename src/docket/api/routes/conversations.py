@@ -42,6 +42,7 @@ from docket.api.schemas import (
 )
 from docket.core.question import Question, QuestionAnswer, serialize_question
 from docket.core.services import conversation_service
+from docket.core.services.conversation_service import TurnResult
 from docket.core.services.proposal_store import ProposalStore
 from docket.core.services.question_store import QuestionStore
 from docket.providers.base import WorkItemProvider
@@ -301,6 +302,63 @@ def _make_callbacks(
     return on_delta, on_message
 
 
+_Work = Callable[
+    [Callable[[StreamDelta], None], Callable[[ChatMessage], None]],
+    TurnResult,
+]
+
+
+async def _run_sse_pump(
+    *,
+    work: _Work,
+    store: ProposalStore,
+    questions: QuestionStore,
+    request: Request,
+    worker_name: str,
+    error_msg: str,
+) -> AsyncIterator[ServerSentEvent]:
+    """Drive a synchronous turn in a worker thread and bridge its callbacks
+    onto an SSE-shaped asyncio queue.
+
+    Emits `delta` / `message` / `proposal` / `question` from the worker, then
+    a terminal `done` (with usage) on success or `error` on exception. The
+    worker may outlive the client — its post-disconnect enqueues land on an
+    unowned queue and get GC'd with the request task."""
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue[ServerSentEvent | None] = asyncio.Queue()
+    on_delta, on_message = _make_callbacks(loop=loop, queue=queue, store=store, questions=questions)
+
+    def _put_threadsafe(event: ServerSentEvent | None) -> None:
+        asyncio.run_coroutine_threadsafe(queue.put(event), loop)
+
+    def run_worker() -> None:
+        try:
+            result = work(on_delta, on_message)
+            _put_threadsafe(
+                ServerSentEvent(event="done", data=json.dumps({"usage": asdict(result.usage)}))
+            )
+        except Exception as e:
+            log.exception(error_msg)
+            _put_threadsafe(
+                ServerSentEvent(
+                    event="error",
+                    data=json.dumps({"detail": f"{type(e).__name__}: {e}"}),
+                )
+            )
+        finally:
+            _put_threadsafe(None)  # sentinel: stream closed
+
+    Thread(target=run_worker, daemon=True, name=worker_name).start()
+
+    while True:
+        if await request.is_disconnected():
+            return
+        event = await queue.get()
+        if event is None:
+            return
+        yield event
+
+
 async def _stream_turn(
     *,
     conn: sqlite3.Connection,
@@ -312,58 +370,33 @@ async def _stream_turn(
     request: Request,
     provider_key: str,
 ) -> AsyncIterator[ServerSentEvent]:
-    loop = asyncio.get_running_loop()
-    queue: asyncio.Queue[ServerSentEvent | None] = asyncio.Queue()
-    on_delta, on_message = _make_callbacks(loop=loop, queue=queue, store=store, questions=questions)
-
-    def _put_threadsafe(event: ServerSentEvent | None) -> None:
-        asyncio.run_coroutine_threadsafe(queue.put(event), loop)
-
     threshold = getattr(request.app.state, "compaction_threshold_tokens", 0) or None
 
-    def run_turn() -> None:
-        try:
-            result = conversation_service.send_user_message(
-                conn,
-                agent,
-                item_id,
-                text,
-                on_delta=on_delta,
-                on_message=on_message,
-                compaction_threshold_tokens=threshold,
-                provider_key=provider_key,
-                question_store=questions,
-            )
-            _put_threadsafe(
-                ServerSentEvent(event="done", data=json.dumps({"usage": asdict(result.usage)}))
-            )
-        except Exception as e:
-            log.exception("chat turn failed for %s", item_id)
-            _put_threadsafe(
-                ServerSentEvent(
-                    event="error",
-                    data=json.dumps({"detail": f"{type(e).__name__}: {e}"}),
-                )
-            )
-        finally:
-            _put_threadsafe(None)  # sentinel: stream closed
+    def work(
+        on_delta: Callable[[StreamDelta], None],
+        on_message: Callable[[ChatMessage], None],
+    ) -> TurnResult:
+        return conversation_service.send_user_message(
+            conn,
+            agent,
+            item_id,
+            text,
+            on_delta=on_delta,
+            on_message=on_message,
+            compaction_threshold_tokens=threshold,
+            provider_key=provider_key,
+            question_store=questions,
+        )
 
-    worker = Thread(target=run_turn, daemon=True, name=f"chat-turn-{item_id}")
-    worker.start()
-
-    try:
-        while True:
-            if await request.is_disconnected():
-                return
-            event = await queue.get()
-            if event is None:
-                return
-            yield event
-    finally:
-        # Worker may still be running if the client disconnected mid-turn; it
-        # finishes on its own and its final enqueues land on a queue nobody
-        # reads, which is harmless (queue is garbage-collected with the task).
-        pass
+    async for event in _run_sse_pump(
+        work=work,
+        store=store,
+        questions=questions,
+        request=request,
+        worker_name=f"chat-turn-{item_id}",
+        error_msg=f"chat turn failed for {item_id}",
+    ):
+        yield event
 
 
 async def _stream_answer(
@@ -382,57 +415,35 @@ async def _stream_answer(
     """SSE pump for `/answer` — same event types as `_stream_turn`, but the
     worker resumes the loop via `submit_question_answer` instead of starting a
     fresh user turn."""
-    loop = asyncio.get_running_loop()
-    queue: asyncio.Queue[ServerSentEvent | None] = asyncio.Queue()
-    on_delta, on_message = _make_callbacks(loop=loop, queue=queue, store=store, questions=questions)
-
-    def _put_threadsafe(event: ServerSentEvent | None) -> None:
-        asyncio.run_coroutine_threadsafe(queue.put(event), loop)
-
     threshold = getattr(request.app.state, "compaction_threshold_tokens", 0) or None
 
-    def run_turn() -> None:
-        try:
-            result = conversation_service.submit_question_answer(
-                conn,
-                agent,
-                item_id,
-                question_id,
-                answers,
-                on_delta=on_delta,
-                on_message=on_message,
-                compaction_threshold_tokens=threshold,
-                provider_key=provider_key,
-                project_id=project_id,
-                question_store=questions,
-            )
-            _put_threadsafe(
-                ServerSentEvent(event="done", data=json.dumps({"usage": asdict(result.usage)}))
-            )
-        except Exception as e:
-            log.exception("answer resume failed for %s", item_id)
-            _put_threadsafe(
-                ServerSentEvent(
-                    event="error",
-                    data=json.dumps({"detail": f"{type(e).__name__}: {e}"}),
-                )
-            )
-        finally:
-            _put_threadsafe(None)
+    def work(
+        on_delta: Callable[[StreamDelta], None],
+        on_message: Callable[[ChatMessage], None],
+    ) -> TurnResult:
+        return conversation_service.submit_question_answer(
+            conn,
+            agent,
+            item_id,
+            question_id,
+            answers,
+            on_delta=on_delta,
+            on_message=on_message,
+            compaction_threshold_tokens=threshold,
+            provider_key=provider_key,
+            project_id=project_id,
+            question_store=questions,
+        )
 
-    worker = Thread(target=run_turn, daemon=True, name=f"chat-answer-{item_id}")
-    worker.start()
-
-    try:
-        while True:
-            if await request.is_disconnected():
-                return
-            event = await queue.get()
-            if event is None:
-                return
-            yield event
-    finally:
-        pass
+    async for event in _run_sse_pump(
+        work=work,
+        store=store,
+        questions=questions,
+        request=request,
+        worker_name=f"chat-answer-{item_id}",
+        error_msg=f"answer resume failed for {item_id}",
+    ):
+        yield event
 
 
 __all__ = ["router"]

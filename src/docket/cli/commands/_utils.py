@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from collections.abc import Callable
 from datetime import datetime
+from enum import Enum
 from typing import Annotated, Protocol
 
 import typer
@@ -16,6 +17,20 @@ DryRun = Annotated[
     bool,
     typer.Option("--dry-run", help="Show diff, do not write."),
 ]
+
+
+def enum_from_arg[E: Enum](value: str, enum_class: type[E], param_name: str) -> E:
+    """Coerce a CLI string into an enum, raising `typer.BadParameter` on miss.
+
+    Lets Typer render the failure as a `Usage:` line consistent with its own
+    argument errors (rather than ad-hoc `console.print` + `Exit(2)`)."""
+    try:
+        return enum_class(value)
+    except ValueError as e:
+        allowed = ", ".join(m.value for m in enum_class)
+        raise typer.BadParameter(
+            f"{value!r} is not one of: {allowed}", param_hint=param_name
+        ) from e
 
 
 def split_tags(raw: str | None) -> list[str]:

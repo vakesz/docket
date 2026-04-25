@@ -3,7 +3,7 @@ from __future__ import annotations
 import typer
 
 from docket._console import console
-from docket.cli.commands._utils import DryRun
+from docket.cli.commands._utils import DryRun, enum_from_arg
 from docket.cli.confirm import apply_mutation
 from docket.cli.context import prepare_or_wizard
 from docket.cli.guard import abort_if_read_only
@@ -21,11 +21,7 @@ def transition_command(
 ) -> None:
     """Move a work item to a new state using a named intent."""
     abort_if_read_only(console)
-    try:
-        ti = TransitionIntent(intent)
-    except ValueError as e:
-        console.print(f"[red]{e}[/red]")
-        raise typer.Exit(2) from e
+    ti = enum_from_arg(intent, TransitionIntent, "intent")
 
     with prepare_or_wizard() as ctx:
         item = mutation_service.require_cached_item(ctx.conn, id, provider_key=ctx.active_provider)
