@@ -24,7 +24,7 @@ from docket.api.deps import (
     require_not_read_only,
 )
 from docket.api.schemas import ProposalDTO, SuggestionDTO, SuggestionStageRequest
-from docket.core.services import mutation_service, suggestion_service
+from docket.core.services import suggestion_service
 from docket.core.services.proposal_store import ProposalStore
 from docket.core.services.suggestion_service import Suggestion, SuggestionError
 from docket.storage.repos import item_repo
@@ -85,9 +85,6 @@ def stage_suggestion(
     if staged.description_patch is not None:
         store.add(staged.description_patch, source="api")
         out.append(ProposalDTO.from_core(staged.description_patch))
-    # mutation_service.propose_transition/description both only read the cache;
-    # no commit needed here. Kept explicit for clarity.
-    _ = mutation_service  # silence unused-import check when running mypy strict
     return out
 
 

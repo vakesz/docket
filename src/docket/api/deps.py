@@ -28,7 +28,7 @@ from docket.core.services.question_store import QuestionStore
 from docket.providers.base import WorkItemProvider
 
 
-def _state_or_raise[T](
+def _require[T](
     request: Request,
     attr: str,
     tp: type[T],
@@ -38,22 +38,17 @@ def _state_or_raise[T](
 ) -> T:
     """Return `request.app.state.<attr>` or raise with the given detail.
 
-    `tp` is the expected type — passed so mypy can bind the return type and
-    so we can surface misconfigured attributes as a hard error rather than a
-    silent mismatch downstream."""
+    `tp` exists to bind the return type — there is no runtime isinstance
+    check because Protocol types (LlmClient, WorkItemProvider) can't be
+    narrowed that way and the wiring layer is the only writer."""
     value = getattr(request.app.state, attr, None)
     if value is None:
         raise HTTPException(status_code=status_code, detail=detail)
-    if not isinstance(value, tp):
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"app.state.{attr} has wrong type: {type(value).__name__}",
-        )
-    return value
+    return cast(T, value)
 
 
 def get_conn(request: Request) -> sqlite3.Connection:
-    return _state_or_raise(
+    return _require(
         request,
         "conn",
         sqlite3.Connection,
@@ -66,8 +61,6 @@ def get_provider(request: Request) -> WorkItemProvider:
     runtime: RuntimeState | None = getattr(request.app.state, "runtime", None)
     if runtime is not None:
         return runtime.provider
-    # WorkItemProvider is a Protocol, so isinstance isn't meaningful — fall
-    # back to a simpler None check and cast.
     provider = getattr(request.app.state, "provider", None)
     if provider is None:
         raise HTTPException(
@@ -78,7 +71,7 @@ def get_provider(request: Request) -> WorkItemProvider:
 
 
 def get_proposals(request: Request) -> ProposalStore:
-    return _state_or_raise(
+    return _require(
         request,
         "proposals",
         ProposalStore,
@@ -88,7 +81,7 @@ def get_proposals(request: Request) -> ProposalStore:
 
 
 def get_questions(request: Request) -> QuestionStore:
-    return _state_or_raise(
+    return _require(
         request,
         "questions",
         QuestionStore,
@@ -98,7 +91,7 @@ def get_questions(request: Request) -> QuestionStore:
 
 
 def require_agent(request: Request) -> AgentLoop:
-    return _state_or_raise(
+    return _require(
         request,
         "agent",
         AgentLoop,
@@ -107,8 +100,6 @@ def require_agent(request: Request) -> AgentLoop:
 
 
 def require_llm(request: Request) -> LlmClient:
-    # LlmClient is a Protocol; keep the direct-None-check path used by
-    # get_provider.
     llm = getattr(request.app.state, "llm", None)
     if llm is None:
         raise HTTPException(
@@ -127,7 +118,7 @@ def require_not_read_only(request: Request) -> None:
 
 
 def get_paths(request: Request) -> Paths:
-    return _state_or_raise(
+    return _require(
         request,
         "paths",
         Paths,
@@ -136,7 +127,7 @@ def get_paths(request: Request) -> Paths:
 
 
 def get_runtime(request: Request) -> RuntimeState:
-    return _state_or_raise(
+    return _require(
         request,
         "runtime",
         RuntimeState,
@@ -167,7 +158,7 @@ def get_config(request: Request) -> Config:
 
     Mutations that need to persist back to disk should also use `get_paths()`
     so they can call `save_config(paths, config)`."""
-    return _state_or_raise(
+    return _require(
         request,
         "config",
         Config,

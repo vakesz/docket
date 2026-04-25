@@ -103,18 +103,6 @@ class Conversation:
 
 
 @dataclass
-class Message:
-    id: str
-    conversation_id: str
-    role: str
-    content: str
-    tool_calls: list[dict[str, Any]] | None = None
-    tokens_in: int = 0
-    tokens_out: int = 0
-    created_at: datetime | None = None
-
-
-@dataclass
 class CreateFields:
     title: str
     description_md: str = ""

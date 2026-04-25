@@ -9,15 +9,12 @@ one.
 
 from __future__ import annotations
 
-import re
 import sqlite3
 from datetime import datetime
 
 from docket.core.model import Project, project_id_for
 from docket.storage._time import now_iso, now_utc
 from docket.storage.repos._patch import build_set_clause
-
-_SLUG_BAD = re.compile(r"[^a-z0-9]+")
 
 
 def _row_to_project(row: sqlite3.Row) -> Project:
@@ -34,12 +31,6 @@ def _row_to_project(row: sqlite3.Row) -> Project:
 def _default_name(provider_key: str) -> str:
     """Human-readable default — never an empty string."""
     return provider_key or "default"
-
-
-def slugify(name: str) -> str:
-    """Lower-kebab slug used in URLs and CLI flags. Falls back to 'project'."""
-    cleaned = _SLUG_BAD.sub("-", name.strip().lower()).strip("-")
-    return cleaned or "project"
 
 
 def ensure(

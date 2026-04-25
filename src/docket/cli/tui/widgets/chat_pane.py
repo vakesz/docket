@@ -21,10 +21,6 @@ class UserTurnRequest(Message):
         self.text = text
 
 
-class NewThreadRequest(Message):
-    pass
-
-
 class TurnFinished(Message):
     """Posted after a chat turn's usage/cost have been computed.
 
