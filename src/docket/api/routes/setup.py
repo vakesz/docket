@@ -39,7 +39,7 @@ from docket.api.schemas import (
     SetupTestResultDTO,
     SyncSummaryDTO,
 )
-from docket.config.loader import ConfigLoadPolicy, load_config, save_config
+from docket.config.loader import load_config, save_config
 from docket.config.models import (
     ProviderEntry,
     compose_setup_config,
@@ -55,7 +55,7 @@ router = APIRouter(prefix="/setup", tags=["setup"])
 @router.get("/status", response_model=SetupStatusDTO)
 def setup_status(paths: Paths = Depends(get_paths)) -> SetupStatusDTO:
     try:
-        cfg = load_config(paths, policy=ConfigLoadPolicy.OPTIONAL)
+        cfg = load_config(paths, optional=True)
     except ValidationError:
         cfg = None
     if cfg is None:
@@ -141,7 +141,7 @@ def setup_complete(
     # slots / active_scope choices when the wizard is re-run against a
     # configured instance. Bootstrap mode will return None here.
     try:
-        existing_cfg = load_config(paths, policy=ConfigLoadPolicy.OPTIONAL)
+        existing_cfg = load_config(paths, optional=True)
     except ValidationError:
         existing_cfg = None
 

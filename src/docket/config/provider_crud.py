@@ -13,7 +13,7 @@ from __future__ import annotations
 from pydantic import HttpUrl
 from rich.prompt import Confirm, Prompt
 
-from docket.config.loader import ConfigLoadPolicy, load_config, save_config
+from docket.config.loader import load_config, save_config
 from docket.config.models import Config, ScopeFilter, build_provider_entry
 from docket.config.paths import resolve_paths
 from docket.config.setup_utils import (
@@ -101,7 +101,7 @@ def provider_add(
         github_host_hint=github_host_hint,
     )
 
-    cfg = load_config(paths, policy=ConfigLoadPolicy.OPTIONAL) or Config()
+    cfg = load_config(paths, optional=True) or Config()
     if name in cfg.providers and not Confirm.ask(
         f"Provider '{name}' already exists. Overwrite?", default=False
     ):

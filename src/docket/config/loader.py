@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import tomllib
-from enum import StrEnum
 from typing import Any, Literal, overload
 
 import tomli_w
@@ -14,27 +13,20 @@ class ConfigMissingError(FileNotFoundError):
     """Raised when config.toml is not present — caller should invoke the setup wizard."""
 
 
-class ConfigLoadPolicy(StrEnum):
-    """How `load_config` should behave when `config.toml` is absent.
-
-    - `REQUIRED` (default): raise `ConfigMissingError`. Surfaces that gate on
-      onboarding (CLI root, `/setup/status`) rely on this to trigger the wizard.
-    - `OPTIONAL`: return `None`. Used by flows that can operate on a default
-      `Config()` (e.g. the wizard itself while rebuilding state)."""
-
-    REQUIRED = "required"
-    OPTIONAL = "optional"
-
-
 @overload
-def load_config(paths: Paths, *, policy: Literal[ConfigLoadPolicy.REQUIRED] = ...) -> Config: ...
+def load_config(paths: Paths, *, optional: Literal[False] = ...) -> Config: ...
 @overload
-def load_config(paths: Paths, *, policy: Literal[ConfigLoadPolicy.OPTIONAL]) -> Config | None: ...
-def load_config(
-    paths: Paths, *, policy: ConfigLoadPolicy = ConfigLoadPolicy.REQUIRED
-) -> Config | None:
+def load_config(paths: Paths, *, optional: Literal[True]) -> Config | None: ...
+def load_config(paths: Paths, *, optional: bool = False) -> Config | None:
+    """Read and validate `config.toml`.
+
+    By default, raise `ConfigMissingError` when the file is absent — surfaces
+    that gate on onboarding (CLI root, `/setup/status`) rely on this to
+    trigger the wizard. Pass `optional=True` to return `None` instead, used
+    by flows that can operate on a default `Config()` (the wizard itself
+    while rebuilding state)."""
     if not paths.config_file.exists():
-        if policy is ConfigLoadPolicy.OPTIONAL:
+        if optional:
             return None
         raise ConfigMissingError(str(paths.config_file))
     with paths.config_file.open("rb") as f:

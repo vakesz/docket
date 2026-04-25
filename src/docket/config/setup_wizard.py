@@ -33,7 +33,7 @@ from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 
 from docket.agent.prompt import scaffold as scaffold_prompts
-from docket.config.loader import ConfigLoadPolicy, load_config, save_config
+from docket.config.loader import load_config, save_config
 from docket.config.models import (
     Config,
     ScopeFilter,
@@ -181,7 +181,7 @@ def _print_existing_providers(cfg: Config) -> None:
 def _load_existing_state(paths: Paths) -> WizardState:
     state = WizardState(paths=paths)
     try:
-        cfg = load_config(paths, policy=ConfigLoadPolicy.OPTIONAL)
+        cfg = load_config(paths, optional=True)
     except ValidationError as e:
         console.print(
             f"[yellow]Existing config at {paths.config_file} is malformed "
