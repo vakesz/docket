@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from typing import Any
 
 #: Canonical default/ceiling pair for `list_*` agent tools. Centralized here
@@ -68,6 +69,22 @@ def provider_unsupported(operation: str) -> str:
     return arg_error(f"provider does not support {operation}")
 
 
+def call_provider[T](operation: str, fn: Callable[[], T], render: Callable[[T], Any]) -> str:
+    """Invoke `fn`, JSON-encode `render(result)`, or render the canonical
+    error shape on `NotImplementedError` / unexpected provider failures.
+
+    `operation` is the human-facing label embedded in the unsupported
+    message (e.g. `"PR detail fetch"`). Centralizes the read-tool error
+    triad so call sites collapse to a single return."""
+    try:
+        result = fn()
+    except NotImplementedError:
+        return provider_unsupported(operation)
+    except Exception as e:
+        return provider_error(e)
+    return json.dumps(render(result))
+
+
 def entry_summary(entry: Any, **extras: Any) -> dict[str, Any]:
     """Shared summary shape for agent list/search tools over memory/source entries.
 
@@ -89,6 +106,7 @@ __all__ = [
     "MAX_LIST_LIMIT",
     "MAX_SEARCH_LIMIT",
     "arg_error",
+    "call_provider",
     "clamp_limit",
     "entry_summary",
     "provider_error",

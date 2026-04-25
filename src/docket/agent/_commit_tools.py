@@ -6,15 +6,9 @@ the schema."""
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
-from docket.agent._helpers import (
-    arg_error,
-    provider_error,
-    provider_unsupported,
-    required_str,
-)
+from docket.agent._helpers import arg_error, call_provider, required_str
 from docket.agent.tools import ToolRegistry
 from docket.providers.base import WorkItemProvider
 
@@ -75,13 +69,7 @@ def register_commit_tools(registry: ToolRegistry, *, provider: WorkItemProvider)
                 ref = required_str(args, "ref")
             except ValueError as e:
                 return arg_error(str(e))
-            try:
-                detail = get_commit_fn(ref)
-            except NotImplementedError:
-                return provider_unsupported("commit fetch")
-            except Exception as e:
-                return provider_error(e)
-            return json.dumps(_commit_payload(detail))
+            return call_provider("commit fetch", lambda: get_commit_fn(ref), _commit_payload)
 
         registry.register(
             name="get_commit",
@@ -112,13 +100,11 @@ def register_commit_tools(registry: ToolRegistry, *, provider: WorkItemProvider)
                 ref = required_str(args, "ref")
             except ValueError as e:
                 return arg_error(str(e))
-            try:
-                diff = get_commit_diff_fn(ref)
-            except NotImplementedError:
-                return provider_unsupported("commit diff fetch")
-            except Exception as e:
-                return provider_error(e)
-            return json.dumps({"ref": ref, "diff": diff})
+            return call_provider(
+                "commit diff fetch",
+                lambda: get_commit_diff_fn(ref),
+                lambda diff: {"ref": ref, "diff": diff},
+            )
 
         registry.register(
             name="get_diff",
@@ -147,13 +133,7 @@ def register_commit_tools(registry: ToolRegistry, *, provider: WorkItemProvider)
                 ref = required_str(args, "ref")
             except ValueError as e:
                 return arg_error(str(e))
-            try:
-                status = get_ci(ref)
-            except NotImplementedError:
-                return provider_unsupported("CI status fetch")
-            except Exception as e:
-                return provider_error(e)
-            return json.dumps(_ci_status_payload(status))
+            return call_provider("CI status fetch", lambda: get_ci(ref), _ci_status_payload)
 
         registry.register(
             name="get_ci_status",

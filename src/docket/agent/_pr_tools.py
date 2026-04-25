@@ -6,16 +6,9 @@ speak git (e.g. `github_stub`) so the model never hallucinates PR queries."""
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
-from docket.agent._helpers import (
-    arg_error,
-    provider_error,
-    provider_unsupported,
-    required_str,
-    str_list,
-)
+from docket.agent._helpers import arg_error, call_provider, required_str, str_list
 from docket.agent.tools import ToolRegistry
 from docket.providers.base import WorkItemProvider
 
@@ -77,14 +70,10 @@ def register_pr_tools(registry: ToolRegistry, *, provider: WorkItemProvider) -> 
                 kws = str_list(args, "title_keywords")
             except ValueError as e:
                 return arg_error(str(e))
-            try:
-                matches = find_prs(id_, kws)
-            except NotImplementedError:
-                return provider_unsupported("PR discovery")
-            except Exception as e:
-                return provider_error(e)
-            return json.dumps(
-                [
+            return call_provider(
+                "PR discovery",
+                lambda: find_prs(id_, kws),
+                lambda matches: [
                     {
                         "url": m.url,
                         "title": m.title,
@@ -94,7 +83,7 @@ def register_pr_tools(registry: ToolRegistry, *, provider: WorkItemProvider) -> 
                         "confidence": round(m.confidence, 2),
                     }
                     for m in matches
-                ]
+                ],
             )
 
         registry.register(
@@ -127,13 +116,7 @@ def register_pr_tools(registry: ToolRegistry, *, provider: WorkItemProvider) -> 
                 pr_id = required_str(args, "id")
             except ValueError as e:
                 return arg_error(str(e))
-            try:
-                detail = get_pr(pr_id)
-            except NotImplementedError:
-                return provider_unsupported("PR detail fetch")
-            except Exception as e:
-                return provider_error(e)
-            return json.dumps(_pull_request_payload(detail))
+            return call_provider("PR detail fetch", lambda: get_pr(pr_id), _pull_request_payload)
 
         registry.register(
             name="get_pull_request",
@@ -166,13 +149,11 @@ def register_pr_tools(registry: ToolRegistry, *, provider: WorkItemProvider) -> 
                 pr_id = required_str(args, "id")
             except ValueError as e:
                 return arg_error(str(e))
-            try:
-                diff = get_pr_diff(pr_id)
-            except NotImplementedError:
-                return provider_unsupported("PR diff fetch")
-            except Exception as e:
-                return provider_error(e)
-            return json.dumps({"id": pr_id, "diff": diff})
+            return call_provider(
+                "PR diff fetch",
+                lambda: get_pr_diff(pr_id),
+                lambda diff: {"id": pr_id, "diff": diff},
+            )
 
         registry.register(
             name="get_pull_request_diff",
