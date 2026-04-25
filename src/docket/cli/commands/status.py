@@ -253,9 +253,8 @@ def _event_outcome(evt: dict[str, Any]) -> str:
 def _fmt_event_ts(value: Any) -> str:
     if not isinstance(value, str):
         return "—"
-    # structlog emits ISO-8601 with trailing 'Z'; keep the HH:MM:SS portion.
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00")).strftime("%H:%M:%S")
+        return datetime.fromisoformat(value).strftime("%H:%M:%S")
     except ValueError:
         return value[:19] if len(value) >= 19 else value
 

@@ -386,7 +386,7 @@ export function useRejectProposal() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ itemId, proposalId }: { itemId: string; proposalId: string }) =>
-      api.delete<void>(
+      api.post<void>(
         `/items/${encodeURIComponent(itemId)}/mutations/${encodeURIComponent(proposalId)}/reject`,
       ),
     onSuccess: () => qc.invalidateQueries({ queryKey: qk.status() }),

@@ -778,11 +778,8 @@ def _reduce_ci(runs: list[CIRun]) -> str:
 def _parse_iso(value: Any) -> datetime | None:
     if not isinstance(value, str) or not value:
         return None
-    # GitHub returns `2024-05-30T18:32:21Z` — Python's fromisoformat handles
-    # that only after 3.11; we normalize the trailing Z defensively.
-    text = value.replace("Z", "+00:00")
     try:
-        return datetime.fromisoformat(text)
+        return datetime.fromisoformat(value)
     except ValueError:
         return None
 

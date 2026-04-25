@@ -26,9 +26,8 @@ def _parse_azure_devops_datetime(value: Any) -> datetime | None:
         return None
     if isinstance(value, datetime):
         return value
-    # Azure DevOps returns ISO-8601 with Z suffix; fromisoformat handles Z in 3.11+
     try:
-        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return datetime.fromisoformat(str(value))
     except ValueError:
         return None
 
