@@ -1,42 +1,46 @@
-"""Shared base for the two-column "list on the left, editor on the right" modals.
+"""Two-column list+editor modal scaffold shared by memory / source / MCP.
 
-`MemoryPane` and `SourcePane` both need: a list of entries, a body-plus-metadata
-editor, save/new/delete buttons, identical key bindings, and the same read-only
-handling. The only real differences are which repo they hit, which extra fields
-their form exposes, and the noun they use in user-facing messages.
+Every pane has the same skeleton: list of entries on the left, form-style
+editor on the right, four bindings (save / new / delete / close), the same
+button row, the same read-only handling. The differences are which fields
+the form exposes, how rows are listed, and what the persistence target is
+(SQLite repo for memory + source, `mcp_service` + `config.toml` for MCP).
 
 Subclasses supply:
-- `compose()` — full layout including the extra form fields
-- `_entity_noun()` — e.g. "memory" / "source"
-- `_field_ids()` — widget ids to enable/disable with read-only
-- `_list()`, `_delete_entry()`, `_save_new()`, `_save_update()` — repo adapters
-- `_entry_id()`, `_entry_label()` — list row rendering
-- `_load_into_editor()`, `_clear_editor_fields()` — form I/O
 
-The base owns binding/button dispatch, list reload, save flow, read-only
-messaging, and editor enable/disable. Both panes together drop by ~150 lines."""
+- `_title`, `_subtitle`, `_hint` — text shown around the body
+- `compose_editor()` — yields the form fields for the right column
+- `_field_ids()` — widget ids the read-only switch toggles
+- `_list_rows()` — `(id, label)` pairs for the ListView
+- `_on_select(entry_id)` — populate the form when a row is picked
+- `_save()` / `_delete_one(entry_id)` / `_clear_form()` — CRUD adapters
+
+The dismiss value is `True` when anything was committed during the session,
+so the parent app can decide whether to rebuild the agent on close. Memory
+and source ignore the result; MCP listens for it."""
 
 from __future__ import annotations
 
-import sqlite3
 from abc import abstractmethod
 from typing import ClassVar
 
+from textual.app import ComposeResult
 from textual.binding import Binding, BindingType
+from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, ListItem, ListView, Static, TextArea
+from textual.widgets import Button, ListItem, ListView, Static
 
 
 class ListEditRow(ListItem):
-    """ListItem that carries the underlying entry id."""
+    """ListItem carrying the underlying entry id."""
 
     def __init__(self, entry_id: str, label: str) -> None:
         super().__init__(Static(label))
         self.entry_id = entry_id
 
 
-class ListEditPane[T](ModalScreen[None]):
-    """Abstract two-column list-plus-editor modal — see module docstring."""
+class ListEditPane(ModalScreen[bool]):
+    """Abstract two-column list+editor modal — see module docstring."""
 
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("ctrl+s", "save", "Save", priority=True),
@@ -45,106 +49,119 @@ class ListEditPane[T](ModalScreen[None]):
         Binding("escape", "cancel", "Close", priority=True),
     ]
 
-    def __init__(
-        self,
-        *,
-        conn: sqlite3.Connection,
-        project_id: str,
-        project_name: str,
-        read_only: bool = False,
-    ) -> None:
-        super().__init__()
-        self._conn = conn
-        self._project_id = project_id
-        self._project_name = project_name
-        self._read_only = read_only
-        self._entries: list[T] = []
-        self._current_id: str | None = None  # None = unsaved/new
+    DEFAULT_CSS = """
+    ListEditPane { align: center middle; }
+    ListEditPane > Vertical {
+        width: 110;
+        max-width: 150;
+        height: 90%;
+        background: $surface;
+        border: round $accent;
+        padding: 1 2;
+    }
+    ListEditPane #title { height: auto; color: $accent; text-style: bold; }
+    ListEditPane #subtitle { height: auto; color: $text-muted; padding-bottom: 1; }
+    ListEditPane #body { height: 1fr; }
+    ListEditPane #list-col { width: 38; }
+    ListEditPane #editor-col { width: 1fr; padding-left: 2; }
+    ListEditPane #entries { height: 1fr; border: round $panel-lighten-1; }
+    ListEditPane .field-label { height: auto; color: $text-muted; padding-top: 1; }
+    ListEditPane #buttons { height: auto; padding-top: 1; }
+    ListEditPane #buttons Button { margin-right: 1; }
+    ListEditPane #hint { height: auto; color: $text-muted; padding-top: 1; }
+    """
 
-    # -- hooks the subclass must implement --------------------------------
+    _title: str = ""
+    _subtitle: str = ""
+    _hint: str = "Ctrl+S save  ·  Ctrl+N new  ·  Ctrl+D delete  ·  Esc close"
+
+    def __init__(self, *, read_only: bool = False) -> None:
+        super().__init__()
+        self._read_only = read_only
+        self._current_id: str | None = None
+        self._dirty = False
+
+    # -- composition -----------------------------------------------------
+
+    def compose(self) -> ComposeResult:
+        with Vertical():
+            yield Static(self._title, id="title")
+            yield Static(self._subtitle, id="subtitle")
+            with Horizontal(id="body"):
+                with Vertical(id="list-col"):
+                    yield Static("entries", classes="field-label")
+                    yield ListView(id="entries")
+                with Vertical(id="editor-col"):
+                    yield from self.compose_editor()
+                    with Horizontal(id="buttons"):
+                        yield from self.compose_buttons()
+            yield Static(self._hint, id="hint")
 
     @abstractmethod
-    def _entity_noun(self) -> str: ...
+    def compose_editor(self) -> ComposeResult: ...
+
+    def compose_buttons(self) -> ComposeResult:
+        yield Button("Save", id="save-btn", variant="primary")
+        yield Button("New", id="new-btn")
+        yield Button("Delete", id="delete-btn", variant="error")
+        yield Button("Close", id="close-btn")
+
+    # -- subclass hooks --------------------------------------------------
 
     @abstractmethod
     def _field_ids(self) -> tuple[str, ...]: ...
 
     @abstractmethod
-    def _list(self) -> list[T]: ...
+    def _list_rows(self) -> list[tuple[str, str]]: ...
 
     @abstractmethod
-    def _entry_id(self, entry: T) -> str: ...
+    def _on_select(self, entry_id: str) -> None: ...
 
     @abstractmethod
-    def _entry_label(self, entry: T) -> str: ...
+    def _save(self) -> str | None:
+        """Persist the form. Return the entry id to reselect, or None on
+        validation error / no-op (the subclass already toasted)."""
 
     @abstractmethod
-    def _load_into_editor(self, entry: T) -> None: ...
+    def _delete_one(self, entry_id: str) -> bool: ...
 
     @abstractmethod
-    def _clear_editor_fields(self) -> None: ...
-
-    @abstractmethod
-    def _save_new(self, *, title: str, body_md: str, tags: list[str]) -> T: ...
-
-    @abstractmethod
-    def _save_update(
-        self, entry_id: str, *, title: str, body_md: str, tags: list[str]
-    ) -> T | None: ...
-
-    @abstractmethod
-    def _delete_entry(self, entry_id: str) -> bool: ...
-
-    # -- shared implementation -------------------------------------------
-
-    def on_mount(self) -> None:
-        self._reload_entries(select_id=None)
-        if self._read_only:
-            self._set_editor_enabled(False)
-            self.app.notify(
-                f"Read-only mode — {self._entity_noun()} edits are disabled.",
-                severity="warning",
-            )
-
-    def _reload_entries(self, *, select_id: str | None) -> None:
-        self._entries = self._list()
-        view = self.query_one("#entries", ListView)
-        view.clear()
-        for entry in self._entries:
-            view.append(ListEditRow(self._entry_id(entry), self._entry_label(entry)))
-        if select_id is not None:
-            for index, entry in enumerate(self._entries):
-                if self._entry_id(entry) == select_id:
-                    view.index = index
-                    self._load_into_editor(entry)
-                    return
-        if self._entries:
-            view.index = 0
-            self._load_into_editor(self._entries[0])
-        else:
-            self._clear_editor()
-
-    def _clear_editor(self) -> None:
-        self._current_id = None
-        self._clear_editor_fields()
+    def _clear_form(self) -> None: ...
 
     def _set_editor_enabled(self, enabled: bool) -> None:
         for widget_id in self._field_ids():
             self.query_one(f"#{widget_id}").disabled = not enabled
-        for btn_id in ("save-btn", "new-btn", "delete-btn"):
-            self.query_one(f"#{btn_id}", Button).disabled = not enabled
+        for btn in self.query("#buttons Button").results(Button):
+            if btn.id != "close-btn":
+                btn.disabled = not enabled
 
-    # -- events -----------------------------------------------------------
+    # -- lifecycle / events ---------------------------------------------
+
+    def on_mount(self) -> None:
+        self._reload(select_id=None)
+        if self._read_only:
+            self._set_editor_enabled(False)
+
+    def _reload(self, *, select_id: str | None) -> None:
+        rows = self._list_rows()
+        view = self.query_one("#entries", ListView)
+        view.clear()
+        for entry_id, label in rows:
+            view.append(ListEditRow(entry_id, label))
+        if select_id and any(eid == select_id for eid, _ in rows):
+            view.index = next(i for i, (eid, _) in enumerate(rows) if eid == select_id)
+            self._on_select(select_id)
+        elif rows:
+            view.index = 0
+            self._on_select(rows[0][0])
+        else:
+            self._current_id = None
+            self._clear_form()
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         item = event.item
         if isinstance(item, ListEditRow):
-            entry = next(
-                (e for e in self._entries if self._entry_id(e) == item.entry_id),
-                None,
-            )
-            if entry is not None:
-                self._load_into_editor(entry)
+            self._on_select(item.entry_id)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         match event.button.id:
@@ -157,55 +174,32 @@ class ListEditPane[T](ModalScreen[None]):
             case "close-btn":
                 self.action_cancel()
 
-    # -- actions ----------------------------------------------------------
+    # -- actions ---------------------------------------------------------
 
     def action_new_entry(self) -> None:
         if self._read_only:
             return
-        self._clear_editor()
-        self.query_one("#title-input", Input).focus()
-
-    def action_cancel(self) -> None:
-        self.dismiss(None)
-
-    def action_delete(self) -> None:
-        if self._read_only or self._current_id is None:
-            return
-        ok = self._delete_entry(self._current_id)
-        if ok:
-            self.app.notify(f"Removed {self._entity_noun()}.", severity="information")
-        self._reload_entries(select_id=None)
+        self._current_id = None
+        self._clear_form()
 
     def action_save(self) -> None:
         if self._read_only:
             return
-        title = self.query_one("#title-input", Input).value.strip()
-        body_md = self.query_one("#editor", TextArea).text
-        tags_raw = self.query_one("#tags-input", Input).value
-        tags = [t.strip() for t in tags_raw.split(",") if t.strip()]
-        if not title:
-            self.app.notify("Title is required.", severity="warning")
+        new_id = self._save()
+        if new_id is None:
             return
-        try:
-            if self._current_id is None:
-                entry = self._save_new(title=title, body_md=body_md, tags=tags)
-                self.app.notify(f"Added '{title}'.", severity="information")
-                self._reload_entries(select_id=self._entry_id(entry))
-            else:
-                updated = self._save_update(
-                    self._current_id, title=title, body_md=body_md, tags=tags
-                )
-                if updated is None:
-                    self.app.notify(
-                        f"{self._entity_noun().capitalize()} vanished — refreshing.",
-                        severity="warning",
-                    )
-                    self._reload_entries(select_id=None)
-                    return
-                self.app.notify(f"Saved '{title}'.", severity="information")
-                self._reload_entries(select_id=self._entry_id(updated))
-        except KeyError as e:
-            self.app.notify(str(e), severity="error")
+        self._dirty = True
+        self._reload(select_id=new_id)
+
+    def action_delete(self) -> None:
+        if self._read_only or self._current_id is None:
+            return
+        if self._delete_one(self._current_id):
+            self._dirty = True
+        self._reload(select_id=None)
+
+    def action_cancel(self) -> None:
+        self.dismiss(self._dirty)
 
 
 __all__ = ["ListEditPane", "ListEditRow"]

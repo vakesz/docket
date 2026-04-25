@@ -1,20 +1,19 @@
-"""Per-project MCP server editor modal.
+"""Per-project MCP server editor modal — extends `ListEditPane`.
 
-Two-column layout: a list of configured MCP servers on the left, a form
-editor on the right. Add/remove/save edit `[projects.<id>.mcp.<name>]` in
-`config.toml` via `mcp_service`; Test briefly spawns the configured
-subprocess to confirm the handshake works before relying on it.
+Two-column layout: configured servers on the left, form editor on the
+right. Add/remove/save edit `[projects.<id>.mcp.<name>]` in `config.toml`
+via `mcp_service`; Test briefly spawns the configured subprocess to
+confirm the handshake works before relying on it.
 
-Saves rebind the live `MCPManager` immediately so the running agent
-picks up the change on its next turn. The modal dismisses with `True`
-when anything has been written so the parent app can rebuild the agent
-once the modal closes; pilot tests passing `mcp_manager=None` get the
-config edits without the live-fleet side effects.
+Saves rebind the live `MCPManager` immediately so the running agent picks
+up the change on its next turn. The modal dismisses with `True` when
+anything has been written so the parent app can rebuild the agent once
+the modal closes; pilot tests passing `mcp_manager=None` get the config
+edits without the live-fleet side effects.
 
 Server names are immutable once created — renaming would change the
-exposed `mcp__<name>__*` tool ids and surprise any in-flight chat
-state. Delete + re-add if a name needs to change.
-"""
+exposed `mcp__<name>__*` tool ids and surprise any in-flight chat state.
+Delete + re-add if a name needs to change."""
 
 from __future__ import annotations
 
@@ -22,24 +21,13 @@ from typing import ClassVar
 
 from textual.app import ComposeResult
 from textual.binding import Binding, BindingType
-from textual.containers import Horizontal, Vertical
-from textual.screen import ModalScreen
-from textual.widgets import Button, Checkbox, Input, ListItem, ListView, Static, TextArea
+from textual.widgets import Button, Checkbox, Input, Static, TextArea
 
 from docket.agent.mcp import MCPClient, MCPManager
+from docket.cli.tui.widgets._list_edit_pane import ListEditPane
 from docket.config.models import Config, MCPServerEntry
 from docket.config.paths import Paths
 from docket.core.services import mcp_service
-
-
-class _ServerRow(ListItem):
-    """ListItem that carries the underlying server name."""
-
-    def __init__(self, name: str, entry: MCPServerEntry) -> None:
-        state = "on " if entry.enabled else "off"
-        label = f"[{state}] {name}"
-        super().__init__(Static(label))
-        self.server_name = name
 
 
 def _format_env(env: dict[str, str]) -> str:
@@ -70,30 +58,15 @@ def _parse_args(raw: str) -> list[str]:
     return [piece for piece in raw.split() if piece]
 
 
-class MCPPane(ModalScreen[bool]):
+class MCPPane(ListEditPane):
     """Modal for browsing and editing the active project's MCP server fleet.
 
     `project_id` is captured at open time. If the active project changes
-    after the modal is open, just close and reopen — the modal doesn't
-    try to track scope switches."""
+    after the modal is open, just close and reopen — the modal doesn't try
+    to track scope switches."""
 
     DEFAULT_CSS = """
-    MCPPane { align: center middle; }
-    MCPPane > Vertical {
-        width: 120;
-        max-width: 150;
-        height: 90%;
-        background: $surface;
-        border: round $accent;
-        padding: 1 2;
-    }
-    MCPPane #title { height: auto; color: $accent; text-style: bold; }
-    MCPPane #subtitle { height: auto; color: $text-muted; padding-bottom: 1; }
-    MCPPane #body { height: 1fr; }
-    MCPPane #list-col { width: 38; }
-    MCPPane #editor-col { width: 1fr; padding-left: 2; }
-    MCPPane #servers { height: 1fr; border: round $panel-lighten-1; }
-    MCPPane .field-label { height: auto; color: $text-muted; padding-top: 1; }
+    MCPPane > Vertical { width: 120; max-width: 150; }
     MCPPane #name-input { height: 3; }
     MCPPane #command-input { height: 3; }
     MCPPane #args-input { height: 3; }
@@ -101,17 +74,11 @@ class MCPPane(ModalScreen[bool]):
     MCPPane #timeout-input { height: 3; }
     MCPPane #env-input { height: 8; border: round $panel-lighten-1; background: $panel; }
     MCPPane #enabled-checkbox { height: 3; padding-top: 1; }
-    MCPPane #buttons { height: auto; padding-top: 1; }
-    MCPPane #buttons Button { margin-right: 1; }
-    MCPPane #hint { height: auto; color: $text-muted; padding-top: 1; }
     """
 
     BINDINGS: ClassVar[list[BindingType]] = [
-        Binding("ctrl+s", "save", "Save", priority=True),
-        Binding("ctrl+n", "new_entry", "New", priority=True),
+        *ListEditPane.BINDINGS,
         Binding("ctrl+t", "test", "Test", priority=True),
-        Binding("ctrl+d", "delete", "Delete", priority=True),
-        Binding("escape", "cancel", "Close", priority=True),
     ]
 
     def __init__(
@@ -124,87 +91,87 @@ class MCPPane(ModalScreen[bool]):
         mcp_manager: MCPManager | None = None,
         read_only: bool = False,
     ) -> None:
-        super().__init__()
+        super().__init__(read_only=read_only)
         self._paths = paths
         self._config = config
         self._project_id = project_id
-        self._project_name = project_name
         self._mcp_manager = mcp_manager
-        self._read_only = read_only
-        self._entries: dict[str, MCPServerEntry] = {}
-        self._current_name: str | None = None  # None = unsaved/new
-        self._dirty = False  # any successful write since open?
+        self._title = f"MCP · {project_name}"
+        self._subtitle = (
+            "Per-project MCP servers exposed to the agent as "
+            "`mcp__<name>__<tool>`. Save rebinds the live fleet; "
+            "Test spawns the subprocess and lists its tools."
+        )
+        self._hint = (
+            "Ctrl+S save  ·  Ctrl+N new  ·  Ctrl+T test  ·  Ctrl+D delete  ·  Esc close"
+        )
 
-    def compose(self) -> ComposeResult:
-        with Vertical():
-            yield Static(f"MCP · {self._project_name}", id="title")
-            yield Static(
-                "Per-project MCP servers exposed to the agent as "
-                "`mcp__<name>__<tool>`. Save rebinds the live fleet; "
-                "Test spawns the subprocess and lists its tools.",
-                id="subtitle",
-            )
-            with Horizontal(id="body"):
-                with Vertical(id="list-col"):
-                    yield Static("servers", classes="field-label")
-                    yield ListView(id="servers")
-                with Vertical(id="editor-col"):
-                    yield Static("name (immutable after create)", classes="field-label")
-                    yield Input(placeholder="short identifier…", id="name-input")
-                    yield Static("command", classes="field-label")
-                    yield Input(placeholder="/usr/bin/python or absolute path", id="command-input")
-                    yield Static("args (whitespace-separated)", classes="field-label")
-                    yield Input(placeholder="-m my.server --flag", id="args-input")
-                    yield Static("env (KEY=VALUE per line)", classes="field-label")
-                    yield TextArea("", id="env-input")
-                    yield Static("transport", classes="field-label")
-                    yield Input(value="stdio", placeholder="stdio", id="transport-input")
-                    yield Static("startup timeout (seconds)", classes="field-label")
-                    yield Input(value="10.0", placeholder="10.0", id="timeout-input")
-                    yield Checkbox("Enabled (start on bind)", value=True, id="enabled-checkbox")
-                    with Horizontal(id="buttons"):
-                        yield Button("Save", id="save-btn", variant="primary")
-                        yield Button("New", id="new-btn")
-                        yield Button("Test", id="test-btn")
-                        yield Button("Delete", id="delete-btn", variant="error")
-                        yield Button("Close", id="close-btn")
-            yield Static(
-                "Ctrl+S save  ·  Ctrl+N new  ·  Ctrl+T test  ·  Ctrl+D delete  ·  Esc close",
-                id="hint",
-            )
+    # ListEditRow uses entry_id as the immutable lookup key, which doubles
+    # as the server name here. Aliasing keeps the existing pilot tests'
+    # `_current_name` assertions working without piping a second attribute
+    # through the primitive.
+    @property
+    def _current_name(self) -> str | None:
+        return self._current_id
 
-    def on_mount(self) -> None:
-        self._reload_entries(select_name=None)
-        if self._read_only:
-            self._set_editor_enabled(False)
-            self.app.notify("Read-only mode — MCP edits are disabled.", severity="warning")
+    def compose_editor(self) -> ComposeResult:
+        yield Static("name (immutable after create)", classes="field-label")
+        yield Input(placeholder="short identifier…", id="name-input")
+        yield Static("command", classes="field-label")
+        yield Input(placeholder="/usr/bin/python or absolute path", id="command-input")
+        yield Static("args (whitespace-separated)", classes="field-label")
+        yield Input(placeholder="-m my.server --flag", id="args-input")
+        yield Static("env (KEY=VALUE per line)", classes="field-label")
+        yield TextArea("", id="env-input")
+        yield Static("transport", classes="field-label")
+        yield Input(value="stdio", placeholder="stdio", id="transport-input")
+        yield Static("startup timeout (seconds)", classes="field-label")
+        yield Input(value="10.0", placeholder="10.0", id="timeout-input")
+        yield Checkbox("Enabled (start on bind)", value=True, id="enabled-checkbox")
 
-    # -- list management ---------------------------------------------------
+    def compose_buttons(self) -> ComposeResult:
+        yield Button("Save", id="save-btn", variant="primary")
+        yield Button("New", id="new-btn")
+        yield Button("Test", id="test-btn")
+        yield Button("Delete", id="delete-btn", variant="error")
+        yield Button("Close", id="close-btn")
 
-    def _reload_entries(self, *, select_name: str | None) -> None:
-        self._entries = mcp_service.list_servers(self._config, self._project_id)
-        view = self.query_one("#servers", ListView)
-        view.clear()
-        for name, entry in self._entries.items():
-            view.append(_ServerRow(name, entry))
-        names = list(self._entries)
-        if select_name is not None and select_name in self._entries:
-            view.index = names.index(select_name)
-            self._load_into_editor(select_name, self._entries[select_name])
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "test-btn":
+            self.action_test()
             return
-        if names:
-            view.index = 0
-            first = names[0]
-            self._load_into_editor(first, self._entries[first])
-        else:
-            self._clear_editor()
+        super().on_button_pressed(event)
 
-    def _load_into_editor(self, name: str, entry: MCPServerEntry) -> None:
-        self._current_name = name
+    def _field_ids(self) -> tuple[str, ...]:
+        return (
+            "name-input",
+            "command-input",
+            "args-input",
+            "env-input",
+            "transport-input",
+            "timeout-input",
+            "enabled-checkbox",
+        )
+
+    # -- ListEditPane hooks -----------------------------------------------
+
+    def _list_rows(self) -> list[tuple[str, str]]:
+        servers = mcp_service.list_servers(self._config, self._project_id)
+        return [
+            (name, f"[{'on ' if entry.enabled else 'off'}] {name}")
+            for name, entry in servers.items()
+        ]
+
+    def _on_select(self, entry_id: str) -> None:
+        servers = mcp_service.list_servers(self._config, self._project_id)
+        entry = servers.get(entry_id)
+        if entry is None:
+            return
+        self._current_id = entry_id
         name_input = self.query_one("#name-input", Input)
-        name_input.value = name
-        # Names are immutable after create — disable the field so the user
-        # doesn't accidentally type a new value and expect a rename.
+        name_input.value = entry_id
+        # Names are immutable after create — disable so the user doesn't
+        # accidentally type a new value and expect a rename.
         name_input.disabled = True
         self.query_one("#command-input", Input).value = entry.command
         self.query_one("#args-input", Input).value = " ".join(entry.args)
@@ -213,8 +180,7 @@ class MCPPane(ModalScreen[bool]):
         self.query_one("#timeout-input", Input).value = f"{entry.startup_timeout_seconds}"
         self.query_one("#enabled-checkbox", Checkbox).value = entry.enabled
 
-    def _clear_editor(self) -> None:
-        self._current_name = None
+    def _clear_form(self) -> None:
         name_input = self.query_one("#name-input", Input)
         name_input.value = ""
         # Editable for new-entry creation.
@@ -226,58 +192,13 @@ class MCPPane(ModalScreen[bool]):
         self.query_one("#timeout-input", Input).value = "10.0"
         self.query_one("#enabled-checkbox", Checkbox).value = True
 
-    def _set_editor_enabled(self, enabled: bool) -> None:
-        for widget_id in (
-            "name-input",
-            "command-input",
-            "args-input",
-            "env-input",
-            "transport-input",
-            "timeout-input",
-            "enabled-checkbox",
-        ):
-            self.query_one(f"#{widget_id}").disabled = not enabled
-        for btn_id in ("save-btn", "new-btn", "test-btn", "delete-btn"):
-            self.query_one(f"#{btn_id}", Button).disabled = not enabled
-
-    # -- events ------------------------------------------------------------
-
-    def on_list_view_selected(self, event: ListView.Selected) -> None:
-        item = event.item
-        if isinstance(item, _ServerRow):
-            entry = self._entries.get(item.server_name)
-            if entry is not None:
-                self._load_into_editor(item.server_name, entry)
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "save-btn":
-            self.action_save()
-        elif event.button.id == "new-btn":
-            self.action_new_entry()
-        elif event.button.id == "test-btn":
-            self.action_test()
-        elif event.button.id == "delete-btn":
-            self.action_delete()
-        elif event.button.id == "close-btn":
-            self.action_cancel()
-
-    # -- actions -----------------------------------------------------------
-
-    def action_new_entry(self) -> None:
-        if self._read_only:
-            return
-        self._clear_editor()
-        self.query_one("#name-input", Input).focus()
-
-    def action_save(self) -> None:
-        if self._read_only:
-            return
+    def _save(self) -> str | None:
         form = self._read_form()
         if form is None:
-            return  # validation error already notified
+            return None
         name, command, args, env, transport, enabled, timeout = form
         try:
-            if self._current_name is None:
+            if self._current_id is None:
                 mcp_service.add_server(
                     self._config,
                     self._paths,
@@ -296,7 +217,7 @@ class MCPPane(ModalScreen[bool]):
                     self._config,
                     self._paths,
                     self._project_id,
-                    self._current_name,
+                    self._current_id,
                     command=command,
                     args=args,
                     env=env,
@@ -307,32 +228,26 @@ class MCPPane(ModalScreen[bool]):
                 self.app.notify(f"Saved MCP server '{name}'.", severity="information")
         except mcp_service.DuplicateServerError:
             self.app.notify(f"'{name}' already exists.", severity="error")
-            return
+            return None
         except mcp_service.InvalidServerConfigError as exc:
             self.app.notify(str(exc), severity="error")
-            return
+            return None
         except mcp_service.UnknownServerError:
             self.app.notify(f"'{name}' vanished — refreshing.", severity="warning")
-            self._reload_entries(select_name=None)
-            return
-        self._dirty = True
+            return None
         self._rebind_live_fleet()
-        self._reload_entries(select_name=name)
+        return name
 
-    def action_delete(self) -> None:
-        if self._read_only or self._current_name is None:
-            return
-        name = self._current_name
+    def _delete_one(self, entry_id: str) -> bool:
         try:
-            mcp_service.remove_server(self._config, self._paths, self._project_id, name)
+            mcp_service.remove_server(self._config, self._paths, self._project_id, entry_id)
         except mcp_service.UnknownServerError:
-            # Already gone; just refresh the list to stay consistent.
-            self._reload_entries(select_name=None)
-            return
-        self.app.notify(f"Removed MCP server '{name}'.", severity="information")
-        self._dirty = True
+            return False
+        self.app.notify(f"Removed MCP server '{entry_id}'.", severity="information")
         self._rebind_live_fleet()
-        self._reload_entries(select_name=None)
+        return True
+
+    # -- Test action -------------------------------------------------------
 
     def action_test(self) -> None:
         """Spawn the in-editor server briefly, list its tools, then close.
@@ -347,8 +262,6 @@ class MCPPane(ModalScreen[bool]):
         if not command:
             self.app.notify("Set a command before testing.", severity="warning")
             return
-        # Build a transient entry from the in-editor values so the user
-        # can verify changes before pressing Save.
         entry = MCPServerEntry(
             transport=transport,
             command=command,
@@ -393,12 +306,6 @@ class MCPPane(ModalScreen[bool]):
                 f"{'' if len(tools) == 1 else 's'}: {preview}{extra}"
             )
         self.app.call_from_thread(lambda: self.app.notify(summary, severity="information"))
-
-    def action_cancel(self) -> None:
-        # Signal the parent app whether anything was committed so it knows
-        # to rebuild the agent. Pilot tests without an mcp_manager still
-        # get the dismiss signal so they can assert.
-        self.dismiss(self._dirty)
 
     # -- helpers -----------------------------------------------------------
 
