@@ -14,13 +14,16 @@ confirms (→ `mutation_service.confirm`) or discards it. The model sees only
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from collections.abc import Callable
+from datetime import UTC, datetime
+from textwrap import dedent
 from typing import Any
 
 from docket.agent._helpers import arg_error, required_str, str_list
 from docket.agent.tools import ToolRegistry
-from docket.agent.transcript import filename_for, next_version, render_markdown
+from docket.agent.types import ChatMessage
 from docket.core.model import CreateFields, ItemKind, TransitionIntent
 from docket.core.mutation import (
     AttachmentUpload,
@@ -34,9 +37,70 @@ from docket.core.redaction import redact_secrets
 from docket.core.services import mutation_service
 from docket.core.services.proposal_store import ProposalStore
 from docket.providers.base import WorkItemProvider
+from docket.storage.item_keys import item_storage_key
 from docket.storage.repos import conversation_repo, item_repo, message_repo, search_repo
 
 _DUPLICATE_LIMIT = 5
+
+# Transcript filenames follow `convo-NNN.md`. Versioning derives from the
+# `attachments` table so we never collide with a prior upload (or with an
+# out-of-band upload that already used the same pattern).
+_FILENAME_RE = re.compile(r"^convo-(\d{3,})\.md$")
+
+
+def _filename_for(version: int) -> str:
+    return f"convo-{version:03d}.md"
+
+
+def _next_version(conn: sqlite3.Connection, item_id: str, *, provider_key: str = "") -> int:
+    rows = conn.execute(
+        "SELECT filename FROM attachments WHERE item_id = ?",
+        (item_storage_key(provider_key, item_id),),
+    ).fetchall()
+    used = 0
+    for row in rows:
+        m = _FILENAME_RE.match(row["filename"] or "")
+        if m:
+            used = max(used, int(m.group(1)))
+    return used + 1
+
+
+def _render_transcript(
+    *,
+    item_id: str,
+    item_title: str,
+    messages: list[ChatMessage],
+    started_at: datetime | None = None,
+) -> str:
+    ts = (started_at or datetime.now(UTC)).isoformat()
+    header = dedent(
+        f"""\
+        # Conversation transcript
+
+        - **item:** {item_id} — {item_title}
+        - **exported:** {ts}
+
+        ---
+        """
+    )
+    body_parts: list[str] = [header]
+    for m in messages:
+        if m.role == "user":
+            body_parts.append(f"## You\n\n{m.content.strip()}\n")
+        elif m.role == "assistant":
+            if m.content:
+                body_parts.append(f"## Assistant\n\n{m.content.strip()}\n")
+            for tc in m.tool_calls:
+                body_parts.append(f"_→ called `{tc.name}` with_ `{tc.arguments}`\n")
+        elif m.role == "tool":
+            preview = (m.content or "").strip()
+            if len(preview) > 800:
+                preview = preview[:800] + " …"
+            body_parts.append(f"_← `{m.name}` returned:_\n\n```\n{preview}\n```\n")
+        elif m.role == "system":
+            # System messages (prefix, snapshot) are intentionally excluded.
+            continue
+    return "\n".join(body_parts).rstrip() + "\n"
 
 
 def _find_duplicates(
@@ -177,9 +241,9 @@ def register_mutating_tools(
             )
         except KeyError as e:
             return arg_error(str(e))
-        version = next_version(conn, item_id, provider_key=provider_key)
-        filename = filename_for(version)
-        md = render_markdown(
+        version = _next_version(conn, item_id, provider_key=provider_key)
+        filename = _filename_for(version)
+        md = _render_transcript(
             item_id=item_id,
             item_title=item.title,
             messages=messages,

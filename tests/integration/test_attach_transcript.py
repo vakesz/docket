@@ -128,3 +128,45 @@ def test_confirm_routes_attachment_through_provider_and_increments_version(env) 
     next_proposal = store.list()[0].proposal
     assert isinstance(next_proposal, AttachmentUpload)
     assert next_proposal.filename == "convo-002.md"
+
+
+def test_attach_transcript_markdown_includes_header_user_and_assistant(env) -> None:
+    _, _, store, reg, item, _ = env
+    reg.dispatch("attach_transcript", {"id": item.id})
+    body = _last_attachment_body(store)
+    assert "# Conversation transcript" in body
+    assert f"{item.id} — {item.title}" in body
+    assert "## You" in body
+    assert "Why is this blocked?" in body
+    assert "## Assistant" in body
+    assert "Looking into it." in body
+
+
+def test_attach_transcript_omits_system_messages(env) -> None:
+    conn, _, store, reg, item, convo = env
+    message_repo.append(conn, convo.id, ChatMessage(role="system", content="secret prefix"))
+    reg.dispatch("attach_transcript", {"id": item.id})
+    body = _last_attachment_body(store)
+    assert "secret prefix" not in body
+    assert "Why is this blocked?" in body
+
+
+def test_attach_transcript_truncates_long_tool_output(env) -> None:
+    conn, _, store, reg, item, convo = env
+    long_blob = "x" * 2000
+    message_repo.append(
+        conn,
+        convo.id,
+        ChatMessage(role="tool", content=long_blob, tool_call_id="c1", name="search_items"),
+    )
+    reg.dispatch("attach_transcript", {"id": item.id})
+    body = _last_attachment_body(store)
+    # Truncation cap is 800 chars + the " …" suffix.
+    assert "xxx …" in body
+    assert long_blob not in body
+
+
+def _last_attachment_body(store: ProposalStore) -> str:
+    proposal = store.list()[-1].proposal
+    assert isinstance(proposal, AttachmentUpload)
+    return proposal.content.decode("utf-8")
