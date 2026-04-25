@@ -1,12 +1,14 @@
-# Docket
+# Docket — contract for human and AI contributors
+
+This file is the load-bearing reference for anyone (or anything) editing the codebase. It captures invariants that aren't visible from a single grep — architecture rules enforced by tests, the proposal-first mutation pattern, and conventions the wider tooling depends on. Read it before making non-trivial changes.
 
 ## Project Snapshot
 
-- Docket is a Python 3.12+ terminal-first work-item triage app with a Typer CLI, a Textual TUI, a FastAPI HTTP surface, and a React (Vite + Bun + TanStack Router/Query) web client in `frontend/` that consumes the FastAPI OpenAPI schema.
-- The package is organized in layered ports-and-adapters style: surfaces in `cli/` and `api/`, canonical domain types in `core/`, workflow orchestration in `core/services/` and `agent/`, and adapters in `providers/`, `storage/`, `config/`, and `telemetry/`.
-- The app is multi-provider. Built-ins are `azure_devops`, `github`, and `github_stub`, and third-party providers can register through the `docket.providers` entry-point group (`src/docket/providers/registry.py`).
-- The runtime is local-first and project-scoped: remote items are cached in SQLite for fast browsing, while project metadata, prompt files, and MCP server configs live under XDG-managed config paths.
-- The primary safety goal is proposal-first mutation: cache and chat locally, render a visible diff, then require explicit confirmation before any provider write happens.
+- Python 3.12+, multi-surface: **Typer CLI** (`src/docket/cli/`), **Textual TUI** (`src/docket/cli/tui/`), **FastAPI HTTP** (`src/docket/api/`), and an optional **React + TanStack Start + Bun** web client in `frontend/` that consumes `/openapi.json`.
+- Layered ports-and-adapters: surfaces in `cli/` and `api/`, canonical types in `core/`, orchestration in `core/services/` and `agent/`, adapters in `providers/`, `storage/`, `config/`, `telemetry/`.
+- Multi-provider. Built-ins: `azure_devops`, `github`, `github_stub`. Third-party providers register via the `docket.providers` entry-point group (`src/docket/providers/registry.py`).
+- Runtime is **local-first** and **project-scoped**. Items cache in SQLite; project metadata, prompts, and MCP server configs live under XDG-managed paths.
+- Primary safety property: **proposal-first mutation**. Cache and chat locally; render a diff; require explicit confirmation before any provider write.
 
 ## Commands
 
@@ -15,40 +17,32 @@ Backend (Python / `uv`):
 ```bash
 uv sync
 
-uv run docket
-uv run docket open --provider <provider>
-uv run docket help
-uv run docket status
-uv run docket setup
-uv run docket setup --step=<name>
-uv run docket setup provider list
-uv run docket setup provider add <name> --type <provider_type>
-uv run docket setup provider remove <name>
-uv run docket sync
-uv run docket sync --full
+uv run docket                      # default: open the TUI
+uv run docket open --provider <p>
+uv run docket help [command]
+uv run docket status [-v]
+uv run docket setup [--step=<name>]
+uv run docket setup provider list|add|remove
+uv run docket sync [--full]
 uv run docket list --kind story
 uv run docket show <id>
-uv run docket transition <id> start_work --dry-run
-uv run docket patch <id> --from-file TODO.md --dry-run
+uv run docket transition <id> start_work [--dry-run]
+uv run docket patch <id> --from-file body.md [--dry-run]
 uv run docket new task --title "Title"
-uv run docket project list
-uv run docket memory list
-uv run docket source list
-uv run docket mcp list
-uv run docket serve
+uv run docket project|memory|source|mcp ...
+uv run docket serve [--host …] [--port …] [--no-chat] [--read-only]
 
 uv run pytest
-uv run pytest tests/integration/test_api.py
+uv run pytest tests/integration/test_api_items.py
 uv run pytest tests/unit/test_import_boundary.py
 uv run pytest tests/pilot/test_tui_pilot.py
 uv run pytest -k "pattern"
 
-uv run ruff check .
-uv run ruff format .
+uv run ruff check . && uv run ruff format .
 uv run mypy src
 ```
 
-Frontend (React / `bun` in `frontend/`):
+Frontend (`bun` in `frontend/`):
 
 ```bash
 cd frontend && bun install
@@ -63,45 +57,72 @@ Cross-tree shortcuts (`Makefile`):
 
 ```bash
 make install      # uv sync + bun install
-make dev          # run backend (docket serve) and frontend (vite) together
+make env          # mint a DOCKET_API_TOKEN into .env (dev only)
+make dev          # run docket serve + vite together
 make check        # lint + typecheck + test across both trees
 make gen-api      # regenerate frontend OpenAPI types against the running backend
 ```
 
 ## Non-Negotiable Rules
 
-- Keep concrete provider imports out of `src/docket/core/`, `src/docket/storage/`, `src/docket/agent/`, and `src/docket/api/`; those layers talk to `WorkItemProvider`, provider specs, or the registry, not `AzureDevOpsProvider`/`GitHubProvider` directly (`tests/unit/test_import_boundary.py`, `src/docket/providers/base.py`, `src/docket/providers/registry.py`).
-- Translate provider-native kinds and states at the boundary and keep the rest of the app on canonical enums like `ItemKind`, `ItemState`, and `TransitionIntent` (`src/docket/core/model.py`, `src/docket/providers/azure_devops/state_map.py`, `src/docket/providers/github/state_map.py`, `src/docket/providers/github_stub/state_map.py`).
-- Do not call `provider.transition`, `provider.patch_description`, `provider.upload_attachment`, or `provider.create_item` from CLI/TUI/API surfaces. In `src/`, provider writes go through `src/docket/core/services/mutation_service.py` only.
-- Treat every provider or agent-side write as proposal-first: build a `Proposal`, render a diff, get confirmation, then confirm through `mutation_service.confirm(...)` (`src/docket/core/mutation.py`, `src/docket/core/services/mutation_service.py`, `src/docket/core/services/proposal_store.py`).
-- Agent mutating tools only stage proposals. That includes work-item tools and project-memory tools; they do not write directly to providers or SQLite (`src/docket/agent/mutating_tools.py`, `src/docket/agent/memory_tools.py`).
-- Project sources are different: the agent can read them, but source writes are human-driven only through CLI/TUI/API paths that go directly to the repo (`src/docket/storage/repos/source_repo.py`, `src/docket/cli/commands/source.py`, `src/docket/api/routes/source.py`, `src/docket/cli/tui/widgets/source_pane.py`, `src/docket/agent/source_tools.py`).
-- Keep the prompt prefix byte-stable. Do not inject timestamps, usernames, scope labels, or other runtime-only text into the system-plus-snapshot prefix or prompt-cache hits will collapse (`src/docket/agent/prompt.py`, `src/docket/agent/tools.py`, `src/docket/agent/factory.py`, `tests/integration/test_prompt_loader.py`).
-- Preserve agent tool registration order when touching tool wiring. Tool schema order is part of the cached prompt prefix (`src/docket/agent/tools.py`, `src/docket/agent/factory.py`, `src/docket/agent/source_tools.py`, `src/docket/agent/memory_tools.py`).
-- Treat SQLite as a cache for provider-backed work items, not the system of record. Sync from the provider, and refresh cached rows after confirmed writes (`src/docket/core/services/sync_service.py`, `src/docket/core/services/mutation_service.py`).
-- Pass `conn`, `provider`, `paths`, `config`, `provider_key`, `project_id`, and runtime state explicitly through contexts or `app.state`; do not introduce hidden global runtime singletons (`src/docket/cli/context.py`, `src/docket/api/app.py`, `src/docket/api/runtime.py`, `src/docket/api/agent_rebuild.py`).
-- Read-only mode must block every mutation entry point and strip mutating agent tools and MCP tools, not just show a warning (`src/docket/cli/guard.py`, `src/docket/api/deps.py`, `src/docket/agent/factory.py`, `src/docket/cli/tui/app.py`, `tests/integration/test_cli_read_only.py`, `tests/integration/test_api_read_only.py`, `tests/pilot/test_read_only_mode.py`, `tests/integration/test_mcp.py`).
-- Keep watchlist rows independent from `items(id)`; pinned ids are allowed to outlive the current cache scope (`src/docket/storage/schema.py`, `tests/integration/test_watchlist_repo.py`).
-- Provider/project switches must rebuild the agent so tool closures rebind to the new `(provider, provider_key, project_id)` tuple (`src/docket/api/agent_rebuild.py`, `src/docket/cli/tui/app.py`).
+1. **No concrete-provider imports in `core/`, `storage/`, `agent/`, `api/`.** They speak only to the `WorkItemProvider` Protocol, provider specs, or the registry — never `AzureDevOpsProvider` / `GitHubProvider` directly. Enforced by `tests/unit/test_import_boundary.py`. See `src/docket/providers/base.py`, `src/docket/providers/registry.py`.
+2. **Translate provider-native kinds and states at the boundary.** The rest of the app runs on canonical enums (`ItemKind`, `ItemState`, `TransitionIntent`). Translation lives in each provider's `state_map.py` (`src/docket/providers/{azure_devops,github,github_stub}/state_map.py`); the canonical types are in `src/docket/core/model.py`.
+3. **Never call `provider.transition` / `patch_description` / `upload_attachment` / `create_item` from a surface.** All provider writes route through `src/docket/core/services/mutation_service.py`.
+4. **Every write is proposal-first.** Build a `Proposal`, render a diff, get confirmation, then execute via `mutation_service.confirm(...)`. Files: `src/docket/core/mutation.py`, `src/docket/core/services/mutation_service.py`, `src/docket/core/services/proposal_store.py`.
+5. **Agent mutating tools only stage proposals.** Both work-item and project-memory tools (`src/docket/agent/mutating_tools.py`, `src/docket/agent/memory_tools.py`) build proposals; they never write to providers or SQLite directly.
+6. **Project sources are read-only for the agent.** The agent gets `list_sources` / `read_source` / `search_sources` only (`src/docket/agent/source_tools.py`). Source writes are human-driven through CLI/TUI/API → repo (`src/docket/storage/repos/source_repo.py`, `src/docket/cli/commands/source.py`, `src/docket/api/routes/source.py`, `src/docket/cli/tui/widgets/source_pane.py`).
+7. **Keep the prompt prefix byte-stable.** No timestamps, usernames, scope labels, or other runtime-only text in the system+snapshot prefix or the prompt cache collapses. See `src/docket/agent/prompt.py`, `src/docket/agent/tools.py`, `src/docket/agent/factory.py`; covered by `tests/integration/test_prompt_loader.py`.
+8. **Preserve agent tool registration order.** The ordered tool schema list is part of the prefix cache key. Current order (`src/docket/agent/factory.py:build_tool_registry`):
+   1. readonly: items → PRs → commits/CI (`src/docket/agent/tool_defs.py`)
+   2. link tools (`src/docket/agent/link_tools.py`)
+   3. memory readonly (project-scoped)
+   4. source readonly (project-scoped)
+   5. MCP tools (project-scoped, stripped in read-only)
+   6. mutating: provider mutations (stripped in read-only)
+   7. memory mutations (project-scoped, stripped in read-only)
 
-## Testing
+   Pinned by `tests/unit/test_tool_registration_order.py`. Reorder = invalidate every open conversation's prompt cache.
+9. **SQLite is a cache, not the system of record.** Sync from the provider, refresh cached rows after a confirmed write (`src/docket/core/services/sync_service.py`, `src/docket/core/services/mutation_service.py:_refresh_cache`).
+10. **No hidden runtime singletons.** Pass `conn`, `provider`, `paths`, `config`, `provider_key`, `project_id`, runtime state explicitly through `cli.context.Context` or `app.state.runtime` (`src/docket/cli/context.py`, `src/docket/api/app.py`, `src/docket/api/runtime.py`, `src/docket/api/agent_rebuild.py`).
+11. **Read-only mode blocks every mutation entry point and strips mutating tools** — agent + MCP. Not just a warning. See `src/docket/cli/guard.py`, `src/docket/api/deps.py:require_not_read_only`, `src/docket/agent/factory.py`, `src/docket/cli/tui/app.py`. Tests: `tests/integration/test_cli_read_only.py`, `tests/integration/test_api_read_only.py`, `tests/pilot/test_read_only_mode.py`, `tests/integration/test_mcp.py`.
+12. **Watchlist rows are independent of `items(id)`.** Pinned ids may outlive the current cache scope (`src/docket/storage/schema.py`, `tests/integration/test_watchlist_repo.py`).
+13. **Provider/project switches must rebuild the agent** so tool closures rebind to the new `(provider, provider_key, project_id)` tuple (`src/docket/api/agent_rebuild.py`, `src/docket/cli/tui/app.py`). On the API side, `RuntimeState.switch_provider` triggers `_rebind_mcp_locked` so the MCP fleet follows the project; scope switches do **not** rebind (the fleet is per-provider/project, not per-view).
 
-- Test layout is split by intent: `tests/unit/` for pure-Python units and architectural guards, `tests/integration/` for DB/FastAPI/Typer/service coverage, and `tests/pilot/` for Textual pilot flows.
-- The test stack is `pytest`, `pytest-asyncio` in auto mode, `pytest-recording` for Azure DevOps coverage, and Textual pilot tests for the TUI (`pyproject.toml`, `tests/pilot/test_tui_pilot.py`).
-- Favor fakes and pilot-style tests over private widget or CSS assertions (`tests/fakes/provider.py`, `tests/fakes/llm.py`, `tests/pilot/test_tui_chat_pilot.py`, `tests/integration/test_api.py`).
-- Cross-cutting guardrails matter here: `tests/unit/test_import_boundary.py`, `tests/unit/test_state_map_reverse.py`, and `tests/integration/test_github_stub_provider.py` are architecture tests, not optional extras.
-- If you change agent tooling, prompt loading, or runtime rebinding, cover both the pure service behavior and at least one surface-level path where practical.
+## Mutation Surface Pattern
 
-## Testing-Specific Configuration
+This is the same shape across CLI, TUI, API, and agent-confirmed flows: stage a proposal, then execute through `mutation_service.confirm(...)`. CLI commands wrap it via `apply_mutation` (`src/docket/cli/confirm.py`):
 
-- Use the `tmp_xdg` fixture when a test touches config, prompts, logs, or the SQLite cache under XDG paths (`tests/conftest.py`).
-- Prompt-loader tests reset module-level loader state before and after each case so prompt overrides do not leak across the suite (`tests/integration/test_prompt_loader.py`).
-- Bootstrap setup tests stub the self-restart hook so `/setup/complete` can be exercised without killing the test process (`tests/integration/test_api_setup.py`).
-- TUI tests should mount `DocketApp` with a fake provider via `run_test()` and drive behavior with pilot input rather than calling widget internals directly (`tests/pilot/test_tui_pilot.py`, `tests/pilot/test_diff_modal_pilot.py`).
+```python
+from docket.cli.confirm import apply_mutation
+from docket.core.services import mutation_service
 
-## Architecture Guardrails
+proposal = mutation_service.propose_transition(
+    ctx.conn,
+    item_id,
+    intent,
+    provider_key=ctx.active_provider,
+)
+apply_mutation(
+    ctx.conn,
+    ctx.provider,
+    proposal,
+    confirm_title=f"Transition {item_id} ({intent.value})",
+    dry_run=dry_run,
+    on_success=lambda r: f"[green]✓ {item_id} → {r.item.state.value}[/green]",
+    provider_key=ctx.active_provider,
+)
+```
 
-Current flow:
+Available proposal builders in `mutation_service`: `propose_transition`, `propose_description_patch`, `propose_attachment`, `propose_comment`, `propose_memory_write`, `propose_memory_delete`. New-item creation uses the same store via the agent's `propose_new_item` tool (`src/docket/agent/mutating_tools.py`).
+
+Surfaces:
+
+- **CLI:** `src/docket/cli/confirm.py:apply_mutation` + commands under `src/docket/cli/commands/`.
+- **TUI:** confirm modals in `src/docket/cli/tui/widgets/diff_modal.py` + `batch_diff_modal.py`; review flow in `src/docket/cli/tui/review_flow.py`.
+- **API:** `src/docket/api/routes/mutations.py` for confirm; proposal builders are called by the routes that own each surface (`items.py`, `memory.py`, etc.).
+- **Agent:** `src/docket/agent/mutating_tools.py` stages proposals only; the human still confirms via the surface that owns the chat session.
+
+## Architecture Map
 
 ```text
 docket / docket open / docket serve
@@ -131,52 +152,53 @@ cli.context.prepare[_or_wizard]
 
 Forbidden edges:
 
-- `core/`, `storage/`, `agent/`, and `api/` to concrete provider modules.
-- Surface adapters directly to provider write methods.
-- Dynamic prompt-prefix fields before the cache boundary.
-- Agent-side source mutation paths.
+- `core/`, `storage/`, `agent/`, `api/` → concrete provider modules
+- Surface adapters → provider write methods
+- Dynamic prompt-prefix fields before the cache boundary
+- Agent → source mutation paths
 
-Future target:
+Aspirational direction (consistent with current refactors, not a hard rule):
 
-- Keep `cli/`, `cli/tui/`, and `api/routes/` as thin adapters that parse input, call one service, and map the result back to UI or HTTP.
-- Keep provider onboarding and plugin discovery centralized in registry/setup services rather than scattering provider-specific logic across surfaces.
-- Move runtime rebind logic, config writes, and project-scoped admin actions toward shared services so TUI and HTTP cannot drift.
-- Treat `config/` as file/path primitives plus schemas and setup orchestration, not as the long-term home for unrelated business logic.
+- `cli/`, `cli/tui/`, `api/routes/` stay thin — parse input, call one service, map result back.
+- Provider onboarding and plugin discovery centralize in registry/setup services, not scattered across surfaces.
+- Runtime rebind, config writes, and project-scoped admin live in shared services so TUI and HTTP can't drift.
+- `config/` stays file/path primitives + schemas + setup orchestration; not a dumping ground.
 
 ## Global Invariants
 
-- Prompt hot reload is mtime-keyed; edits apply on the next turn without restart (`src/docket/agent/prompt.py`, `src/docket/agent/prompt_templates.py`).
-- Conversation compaction summarizes older messages into a synthetic `system` row and marks originals as `compacted=1` so transcripts stay complete while live prompt history stays short (`src/docket/core/services/compaction_service.py`, `src/docket/storage/repos/message_repo.py`).
-- External item changes are injected back into active conversations as system messages so the assistant does not keep reasoning over stale ticket state (`src/docket/core/services/external_update_service.py`).
-- Source documents are intentionally excluded from the always-on prompt prefix; the agent reads them on demand through tools, so source edits do not invalidate the prompt cache (`src/docket/core/services/source_service.py`, `src/docket/storage/repos/source_repo.py`).
-- MCP server config is per-project and persisted in `config.toml`; changing config does not automatically mutate a live manager unless the surface explicitly rebinds it (`src/docket/core/services/mcp_service.py`, `src/docket/agent/mcp/manager.py`, `src/docket/api/routes/mcp.py`).
-- Bootstrap HTTP mode is a separate minimal app exposing only `/health` and `/setup/*` until `config.toml` exists (`src/docket/api/bootstrap_app.py`, `src/docket/api/routes/setup.py`).
-- Telemetry is on by default and writes one JSON object per line to `<paths.log_dir>/docket.log` (rotating 1 MB x 3) at `DEBUG` level. The on-disk log is the only place some worker-thread tracebacks surface during a TUI session, so verbosity is intentional (`src/docket/telemetry/logging.py`, `src/docket/cli/context.py`, `src/docket/config/models.py`).
+- **Prompt hot reload is mtime-keyed.** Edits to `prompts/system_base.md` or `prompts/kind_<kind>.md` apply on the next turn (`src/docket/agent/prompt.py`, `src/docket/agent/prompt_templates.py`).
+- **Conversation compaction** summarizes older messages into a synthetic `system` row and flips `messages.compacted = 1` on originals so transcripts stay complete while the live prompt history stays short (`src/docket/core/services/compaction_service.py`, `src/docket/storage/repos/message_repo.py`).
+- **External item changes are injected** back into active conversations as system messages so the assistant doesn't keep reasoning over stale ticket state (`src/docket/core/services/external_update_service.py`).
+- **Source documents are excluded from the always-on prefix.** The agent reads them on demand through tools, so source edits never invalidate the prompt cache (`src/docket/core/services/source_service.py`, `src/docket/storage/repos/source_repo.py`).
+- **MCP server config is per-project**, persisted in `config.toml`. Config edits do not auto-mutate a live manager — surfaces explicitly rebind (`src/docket/core/services/mcp_service.py`, `src/docket/agent/mcp/manager.py`, `src/docket/api/routes/mcp.py`, `src/docket/api/runtime.py:_rebind_mcp_locked`).
+- **Bootstrap HTTP mode** is a separate minimal app exposing only `/health` and `/setup/*` until `config.toml` exists (`src/docket/api/bootstrap_app.py`, `src/docket/api/routes/setup.py`). Setup and live-mode provider routes share DTO assembly via `src/docket/api/_provider_setup.py`.
+- **Telemetry is on by default**, one JSON object per line into `<paths.log_dir>/docket.log` (rotating 1 MB × 3) at `DEBUG`. The on-disk log is the only place some worker-thread tracebacks surface during a TUI session — verbosity is intentional (`src/docket/telemetry/logging.py`, `src/docket/cli/context.py`, `src/docket/config/models.py`).
 
-## Mutation Surface Pattern
+## Testing
 
-```python
-proposal = mutation_service.propose_transition(
-    ctx.conn,
-    item_id,
-    intent,
-    provider_key=ctx.active_provider,
-)
-result = apply_mutation(
-    ctx.conn,
-    ctx.provider,
-    proposal,
-    confirm_title=f"Transition {item_id} ({intent.value})",
-    dry_run=dry_run,
-    provider_key=ctx.active_provider,
-)
-```
+- **Layout by intent.** `tests/unit/` for pure-Python units and architectural guards; `tests/integration/` for DB/FastAPI/Typer/service coverage; `tests/pilot/` for Textual pilot flows.
+- **Stack.** `pytest`, `pytest-asyncio` in auto mode (see `pyproject.toml`), `pytest-recording` for live Azure DevOps coverage, Textual `app.run_test()` for the TUI.
+- **Favor fakes and pilot-style tests** over private widget or CSS assertions. `tests/fakes/provider.py` (FakeProvider), `tests/fakes/llm.py` (scripted LLM), `tests/fakes/mcp_server.py`. Examples: `tests/pilot/test_tui_chat_pilot.py`, `tests/integration/test_api_conversation.py`.
+- **Architecture tests are not optional.** `tests/unit/test_import_boundary.py`, `tests/unit/test_state_map_reverse.py`, `tests/unit/test_tool_registration_order.py`, `tests/integration/test_github_stub_provider.py`. If they fail, fix the leak — don't relax the test.
+- **When you change agent tooling, prompt loading, or runtime rebinding**, cover both the pure service behavior and at least one surface-level path.
 
-The same shape applies across CLI, TUI, API, and agent-confirmed flows: stage a proposal first, then execute it only through `mutation_service.confirm(...)` (`src/docket/cli/confirm.py`, `src/docket/cli/commands/transition.py`, `src/docket/api/routes/mutations.py`, `src/docket/agent/mutating_tools.py`).
+### Test fixtures and conventions
+
+- **`tmp_xdg`** (`tests/conftest.py`) sandboxes XDG paths under a temp root. Use it whenever a test touches config, prompts, logs, or the SQLite cache. It also suppresses `load_project_env()` so the repo's own `.env` (which redirects XDG into `.docket-dev/`) doesn't clobber the monkeypatched paths.
+- **Prompt-loader tests** reset module-level loader state before and after each case so prompt overrides don't leak across the suite (`tests/integration/test_prompt_loader.py`).
+- **Bootstrap setup tests** stub the self-restart hook so `/setup/complete` can be exercised without killing the test process (`tests/integration/test_api_setup.py`).
+- **TUI tests** mount `DocketApp` with a fake provider via `app.run_test()` and drive behavior with `pilot.press(...)`. No CSS or private-widget assertions. See `tests/pilot/test_tui_pilot.py`, `tests/pilot/test_diff_modal_pilot.py`.
+- **API integration tests** are split per route module (`test_api_items.py`, `test_api_conversation.py`, `test_api_mutations.py`, etc.) sharing fixtures from `tests/integration/_api_fixtures.py`. There is no monolithic `test_api.py`.
 
 ## Linting and Code Style
 
-- Target Python is 3.12 (`pyproject.toml`).
-- Ruff is the formatter and linter. Selected rule groups are `E`, `F`, `I`, `N`, `UP`, `B`, `SIM`, and `RUF`; line length is 100 and `E501` is ignored (`pyproject.toml`).
-- Ruff applies per-file ignores to the `tests` tree and to the API and CLI command packages because those areas intentionally use testing shortcuts or FastAPI/Typer default expressions (`pyproject.toml`).
-- Mypy runs in strict mode with the Pydantic plugin enabled; new code should carry real types, not placeholder annotations (`pyproject.toml`).
+- Target Python 3.12 (`pyproject.toml`).
+- Ruff is formatter and linter. Selected rule groups: `E`, `F`, `I`, `N`, `UP`, `B`, `SIM`, `RUF`. Line length 100; `E501` ignored.
+- Per-file ignores: `tests/**` drops `B`/`SIM`; `src/docket/api/**` and `src/docket/cli/commands/**` drop `B008` because FastAPI `Depends(...)` and Typer `Argument(...)`/`Option(...)` belong in argument defaults.
+- Mypy strict, Pydantic plugin enabled. New code carries real types — no `Any` placeholders.
+
+## When in doubt
+
+- **Skim** `src/docket/core/services/mutation_service.py` and `src/docket/agent/factory.py` — they're the spine of the safety story.
+- **Run** the architecture tests (`uv run pytest tests/unit/test_import_boundary.py tests/unit/test_tool_registration_order.py tests/unit/test_state_map_reverse.py`) before you push a refactor.
+- **Read** [README.md](README.md) for the user-facing tour, and [.docs/FIRST_TIME_SETUP.md](.docs/FIRST_TIME_SETUP.md) for the onboarding walkthrough.
