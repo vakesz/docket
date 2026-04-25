@@ -16,7 +16,13 @@ from docket.agent.loop import AgentLoop
 from docket.agent.tools import ToolRegistry
 from docket.agent.types import ChatMessage, StreamDelta
 from docket.cli.tui._status_helpers import update_status_bar
-from docket.cli.tui.background_tasks import BackgroundTasksMixin
+from docket.cli.tui.background_tasks import (
+    mark_sync_now,
+    schedule_next_sync,
+    set_offline,
+    tick_background_sync,
+    tick_external_watch,
+)
 from docket.cli.tui.config_actions import ConfigMixin
 from docket.cli.tui.errors import humanize as humanize_error
 from docket.cli.tui.errors import retry_hint
@@ -78,7 +84,6 @@ def _docket_commands_provider() -> type[Provider]:
 
 
 class DocketApp(
-    BackgroundTasksMixin,
     PaneLayoutMixin,
     ItemSelectionMixin,
     ConfigMixin,
@@ -205,15 +210,15 @@ class DocketApp(
         if self.tui_ctx.external_watch_interval_seconds > 0:
             self.set_interval(
                 self.tui_ctx.external_watch_interval_seconds,
-                self._tick_external_watch,
+                lambda: tick_external_watch(self),
                 name="external-watch",
             )
         sync_interval = self._resolved_sync_interval()
         if sync_interval > 0:
-            self._schedule_next_sync(sync_interval)
+            schedule_next_sync(self, sync_interval)
             self.set_interval(
                 sync_interval,
-                self._tick_background_sync,
+                lambda: tick_background_sync(self),
                 name="background-sync",
             )
 
@@ -532,10 +537,10 @@ class DocketApp(
                 f"{humanize_error(e, action=label)} {retry_hint('r', 'sync')}",
                 severity="error",
             )
-            self._set_offline(True)
+            set_offline(self, True)
             return
-        self._set_offline(False)
-        self._mark_sync_now()
+        set_offline(self, False)
+        mark_sync_now(self)
         self._reload_tree()
         self.notify(success_message(summary), severity="information")
 
