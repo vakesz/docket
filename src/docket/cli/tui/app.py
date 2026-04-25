@@ -16,7 +16,7 @@ from docket.agent.factory import build_agent
 from docket.agent.loop import AgentLoop
 from docket.agent.tools import ToolRegistry
 from docket.agent.types import ChatMessage, StreamDelta
-from docket.cli.tui import item_selection
+from docket.cli.tui import config_actions, item_selection
 from docket.cli.tui._status_helpers import update_status_bar
 from docket.cli.tui.background_tasks import (
     mark_sync_now,
@@ -25,7 +25,6 @@ from docket.cli.tui.background_tasks import (
     tick_background_sync,
     tick_external_watch,
 )
-from docket.cli.tui.config_actions import ConfigMixin
 from docket.cli.tui.errors import humanize as humanize_error
 from docket.cli.tui.errors import retry_hint
 from docket.cli.tui.pane_layout import (
@@ -90,7 +89,6 @@ def _docket_commands_provider() -> type[Provider]:
 
 
 class DocketApp(
-    ConfigMixin,
     ReviewFlowMixin,
     SuggestionFlowMixin,
     App[None],
@@ -209,7 +207,7 @@ class DocketApp(
     def on_mount(self) -> None:
         self._reload_tree()
         self._init_status_bar()
-        self._apply_saved_theme()
+        config_actions.apply_saved_theme(self)
         self._apply_tooltips()
         if self.tui_ctx.external_watch_interval_seconds > 0:
             self.set_interval(
@@ -274,6 +272,24 @@ class DocketApp(
 
     def action_toggle_pin(self) -> None:
         item_selection.toggle_pin(self)
+
+    # --- config-action delegates -----------------------------------------------
+    # action_set_default_provider has no key binding but the command palette
+    # invokes it by attribute; the rest are bound to keys (see BINDINGS).
+    def action_pick_theme(self) -> None:
+        config_actions.pick_theme(self)
+
+    def action_open_settings(self) -> None:
+        config_actions.open_settings(self)
+
+    def action_edit_prompts(self) -> None:
+        config_actions.edit_prompts(self)
+
+    def action_toggle_done_visibility(self) -> None:
+        config_actions.toggle_done_visibility(self)
+
+    def action_set_default_provider(self) -> None:
+        config_actions.set_default_provider(self)
 
     def _init_status_bar(self) -> None:
         """Populate the static status-bar segments (provider name, scope key).
