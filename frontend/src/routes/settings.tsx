@@ -60,7 +60,12 @@ import { ThemePicker } from "~/components/shell/ThemePicker";
 import { ToolDisplayPicker } from "~/components/shell/ToolDisplayPicker";
 import { docketCodeMirrorTheme } from "~/lib/cmTheme";
 import { cn } from "~/lib/cn";
-import { fieldClass, secondaryButtonClass } from "~/lib/formClasses";
+import {
+  fieldClass,
+  outlineButtonClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from "~/lib/formClasses";
 
 type PromptSummary = components["schemas"]["PromptSummaryDTO"];
 
@@ -506,7 +511,7 @@ function SettingsPage() {
                     type="button"
                     onClick={revertAll}
                     disabled={!dirty}
-                    className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-medium text-fg hover:bg-bg disabled:cursor-not-allowed disabled:opacity-40"
+                    className={outlineButtonClass}
                   >
                     <RotateCcw className="h-4 w-4" />
                     Revert
@@ -515,7 +520,7 @@ function SettingsPage() {
                     type="button"
                     onClick={save}
                     disabled={!canSave}
-                    className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-accent-fg hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+                    className={primaryButtonClass}
                   >
                     <Save className="h-4 w-4" />
                     {patch.isPending ? "Saving…" : "Save changes"}
@@ -1120,7 +1125,7 @@ function ProviderModal(props: ProviderModalProps) {
             submitMutation.isPending ||
             (!!testResult && !testResult.ok)
           }
-          className="inline-flex items-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-accent-fg hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40"
+          className={primaryButtonClass}
         >
           {isEdit ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
           {submitLabel}
@@ -2461,26 +2466,16 @@ function PromptEditor({ promptKey }: { promptKey: string }) {
                   ? "This prompt is already the bundled default"
                   : "Restore the bundled default content"
             }
-            className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-medium text-fg hover:bg-bg disabled:cursor-not-allowed disabled:opacity-40"
+            className={outlineButtonClass}
           >
             <Sparkles className="h-4 w-4" />
             {reset.isPending ? "Resetting…" : "Reset to default"}
           </button>
-          <button
-            type="button"
-            onClick={revert}
-            disabled={!dirty}
-            className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-medium text-fg hover:bg-bg disabled:cursor-not-allowed disabled:opacity-40"
-          >
+          <button type="button" onClick={revert} disabled={!dirty} className={outlineButtonClass}>
             <RotateCcw className="h-4 w-4" />
             Revert
           </button>
-          <button
-            type="button"
-            onClick={save}
-            disabled={!canSave}
-            className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-accent-fg hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
-          >
+          <button type="button" onClick={save} disabled={!canSave} className={primaryButtonClass}>
             <Save className="h-4 w-4" />
             {put.isPending ? "Saving…" : "Save changes"}
             <span className="ml-1 hidden font-mono text-[10px] opacity-70 sm:inline">⌘S</span>

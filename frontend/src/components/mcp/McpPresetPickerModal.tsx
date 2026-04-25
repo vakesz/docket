@@ -7,7 +7,13 @@ import { Label } from "~/components/common/Label";
 import { Modal } from "~/components/common/Modal";
 import { Notice } from "~/components/common/Notice";
 import { cn } from "~/lib/cn";
-import { fieldClass, fieldMonoClass, secondaryButtonClass } from "~/lib/formClasses";
+import {
+  fieldClass,
+  fieldMonoClass,
+  outlineButtonClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from "~/lib/formClasses";
 
 /**
  * Preset picker. Two steps:
@@ -223,29 +229,21 @@ export function McpPresetPickerModal({
       <footer className="flex items-center justify-end gap-2 border-t border-border bg-surface/70 px-6 py-3">
         {selected ? (
           <>
-            <button
-              type="button"
-              onClick={backToList}
-              className="rounded-xl border border-border px-3 py-2 text-sm font-medium text-fg hover:bg-bg"
-            >
+            <button type="button" onClick={backToList} className={outlineButtonClass}>
               Back
             </button>
             <button
               type="button"
               onClick={() => void onApply()}
               disabled={!canApply}
-              className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-accent-fg hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+              className={primaryButtonClass}
             >
               <Sparkles className="h-4 w-4" />
               {apply.isPending ? "Applying…" : "Apply preset"}
             </button>
           </>
         ) : (
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-xl border border-border px-3 py-2 text-sm font-medium text-fg hover:bg-bg"
-          >
+          <button type="button" onClick={onClose} className={outlineButtonClass}>
             Cancel
           </button>
         )}

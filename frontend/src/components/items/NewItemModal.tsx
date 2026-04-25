@@ -24,7 +24,7 @@ import {
 import { docketCodeMirrorTheme } from "~/lib/cmTheme";
 import { cn } from "~/lib/cn";
 import { formatKind, formatState } from "~/lib/format";
-import { fieldClass } from "~/lib/formClasses";
+import { fieldClass, outlineButtonClass, primaryButtonClass } from "~/lib/formClasses";
 
 type ItemKind = DTO["ItemKind"];
 
@@ -195,29 +195,21 @@ export function NewItemModal({ defaultKind, onClose, onCreated }: Props) {
       <footer className="flex items-center justify-end gap-2 border-t border-border bg-surface/70 px-6 py-3">
         {proposal ? (
           <>
-            <button
-              type="button"
-              onClick={backToEdit}
-              className="rounded-xl border border-border px-3 py-2 text-sm font-medium text-fg hover:bg-bg"
-            >
+            <button type="button" onClick={backToEdit} className={outlineButtonClass}>
               Back to edit
             </button>
             <button
               type="button"
               onClick={() => void confirm()}
               disabled={!canCreate}
-              className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-accent-fg hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+              className={primaryButtonClass}
             >
               {confirmMutation.isPending ? "Creating…" : "Create item"}
             </button>
           </>
         ) : (
           <>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-xl border border-border px-3 py-2 text-sm font-medium text-fg hover:bg-bg"
-            >
+            <button type="button" onClick={onClose} className={outlineButtonClass}>
               Cancel
             </button>
             <button
@@ -225,7 +217,7 @@ export function NewItemModal({ defaultKind, onClose, onCreated }: Props) {
               onClick={() => void stage()}
               disabled={!canStage}
               title="Ctrl/Cmd+S"
-              className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-accent-fg hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+              className={primaryButtonClass}
             >
               {stageMutation.isPending ? "Staging…" : "Stage proposal"}
             </button>

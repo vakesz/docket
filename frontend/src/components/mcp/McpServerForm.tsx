@@ -12,7 +12,12 @@ import {
 import { Notice } from "~/components/common/Notice";
 import { type McpServerDraft, serializeDraft } from "~/components/mcp/mcpServerDraft";
 import { cn } from "~/lib/cn";
-import { fieldClass, secondaryButtonClass } from "~/lib/formClasses";
+import {
+  fieldClass,
+  outlineButtonClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from "~/lib/formClasses";
 
 // Server names act as dict keys in `config.toml` under `[projects.<id>.mcp.<name>]`;
 // the backend also enforces the same shape (`tui_parity.validate_mcp_server_name`).
@@ -193,7 +198,7 @@ export function McpServerForm({
             type="button"
             onClick={() => void onTest()}
             disabled={readOnly || testing || Boolean(commandError)}
-            className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-medium text-fg hover:bg-bg disabled:cursor-not-allowed disabled:opacity-40"
+            className={outlineButtonClass}
             title="Spawn the subprocess, run the MCP handshake, and list its tools"
           >
             <FlaskConical className="h-4 w-4" />
@@ -214,7 +219,7 @@ export function McpServerForm({
             type="button"
             onClick={() => void save()}
             disabled={readOnly || saving || Boolean(formError) || (mode === "edit" && !dirty)}
-            className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-accent-fg hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+            className={primaryButtonClass}
           >
             <Save className="h-4 w-4" />
             {saving ? "Saving…" : mode === "create" ? "Create" : "Save changes"}
