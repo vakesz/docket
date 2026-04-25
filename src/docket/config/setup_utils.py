@@ -52,8 +52,8 @@ def step_auth_with_retry(
     raises `SystemExit(1)` — the wizard cannot meaningfully continue without
     an authenticated session.
 
-    Shared by `setup_wizard_github` and `setup_wizard_azure_devops` so the
-    retry policy, messaging, and exit semantics stay in one place."""
+    Shared by every provider's auth step in `setup_wizard` so the retry
+    policy, messaging, and exit semantics stay in one place."""
     console.print(f"Checking {service_label} session...")
     while True:
         try:

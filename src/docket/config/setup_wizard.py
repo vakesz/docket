@@ -49,30 +49,17 @@ from docket.config.setup_utils import (
     console,
     looks_like_http_url,
     pick,
-)
-from docket.config.setup_wizard_azure_devops import (
-    step_auth as _azure_devops_step_auth,
-)
-from docket.config.setup_wizard_azure_devops import (
-    step_connection as _azure_devops_step_connection,
-)
-from docket.config.setup_wizard_azure_devops import (
-    step_scope as _azure_devops_step_scope,
-)
-from docket.config.setup_wizard_github import (
-    step_auth as _github_step_auth,
-)
-from docket.config.setup_wizard_github import (
-    step_connection as _github_step_connection,
-)
-from docket.config.setup_wizard_github import (
-    step_scope as _github_step_scope,
-)
-from docket.config.setup_wizard_github import (
-    step_stub_connection as _github_stub_step_connection,
+    pick_assignee,
+    pick_github_host,
+    pick_github_repo,
+    step_auth_with_retry,
 )
 from docket.core.services import sync_service
 from docket.providers import registry
+from docket.providers.azure_devops import AzureDevOpsProvider, discover
+from docket.providers.azure_devops.auth import ensure_logged_in
+from docket.providers.azure_devops.discover import DiscoveryError
+from docket.providers.base import ProviderError
 from docket.storage import init_db
 
 
@@ -88,32 +75,6 @@ class ProviderWizard:
     auth: Callable[[WizardState], None] | None = None
     connection: Callable[[WizardState], None] | None = None
     scope: Callable[[WizardState], None] | None = None
-
-
-def _github_stub_step_auth(state: WizardState) -> None:
-    console.print("[dim]No auth needed — github_stub runs entirely in-memory.[/dim]")
-
-
-# Built-in provider onboarding hooks. Third-party providers either register
-# their own entry here at import time or fall through to the generic spec-
-# driven connection step + empty scope.
-_WIZARDS: dict[str, ProviderWizard] = {
-    "azure_devops": ProviderWizard(
-        auth=_azure_devops_step_auth,
-        connection=_azure_devops_step_connection,
-        scope=_azure_devops_step_scope,
-    ),
-    "github": ProviderWizard(
-        auth=_github_step_auth,
-        connection=_github_step_connection,
-        scope=_github_step_scope,
-    ),
-    "github_stub": ProviderWizard(
-        auth=_github_stub_step_auth,
-        connection=_github_stub_step_connection,
-        scope=_github_step_scope,
-    ),
-}
 
 
 STEP_NAMES: tuple[str, ...] = (
@@ -312,6 +273,27 @@ def _next_sibling_key(type_id: str, taken: set[str]) -> str:
 # ---- step 2: auth (per-provider) --------------------------------------------
 
 
+def _azure_devops_step_auth(state: WizardState) -> None:
+    step_auth_with_retry(ensure_logged_in, service_label="Azure CLI")
+    state.signed_in_email = discover.signed_in_email()
+
+
+def _github_step_auth(state: WizardState) -> None:
+    from docket.providers.github.auth import (
+        ensure_logged_in as gh_ensure_logged_in,
+    )
+    from docket.providers.github.auth import (
+        signed_in_email as gh_signed_in_email,
+    )
+
+    step_auth_with_retry(gh_ensure_logged_in, service_label="GitHub CLI")
+    state.signed_in_email = gh_signed_in_email()
+
+
+def _github_stub_step_auth(state: WizardState) -> None:
+    console.print("[dim]No auth needed — github_stub runs entirely in-memory.[/dim]")
+
+
 def _step_provider_auth(state: WizardState) -> None:
     wiz = _WIZARDS.get(state.type_id)
     if wiz and wiz.auth is not None:
@@ -324,6 +306,107 @@ def _step_provider_auth(state: WizardState) -> None:
 
 
 # ---- step 3: connection (per-provider) --------------------------------------
+
+
+def _azure_devops_step_connection(state: WizardState) -> None:
+    """Pick org and project — from discovery when available, manual otherwise."""
+    while True:
+        org = _azure_devops_pick_org(state)
+        project = _azure_devops_pick_project(state, org)
+        console.print(f"Probing {org}/{project}...")
+        provider = AzureDevOpsProvider(organization_url=org, project=project)
+        try:
+            provider.health_check()
+        except ProviderError as e:
+            console.print(f"[red]Connection failed:[/red] {e}")
+            if not Confirm.ask("Try different values?", default=True):
+                raise SystemExit(1) from e
+            state.provider_config = {"organization": org, "project": project}
+            continue
+        state.provider_config = {
+            "organization": str(HttpUrl(org)),
+            "project": project,
+        }
+        console.print("[green]✓ reachable[/green]")
+        return
+
+
+def _azure_devops_pick_org(state: WizardState) -> str:
+    try:
+        orgs = discover.list_orgs()
+    except DiscoveryError as e:
+        console.print(f"[dim]Couldn't auto-list organizations ({e}) — entering manually.[/dim]")
+        orgs = []
+    if not orgs:
+        return _azure_devops_prompt_org_url(state)
+    labels = [f"{o.name} ({o.url})" for o in orgs]
+    match pick("Azure DevOps organization", labels, allow_custom=True):
+        case "__custom__":
+            return _azure_devops_prompt_org_url(state)
+        case int(idx):
+            return orgs[idx].url
+
+
+def _azure_devops_prompt_org_url(state: WizardState) -> str:
+    current = str(state.provider_config.get("organization", ""))
+    while True:
+        raw = (
+            Prompt.ask(
+                "Azure DevOps organization URL",
+                default=current or "https://dev.azure.com/your-org",
+            )
+            .strip()
+            .rstrip("/")
+        )
+        if not looks_like_http_url(raw):
+            console.print(
+                "[red]Please enter a full URL (e.g. https://dev.azure.com/your-org).[/red]"
+            )
+            continue
+        return raw
+
+
+def _azure_devops_pick_project(state: WizardState, org_url: str) -> str:
+    try:
+        projects = discover.list_projects(org_url)
+    except DiscoveryError as e:
+        console.print(f"[dim]Couldn't auto-list projects ({e}) — entering manually.[/dim]")
+        projects = []
+    if not projects:
+        return _azure_devops_prompt_project_name(state)
+    labels = [p.name for p in projects]
+    match pick("Project", labels, allow_custom=True):
+        case "__custom__":
+            return _azure_devops_prompt_project_name(state)
+        case int(idx):
+            return projects[idx].name
+
+
+def _azure_devops_prompt_project_name(state: WizardState) -> str:
+    current = str(state.provider_config.get("project", ""))
+    while True:
+        project = Prompt.ask("Project name", default=current or "").strip()
+        if project:
+            return project
+        console.print("[red]Project name is required.[/red]")
+
+
+def _github_step_connection(state: WizardState) -> None:
+    host = pick_github_host()
+    repo = pick_github_repo(host=host.hostname if host else None)
+    config: dict[str, Any] = {"default_repo": repo}
+    if host and host.api_base_url != "https://api.github.com":
+        config["base_url"] = host.api_base_url
+    state.provider_config = config
+    # Store the hostname as a hint for the label step's default — doesn't
+    # persist to config.toml; only `base_url` / `default_repo` do.
+    state.signed_in_github_host = host.hostname if host else None
+
+
+def _github_stub_step_connection(state: WizardState) -> None:
+    current = str(state.provider_config.get("default_repo", "example/repo"))
+    repo = Prompt.ask("Default repo (owner/name)", default=current).strip() or current
+    state.provider_config = {"default_repo": repo}
 
 
 def _step_provider_connection(state: WizardState) -> None:
@@ -416,6 +499,124 @@ def _suggest_display_name(state: WizardState) -> str:
 
 
 # ---- step 4: scope (per-provider) -------------------------------------------
+
+
+def _azure_devops_step_scope(state: WizardState) -> None:
+    org = str(state.provider_config.get("organization", ""))
+    project = str(state.provider_config.get("project", ""))
+    console.print(
+        "Scope filters limit which work items get cached locally. "
+        "Leave any axis as 'any' to include everything."
+    )
+    while True:
+        team = _azure_devops_pick_optional(
+            "Team",
+            fetch=lambda: discover.list_teams(org, project),
+            current=state.scope.team,
+        )
+        area = _azure_devops_pick_optional(
+            "Area path",
+            fetch=lambda: discover.list_area_paths(org, project),
+            current=state.scope.area_path,
+        )
+        iteration = _azure_devops_pick_optional(
+            "Iteration path",
+            fetch=lambda: discover.list_iteration_paths(org, project),
+            current=state.scope.iteration_path,
+        )
+        assignee = pick_assignee(
+            signed_in_email=state.signed_in_email,
+            current_assignee=state.scope.assignee,
+        )
+        scope = ScopeFilter(
+            team=team,
+            area_path=area,
+            iteration_path=iteration,
+            assignee=assignee,
+        )
+
+        count = _azure_devops_count_items_for_scope(org, project, scope)
+        if count is None:
+            console.print("[yellow]Could not count items — proceeding with this scope.[/yellow]")
+        else:
+            console.print(f"[cyan]→ {count} item(s) match this scope[/cyan]")
+
+        if Confirm.ask("Use this scope?", default=True):
+            state.scope = scope
+            return
+
+
+def _azure_devops_pick_optional(
+    label: str,
+    *,
+    fetch: Callable[[], list[str]],
+    current: str,
+) -> str:
+    """Offer discovered options plus 'any' and 'custom…'. Returns '' for 'any'.
+
+    'any' is always rendered first and is the default — browsing an unfamiliar
+    org/repo almost always wants "everything", not whichever team happened to
+    sort alphabetically first."""
+    options: list[str] = []
+    try:
+        options = [o for o in fetch() if o]
+    except DiscoveryError as e:
+        console.print(f"[dim]Couldn't list {label.lower()}s ({e}) — entering manually.[/dim]")
+    if not options:
+        raw = Prompt.ask(f"{label} (blank for any)", default=current or "")
+        return raw.strip()
+
+    match pick(label, options, allow_any=True, allow_custom=True):
+        case "__any__":
+            return ""
+        case "__custom__":
+            return Prompt.ask(f"{label} (free-form)", default=current or "").strip()
+        case int(idx):
+            return options[idx]
+
+
+def _azure_devops_count_items_for_scope(org: str, project: str, scope: ScopeFilter) -> int | None:
+    try:
+        provider = AzureDevOpsProvider(organization_url=org, project=project)
+        items = list(provider.list_changes_since(None, scope.to_core()))
+        return len(items)
+    except ProviderError:
+        return None
+
+
+def _github_step_scope(state: WizardState) -> None:
+    """GitHub scope is just the assignee — team/area/iteration don't apply."""
+    console.print(
+        "Scope filters limit which issues/PRs get cached locally. "
+        "Only 'assignee' is meaningful for GitHub."
+    )
+    assignee = pick_assignee(
+        signed_in_email=state.signed_in_email,
+        current_assignee=state.scope.assignee,
+    )
+    state.scope = ScopeFilter(assignee=assignee)
+
+
+# Built-in provider onboarding hooks. Third-party providers either register
+# their own entry here at import time or fall through to the generic spec-
+# driven connection step + empty scope.
+_WIZARDS: dict[str, ProviderWizard] = {
+    "azure_devops": ProviderWizard(
+        auth=_azure_devops_step_auth,
+        connection=_azure_devops_step_connection,
+        scope=_azure_devops_step_scope,
+    ),
+    "github": ProviderWizard(
+        auth=_github_step_auth,
+        connection=_github_step_connection,
+        scope=_github_step_scope,
+    ),
+    "github_stub": ProviderWizard(
+        auth=_github_stub_step_auth,
+        connection=_github_stub_step_connection,
+        scope=_github_step_scope,
+    ),
+}
 
 
 def _step_provider_scope(state: WizardState) -> None:

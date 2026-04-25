@@ -18,7 +18,6 @@ from typing import Any
 import pytest
 
 from docket.config import setup_utils, setup_wizard
-from docket.config import setup_wizard_azure_devops as sw_azure
 from docket.config.loader import load_config
 from docket.config.paths import Paths
 from docket.core.model import SyncSummary
@@ -58,10 +57,10 @@ def _stub_infra(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Paths:
     )
     monkeypatch.setattr(setup_wizard, "resolve_paths", lambda: paths)
 
-    # Neuter external touches — Azure-specific calls live in the companion
-    # module after the setup_wizard split.
-    monkeypatch.setattr(sw_azure, "ensure_logged_in", lambda: "user@example.com")
-    monkeypatch.setattr(sw_azure.discover, "signed_in_email", lambda: "user@example.com")
+    # Neuter external touches — Azure-specific symbols are imported at module
+    # level inside `setup_wizard`, so monkeypatching there reaches the wizard.
+    monkeypatch.setattr(setup_wizard, "ensure_logged_in", lambda: "user@example.com")
+    monkeypatch.setattr(setup_wizard.discover, "signed_in_email", lambda: "user@example.com")
 
     # A provider stub whose health check always passes and whose change feed is empty.
     class _StubProvider:
@@ -75,7 +74,7 @@ def _stub_infra(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Paths:
         def list_changes_since(self, _wm, _filters):  # for count preview
             return []
 
-    monkeypatch.setattr(sw_azure, "AzureDevOpsProvider", _StubProvider)
+    monkeypatch.setattr(setup_wizard, "AzureDevOpsProvider", _StubProvider)
 
     # Avoid touching the DB on the final step.
     class _FakeConn:
@@ -105,7 +104,7 @@ def test_wizard_uses_discovery_selections_end_to_end(
 ) -> None:
     paths = _stub_infra(monkeypatch, tmp_path)
     monkeypatch.setattr(
-        sw_azure.discover,
+        setup_wizard.discover,
         "list_orgs",
         lambda: [
             OrgRef(name="contoso", url="https://dev.azure.com/contoso"),
@@ -113,22 +112,22 @@ def test_wizard_uses_discovery_selections_end_to_end(
         ],
     )
     monkeypatch.setattr(
-        sw_azure.discover,
+        setup_wizard.discover,
         "list_projects",
         lambda _org: [ProjectRef(id="p1", name="platform"), ProjectRef(id="p2", name="infra")],
     )
     monkeypatch.setattr(
-        sw_azure.discover,
+        setup_wizard.discover,
         "list_teams",
         lambda *_: ["Alpha", "Bravo"],
     )
     monkeypatch.setattr(
-        sw_azure.discover,
+        setup_wizard.discover,
         "list_area_paths",
         lambda *_: ["platform", "platform\\Platform"],
     )
     monkeypatch.setattr(
-        sw_azure.discover,
+        setup_wizard.discover,
         "list_iteration_paths",
         lambda *_: ["platform", "platform\\Sprint 42"],
     )
@@ -172,7 +171,7 @@ def test_wizard_falls_back_when_discovery_fails(
     paths = _stub_infra(monkeypatch, tmp_path)
 
     def _raise(*_a, **_kw):
-        raise sw_azure.DiscoveryError("no route to host")
+        raise setup_wizard.DiscoveryError("no route to host")
 
     for name in (
         "list_orgs",
@@ -181,7 +180,7 @@ def test_wizard_falls_back_when_discovery_fails(
         "list_area_paths",
         "list_iteration_paths",
     ):
-        monkeypatch.setattr(sw_azure.discover, name, _raise)
+        monkeypatch.setattr(setup_wizard.discover, name, _raise)
 
     _script_prompts(
         monkeypatch,
@@ -227,9 +226,9 @@ def test_wizard_rejects_bare_org_name_then_accepts_full_url(
         "list_iteration_paths",
     ):
         monkeypatch.setattr(
-            sw_azure.discover,
+            setup_wizard.discover,
             name,
-            lambda *_a, **_kw: (_ for _ in ()).throw(sw_azure.DiscoveryError("no")),
+            lambda *_a, **_kw: (_ for _ in ()).throw(setup_wizard.DiscoveryError("no")),
         )
 
     _script_prompts(
@@ -261,17 +260,17 @@ def test_wizard_enables_http_and_mints_token(
 ) -> None:
     paths = _stub_infra(monkeypatch, tmp_path)
     monkeypatch.setattr(
-        sw_azure.discover,
+        setup_wizard.discover,
         "list_orgs",
         lambda: [OrgRef(name="contoso", url="https://dev.azure.com/contoso")],
     )
     monkeypatch.setattr(
-        sw_azure.discover,
+        setup_wizard.discover,
         "list_projects",
         lambda _org: [ProjectRef(id="p1", name="platform")],
     )
     for name in ("list_teams", "list_area_paths", "list_iteration_paths"):
-        monkeypatch.setattr(sw_azure.discover, name, lambda *_: [])
+        monkeypatch.setattr(setup_wizard.discover, name, lambda *_: [])
 
     _script_prompts(
         monkeypatch,
@@ -309,9 +308,9 @@ def test_wizard_http_disabled_leaves_token_empty(
         "list_iteration_paths",
     ):
         monkeypatch.setattr(
-            sw_azure.discover,
+            setup_wizard.discover,
             name,
-            lambda *_a, **_kw: (_ for _ in ()).throw(sw_azure.DiscoveryError("no")),
+            lambda *_a, **_kw: (_ for _ in ()).throw(setup_wizard.DiscoveryError("no")),
         )
     _script_prompts(
         monkeypatch,
