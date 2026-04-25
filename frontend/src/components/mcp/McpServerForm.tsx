@@ -11,6 +11,7 @@ import {
 } from "~/api/hooks";
 import { Notice } from "~/components/common/Notice";
 import { cn } from "~/lib/cn";
+import { fieldClass, secondaryButtonClass } from "~/lib/formClasses";
 
 // Server names act as dict keys in `config.toml` under `[projects.<id>.mcp.<name>]`;
 // the backend also enforces the same shape (`tui_parity.validate_mcp_server_name`).
@@ -560,10 +561,7 @@ function TextInput({
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       disabled={disabled}
-      className={cn(
-        "w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg transition-colors focus:border-accent focus:outline-none",
-        disabled && "cursor-not-allowed opacity-60",
-      )}
+      className={cn(fieldClass, "transition-colors", disabled && "cursor-not-allowed opacity-60")}
     />
   );
 }
@@ -621,11 +619,7 @@ function Select({
   onChange: (v: string) => void;
 }) {
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg focus:border-accent focus:outline-none"
-    >
+    <select value={value} onChange={(e) => onChange(e.target.value)} className={fieldClass}>
       {options.map((opt) => (
         <option key={opt.value} value={opt.value}>
           {opt.label}
@@ -650,7 +644,7 @@ function Toggle({
       role="switch"
       aria-checked={checked}
       onClick={() => onChange(!checked)}
-      className="inline-flex w-fit items-center gap-3 rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg hover:bg-surface-alt"
+      className={cn(secondaryButtonClass, "w-fit")}
     >
       <span
         className={cn(

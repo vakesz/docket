@@ -7,6 +7,7 @@ import { Label } from "~/components/common/Label";
 import { Modal } from "~/components/common/Modal";
 import { Notice } from "~/components/common/Notice";
 import { cn } from "~/lib/cn";
+import { fieldClass, fieldMonoClass, secondaryButtonClass } from "~/lib/formClasses";
 
 /**
  * Preset picker. Two steps:
@@ -163,7 +164,7 @@ export function McpPresetPickerModal({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder={selected.default_name}
-                className="mt-2 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg focus:border-accent focus:outline-none"
+                className={cn(fieldClass, "mt-2")}
               />
               <p className="mt-1 text-xs text-fg-muted">
                 Dict key in <code>config.toml</code>. Must be unique per project.
@@ -185,7 +186,7 @@ export function McpPresetPickerModal({
                     setEnvValues((prev) => ({ ...prev, [env.name]: e.target.value }))
                   }
                   placeholder={env.placeholder || env.name}
-                  className="mt-2 w-full rounded-xl border border-border bg-surface px-3 py-2 font-mono text-sm text-fg focus:border-accent focus:outline-none"
+                  className={cn(fieldMonoClass, "mt-2")}
                 />
                 {env.description && <p className="mt-1 text-xs text-fg-muted">{env.description}</p>}
               </div>
@@ -197,7 +198,7 @@ export function McpPresetPickerModal({
                 role="switch"
                 aria-checked={enabled}
                 onClick={() => setEnabled((v) => !v)}
-                className="inline-flex items-center gap-3 rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg hover:bg-surface-alt"
+                className={secondaryButtonClass}
               >
                 <span
                   className={cn(

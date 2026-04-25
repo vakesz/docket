@@ -60,6 +60,7 @@ import { ThemePicker } from "~/components/shell/ThemePicker";
 import { ToolDisplayPicker } from "~/components/shell/ToolDisplayPicker";
 import { docketCodeMirrorTheme } from "~/lib/cmTheme";
 import { cn } from "~/lib/cn";
+import { fieldClass, secondaryButtonClass } from "~/lib/formClasses";
 
 type PromptSummary = components["schemas"]["PromptSummaryDTO"];
 
@@ -1701,7 +1702,7 @@ function TextInput({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg transition-colors focus:border-accent focus:outline-none"
+      className={cn(fieldClass, "transition-colors")}
     />
   );
 }
@@ -1786,11 +1787,7 @@ function Select({
 
   return (
     <div className="flex w-full gap-2">
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg focus:border-accent focus:outline-none"
-      >
+      <select value={value} onChange={(e) => onChange(e.target.value)} className={fieldClass}>
         {value === "" && <option value="">{placeholder ?? "— choose —"}</option>}
         {options.map((opt) => (
           <option key={opt.value} value={opt.value}>
@@ -1826,7 +1823,7 @@ function Toggle({
       role="switch"
       aria-checked={checked}
       onClick={() => onChange(!checked)}
-      className="inline-flex w-fit items-center gap-3 rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg hover:bg-surface-alt"
+      className={cn(secondaryButtonClass, "w-fit")}
     >
       <span
         className={cn(

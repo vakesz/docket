@@ -22,7 +22,9 @@ import {
   resolveSupportedKinds,
 } from "~/components/items/newItemForm";
 import { docketCodeMirrorTheme } from "~/lib/cmTheme";
+import { cn } from "~/lib/cn";
 import { formatKind, formatState } from "~/lib/format";
+import { fieldClass } from "~/lib/formClasses";
 
 type ItemKind = DTO["ItemKind"];
 
@@ -277,7 +279,7 @@ function EditPhase({
           <select
             value={kind}
             onChange={(e) => onKind(e.target.value as ItemKind)}
-            className="mt-2 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg focus:border-accent focus:outline-none"
+            className={cn(fieldClass, "mt-2")}
           >
             {kinds.map((k) => (
               <option key={k} value={k}>
@@ -293,7 +295,7 @@ function EditPhase({
             value={title}
             onChange={(e) => onTitle(e.target.value)}
             placeholder="Short, specific title"
-            className="mt-2 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg focus:border-accent focus:outline-none"
+            className={cn(fieldClass, "mt-2")}
           />
         </div>
       </div>
@@ -329,7 +331,7 @@ function EditPhase({
             value={parentId}
             onChange={(e) => onParent(e.target.value)}
             placeholder="#123 or provider-id"
-            className="mt-2 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg focus:border-accent focus:outline-none"
+            className={cn(fieldClass, "mt-2")}
           />
         </div>
         <div>
@@ -338,7 +340,7 @@ function EditPhase({
             value={assignee}
             onChange={(e) => onAssignee(e.target.value)}
             placeholder="@me or user handle"
-            className="mt-2 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg focus:border-accent focus:outline-none"
+            className={cn(fieldClass, "mt-2")}
           />
         </div>
         <div>
@@ -347,7 +349,7 @@ function EditPhase({
             value={tagsRaw}
             onChange={(e) => onTags(e.target.value)}
             placeholder="triage, ux, regression"
-            className="mt-2 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg focus:border-accent focus:outline-none"
+            className={cn(fieldClass, "mt-2")}
           />
         </div>
       </div>
