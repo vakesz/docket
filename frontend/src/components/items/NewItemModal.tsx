@@ -1,6 +1,3 @@
-import { markdown } from "@codemirror/lang-markdown";
-import { EditorView } from "@codemirror/view";
-import CodeMirror from "@uiw/react-codemirror";
 import { FilePlus2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -13,18 +10,16 @@ import {
   useStageItemCreate,
   useStatus,
 } from "~/api/hooks";
-import { Label } from "~/components/common/Label";
 import { Modal } from "~/components/common/Modal";
 import { Notice } from "~/components/common/Notice";
 import {
   buildCreateRequest,
   pickInitialKind,
   resolveSupportedKinds,
-} from "~/components/items/newItemForm";
-import { docketCodeMirrorTheme } from "~/lib/cmTheme";
-import { cn } from "~/lib/cn";
-import { formatKind, formatState } from "~/lib/format";
-import { fieldClass, outlineButtonClass, primaryButtonClass } from "~/lib/formClasses";
+} from "~/components/items/newItemHelpers";
+
+import { NewItemForm } from "./NewItemForm";
+import { ProposalConfirmFooter } from "./ProposalConfirmFooter";
 
 type ItemKind = DTO["ItemKind"];
 
@@ -73,7 +68,6 @@ export function NewItemModal({ defaultKind, onClose, onCreated }: Props) {
     titleRef.current?.focus();
   }, []);
 
-  // Debounce the title for the duplicate search.
   const [debouncedTitle, setDebouncedTitle] = useState("");
   useEffect(() => {
     const t = setTimeout(() => setDebouncedTitle(title.trim()), 250);
@@ -117,7 +111,6 @@ export function NewItemModal({ defaultKind, onClose, onCreated }: Props) {
   };
 
   const onFormKeyDown = (e: React.KeyboardEvent<HTMLFormElement>) => {
-    // Ctrl/Cmd+S from any field in edit phase stages the proposal.
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s" && proposal === null) {
       e.preventDefault();
       void stage();
@@ -171,7 +164,7 @@ export function NewItemModal({ defaultKind, onClose, onCreated }: Props) {
             {proposal.diff}
           </pre>
         ) : (
-          <EditPhase
+          <NewItemForm
             kind={kind}
             kinds={supportedKinds}
             title={title}
@@ -193,191 +186,18 @@ export function NewItemModal({ defaultKind, onClose, onCreated }: Props) {
       </form>
 
       <footer className="flex items-center justify-end gap-2 border-t border-border bg-surface/70 px-6 py-3">
-        {proposal ? (
-          <>
-            <button type="button" onClick={backToEdit} className={outlineButtonClass}>
-              Back to edit
-            </button>
-            <button
-              type="button"
-              onClick={() => void confirm()}
-              disabled={!canCreate}
-              className={primaryButtonClass}
-            >
-              {confirmMutation.isPending ? "Creating…" : "Create item"}
-            </button>
-          </>
-        ) : (
-          <>
-            <button type="button" onClick={onClose} className={outlineButtonClass}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => void stage()}
-              disabled={!canStage}
-              title="Ctrl/Cmd+S"
-              className={primaryButtonClass}
-            >
-              {stageMutation.isPending ? "Staging…" : "Stage proposal"}
-            </button>
-          </>
-        )}
+        <ProposalConfirmFooter
+          proposal={proposal}
+          canStage={canStage}
+          canCreate={canCreate}
+          staging={stageMutation.isPending}
+          creating={confirmMutation.isPending}
+          onCancel={onClose}
+          onBackToEdit={backToEdit}
+          onStage={() => void stage()}
+          onConfirm={() => void confirm()}
+        />
       </footer>
     </Modal>
-  );
-}
-
-function EditPhase({
-  kind,
-  kinds,
-  title,
-  description,
-  parentId,
-  assignee,
-  tagsRaw,
-  duplicates,
-  duplicatesLoading,
-  titleRef,
-  onKind,
-  onTitle,
-  onDescription,
-  onParent,
-  onAssignee,
-  onTags,
-}: {
-  kind: ItemKind;
-  kinds: ItemKind[];
-  title: string;
-  description: string;
-  parentId: string;
-  assignee: string;
-  tagsRaw: string;
-  duplicates: DTO["ItemDTO"][] | undefined;
-  duplicatesLoading: boolean;
-  titleRef: React.RefObject<HTMLInputElement | null>;
-  onKind: (v: ItemKind) => void;
-  onTitle: (v: string) => void;
-  onDescription: (v: string) => void;
-  onParent: (v: string) => void;
-  onAssignee: (v: string) => void;
-  onTags: (v: string) => void;
-}) {
-  return (
-    <div className="flex flex-col gap-5">
-      <div className="grid gap-4 sm:grid-cols-[160px_1fr]">
-        <div>
-          <Label>Kind</Label>
-          <select
-            value={kind}
-            onChange={(e) => onKind(e.target.value as ItemKind)}
-            className={cn(fieldClass, "mt-2")}
-          >
-            {kinds.map((k) => (
-              <option key={k} value={k}>
-                {formatKind(k)}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <Label>Title</Label>
-          <input
-            ref={titleRef}
-            value={title}
-            onChange={(e) => onTitle(e.target.value)}
-            placeholder="Short, specific title"
-            className={cn(fieldClass, "mt-2")}
-          />
-        </div>
-      </div>
-
-      {title.trim().length >= 3 && (
-        <DuplicatesPanel loading={duplicatesLoading} duplicates={duplicates ?? []} />
-      )}
-
-      <div>
-        <Label>Description (markdown)</Label>
-        <div className="mt-2 overflow-hidden rounded-xl border border-border">
-          <CodeMirror
-            value={description}
-            height="200px"
-            theme="none"
-            extensions={[markdown(), EditorView.lineWrapping, ...docketCodeMirrorTheme()]}
-            onChange={onDescription}
-            basicSetup={{
-              lineNumbers: false,
-              foldGutter: false,
-              highlightActiveLine: false,
-              highlightActiveLineGutter: false,
-            }}
-            className="text-[13px]"
-          />
-        </div>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div>
-          <Label>Parent id (optional)</Label>
-          <input
-            value={parentId}
-            onChange={(e) => onParent(e.target.value)}
-            placeholder="#123 or provider-id"
-            className={cn(fieldClass, "mt-2")}
-          />
-        </div>
-        <div>
-          <Label>Assignee (optional)</Label>
-          <input
-            value={assignee}
-            onChange={(e) => onAssignee(e.target.value)}
-            placeholder="@me or user handle"
-            className={cn(fieldClass, "mt-2")}
-          />
-        </div>
-        <div>
-          <Label>Tags (comma-separated)</Label>
-          <input
-            value={tagsRaw}
-            onChange={(e) => onTags(e.target.value)}
-            placeholder="triage, ux, regression"
-            className={cn(fieldClass, "mt-2")}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DuplicatesPanel({
-  loading,
-  duplicates,
-}: {
-  loading: boolean;
-  duplicates: DTO["ItemDTO"][];
-}) {
-  if (loading && duplicates.length === 0) {
-    return <p className="text-xs text-fg-muted">Checking for duplicates…</p>;
-  }
-  if (duplicates.length === 0) return null;
-  return (
-    <div className="rounded-xl border border-warning bg-warning-bg/40 px-3 py-2 text-xs text-warning-fg">
-      <div className="mb-1 font-semibold">Possible duplicates ({duplicates.length})</div>
-      <ul className="flex flex-col gap-0.5 font-mono text-[11px]">
-        {duplicates.map((it) => (
-          <li key={it.id} className="truncate">
-            <a
-              href={`/items/${encodeURIComponent(it.id)}`}
-              target="_blank"
-              rel="noreferrer"
-              className="hover:underline"
-            >
-              [{it.id}] {it.title}
-            </a>
-            <span className="ml-2 text-fg-muted">— {formatState(it.state)}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
   );
 }

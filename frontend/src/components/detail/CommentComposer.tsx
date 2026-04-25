@@ -1,20 +1,13 @@
-import { markdown } from "@codemirror/lang-markdown";
-import CodeMirror from "@uiw/react-codemirror";
 import { useState } from "react";
 import type { DTO } from "~/api/client";
 import { useProposeComment } from "~/api/hooks";
-import { docketCodeMirrorTheme } from "~/lib/cmTheme";
+import { MarkdownEditor } from "~/components/common/MarkdownEditor";
 
 interface Props {
   itemId: string;
   onStaged: (proposal: DTO["ProposalDTO"]) => void;
 }
 
-/**
- * Manual comment composer. Stages a `comment_add` proposal that the user
- * confirms via the existing `ProposalCard` flow — keeps the proposal-first
- * invariant intact (no direct provider write from a surface).
- */
 export function CommentComposer({ itemId, onStaged }: Props) {
   const [value, setValue] = useState("");
   const [open, setOpen] = useState(false);
@@ -37,14 +30,11 @@ export function CommentComposer({ itemId, onStaged }: Props) {
   return (
     <div className="flex flex-col gap-2">
       <div className="overflow-hidden rounded border border-border">
-        <CodeMirror
+        <MarkdownEditor
           value={value}
-          height="140px"
-          theme="none"
-          extensions={[markdown(), ...docketCodeMirrorTheme()]}
           onChange={setValue}
+          height="140px"
           placeholder="Write a comment in markdown…"
-          basicSetup={{ lineNumbers: false, foldGutter: false }}
         />
       </div>
       {propose.error && <p className="text-xs text-danger">{(propose.error as Error).message}</p>}

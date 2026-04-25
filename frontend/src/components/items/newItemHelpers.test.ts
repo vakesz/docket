@@ -6,7 +6,7 @@ import {
   parseTags,
   pickInitialKind,
   resolveSupportedKinds,
-} from "./newItemForm";
+} from "./newItemHelpers";
 
 describe("parseTags", () => {
   test("splits on comma and trims whitespace", () => {

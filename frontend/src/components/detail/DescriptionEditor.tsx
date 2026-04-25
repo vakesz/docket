@@ -1,9 +1,7 @@
-import { markdown } from "@codemirror/lang-markdown";
-import CodeMirror from "@uiw/react-codemirror";
 import { useState } from "react";
 import type { DTO } from "~/api/client";
 import { useProposeDescription } from "~/api/hooks";
-import { docketCodeMirrorTheme } from "~/lib/cmTheme";
+import { MarkdownEditor } from "~/components/common/MarkdownEditor";
 
 interface Props {
   itemId: string;
@@ -20,14 +18,7 @@ export function DescriptionEditor({ itemId, initial, onStaged, onClose }: Props)
   return (
     <div className="flex flex-col gap-2">
       <div className="overflow-hidden rounded border border-border">
-        <CodeMirror
-          value={value}
-          height="240px"
-          theme="none"
-          extensions={[markdown(), ...docketCodeMirrorTheme()]}
-          onChange={setValue}
-          basicSetup={{ lineNumbers: false, foldGutter: false }}
-        />
+        <MarkdownEditor value={value} onChange={setValue} height="240px" />
       </div>
       <div className="flex justify-end gap-2">
         <button
