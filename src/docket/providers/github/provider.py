@@ -102,41 +102,38 @@ class GitHubProvider:
             "X-GitHub-Api-Version": "2022-11-28",
         }
 
-    def _get(self, path: str, params: dict[str, str] | None = None) -> Any:
+    def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, str] | None = None,
+        json: dict[str, Any] | None = None,
+    ) -> Any:
+        """Issue an authenticated REST call and decode JSON.
+
+        Wraps `httpx.HTTPError` and any non-2xx response as
+        `ProviderUnreachableError` with a uniform message shape so callers
+        don't repeat the four-line try/raise dance per verb."""
         client = self._client_or_make()
         try:
-            resp = client.get(path, params=params)
+            resp = client.request(method, path, params=params, json=json)
         except httpx.HTTPError as e:
-            raise ProviderUnreachableError(f"GET {path} failed: {e}") from e
+            raise ProviderUnreachableError(f"{method} {path} failed: {e}") from e
         if resp.status_code >= 400:
             raise ProviderUnreachableError(
-                f"GET {path} returned {resp.status_code}: {resp.text[:200]}"
+                f"{method} {path} returned {resp.status_code}: {resp.text[:200]}"
             )
         return resp.json()
+
+    def _get(self, path: str, params: dict[str, str] | None = None) -> Any:
+        return self._request("GET", path, params=params)
 
     def _post(self, path: str, body: dict[str, Any]) -> Any:
-        client = self._client_or_make()
-        try:
-            resp = client.post(path, json=body)
-        except httpx.HTTPError as e:
-            raise ProviderUnreachableError(f"POST {path} failed: {e}") from e
-        if resp.status_code >= 400:
-            raise ProviderUnreachableError(
-                f"POST {path} returned {resp.status_code}: {resp.text[:200]}"
-            )
-        return resp.json()
+        return self._request("POST", path, json=body)
 
     def _patch(self, path: str, body: dict[str, Any]) -> Any:
-        client = self._client_or_make()
-        try:
-            resp = client.patch(path, json=body)
-        except httpx.HTTPError as e:
-            raise ProviderUnreachableError(f"PATCH {path} failed: {e}") from e
-        if resp.status_code >= 400:
-            raise ProviderUnreachableError(
-                f"PATCH {path} returned {resp.status_code}: {resp.text[:200]}"
-            )
-        return resp.json()
+        return self._request("PATCH", path, json=body)
 
     # -- reads --------------------------------------------------------------
 
