@@ -11,7 +11,6 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from docket.api.auth import require_bearer
 from docket.api.deps import get_conn, get_runtime, require_not_read_only
 from docket.api.runtime import RuntimeState
 from docket.api.schemas import SyncSummaryDTO
@@ -20,7 +19,7 @@ from docket.core.services import sync_service
 router = APIRouter(
     prefix="/sync",
     tags=["sync"],
-    dependencies=[Depends(require_bearer), Depends(require_not_read_only)],
+    dependencies=[Depends(require_not_read_only)],
 )
 
 

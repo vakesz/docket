@@ -70,18 +70,14 @@ def serialize_question(question: Question) -> dict[str, Any]:
                 "header": q.header,
                 "multi_select": q.multi_select,
                 "allow_other": q.allow_other,
-                "options": [
-                    {"label": o.label, "description": o.description} for o in q.options
-                ],
+                "options": [{"label": o.label, "description": o.description} for o in q.options],
             }
             for q in question.questions
         ],
     }
 
 
-def serialize_answers(
-    question: Question, answers: tuple[QuestionAnswer, ...]
-) -> str:
+def serialize_answers(question: Question, answers: tuple[QuestionAnswer, ...]) -> str:
     """Tool-result content the LLM sees once the user answers."""
     body = {
         "status": "answered",

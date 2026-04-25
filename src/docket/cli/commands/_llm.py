@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from rich.console import Console
-
+from docket.cli._console import console
 from docket.config.env import (
     get_llm_api_key,
     get_llm_api_version,
@@ -14,8 +13,6 @@ from docket.config.env import (
 if TYPE_CHECKING:
     from docket.agent.llm_client import AzureOpenAIClient
     from docket.config.models import LlmConfig
-
-_console = Console()
 
 
 def build_llm_client(llm_cfg: LlmConfig) -> AzureOpenAIClient | None:
@@ -34,7 +31,7 @@ def build_llm_client(llm_cfg: LlmConfig) -> AzureOpenAIClient | None:
             )
             if not value
         ]
-        _console.print(
+        console.print(
             f"[yellow]Chat disabled[/yellow]: set {', '.join(missing)} in "
             "your .env (repo-local or ~/.config/docket/.env), or run `docket setup` "
             "to persist the endpoint into config.toml."

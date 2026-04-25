@@ -13,11 +13,7 @@ lived and the running TUI/serve picks up changes on its next bind)."""
 from __future__ import annotations
 
 from docket.config.loader import save_config
-from docket.config.mcp_presets import (
-    MissingPresetEnvError,
-    UnknownPresetError,
-    apply_preset,
-)
+from docket.config.mcp_presets import MissingPresetEnvError, UnknownPresetError
 from docket.config.models import Config, MCPServerEntry, ProjectEntry
 from docket.config.paths import Paths
 
@@ -160,42 +156,6 @@ def remove_server(config: Config, paths: Paths, project_id: str, name: str) -> N
     save_config(paths, config)
 
 
-def add_server_from_preset(
-    config: Config,
-    paths: Paths,
-    project_id: str,
-    preset_id: str,
-    *,
-    name: str | None = None,
-    env: dict[str, str] | None = None,
-    enabled: bool = True,
-) -> tuple[str, MCPServerEntry]:
-    """Instantiate a preset and add it to the project.
-
-    Returns `(server_name, entry)` so the caller can echo back what was saved.
-    Raises the same error set as `add_server` plus:
-    - `UnknownPresetError` / `MissingPresetEnvError` from the preset resolver.
-    """
-    from docket.config.mcp_presets import get_preset
-
-    preset = get_preset(preset_id)  # raises UnknownPresetError
-    entry = apply_preset(preset_id, env=env, enabled=enabled)
-    server_name = (name or preset.default_name).strip() or preset.default_name
-    added = add_server(
-        config,
-        paths,
-        project_id,
-        server_name,
-        command=entry.command,
-        args=list(entry.args),
-        env=dict(entry.env),
-        transport=entry.transport,
-        enabled=entry.enabled,
-        startup_timeout_seconds=entry.startup_timeout_seconds,
-    )
-    return server_name, added
-
-
 __all__ = [
     "DuplicateServerError",
     "InvalidServerConfigError",
@@ -204,7 +164,6 @@ __all__ = [
     "UnknownProjectError",
     "UnknownServerError",
     "add_server",
-    "add_server_from_preset",
     "get_server",
     "list_servers",
     "remove_server",

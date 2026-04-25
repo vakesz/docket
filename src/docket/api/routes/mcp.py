@@ -15,10 +15,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 
 from docket.agent.mcp import MCPClient
-from docket.api.auth import require_bearer
 from docket.api.deps import (
     get_config,
     get_paths,
@@ -32,10 +31,8 @@ from docket.api.schemas import (
     MCPPresetDTO,
     MCPPresetEnvDTO,
     MCPPresetListDTO,
-    MCPServerCreateRequest,
     MCPServerDTO,
     MCPServerListDTO,
-    MCPServerTestRequest,
     MCPServerTestResultDTO,
     MCPServerUpdateRequest,
     MCPToolDTO,
@@ -45,10 +42,7 @@ from docket.config.models import Config, MCPServerEntry
 from docket.config.paths import Paths
 from docket.core.services import mcp_service
 
-router = APIRouter(
-    tags=["mcp"],
-    dependencies=[Depends(require_bearer)],
-)
+router = APIRouter(tags=["mcp"])
 
 
 def _to_dto(project_id: str, name: str, entry: MCPServerEntry) -> MCPServerDTO:
@@ -151,14 +145,15 @@ def get_mcp_server(
 
 
 @router.post(
-    "/projects/{project_id:path}/mcp",
+    "/projects/{project_id:path}/mcp/{name}",
     response_model=MCPServerDTO,
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(require_not_read_only)],
 )
 def create_mcp_server(
     project_id: str,
-    payload: MCPServerCreateRequest,
+    name: str,
+    payload: MCPServerEntry,
     request: Request,
     config: Config = Depends(get_config),
     paths: Paths = Depends(get_paths),
@@ -170,7 +165,7 @@ def create_mcp_server(
             config,
             paths,
             project_id,
-            payload.name,
+            name,
             command=payload.command,
             args=list(payload.args),
             env=dict(payload.env),
@@ -181,12 +176,12 @@ def create_mcp_server(
     except mcp_service.DuplicateServerError as exc:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            f"MCP server '{payload.name}' already exists for project '{project_id}'.",
+            f"MCP server '{name}' already exists for project '{project_id}'.",
         ) from exc
     except mcp_service.InvalidServerConfigError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     _refresh_runtime(runtime, project_id, request)
-    return _to_dto(project_id, payload.name, entry)
+    return _to_dto(project_id, name, entry)
 
 
 @router.patch(
@@ -260,31 +255,6 @@ def delete_mcp_server(
 
 
 @router.post(
-    "/projects/{project_id:path}/mcp/test",
-    response_model=MCPServerTestResultDTO,
-    dependencies=[Depends(require_not_read_only)],
-)
-def test_mcp_server_draft(
-    project_id: str,
-    payload: MCPServerTestRequest,
-    config: Config = Depends(get_config),
-) -> MCPServerTestResultDTO:
-    """Validate a draft MCP server config without saving it."""
-    require_project(config, project_id)
-    return _test_result(
-        payload.name,
-        MCPServerEntry(
-            transport=payload.transport,
-            command=payload.command,
-            args=list(payload.args),
-            env=dict(payload.env),
-            enabled=payload.enabled,
-            startup_timeout_seconds=payload.startup_timeout_seconds,
-        ),
-    )
-
-
-@router.post(
     "/projects/{project_id:path}/mcp/{name}/test",
     response_model=MCPServerTestResultDTO,
     dependencies=[Depends(require_not_read_only)],
@@ -292,12 +262,18 @@ def test_mcp_server_draft(
 def test_mcp_server(
     project_id: str,
     name: str,
+    payload: MCPServerEntry | None = Body(None),
     config: Config = Depends(get_config),
 ) -> MCPServerTestResultDTO:
-    """Spawn the configured MCP server, complete the handshake, list its
-    tools, then close. Lets the UI verify a fresh entry without restarting
-    the running fleet."""
+    """Spawn an MCP server, complete the handshake, list its tools, then close.
+
+    With a body, validates a draft entry without persisting it (used by the
+    Settings UI before save). Without a body, looks up the saved entry and
+    spawns a fresh subprocess for it — the live runtime fleet is not touched
+    either way."""
     require_project(config, project_id)
+    if payload is not None:
+        return _test_result(name, payload)
     try:
         entry = mcp_service.get_server(config, project_id, name)
     except mcp_service.UnknownServerError as exc:
@@ -360,16 +336,24 @@ def apply_mcp_preset(
     The preset supplies `command`/`args`/`transport`; the caller supplies env
     values (typically an API token) via `payload.env`. Returns 400 if the
     preset or a required env var is missing, 409 on name conflict."""
+    from docket.config.mcp_presets import apply_preset, get_preset
+
     require_project(config, project_id)
     try:
-        server_name, entry = mcp_service.add_server_from_preset(
+        preset = get_preset(preset_id)
+        entry = apply_preset(preset_id, env=dict(payload.env), enabled=payload.enabled)
+        server_name = (payload.name or preset.default_name).strip() or preset.default_name
+        entry = mcp_service.add_server(
             config,
             paths,
             project_id,
-            preset_id,
-            name=payload.name,
-            env=dict(payload.env),
-            enabled=payload.enabled,
+            server_name,
+            command=entry.command,
+            args=list(entry.args),
+            env=dict(entry.env),
+            transport=entry.transport,
+            enabled=entry.enabled,
+            startup_timeout_seconds=entry.startup_timeout_seconds,
         )
     except mcp_service.UnknownPresetError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown MCP preset '{preset_id}'") from exc

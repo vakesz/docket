@@ -3,16 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 
 import typer
-from rich.console import Console
 
+from docket.cli._console import console
 from docket.cli.commands._utils import DryRun
 from docket.cli.confirm import apply_mutation
 from docket.cli.context import prepare_or_wizard
 from docket.cli.guard import abort_if_read_only
 from docket.core.model import CreateFields, ItemKind
 from docket.core.mutation import ItemCreate
-
-console = Console()
 
 _KIND_HELP = f"Kind: {', '.join(k.value for k in ItemKind)}"
 

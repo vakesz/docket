@@ -8,17 +8,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from docket.api.auth import require_bearer
 from docket.api.deps import get_runtime, require_not_read_only
 from docket.api.runtime import RuntimeState, rebuild_agent
 from docket.api.schemas import ProviderDTO, ProviderSwitchRequest
 from docket.providers.registry import spec as provider_spec
 
-router = APIRouter(
-    prefix="/providers",
-    tags=["providers"],
-    dependencies=[Depends(require_bearer)],
-)
+router = APIRouter(prefix="/providers", tags=["providers"])
 
 
 def _to_dto(runtime: RuntimeState, key: str) -> ProviderDTO:

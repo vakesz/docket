@@ -11,12 +11,11 @@ import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from docket.api.auth import require_bearer
 from docket.api.deps import get_active_provider_key, get_conn, require_not_read_only
 from docket.api.schemas import ItemDTO, PinnedStatusDTO
 from docket.storage.repos import item_repo, watchlist_repo
 
-router = APIRouter(tags=["pins"], dependencies=[Depends(require_bearer)])
+router = APIRouter(tags=["pins"])
 
 
 @router.get("/items/{item_id:path}/pinned", response_model=PinnedStatusDTO)

@@ -3,10 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import typer
-from rich.console import Console
 from rich.table import Table
 
-console = Console()
+from docket.cli._console import console
 
 
 @dataclass(frozen=True)

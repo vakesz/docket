@@ -9,17 +9,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from docket.api.auth import require_bearer
 from docket.api.deps import get_runtime, require_not_read_only
 from docket.api.runtime import RuntimeState
 from docket.api.schemas import ScopeDTO, ScopeSwitchRequest
 from docket.config.models import ScopeFilter
 
-router = APIRouter(
-    prefix="/scopes",
-    tags=["scopes"],
-    dependencies=[Depends(require_bearer)],
-)
+router = APIRouter(prefix="/scopes", tags=["scopes"])
 
 
 def _scope_dto(name: str, sf: ScopeFilter, *, active: bool) -> ScopeDTO:

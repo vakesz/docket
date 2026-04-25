@@ -1,8 +1,8 @@
 """Scripted fake LLM client for agent tests.
 
 Each "turn" is a list of StreamDeltas to emit. The fake returns the next
-scripted turn on every `complete`/`stream` call, so tests can simulate
-multi-round tool-use sequences deterministically.
+scripted turn on every `stream` call, so tests can simulate multi-round
+tool-use sequences deterministically.
 """
 
 from __future__ import annotations
@@ -10,10 +10,8 @@ from __future__ import annotations
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 
-from docket.agent.llm_client import accumulate_stream
 from docket.agent.types import (
     ChatMessage,
-    CompletionResult,
     StreamDelta,
     ToolCallDelta,
     ToolSchema,
@@ -61,15 +59,6 @@ class FakeLlmClient:
     script: list[ScriptedTurn] = field(default_factory=list)
     calls: list[list[ChatMessage]] = field(default_factory=list)
     tool_schemas_seen: list[list[ToolSchema]] = field(default_factory=list)
-
-    def complete(
-        self,
-        messages: list[ChatMessage],
-        tools: list[ToolSchema],
-        *,
-        temperature: float = 0.2,
-    ) -> CompletionResult:
-        return accumulate_stream(self.stream(messages, tools, temperature=temperature))
 
     def stream(
         self,

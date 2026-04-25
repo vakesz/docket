@@ -8,15 +8,13 @@ filters on top and don't create separate projects.
 from __future__ import annotations
 
 import typer
-from rich.console import Console
 from rich.table import Table
 
+from docket.cli._console import console
 from docket.cli.context import prepare_or_wizard
 from docket.core.model import project_id_for
 from docket.core.services import project_service
 from docket.storage.repos import project_repo
-
-console = Console()
 
 project_app = typer.Typer(
     name="project",

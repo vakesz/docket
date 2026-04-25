@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import typer
-from rich.console import Console
 
 from docket.cli.commands.help import help_command
 from docket.cli.commands.list import list_command
@@ -18,8 +17,6 @@ from docket.cli.commands.source import source_app
 from docket.cli.commands.status import status_command
 from docket.cli.commands.sync import sync_command
 from docket.cli.commands.transition import transition_command
-
-console = Console()
 
 app = typer.Typer(
     name="docket",

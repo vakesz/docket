@@ -9,11 +9,11 @@ human-curated reference material (requirements, design notes, runbooks).
 from __future__ import annotations
 
 import typer
-from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
+from docket.cli._console import console
 from docket.cli.commands._utils import (
     format_updated,
     read_body,
@@ -23,8 +23,6 @@ from docket.cli.commands._utils import (
 from docket.cli.context import Context, prepare_or_wizard
 from docket.core.model import Source
 from docket.storage.repos import source_repo
-
-console = Console()
 
 source_app = typer.Typer(
     name="source",

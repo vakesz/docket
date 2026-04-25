@@ -4,16 +4,14 @@ import os
 import secrets
 
 import typer
-from rich.console import Console
 
+from docket.cli._console import console
 from docket.cli.commands._llm import build_llm_client
 from docket.cli.context import prepare
 from docket.config import ConfigMissingError
 from docket.config.env import get_read_only, get_setup_token
 from docket.config.paths import resolve_paths
 from docket.telemetry import init_logging
-
-console = Console()
 
 _VALID_LOG_LEVELS = {"critical", "error", "warning", "info", "debug", "trace"}
 

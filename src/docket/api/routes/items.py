@@ -6,7 +6,6 @@ import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from docket.api.auth import require_bearer
 from docket.api.deps import (
     get_active_provider_key,
     get_conn,
@@ -57,11 +56,7 @@ def get_item_or_fetch(
     return fresh
 
 
-router = APIRouter(
-    prefix="/items",
-    tags=["items"],
-    dependencies=[Depends(require_bearer)],
-)
+router = APIRouter(prefix="/items", tags=["items"])
 
 
 @router.get("", response_model=list[ItemDTO])
@@ -118,7 +113,7 @@ def search_items(
     stripped = q.strip()
     if not stripped:
         return []
-    ids = search_repo.search_similar(conn, stripped, provider_key=provider_key)
+    ids = search_repo.search(conn, stripped, provider_key=provider_key, operator="OR")
     out: list[ItemDTO] = []
     for iid in ids:
         if len(out) >= limit:

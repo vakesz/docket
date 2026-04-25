@@ -101,9 +101,7 @@ def _parse_questions(raw: Any) -> tuple[QuestionItem, ...]:
         if not header:
             raise ValueError(f"questions[{idx}].header is required")
         if len(header) > _HEADER_LIMIT:
-            raise ValueError(
-                f"questions[{idx}].header must be <= {_HEADER_LIMIT} chars"
-            )
+            raise ValueError(f"questions[{idx}].header must be <= {_HEADER_LIMIT} chars")
         multi_select = bool(q.get("multi_select", False))
         opts_raw = q.get("options")
         if not isinstance(opts_raw, list):
@@ -118,9 +116,7 @@ def _parse_questions(raw: Any) -> tuple[QuestionItem, ...]:
                 raise ValueError(f"questions[{idx}].options[{oidx}] must be an object")
             label = str(opt.get("label", "")).strip()
             if not label:
-                raise ValueError(
-                    f"questions[{idx}].options[{oidx}].label is required"
-                )
+                raise ValueError(f"questions[{idx}].options[{oidx}].label is required")
             description = str(opt.get("description", "") or "")
             opts.append(QuestionOption(label=label, description=description))
         labels = [o.label for o in opts]

@@ -10,16 +10,11 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from docket.agent import prompt_templates
-from docket.api.auth import require_bearer
 from docket.api.deps import get_paths, require_not_read_only
 from docket.api.schemas import PromptDTO, PromptSummaryDTO, PromptUpdateRequest
 from docket.config.paths import Paths
 
-router = APIRouter(
-    prefix="/prompts",
-    tags=["prompts"],
-    dependencies=[Depends(require_bearer)],
-)
+router = APIRouter(prefix="/prompts", tags=["prompts"])
 
 
 def _is_customized(paths: Paths, template: prompt_templates.PromptTemplate) -> bool:

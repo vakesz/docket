@@ -387,9 +387,7 @@ async def test_free_text_while_question_pending_redirects_as_other(chat_env) -> 
 
     msgs = message_repo.list_for_conversation(
         ctx.conn,
-        conversation_repo.list_for_item(
-            ctx.conn, "S-1", provider_key=ctx.provider_key
-        )[0].id,
+        conversation_repo.list_for_item(ctx.conn, "S-1", provider_key=ctx.provider_key)[0].id,
     )
     payload = json.loads(msgs[2].content)
     assert payload["status"] == "answered"

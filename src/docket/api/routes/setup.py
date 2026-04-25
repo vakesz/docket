@@ -104,7 +104,8 @@ def test_llm(req: SetupTestLlmRequest) -> SetupTestResultDTO:
     if not req.endpoint or not req.api_key:
         return SetupTestResultDTO(ok=False, error="endpoint and api_key are required")
     try:
-        from docket.agent.llm_client import AzureOpenAIClient
+        from docket.agent.llm_client import AzureOpenAIClient, accumulate_stream
+        from docket.agent.types import ChatMessage
     except ImportError as e:
         return SetupTestResultDTO(ok=False, error=f"openai SDK not installed: {e}")
     try:
@@ -114,10 +115,7 @@ def test_llm(req: SetupTestLlmRequest) -> SetupTestResultDTO:
             deployment=req.deployment,
             api_version=req.api_version,
         )
-        client.complete(
-            messages=[{"role": "user", "content": "ping"}],  # type: ignore[list-item]
-            tools=[],
-        )
+        accumulate_stream(client.stream([ChatMessage(role="user", content="ping")], []))
     except Exception as e:
         return SetupTestResultDTO(ok=False, error=f"{type(e).__name__}: {e}")
     return SetupTestResultDTO(ok=True)

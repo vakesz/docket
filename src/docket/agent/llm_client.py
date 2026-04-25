@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Iterable, Iterator
-from typing import Any, Literal, Protocol, cast
+from typing import Any, Protocol
 from urllib.parse import parse_qs, urlparse
 
 from docket.agent.types import (
@@ -37,15 +37,10 @@ class LlmClient(Protocol):
     """Structural interface every LLM client must satisfy.
 
     The agent depends on this Protocol, not on the concrete client, so
-    tests can substitute a scripted fake."""
-
-    def complete(
-        self,
-        messages: list[ChatMessage],
-        tools: list[ToolSchema],
-        *,
-        temperature: float | None = None,
-    ) -> CompletionResult: ...
+    tests can substitute a scripted fake. Non-streaming consumers wrap
+    `stream(...)` with `accumulate_stream(...)` — there's a single
+    happy path through the SDK so streaming and non-streaming usage
+    can't drift."""
 
     def stream(
         self,
@@ -93,31 +88,6 @@ class AzureOpenAIClient:
         )
 
     # -- public API ---------------------------------------------------------
-
-    def complete(
-        self,
-        messages: list[ChatMessage],
-        tools: list[ToolSchema],
-        *,
-        temperature: float | None = None,
-    ) -> CompletionResult:
-        kwargs: dict[str, Any] = {
-            "model": self._deployment,
-            "messages": [_to_openai_message(m) for m in messages],
-            "tools": [_to_openai_tool(t) for t in tools] or None,
-            "stream": False,
-        }
-        if temperature is not None:
-            kwargs["temperature"] = temperature
-        response = self._client.chat.completions.create(**kwargs)
-        choice = response.choices[0]
-        msg = _from_openai_message(choice.message)
-        usage = _from_openai_usage(response.usage)
-        return CompletionResult(
-            message=msg,
-            usage=usage,
-            finish_reason=choice.finish_reason or "stop",
-        )
 
     def stream(
         self,
@@ -194,21 +164,6 @@ def _to_openai_tool(t: ToolSchema) -> dict[str, Any]:
             "parameters": t.parameters,
         },
     }
-
-
-def _from_openai_message(msg: Any) -> ChatMessage:
-    # OpenAI-compatible servers always return one of these four roles for a
-    # chat-completion choice; narrow to the Literal so ChatMessage accepts it.
-    role = cast(Literal["system", "user", "assistant", "tool"], msg.role or "assistant")
-    content = msg.content or ""
-    tool_calls: list[ToolCall] = []
-    for tc in msg.tool_calls or []:
-        try:
-            args = json.loads(tc.function.arguments or "{}")
-        except json.JSONDecodeError:
-            args = {}
-        tool_calls.append(ToolCall(id=tc.id, name=tc.function.name, arguments=args))
-    return ChatMessage(role=role, content=content, tool_calls=tool_calls)
 
 
 def _from_openai_usage(u: Any) -> Usage:

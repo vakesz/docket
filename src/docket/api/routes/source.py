@@ -16,7 +16,6 @@ import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from docket.api.auth import require_bearer
 from docket.api.deps import (
     get_config,
     get_conn,
@@ -34,10 +33,7 @@ from docket.api.schemas import (
 from docket.config.models import Config
 from docket.storage.repos import source_repo
 
-router = APIRouter(
-    tags=["sources"],
-    dependencies=[Depends(require_bearer)],
-)
+router = APIRouter(tags=["sources"])
 
 
 @router.get(

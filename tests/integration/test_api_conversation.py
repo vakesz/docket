@@ -183,9 +183,7 @@ def test_answer_endpoint_resumes_conversation(env: ApiEnv) -> None:
         json={"text": "advise me"},
     ) as resp:
         events = parse_sse(resp.iter_lines())
-    qid = json.loads(
-        next(e for e in events if e["event"] == "question")["data"]
-    )["id"]
+    qid = json.loads(next(e for e in events if e["event"] == "question")["data"])["id"]
 
     with client.stream(
         "POST",
@@ -200,11 +198,7 @@ def test_answer_endpoint_resumes_conversation(env: ApiEnv) -> None:
         answer_events = parse_sse(resp.iter_lines())
 
     # The resumed turn streams the model's reply, then `done`.
-    text = "".join(
-        json.loads(e["data"])["text"]
-        for e in answer_events
-        if e["event"] == "delta"
-    )
+    text = "".join(json.loads(e["data"])["text"] for e in answer_events if e["event"] == "delta")
     assert text == "got it"
     assert any(e["event"] == "done" for e in answer_events)
 
@@ -243,9 +237,7 @@ def test_answer_endpoint_rejects_wrong_arity(env: ApiEnv) -> None:
         json={"text": "?"},
     ) as resp:
         events = parse_sse(resp.iter_lines())
-    qid = json.loads(
-        next(e for e in events if e["event"] == "question")["data"]
-    )["id"]
+    qid = json.loads(next(e for e in events if e["event"] == "question")["data"])["id"]
 
     resp = client.post(
         "/items/S-1/conversation/answer",

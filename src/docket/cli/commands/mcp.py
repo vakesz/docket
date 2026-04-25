@@ -10,15 +10,13 @@ project switch, or a server restart).
 from __future__ import annotations
 
 import typer
-from rich.console import Console
 from rich.table import Table
 
 from docket.agent.mcp import MCPClient
+from docket.cli._console import console
 from docket.cli.context import prepare_or_wizard
 from docket.config.models import MCPServerEntry
 from docket.core.services import mcp_service
-
-console = Console()
 
 mcp_app = typer.Typer(
     name="mcp",
@@ -170,19 +168,27 @@ def mcp_add_preset(
     from docket.config.mcp_presets import (
         MissingPresetEnvError,
         UnknownPresetError,
+        apply_preset,
+        get_preset,
     )
 
     with prepare_or_wizard() as ctx:
         project = ctx.active_project()
         try:
-            server_name, _ = mcp_service.add_server_from_preset(
+            preset = get_preset(preset_id)
+            entry = apply_preset(preset_id, env=_split_env(env), enabled=enabled)
+            server_name = (name or preset.default_name).strip() or preset.default_name
+            mcp_service.add_server(
                 ctx.config,
                 ctx.paths,
                 project.id,
-                preset_id,
-                name=name,
-                env=_split_env(env),
-                enabled=enabled,
+                server_name,
+                command=entry.command,
+                args=list(entry.args),
+                env=dict(entry.env),
+                transport=entry.transport,
+                enabled=entry.enabled,
+                startup_timeout_seconds=entry.startup_timeout_seconds,
             )
         except UnknownPresetError as exc:
             console.print(

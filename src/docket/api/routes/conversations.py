@@ -20,7 +20,6 @@ from sse_starlette.sse import EventSourceResponse, ServerSentEvent  # type: igno
 
 from docket.agent.loop import AgentLoop
 from docket.agent.types import ChatMessage, StreamDelta
-from docket.api.auth import require_bearer
 from docket.api.deps import (
     get_active_provider_key,
     get_conn,
@@ -50,11 +49,7 @@ from docket.storage.repos import conversation_repo, message_repo
 
 log = logging.getLogger(__name__)
 
-router = APIRouter(
-    prefix="/items/{item_id:path}/conversation",
-    tags=["conversations"],
-    dependencies=[Depends(require_bearer)],
-)
+router = APIRouter(prefix="/items/{item_id:path}/conversation", tags=["conversations"])
 
 
 def _message_dto(m: ChatMessage) -> ChatRoleDTO:
@@ -223,8 +218,7 @@ async def answer_question(
         )
 
     answers = tuple(
-        QuestionAnswer(selected=tuple(a.selected), other_text=a.other)
-        for a in payload.answers
+        QuestionAnswer(selected=tuple(a.selected), other_text=a.other) for a in payload.answers
     )
 
     generator = _stream_answer(
@@ -320,9 +314,7 @@ async def _stream_turn(
 ) -> AsyncIterator[ServerSentEvent]:
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue[ServerSentEvent | None] = asyncio.Queue()
-    on_delta, on_message = _make_callbacks(
-        loop=loop, queue=queue, store=store, questions=questions
-    )
+    on_delta, on_message = _make_callbacks(loop=loop, queue=queue, store=store, questions=questions)
 
     def _put_threadsafe(event: ServerSentEvent | None) -> None:
         asyncio.run_coroutine_threadsafe(queue.put(event), loop)
@@ -392,9 +384,7 @@ async def _stream_answer(
     fresh user turn."""
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue[ServerSentEvent | None] = asyncio.Queue()
-    on_delta, on_message = _make_callbacks(
-        loop=loop, queue=queue, store=store, questions=questions
-    )
+    on_delta, on_message = _make_callbacks(loop=loop, queue=queue, store=store, questions=questions)
 
     def _put_threadsafe(event: ServerSentEvent | None) -> None:
         asyncio.run_coroutine_threadsafe(queue.put(event), loop)

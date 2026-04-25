@@ -11,7 +11,6 @@ import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from docket.api.auth import require_bearer
 from docket.api.deps import get_config, get_conn, get_paths, get_runtime, require_not_read_only
 from docket.api.runtime import RuntimeState, rebuild_agent
 from docket.api.schemas import ProjectDTO, ProjectUpdateRequest
@@ -20,11 +19,7 @@ from docket.config.paths import Paths
 from docket.core.model import project_id_for
 from docket.core.services import project_service
 
-router = APIRouter(
-    prefix="/projects",
-    tags=["projects"],
-    dependencies=[Depends(require_bearer)],
-)
+router = APIRouter(prefix="/projects", tags=["projects"])
 
 
 @router.get("", response_model=list[ProjectDTO])

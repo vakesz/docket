@@ -75,7 +75,11 @@ def build_tool_registry(
         )
         if project_id:
             register_memory_mutating_tools(registry, conn=conn, store=store, project_id=project_id)
-    if question_store is not None and conversation_id is not None and current_tool_call_id is not None:
+    if (
+        question_store is not None
+        and conversation_id is not None
+        and current_tool_call_id is not None
+    ):
         register_ask_user_tool(
             registry,
             store=question_store,

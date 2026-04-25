@@ -125,9 +125,7 @@ def test_ask_user_appended_last_in_read_write_with_project(conn: object) -> None
     """`ask_user` is registered after every other tool so adding it to an
     existing install does not invalidate the prompt-prefix cache. It is also
     available regardless of read-only — questions don't mutate provider state."""
-    names = _names(
-        conn, read_only=False, project_id="primary", with_question_store=True
-    )
+    names = _names(conn, read_only=False, project_id="primary", with_question_store=True)
     assert names[-1] == "ask_user"
     assert names == [
         "get_item",

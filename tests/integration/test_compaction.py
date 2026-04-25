@@ -8,8 +8,8 @@ from docket.agent.loop import AgentLoop
 from docket.agent.tool_defs import register_readonly_tools
 from docket.agent.tools import ToolRegistry
 from docket.agent.types import Usage
-from docket.core.services import compaction_service, conversation_service
-from docket.core.services.compaction_service import SUMMARY_MARKER
+from docket.core.services import conversation_service
+from docket.core.services.conversation_service import SUMMARY_MARKER
 from docket.storage import init_db
 from docket.storage.repos import conversation_repo, message_repo
 from tests.conftest import MakeItem
@@ -93,7 +93,7 @@ def test_above_threshold_compacts_old_turns(env) -> None:
     # A summary row was added; the oldest rows got flipped to compacted=1.
     assert any(SUMMARY_MARKER in (m.content or "") for m in live)
     # Live now = summary + kept tail + this turn's (user + assistant).
-    assert len(live) <= compaction_service.TAIL_KEEP_MESSAGES + 3
+    assert len(live) <= conversation_service.TAIL_KEEP_MESSAGES + 3
 
     # Full history (live + compacted) still has everything — transcript intact.
     full = message_repo.list_for_conversation(conn, convo.id, live_only=False)
@@ -110,7 +110,7 @@ def test_compact_now_keeps_tail_intact(env) -> None:
     convo = conversation_repo.get_active_for_item(conn, item.id, provider_key="")
     assert convo is not None
 
-    result = compaction_service.compact_now(conn, llm=client, convo_id=convo.id, tail_keep=4)
+    result = conversation_service.compact_now(conn, llm=client, convo_id=convo.id, tail_keep=4)
     assert result.compacted_message_count > 0
     assert result.summary_message_id is not None
 
@@ -128,6 +128,6 @@ def test_compact_now_noop_when_nothing_to_fold(env) -> None:
 
     convo = conversation_repo.get_active_for_item(conn, item.id, provider_key="")
     assert convo is not None
-    result = compaction_service.compact_now(conn, llm=client, convo_id=convo.id, tail_keep=6)
+    result = conversation_service.compact_now(conn, llm=client, convo_id=convo.id, tail_keep=6)
     assert result.compacted_message_count == 0
     assert result.summary_message_id is None

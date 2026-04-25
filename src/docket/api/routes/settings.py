@@ -26,7 +26,6 @@ from docket.api._provider_setup import (
     provider_type_dtos,
     test_provider_draft,
 )
-from docket.api.auth import require_bearer
 from docket.api.deps import get_paths, get_runtime, require_not_read_only
 from docket.api.routes.setup import _write_env_key
 from docket.api.runtime import RuntimeState
@@ -51,11 +50,7 @@ from docket.providers import registry
 from docket.providers.registry import UnknownProviderError
 from docket.providers.registry import build as build_provider
 
-router = APIRouter(
-    prefix="/settings",
-    tags=["settings"],
-    dependencies=[Depends(require_bearer)],
-)
+router = APIRouter(prefix="/settings", tags=["settings"])
 
 
 @router.get("", response_model=SettingsDTO)

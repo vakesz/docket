@@ -141,9 +141,9 @@ class NewItemModal(ModalScreen["NewItemRequest | None"]):
         if len(stripped) < 3:
             # Typing ahead — don't spam the user with noise matches.
             return
-        ids = search_repo.search_similar(self._conn, stripped, provider_key=self._provider_key)[
-            :_DUPLICATE_LIMIT
-        ]
+        ids = search_repo.search(
+            self._conn, stripped, provider_key=self._provider_key, operator="OR"
+        )[:_DUPLICATE_LIMIT]
         if not ids:
             return
         container.mount(Static(f"[b]possible duplicates[/b] ({len(ids)}):"))

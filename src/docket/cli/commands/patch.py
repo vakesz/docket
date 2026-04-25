@@ -3,16 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 
 import typer
-from rich.console import Console
 
+from docket.cli._console import console
 from docket.cli.commands._utils import DryRun
 from docket.cli.confirm import apply_mutation
 from docket.cli.context import prepare_or_wizard
 from docket.cli.guard import abort_if_read_only
 from docket.core.mutation import DescriptionPatch
 from docket.core.services import mutation_service
-
-console = Console()
 
 
 def patch_command(

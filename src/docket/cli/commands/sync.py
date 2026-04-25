@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import typer
-from rich.console import Console
 
+from docket.cli._console import console
 from docket.cli.context import prepare_or_wizard
 from docket.core.services import sync_service
-
-console = Console()
 
 
 def sync_command(

@@ -121,7 +121,9 @@ def test_history_feeds_back_into_prompt(env) -> None:
 # -- ask_user / question flow ----------------------------------------------
 
 
-def _build_ask_user_loop(conn, item, question_store: QuestionStore) -> tuple[AgentLoop, FakeLlmClient]:
+def _build_ask_user_loop(
+    conn, item, question_store: QuestionStore
+) -> tuple[AgentLoop, FakeLlmClient]:
     """Loop pre-wired with the readonly toolset plus `ask_user`. Returns the
     loop and the (still-empty) FakeLlmClient so the caller can script turns."""
     registry = ToolRegistry()
@@ -251,9 +253,7 @@ def test_submit_question_answer_rejects_mismatched_id(env) -> None:
     loop, client = _build_ask_user_loop(conn, item, qstore)
     client.script = [tool_turn("tc-q1", "ask_user", _ASK_ARGS)]
 
-    first = conversation_service.send_user_message(
-        conn, loop, item.id, "?", question_store=qstore
-    )
+    first = conversation_service.send_user_message(conn, loop, item.id, "?", question_store=qstore)
     assert first.pending_question is not None
 
     with pytest.raises(KeyError):

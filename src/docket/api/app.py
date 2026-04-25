@@ -130,29 +130,34 @@ def create_app(
 
     rebuild_agent(app, runtime)
 
+    # Every live-mode router requires `Depends(require_bearer)`. Attaching it
+    # at the include site keeps individual routers from re-importing the auth
+    # gate. The setup router uses `require_setup_token` per-route instead and
+    # is intentionally bearer-free here.
+    bearer = [Depends(require_bearer)]
     # Sub-routers keyed off `/items/{item_id:path}/…` must be registered
     # before the catch-all item routes, otherwise the `:path` converter
     # on the plain `/{item_id}` route greedy-matches and swallows
     # `/conversation`, `/pinned`, etc. into the item id.
-    app.include_router(mutations_routes.router)
-    app.include_router(conversations_routes.router)
-    app.include_router(pins_routes.router)
-    app.include_router(suggestions_routes.router)
-    app.include_router(items_routes.router)
-    app.include_router(prompts_routes.router)
-    app.include_router(settings_routes.router)
-    app.include_router(scopes_routes.router)
-    app.include_router(providers_routes.router)
+    app.include_router(mutations_routes.router, dependencies=bearer)
+    app.include_router(conversations_routes.router, dependencies=bearer)
+    app.include_router(pins_routes.router, dependencies=bearer)
+    app.include_router(suggestions_routes.router, dependencies=bearer)
+    app.include_router(items_routes.router, dependencies=bearer)
+    app.include_router(prompts_routes.router, dependencies=bearer)
+    app.include_router(settings_routes.router, dependencies=bearer)
+    app.include_router(scopes_routes.router, dependencies=bearer)
+    app.include_router(providers_routes.router, dependencies=bearer)
     # Memory routes must come before `projects_routes` because the catch-all
     # `/projects/{project_id:path}` greedy-matches and would swallow
     # `/projects/{project_id}/memory` into the project_id. Same applies to
     # source and mcp routes.
-    app.include_router(memory_routes.router)
-    app.include_router(source_routes.router)
-    app.include_router(mcp_routes.router)
-    app.include_router(projects_routes.router)
-    app.include_router(sync_routes.router)
-    app.include_router(status_routes.router)
+    app.include_router(memory_routes.router, dependencies=bearer)
+    app.include_router(source_routes.router, dependencies=bearer)
+    app.include_router(mcp_routes.router, dependencies=bearer)
+    app.include_router(projects_routes.router, dependencies=bearer)
+    app.include_router(sync_routes.router, dependencies=bearer)
+    app.include_router(status_routes.router, dependencies=bearer)
     app.include_router(setup_routes.router)
 
     @app.get("/health", response_model=HealthDTO, tags=["health"])

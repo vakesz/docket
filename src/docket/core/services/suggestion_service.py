@@ -27,7 +27,7 @@ import sqlite3
 from dataclasses import dataclass, field
 from typing import Any
 
-from docket.agent.llm_client import LlmClient
+from docket.agent.llm_client import LlmClient, accumulate_stream
 from docket.agent.prompt import build_prefix
 from docket.agent.types import ChatMessage
 from docket.core.model import Item, TransitionIntent
@@ -97,7 +97,7 @@ def suggest_next_action(
     comments = comment_repo.list_comments(conn, item.id, provider_key=item.provider_key)
     prefix = build_prefix(item, comments)
     messages: list[ChatMessage] = [*prefix, ChatMessage(role="user", content=_USER_PROMPT)]
-    result = llm.complete(messages, [])
+    result = accumulate_stream(llm.stream(messages, []))
     raw = (result.message.content or "").strip()
     return _parse(item.id, raw)
 

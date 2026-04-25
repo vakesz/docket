@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import typer
-from rich.console import Console
 
+from docket.cli._console import console
 from docket.cli.commands._llm import build_llm_client
 from docket.cli.context import prepare_or_wizard
 from docket.config.env import get_read_only
 from docket.core.model import ItemKind
-
-console = Console()
 
 
 def open_command(

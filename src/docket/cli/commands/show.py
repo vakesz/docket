@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import typer
-from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 
+from docket.cli._console import console
 from docket.cli.context import prepare_or_wizard
 from docket.storage.repos import comment_repo, item_repo
-
-console = Console()
 
 
 def show_command(id: str = typer.Argument(..., help="Work item ID.")) -> None:

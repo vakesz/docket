@@ -93,9 +93,8 @@ def _manager(client: TestClient) -> MCPManager:
     return mgr
 
 
-def _server_payload(*, name: str = "fake", enabled: bool = True) -> dict[str, object]:
+def _server_payload(*, enabled: bool = True) -> dict[str, object]:
     return {
-        "name": name,
         "command": sys.executable,
         "args": ["-m", "tests.fakes.mcp_server"],
         "env": {},
@@ -116,7 +115,7 @@ def test_list_when_empty(client: TestClient) -> None:
 
 def test_create_then_get_round_trips(client: TestClient) -> None:
     pid = _pid()
-    resp = client.post(f"/projects/{pid}/mcp", json=_server_payload(), headers=AUTH_HEADERS)
+    resp = client.post(f"/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
     assert resp.status_code == 201, resp.text
     body = resp.json()
     assert body["name"] == "fake"
@@ -130,14 +129,14 @@ def test_create_then_get_round_trips(client: TestClient) -> None:
 
 def test_create_duplicate_is_409(client: TestClient) -> None:
     pid = _pid()
-    client.post(f"/projects/{pid}/mcp", json=_server_payload(), headers=AUTH_HEADERS)
-    again = client.post(f"/projects/{pid}/mcp", json=_server_payload(), headers=AUTH_HEADERS)
+    client.post(f"/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
+    again = client.post(f"/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
     assert again.status_code == 409
 
 
 def test_patch_updates_specific_fields(client: TestClient) -> None:
     pid = _pid()
-    client.post(f"/projects/{pid}/mcp", json=_server_payload(), headers=AUTH_HEADERS)
+    client.post(f"/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
     resp = client.patch(
         f"/projects/{pid}/mcp/fake",
         json={"enabled": False, "startup_timeout_seconds": 7.0},
@@ -153,14 +152,14 @@ def test_patch_updates_specific_fields(client: TestClient) -> None:
 
 def test_patch_requires_at_least_one_field(client: TestClient) -> None:
     pid = _pid()
-    client.post(f"/projects/{pid}/mcp", json=_server_payload(), headers=AUTH_HEADERS)
+    client.post(f"/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
     resp = client.patch(f"/projects/{pid}/mcp/fake", json={}, headers=AUTH_HEADERS)
     assert resp.status_code == 400
 
 
 def test_delete_removes_entry(client: TestClient) -> None:
     pid = _pid()
-    client.post(f"/projects/{pid}/mcp", json=_server_payload(), headers=AUTH_HEADERS)
+    client.post(f"/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
     resp = client.delete(f"/projects/{pid}/mcp/fake", headers=AUTH_HEADERS)
     assert resp.status_code == 204
     assert client.get(f"/projects/{pid}/mcp/fake", headers=AUTH_HEADERS).status_code == 404
@@ -168,7 +167,7 @@ def test_delete_removes_entry(client: TestClient) -> None:
 
 def test_test_endpoint_starts_real_server(client: TestClient) -> None:
     pid = _pid()
-    client.post(f"/projects/{pid}/mcp", json=_server_payload(), headers=AUTH_HEADERS)
+    client.post(f"/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
     resp = client.post(f"/projects/{pid}/mcp/fake/test", headers=AUTH_HEADERS)
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -183,8 +182,8 @@ def test_test_endpoint_starts_real_server(client: TestClient) -> None:
 def test_draft_test_endpoint_validates_without_persisting(client: TestClient) -> None:
     pid = _pid()
     resp = client.post(
-        f"/projects/{pid}/mcp/test",
-        json=_server_payload(name="draft"),
+        f"/projects/{pid}/mcp/draft/test",
+        json=_server_payload(),
         headers=AUTH_HEADERS,
     )
     assert resp.status_code == 200, resp.text
@@ -198,7 +197,6 @@ def test_draft_test_endpoint_validates_without_persisting(client: TestClient) ->
 def test_test_endpoint_reports_failure_for_broken_command(client: TestClient) -> None:
     pid = _pid()
     payload = {
-        "name": "broken",
         "command": sys.executable,
         "args": ["-c", "import sys; sys.exit(1)"],
         "env": {},
@@ -206,7 +204,7 @@ def test_test_endpoint_reports_failure_for_broken_command(client: TestClient) ->
         "enabled": True,
         "startup_timeout_seconds": 2.0,
     }
-    client.post(f"/projects/{pid}/mcp", json=payload, headers=AUTH_HEADERS)
+    client.post(f"/projects/{pid}/mcp/broken", json=payload, headers=AUTH_HEADERS)
     resp = client.post(f"/projects/{pid}/mcp/broken/test", headers=AUTH_HEADERS)
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -216,9 +214,9 @@ def test_test_endpoint_reports_failure_for_broken_command(client: TestClient) ->
 
 def test_draft_test_endpoint_reports_invalid_transport(client: TestClient) -> None:
     pid = _pid()
-    payload = _server_payload(name="draft")
+    payload = _server_payload()
     payload["transport"] = "sse"
-    resp = client.post(f"/projects/{pid}/mcp/test", json=payload, headers=AUTH_HEADERS)
+    resp = client.post(f"/projects/{pid}/mcp/draft/test", json=payload, headers=AUTH_HEADERS)
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["ok"] is False
@@ -239,7 +237,7 @@ def test_unknown_server_returns_404(client: TestClient) -> None:
 def test_routes_require_auth(client: TestClient) -> None:
     pid = _pid()
     assert client.get(f"/projects/{pid}/mcp").status_code == 401
-    assert client.post(f"/projects/{pid}/mcp/test", json=_server_payload()).status_code == 401
+    assert client.post(f"/projects/{pid}/mcp/draft/test", json=_server_payload()).status_code == 401
 
 
 def test_create_rebinds_active_runtime_manager(client: TestClient) -> None:
@@ -247,7 +245,7 @@ def test_create_rebinds_active_runtime_manager(client: TestClient) -> None:
     pid = _pid()
     manager = _manager(client)
     assert manager.clients == {}
-    resp = client.post(f"/projects/{pid}/mcp", json=_server_payload(), headers=AUTH_HEADERS)
+    resp = client.post(f"/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
     assert resp.status_code == 201, resp.text
     assert "fake" in manager.clients
     assert manager.active_project_id == pid
@@ -257,7 +255,7 @@ def test_create_rejects_unsupported_transport(client: TestClient) -> None:
     pid = _pid()
     payload = _server_payload()
     payload["transport"] = "sse"
-    resp = client.post(f"/projects/{pid}/mcp", json=payload, headers=AUTH_HEADERS)
+    resp = client.post(f"/projects/{pid}/mcp/fake", json=payload, headers=AUTH_HEADERS)
     assert resp.status_code == 400
     assert "Only 'stdio' is supported" in resp.text
 
@@ -265,7 +263,7 @@ def test_create_rejects_unsupported_transport(client: TestClient) -> None:
 def test_disable_via_patch_drops_running_client(client: TestClient) -> None:
     pid = _pid()
     manager = _manager(client)
-    client.post(f"/projects/{pid}/mcp", json=_server_payload(), headers=AUTH_HEADERS)
+    client.post(f"/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
     assert "fake" in manager.clients
     resp = client.patch(f"/projects/{pid}/mcp/fake", json={"enabled": False}, headers=AUTH_HEADERS)
     assert resp.status_code == 200, resp.text
@@ -275,7 +273,7 @@ def test_disable_via_patch_drops_running_client(client: TestClient) -> None:
 def test_delete_drops_running_client(client: TestClient) -> None:
     pid = _pid()
     manager = _manager(client)
-    client.post(f"/projects/{pid}/mcp", json=_server_payload(), headers=AUTH_HEADERS)
+    client.post(f"/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
     assert "fake" in manager.clients
     resp = client.delete(f"/projects/{pid}/mcp/fake", headers=AUTH_HEADERS)
     assert resp.status_code == 204
@@ -300,7 +298,9 @@ def test_inactive_project_writes_persist_but_do_not_rebind(
     save_config(paths, cfg)
 
     manager = _manager(client)
-    resp = client.post(f"/projects/{other_pid}/mcp", json=_server_payload(), headers=AUTH_HEADERS)
+    resp = client.post(
+        f"/projects/{other_pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS
+    )
     assert resp.status_code == 201, resp.text
     # Active project hasn't changed → live manager unchanged.
     assert manager.clients == {}

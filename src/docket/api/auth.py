@@ -1,13 +1,16 @@
 """Static bearer-token auth for the HTTP surface.
 
-The server carries a single configured token. Compared with `secrets.compare_digest`
-so we don't leak the correct token through timing. A non-empty token is mandatory —
-if the config is empty we refuse to bind at all (enforced in `app.create_app`).
+The server carries a single configured token (or, in bootstrap mode, also a
+setup token). Tokens are compared with `secrets.compare_digest` so the
+correct token doesn't leak through timing. A non-empty bearer token is
+mandatory in live mode — `app.create_app` refuses to bind without one,
+which is why the gate doesn't separately raise 503 for an empty bearer.
 """
 
 from __future__ import annotations
 
 import secrets
+from collections.abc import Callable
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -30,51 +33,45 @@ def _extract_bearer(creds: HTTPAuthorizationCredentials | None) -> str:
     return creds.credentials
 
 
-def require_bearer(
-    request: Request,
-    creds: HTTPAuthorizationCredentials | None = Depends(_scheme),
-) -> None:
-    expected = getattr(request.app.state, "bearer_token", "")
-    if not expected:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="HTTP surface is not configured with a bearer token.",
-        )
-    supplied = _extract_bearer(creds)
-    if not secrets.compare_digest(supplied, expected):
+def _make_token_gate(
+    *attrs: str, missing_detail: str | None = None
+) -> Callable[[Request, HTTPAuthorizationCredentials | None], None]:
+    """Build a FastAPI dependency that accepts any of the named app.state tokens.
+
+    `missing_detail` set means "raise 503 when none of the named tokens are
+    configured" — used by the setup gate where bootstrap mode may genuinely
+    have no tokens. Leave it None when an empty token implies misconfiguration
+    that `create_app` already rejected (the gate will simply 401 instead)."""
+
+    def gate(
+        request: Request,
+        creds: HTTPAuthorizationCredentials | None = Depends(_scheme),
+    ) -> None:
+        candidates = [t for t in (getattr(request.app.state, a, "") for a in attrs) if t]
+        if not candidates and missing_detail is not None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=missing_detail,
+            )
+        supplied = _extract_bearer(creds)
+        for expected in candidates:
+            if secrets.compare_digest(supplied, expected):
+                return
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid bearer token.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    return gate
 
-def require_setup_token(
-    request: Request,
-    creds: HTTPAuthorizationCredentials | None = Depends(_scheme),
-) -> None:
-    """Auth gate for the /setup/* mutating endpoints.
 
-    Accepts either the setup token (bootstrap mode, before config.toml exists)
-    or the regular bearer token (lets an admin re-run setup later). Either is
-    fine because both already represent full control of the server."""
-    setup_token = getattr(request.app.state, "setup_token", "")
-    bearer_token = getattr(request.app.state, "bearer_token", "")
-    if not setup_token and not bearer_token:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Setup surface requires either DOCKET_SETUP_TOKEN or a configured bearer token.",
-        )
-    supplied = _extract_bearer(creds)
-    if setup_token and secrets.compare_digest(supplied, setup_token):
-        return
-    if bearer_token and secrets.compare_digest(supplied, bearer_token):
-        return
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid bearer token.",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+require_bearer = _make_token_gate("bearer_token")
+require_setup_token = _make_token_gate(
+    "setup_token",
+    "bearer_token",
+    missing_detail="Setup surface requires either DOCKET_SETUP_TOKEN or a configured bearer token.",
+)
 
 
 __all__ = ["require_bearer", "require_setup_token"]

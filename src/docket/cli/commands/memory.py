@@ -8,11 +8,11 @@ and `recall_memory` tools and writes them through proposal-confirm.
 from __future__ import annotations
 
 import typer
-from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
+from docket.cli._console import console
 from docket.cli.commands._utils import (
     format_updated,
     read_body,
@@ -22,8 +22,6 @@ from docket.cli.commands._utils import (
 from docket.cli.context import Context, prepare_or_wizard
 from docket.core.model import MemoryEntry
 from docket.storage.repos import memory_repo
-
-console = Console()
 
 memory_app = typer.Typer(
     name="memory",

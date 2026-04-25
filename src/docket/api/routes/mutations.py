@@ -14,7 +14,6 @@ from collections.abc import Callable
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from docket.api.auth import require_bearer
 from docket.api.deps import (
     get_active_provider_key,
     get_conn,
@@ -46,7 +45,7 @@ from docket.providers.base import WorkItemProvider
 router = APIRouter(
     prefix="/items/{item_id:path}/mutations",
     tags=["mutations"],
-    dependencies=[Depends(require_bearer), Depends(require_not_read_only)],
+    dependencies=[Depends(require_not_read_only)],
 )
 
 

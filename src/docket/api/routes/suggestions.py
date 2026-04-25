@@ -15,7 +15,6 @@ import sqlite3
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from docket.agent.llm_client import LlmClient
-from docket.api.auth import require_bearer
 from docket.api.deps import (
     get_active_provider_key,
     get_conn,
@@ -29,11 +28,7 @@ from docket.core.services.proposal_store import ProposalStore
 from docket.core.services.suggestion_service import Suggestion, SuggestionError
 from docket.storage.repos import item_repo
 
-router = APIRouter(
-    prefix="/items/{item_id:path}/suggestion",
-    tags=["suggestions"],
-    dependencies=[Depends(require_bearer)],
-)
+router = APIRouter(prefix="/items/{item_id:path}/suggestion", tags=["suggestions"])
 
 
 @router.post("", response_model=SuggestionDTO)

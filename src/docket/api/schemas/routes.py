@@ -337,16 +337,6 @@ class MCPServerListDTO(BaseModel):
     entries: list[MCPServerDTO] = Field(default_factory=list)
 
 
-class MCPServerCreateRequest(BaseModel):
-    name: str
-    command: str
-    args: list[str] = Field(default_factory=list)
-    env: dict[str, str] = Field(default_factory=dict)
-    transport: str = "stdio"
-    enabled: bool = True
-    startup_timeout_seconds: float = 10.0
-
-
 class MCPServerUpdateRequest(BaseModel):
     """PATCH body. Only fields you set are written; others are left alone.
 
@@ -358,18 +348,6 @@ class MCPServerUpdateRequest(BaseModel):
     transport: str | None = None
     enabled: bool | None = None
     startup_timeout_seconds: float | None = None
-
-
-class MCPServerTestRequest(BaseModel):
-    """Draft MCP server config to validate without persisting it."""
-
-    name: str
-    command: str
-    args: list[str] = Field(default_factory=list)
-    env: dict[str, str] = Field(default_factory=dict)
-    transport: str = "stdio"
-    enabled: bool = True
-    startup_timeout_seconds: float = 10.0
 
 
 class MCPServerTestResultDTO(BaseModel):

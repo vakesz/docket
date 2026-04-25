@@ -62,12 +62,10 @@ class AgentLoop:
         client: LlmClient,
         tools: ToolRegistry,
         max_tool_rounds: int = 5,
-        stream: bool = True,
     ) -> None:
         self._client = client
         self._tools = tools
         self._max_rounds = max_tool_rounds
-        self._stream = stream
         self._current_tool_call_id: str = ""
         self._current_conversation_id: str = ""
 
@@ -196,12 +194,10 @@ class AgentLoop:
         with_tools: bool = True,
     ) -> CompletionResult:
         schemas = self._tools.schemas() if with_tools else []
-        if self._stream:
-            stream = self._client.stream(messages, schemas)
-            if on_delta is not None:
-                stream = _tap(stream, on_delta)
-            return accumulate_stream(stream)
-        return self._client.complete(messages, schemas)
+        stream = self._client.stream(messages, schemas)
+        if on_delta is not None:
+            stream = _tap(stream, on_delta)
+        return accumulate_stream(stream)
 
     def _dispatch(self, tc: ToolCall) -> ChatMessage:
         self._current_tool_call_id = tc.id

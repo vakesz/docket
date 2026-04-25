@@ -10,16 +10,14 @@ import sqlite3
 from collections.abc import Callable
 
 import typer
-from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
 
+from docket.cli._console import console
 from docket.core.mutation import Proposal, render_diff
 from docket.core.services import mutation_service
 from docket.core.services.mutation_service import MutationResult
 from docket.providers.base import WorkItemProvider
-
-console = Console()
 
 
 def prompt_confirm(proposal: Proposal, *, title: str = "Proposed change") -> bool:
