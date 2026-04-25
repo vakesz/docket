@@ -1,26 +1,26 @@
 """Tree/filter/detail selection plumbing for `DocketApp`.
 
-The backlog pane is the app's main navigation surface. This mixin owns the
-handlers that react to selection, filter input, and the small cross-pane
-keystrokes (Esc from chat, Up/Down from the filter) — plus the few actions
-that operate on the focused item (open in browser, toggle pin, quick-open).
+The backlog pane is the app's main navigation surface. This module owns
+the handlers that react to selection, filter input, and the small
+cross-pane keystrokes (Esc from chat, Up/Down from the filter) — plus the
+few actions that operate on the focused item (open in browser, toggle
+pin, quick-open).
 
-Leaving this logic in the mixin keeps `DocketApp` focused on composition
-and cross-cutting state (agent, status bar, sync timers) while selection
-and filter details live next to each other. See `pane_layout.py` for the
-companion mixin that handles focus cycling and resize."""
+Free helpers, not a mixin: `DocketApp` keeps thin `on_*` / `action_*`
+delegates because Textual's binding/message dispatcher looks them up by
+name on the App, but the mechanics live here as `app: DocketApp`
+callables. See `pane_layout.py` for the companion focus-cycling helpers."""
 
 from __future__ import annotations
 
 import logging
 import webbrowser
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from textual import events
 from textual.widgets import Input
 
 from docket.cli.tui.pane_layout import defocus_chat_prompt
-from docket.cli.tui.tui_context import TuiContext
 from docket.cli.tui.view_resolver import (
     resolve_grouping,
     resolve_list_item_states,
@@ -42,286 +42,272 @@ from docket.storage.repos import (
 )
 
 if TYPE_CHECKING:
-    from textual.app import App
-
     from docket.cli.tui.app import DocketApp
-
-    _AppBase = App[None]
-else:
-    _AppBase = object
 
 log = logging.getLogger(__name__)
 
 
-class ItemSelectionMixin(_AppBase):
-    """Selection + filter handlers, tree-aware keystrokes, and per-item actions.
+def reload_tree(app: DocketApp) -> None:
+    apply_filter(app, "")
 
-    Mypy sees the mixin as an `App[None]` so the many `query_one`/`notify`/
-    `run_worker` calls type-check. Runtime base is `object` — `DocketApp`
-    provides the real App. Host-provided state and sibling-mixin methods are
-    declared under `TYPE_CHECKING` stubs below."""
 
-    # Host-provided state (see DocketApp.__init__).
-    tui_ctx: TuiContext
-    _selected_item_id: str | None
+def resolved_grouping(app: DocketApp) -> GroupingStrategy:
+    return resolve_grouping(app.tui_ctx)
 
-    if TYPE_CHECKING:
-        from docket.core.question import Question
 
-        # Host-provided helpers (live in DocketApp).
-        def _active_view_filter(self) -> visual_filter.ResolvedFilter: ...
-        def _reset_cost_display(self) -> None: ...
-        def _hydrate_pending_question(self, item_id: str) -> Question | None: ...
+def list_item_states(app: DocketApp) -> tuple[ItemState, ...] | None:
+    return resolve_list_item_states(app.tui_ctx)
 
-    # ---- public accessors -------------------------------------------------
 
-    def selected_item_id(self) -> str | None:
-        """The currently focused item's id, or None when nothing is selected."""
-        return self._selected_item_id
+def apply_filter(app: DocketApp, raw: str) -> None:
+    """Re-render the tree for the given filter query.
 
-    # ---- reload / filter --------------------------------------------------
-
-    def _reload_tree(self) -> None:
-        self._apply_filter("")
-
-    def _resolved_grouping(self) -> GroupingStrategy:
-        return resolve_grouping(self.tui_ctx)
-
-    def _list_item_states(self) -> tuple[ItemState, ...] | None:
-        return resolve_list_item_states(self.tui_ctx)
-
-    def _apply_filter(self, raw: str) -> None:
-        """Re-render the tree for the given filter query.
-
-        Empty query = full list (same as _reload_tree). Non-empty delegates
-        to the FTS5-backed search_repo so title + description + comments all
-        match, returning items in bm25 rank order. The active view filter
-        (assignee, area, iteration, team) is layered on top of the search
-        hits so scope and free-text narrow together."""
-        query = raw.strip()
-        tree = self.query_one(ItemTree)
-        pinned = watchlist_repo.list_pinned_items(
-            self.tui_ctx.conn, provider_key=self.tui_ctx.provider_key
-        )
-        resolved = self._active_view_filter()
-        grouping = self._resolved_grouping()
-        states = self._list_item_states()
-        if not query:
-            items = item_repo.list_items(
-                self.tui_ctx.conn,
-                provider_key=self.tui_ctx.provider_key,
-                assignee=resolved.assignee,
-                states=states,
-            )
-            tree.load_items(
-                visual_filter.apply_to_items(items, resolved),
-                pinned=pinned,
-                grouping=grouping,
-            )
-            return
-        ids = search_repo.search(
-            self.tui_ctx.conn,
-            query,
-            provider_key=self.tui_ctx.provider_key,
+    Empty query = full list. Non-empty delegates to the FTS5-backed
+    search_repo so title + description + comments all match, returning
+    items in bm25 rank order. The active view filter (assignee, area,
+    iteration, team) is layered on top of the search hits so scope and
+    free-text narrow together."""
+    query = raw.strip()
+    tree = app.query_one(ItemTree)
+    pinned = watchlist_repo.list_pinned_items(
+        app.tui_ctx.conn, provider_key=app.tui_ctx.provider_key
+    )
+    resolved = app._active_view_filter()
+    grouping = resolved_grouping(app)
+    states = list_item_states(app)
+    if not query:
+        items = item_repo.list_items(
+            app.tui_ctx.conn,
+            provider_key=app.tui_ctx.provider_key,
             assignee=resolved.assignee,
+            states=states,
         )
-        if not ids:
-            tree.load_items([], pinned=pinned, grouping=grouping)
-            return
-        by_id = {
-            i.id: i
-            for i in item_repo.list_items_by_ids(
-                self.tui_ctx.conn,
-                ids,
-                provider_key=self.tui_ctx.provider_key,
-                states=states,
-            )
-        }
-        ordered = [by_id[iid] for iid in ids if iid in by_id]
         tree.load_items(
-            visual_filter.apply_to_items(ordered, resolved),
+            visual_filter.apply_to_items(items, resolved),
             pinned=pinned,
             grouping=grouping,
         )
-
-    # ---- selection handlers -----------------------------------------------
-
-    def on_item_selected(self, message: ItemSelected) -> None:
-        item = item_repo.get_item(
-            self.tui_ctx.conn, message.item_id, provider_key=self.tui_ctx.provider_key
+        return
+    ids = search_repo.search(
+        app.tui_ctx.conn,
+        query,
+        provider_key=app.tui_ctx.provider_key,
+        assignee=resolved.assignee,
+    )
+    if not ids:
+        tree.load_items([], pinned=pinned, grouping=grouping)
+        return
+    by_id = {
+        i.id: i
+        for i in item_repo.list_items_by_ids(
+            app.tui_ctx.conn,
+            ids,
+            provider_key=app.tui_ctx.provider_key,
+            states=states,
         )
-        comments = comment_repo.list_comments(
-            self.tui_ctx.conn, message.item_id, provider_key=self.tui_ctx.provider_key
+    }
+    ordered = [by_id[iid] for iid in ids if iid in by_id]
+    tree.load_items(
+        visual_filter.apply_to_items(ordered, resolved),
+        pinned=pinned,
+        grouping=grouping,
+    )
+
+
+def on_item_selected(app: DocketApp, message: ItemSelected) -> None:
+    item = item_repo.get_item(
+        app.tui_ctx.conn, message.item_id, provider_key=app.tui_ctx.provider_key
+    )
+    comments = comment_repo.list_comments(
+        app.tui_ctx.conn, message.item_id, provider_key=app.tui_ctx.provider_key
+    )
+    app.query_one(ItemDetail).show(item, comments)
+    chat = app.query_one(ChatPane)
+    chat.bind_item(item)
+    app._selected_item_id = item.id if item else None
+    app._reset_cost_display()
+    if item is not None:
+        active = conversation_repo.get_active_for_item(
+            app.tui_ctx.conn,
+            item.id,
+            provider_key=app.tui_ctx.provider_key,
         )
-        self.query_one(ItemDetail).show(item, comments)
-        chat = self.query_one(ChatPane)
-        chat.bind_item(item)
-        self._selected_item_id = item.id if item else None
-        self._reset_cost_display()
-        if item is not None:
-            active = conversation_repo.get_active_for_item(
-                self.tui_ctx.conn,
-                item.id,
-                provider_key=self.tui_ctx.provider_key,
-            )
-            if active is None:
-                chat.show_history([])
-            else:
-                history = message_repo.list_for_conversation(self.tui_ctx.conn, active.id)
-                chat.show_history(history)
-            # Re-render any pending `ask_user` card for this item so the
-            # question survives a tab-away/tab-back. The store is in-memory,
-            # so this only triggers when the agent staged the question in
-            # this same TUI session.
-            pending = self._hydrate_pending_question(item.id)
-            if pending is not None:
-                chat.show_question(pending)
-            else:
-                chat.clear_question()
-            # Fetch fresh details (attachments, up-to-date description, comments)
-            # from the provider in the background — the WIQL sync batch can't carry
-            # relations, so attachments only show up after this hydrates.
-            self.run_worker(
-                lambda item_id=item.id: self._hydrate_detail(item_id),
-                group=f"hydrate-{item.id}",
-                exclusive=True,
-                thread=True,
-            )
-
-    def _hydrate_detail(self, item_id: str) -> None:
-        try:
-            fresh = self.tui_ctx.provider.get_item(item_id)
-            fresh_comments = self.tui_ctx.provider.get_comments(item_id)
-        except Exception:
-            log.exception("detail hydrate failed for %s", item_id)
-            return
-        if self.tui_ctx.provider_key:
-            fresh.provider_key = self.tui_ctx.provider_key
-        item_repo.upsert_item(self.tui_ctx.conn, fresh)
-        comment_repo.replace_comments_for_item(
-            self.tui_ctx.conn,
-            item_id,
-            fresh_comments,
-            provider_key=self.tui_ctx.provider_key,
-        )
-
-        # Only repaint if the user hasn't moved on to another item.
-        def paint() -> None:
-            if self._selected_item_id == item_id:
-                self.query_one(ItemDetail).show(fresh, fresh_comments)
-
-        self.call_from_thread(paint)
-
-    # ---- filter input + cross-pane keystrokes -----------------------------
-
-    def on_input_changed(self, event: Input.Changed) -> None:
-        if event.input.id != "filter":
-            return
-        self._apply_filter(event.value or "")
-
-    def on_input_submitted(self, event: Input.Submitted) -> None:
-        # Enter in the filter is redundant with the live-filter path, but we
-        # still honor it so nothing feels broken and pilot tests that drive
-        # `action_submit` continue to work.
-        if event.input.id != "filter":
-            return
-        self._apply_filter(event.value or "")
-
-    def on_key(self, event: events.Key) -> None:
-        filter_input = self.query_one("#filter", Input)
-        tree = self.query_one(ItemTree)
-        if event.key == "escape" and defocus_chat_prompt(cast("DocketApp", self)):
-            event.stop()
-            event.prevent_default()
-            return
-        if event.key == "down" and self.focused is filter_input:
-            self._move_from_filter_to_tree()
-            event.stop()
-            event.prevent_default()
-            return
-        if event.key == "up" and self.focused is tree and self._move_from_tree_to_filter():
-            event.stop()
-            event.prevent_default()
-
-    def _move_from_filter_to_tree(self) -> None:
-        tree = self.query_one(ItemTree)
-        tree.focus()
-        if tree.cursor_node is not None and tree.cursor_line >= 0:
-            tree.action_cursor_down()
-            return
-        first_item = tree.first_visible_item_node()
-        if first_item is not None:
-            tree.move_cursor(first_item, animate=False)
-
-    def _move_from_tree_to_filter(self) -> bool:
-        tree = self.query_one(ItemTree)
-        first_item = tree.first_visible_item_node()
-        if first_item is None:
-            return False
-        if tree.cursor_node is not first_item and tree.cursor_line > first_item.line:
-            return False
-        self.query_one("#filter", Input).focus()
-        return True
-
-    # ---- focus / open actions --------------------------------------------
-
-    def action_focus_filter(self) -> None:
-        self.query_one("#filter", Input).focus()
-
-    def action_quick_open(self) -> None:
-        """Prompt for a ticket id; on submit, route through the normal
-        item-selection path so detail + chat wire up the same way as if
-        the user clicked the row in the tree."""
-
-        def on_result(result: QuickOpenResult | None) -> None:
-            if result is None or result.item_id is None:
-                return
-            item = item_repo.get_item(
-                self.tui_ctx.conn, result.item_id, provider_key=self.tui_ctx.provider_key
-            )
-            if item is None:
-                self.notify(f"No item '{result.item_id}' in cache.", severity="warning")
-                return
-            # Reuse the tree's message path so on_item_selected runs unchanged.
-            self.post_message(ItemSelected(item.id))
-
-        self.push_screen(
-            QuickOpenModal(conn=self.tui_ctx.conn, provider_key=self.tui_ctx.provider_key),
-            on_result,
-        )
-
-    def action_open_in_browser(self) -> None:
-        if self._selected_item_id is None:
-            self.notify("Select an item first.", severity="warning")
-            return
-        item = item_repo.get_item(
-            self.tui_ctx.conn,
-            self._selected_item_id,
-            provider_key=self.tui_ctx.provider_key,
-        )
-        if item is None or not item.url:
-            self.notify("This item has no URL on file.", severity="warning")
-            return
-        webbrowser.open(item.url)
-        self.notify(f"Opened {item.id} in browser")
-
-    def action_toggle_pin(self) -> None:
-        """Pin or unpin the focused item. Pins survive scope/view switches —
-        they come from the `watchlist` table, joined on `items.id` at reload
-        time, so archived rows drop out without any bookkeeping here."""
-        if self._selected_item_id is None:
-            self.notify("Select an item first.", severity="warning")
-            return
-        item_id = self._selected_item_id
-        if watchlist_repo.is_pinned(
-            self.tui_ctx.conn, item_id, provider_key=self.tui_ctx.provider_key
-        ):
-            watchlist_repo.unpin(self.tui_ctx.conn, item_id, provider_key=self.tui_ctx.provider_key)
-            self.notify(f"Unpinned {item_id}.", severity="information")
+        if active is None:
+            chat.show_history([])
         else:
-            watchlist_repo.pin(self.tui_ctx.conn, item_id, provider_key=self.tui_ctx.provider_key)
-            self.notify(f"Pinned {item_id}.", severity="information")
-        self._reload_tree()
+            history = message_repo.list_for_conversation(app.tui_ctx.conn, active.id)
+            chat.show_history(history)
+        # Re-render any pending `ask_user` card for this item so the
+        # question survives a tab-away/tab-back. The store is in-memory,
+        # so this only triggers when the agent staged the question in
+        # this same TUI session.
+        pending = app._hydrate_pending_question(item.id)
+        if pending is not None:
+            chat.show_question(pending)
+        else:
+            chat.clear_question()
+        # Fetch fresh details (attachments, up-to-date description, comments)
+        # from the provider in the background — the WIQL sync batch can't carry
+        # relations, so attachments only show up after this hydrates.
+        app.run_worker(
+            lambda item_id=item.id: _hydrate_detail(app, item_id),
+            group=f"hydrate-{item.id}",
+            exclusive=True,
+            thread=True,
+        )
 
 
-__all__ = ["ItemSelectionMixin"]
+def _hydrate_detail(app: DocketApp, item_id: str) -> None:
+    try:
+        fresh = app.tui_ctx.provider.get_item(item_id)
+        fresh_comments = app.tui_ctx.provider.get_comments(item_id)
+    except Exception:
+        log.exception("detail hydrate failed for %s", item_id)
+        return
+    if app.tui_ctx.provider_key:
+        fresh.provider_key = app.tui_ctx.provider_key
+    item_repo.upsert_item(app.tui_ctx.conn, fresh)
+    comment_repo.replace_comments_for_item(
+        app.tui_ctx.conn,
+        item_id,
+        fresh_comments,
+        provider_key=app.tui_ctx.provider_key,
+    )
+
+    # Only repaint if the user hasn't moved on to another item.
+    def paint() -> None:
+        if app._selected_item_id == item_id:
+            app.query_one(ItemDetail).show(fresh, fresh_comments)
+
+    app.call_from_thread(paint)
+
+
+def on_input_changed(app: DocketApp, event: Input.Changed) -> None:
+    if event.input.id != "filter":
+        return
+    apply_filter(app, event.value or "")
+
+
+def on_input_submitted(app: DocketApp, event: Input.Submitted) -> None:
+    # Enter in the filter is redundant with the live-filter path, but we
+    # still honor it so nothing feels broken and pilot tests that drive
+    # `action_submit` continue to work.
+    if event.input.id != "filter":
+        return
+    apply_filter(app, event.value or "")
+
+
+def on_key(app: DocketApp, event: events.Key) -> None:
+    filter_input = app.query_one("#filter", Input)
+    tree = app.query_one(ItemTree)
+    if event.key == "escape" and defocus_chat_prompt(app):
+        event.stop()
+        event.prevent_default()
+        return
+    if event.key == "down" and app.focused is filter_input:
+        _move_from_filter_to_tree(app)
+        event.stop()
+        event.prevent_default()
+        return
+    if event.key == "up" and app.focused is tree and _move_from_tree_to_filter(app):
+        event.stop()
+        event.prevent_default()
+
+
+def _move_from_filter_to_tree(app: DocketApp) -> None:
+    tree = app.query_one(ItemTree)
+    tree.focus()
+    if tree.cursor_node is not None and tree.cursor_line >= 0:
+        tree.action_cursor_down()
+        return
+    first_item = tree.first_visible_item_node()
+    if first_item is not None:
+        tree.move_cursor(first_item, animate=False)
+
+
+def _move_from_tree_to_filter(app: DocketApp) -> bool:
+    tree = app.query_one(ItemTree)
+    first_item = tree.first_visible_item_node()
+    if first_item is None:
+        return False
+    if tree.cursor_node is not first_item and tree.cursor_line > first_item.line:
+        return False
+    app.query_one("#filter", Input).focus()
+    return True
+
+
+def focus_filter(app: DocketApp) -> None:
+    app.query_one("#filter", Input).focus()
+
+
+def quick_open(app: DocketApp) -> None:
+    """Prompt for a ticket id; on submit, route through the normal
+    item-selection path so on_item_selected runs unchanged."""
+
+    def on_result(result: QuickOpenResult | None) -> None:
+        if result is None or result.item_id is None:
+            return
+        item = item_repo.get_item(
+            app.tui_ctx.conn, result.item_id, provider_key=app.tui_ctx.provider_key
+        )
+        if item is None:
+            app.notify(f"No item '{result.item_id}' in cache.", severity="warning")
+            return
+        # Reuse the tree's message path so on_item_selected runs unchanged.
+        app.post_message(ItemSelected(item.id))
+
+    app.push_screen(
+        QuickOpenModal(conn=app.tui_ctx.conn, provider_key=app.tui_ctx.provider_key),
+        on_result,
+    )
+
+
+def open_in_browser(app: DocketApp) -> None:
+    if app._selected_item_id is None:
+        app.notify("Select an item first.", severity="warning")
+        return
+    item = item_repo.get_item(
+        app.tui_ctx.conn,
+        app._selected_item_id,
+        provider_key=app.tui_ctx.provider_key,
+    )
+    if item is None or not item.url:
+        app.notify("This item has no URL on file.", severity="warning")
+        return
+    webbrowser.open(item.url)
+    app.notify(f"Opened {item.id} in browser")
+
+
+def toggle_pin(app: DocketApp) -> None:
+    """Pin or unpin the focused item. Pins survive scope/view switches —
+    they come from the `watchlist` table, joined on `items.id` at reload
+    time, so archived rows drop out without any bookkeeping here."""
+    if app._selected_item_id is None:
+        app.notify("Select an item first.", severity="warning")
+        return
+    item_id = app._selected_item_id
+    if watchlist_repo.is_pinned(
+        app.tui_ctx.conn, item_id, provider_key=app.tui_ctx.provider_key
+    ):
+        watchlist_repo.unpin(app.tui_ctx.conn, item_id, provider_key=app.tui_ctx.provider_key)
+        app.notify(f"Unpinned {item_id}.", severity="information")
+    else:
+        watchlist_repo.pin(app.tui_ctx.conn, item_id, provider_key=app.tui_ctx.provider_key)
+        app.notify(f"Pinned {item_id}.", severity="information")
+    reload_tree(app)
+
+
+__all__ = [
+    "apply_filter",
+    "focus_filter",
+    "list_item_states",
+    "on_input_changed",
+    "on_input_submitted",
+    "on_item_selected",
+    "on_key",
+    "open_in_browser",
+    "quick_open",
+    "reload_tree",
+    "resolved_grouping",
+    "toggle_pin",
+]

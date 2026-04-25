@@ -5,6 +5,7 @@ import logging
 from collections.abc import Callable
 from typing import ClassVar
 
+from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.command import Provider
@@ -15,6 +16,7 @@ from docket.agent.factory import build_agent
 from docket.agent.loop import AgentLoop
 from docket.agent.tools import ToolRegistry
 from docket.agent.types import ChatMessage, StreamDelta
+from docket.cli.tui import item_selection
 from docket.cli.tui._status_helpers import update_status_bar
 from docket.cli.tui.background_tasks import (
     mark_sync_now,
@@ -26,7 +28,6 @@ from docket.cli.tui.background_tasks import (
 from docket.cli.tui.config_actions import ConfigMixin
 from docket.cli.tui.errors import humanize as humanize_error
 from docket.cli.tui.errors import retry_hint
-from docket.cli.tui.item_selection import ItemSelectionMixin
 from docket.cli.tui.pane_layout import (
     cycle_pane_focus,
     resize_focused_pane,
@@ -51,7 +52,7 @@ from docket.cli.tui.widgets.chat_pane import (
 )
 from docket.cli.tui.widgets.help_modal import HelpModal
 from docket.cli.tui.widgets.item_detail import ItemDetail
-from docket.cli.tui.widgets.item_tree import ItemTree
+from docket.cli.tui.widgets.item_tree import ItemSelected, ItemTree
 from docket.cli.tui.widgets.mcp_pane import MCPPane
 from docket.cli.tui.widgets.memory_pane import MemoryPane
 from docket.cli.tui.widgets.new_item_modal import NewItemModal
@@ -73,6 +74,7 @@ from docket.core.services import (
 )
 from docket.core.services.proposal_store import PendingProposal, ProposalStore
 from docket.core.services.question_store import QuestionStore
+from docket.providers.base import GroupingStrategy
 
 log = logging.getLogger(__name__)
 
@@ -88,7 +90,6 @@ def _docket_commands_provider() -> type[Provider]:
 
 
 class DocketApp(
-    ItemSelectionMixin,
     ConfigMixin,
     ReviewFlowMixin,
     SuggestionFlowMixin,
@@ -233,6 +234,46 @@ class DocketApp(
 
     def _resolved_sync_interval(self) -> float:
         return resolve_sync_interval(self.tui_ctx)
+
+    # --- item-selection delegates ----------------------------------------------
+    # Sibling mixins (config_actions, review_flow, suggestion_flow) and tests
+    # call these via `self.x`, so DocketApp keeps thin method delegates. The
+    # mechanics are in `item_selection`.
+    def selected_item_id(self) -> str | None:
+        return self._selected_item_id
+
+    def _reload_tree(self) -> None:
+        item_selection.reload_tree(self)
+
+    def _resolved_grouping(self) -> GroupingStrategy:
+        return item_selection.resolved_grouping(self)
+
+    def _apply_filter(self, raw: str) -> None:
+        item_selection.apply_filter(self, raw)
+
+    def on_item_selected(self, message: ItemSelected) -> None:
+        item_selection.on_item_selected(self, message)
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        item_selection.on_input_changed(self, event)
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        item_selection.on_input_submitted(self, event)
+
+    def on_key(self, event: events.Key) -> None:
+        item_selection.on_key(self, event)
+
+    def action_focus_filter(self) -> None:
+        item_selection.focus_filter(self)
+
+    def action_quick_open(self) -> None:
+        item_selection.quick_open(self)
+
+    def action_open_in_browser(self) -> None:
+        item_selection.open_in_browser(self)
+
+    def action_toggle_pin(self) -> None:
+        item_selection.toggle_pin(self)
 
     def _init_status_bar(self) -> None:
         """Populate the static status-bar segments (provider name, scope key).
