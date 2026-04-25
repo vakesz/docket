@@ -19,7 +19,7 @@ uv sync
 
 uv run docket                      # default: open the TUI
 uv run docket open --provider <p>
-uv run docket help [command]
+uv run docket --help
 uv run docket status [-v]
 uv run docket setup [--step=<name>]
 uv run docket setup provider list|add|remove

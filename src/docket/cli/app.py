@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import typer
 
-from docket.cli.commands.help import help_command
 from docket.cli.commands.list import list_command
 from docket.cli.commands.mcp import mcp_app
 from docket.cli.commands.memory import memory_app
@@ -55,7 +54,6 @@ app.command("patch")(patch_command)
 app.command("new")(new_command)
 app.command("serve")(serve_command)
 app.command("status")(status_command)
-app.command("help")(help_command)
 
 
 def main() -> None:

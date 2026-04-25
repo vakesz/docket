@@ -53,7 +53,7 @@ make install      # uv sync + (cd frontend && bun install)
 Verify:
 
 ```bash
-uv run docket help
+uv run docket --help
 ```
 
 You should see the command table. If not, jump to [Troubleshooting](#troubleshooting).

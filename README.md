@@ -53,7 +53,7 @@ For the full walkthrough (Azure DevOps + GitHub auth, troubleshooting, where fil
 | Command | What it does |
 | --- | --- |
 | `docket` | Open the TUI (default when no subcommand is given) |
-| `docket help [command]` | Command list with examples; pass a name for a focused view |
+| `docket --help` | Typer's command list (also `docket <subcommand> --help` for one) |
 | `docket status [-v]` | Active project, paths, cache counts, sync state, MCP fleet, telemetry, HTTP |
 | `docket sync [--full]` | Pull changes from the active provider |
 | `docket list --kind story` | List cached items (filter by kind, state, assignee) |
