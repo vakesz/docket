@@ -24,6 +24,7 @@ from docket.api.runtime import RuntimeState
 from docket.config.models import Config
 from docket.config.paths import Paths
 from docket.core.services.proposal_store import ProposalStore
+from docket.core.services.question_store import QuestionStore
 from docket.providers.base import WorkItemProvider
 
 
@@ -82,6 +83,16 @@ def get_proposals(request: Request) -> ProposalStore:
         "proposals",
         ProposalStore,
         detail="Proposal store is not wired into the app.",
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+    )
+
+
+def get_questions(request: Request) -> QuestionStore:
+    return _state_or_raise(
+        request,
+        "questions",
+        QuestionStore,
+        detail="Question store is not wired into the app.",
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
     )
 
@@ -201,6 +212,7 @@ __all__ = [
     "get_paths",
     "get_proposals",
     "get_provider",
+    "get_questions",
     "get_runtime",
     "get_runtime_optional",
     "require_agent",

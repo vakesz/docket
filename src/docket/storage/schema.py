@@ -69,6 +69,7 @@ STATEMENTS: tuple[str, ...] = (
         tool_call_id     TEXT,
         tool_name        TEXT,
         compacted        INTEGER NOT NULL DEFAULT 0,
+        pending          INTEGER NOT NULL DEFAULT 0,
         tokens_in        INTEGER NOT NULL DEFAULT 0,
         tokens_out       INTEGER NOT NULL DEFAULT 0,
         created_at       TEXT NOT NULL

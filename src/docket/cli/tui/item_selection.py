@@ -63,9 +63,12 @@ class ItemSelectionMixin(_AppBase):
     _selected_item_id: str | None
 
     if TYPE_CHECKING:
+        from docket.core.question import Question
+
         # Host-provided helpers (live in DocketApp).
         def _active_view_filter(self) -> visual_filter.ResolvedFilter: ...
         def _reset_cost_display(self) -> None: ...
+        def _hydrate_pending_question(self, item_id: str) -> Question | None: ...
         # Sibling mixin (PaneLayoutMixin).
         def _defocus_chat_prompt(self) -> bool: ...
 
@@ -165,6 +168,15 @@ class ItemSelectionMixin(_AppBase):
             else:
                 history = message_repo.list_for_conversation(self.tui_ctx.conn, active.id)
                 chat.show_history(history)
+            # Re-render any pending `ask_user` card for this item so the
+            # question survives a tab-away/tab-back. The store is in-memory,
+            # so this only triggers when the agent staged the question in
+            # this same TUI session.
+            pending = self._hydrate_pending_question(item.id)
+            if pending is not None:
+                chat.show_question(pending)
+            else:
+                chat.clear_question()
             # Fetch fresh details (attachments, up-to-date description, comments)
             # from the provider in the background — the WIQL sync batch can't carry
             # relations, so attachments only show up after this hydrates.

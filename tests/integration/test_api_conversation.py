@@ -118,3 +118,141 @@ def test_new_thread_archives_previous(env: ApiEnv) -> None:
     # History is now empty against the new thread.
     history = client.get("/items/S-1/conversation", headers=AUTH_HEADERS).json()
     assert history["messages"] == []
+
+
+# -- ask_user / SSE question event + /answer endpoint -----------------------
+
+
+_ASK_ARGS = json.dumps(
+    {
+        "questions": [
+            {
+                "question": "Pick one",
+                "header": "Pick",
+                "options": [
+                    {"label": "alpha"},
+                    {"label": "beta"},
+                ],
+            }
+        ]
+    }
+)
+
+
+def test_sse_emits_question_event_when_agent_calls_ask_user(env: ApiEnv) -> None:
+    llm = FakeLlmClient(script=[tool_turn("tc-q1", "ask_user", _ASK_ARGS)])
+    client = build_client(env, llm=llm)
+
+    with client.stream(
+        "POST",
+        "/items/S-1/conversation/messages",
+        headers=AUTH_HEADERS,
+        json={"text": "should I do X?"},
+    ) as resp:
+        assert resp.status_code == 200
+        events = parse_sse(resp.iter_lines())
+
+    questions_seen = [e for e in events if e["event"] == "question"]
+    assert len(questions_seen) == 1
+    payload = json.loads(questions_seen[0]["data"])
+    assert payload["tool_call_id"] == "tc-q1"
+    assert len(payload["questions"]) == 1
+    item = payload["questions"][0]
+    assert item["header"] == "Pick"
+    assert [o["label"] for o in item["options"]] == ["alpha", "beta"]
+    # The "Other" choice is rendered client-side; the API surfaces only the
+    # `allow_other` flag so the UI knows to add it.
+    assert item["allow_other"] is True
+
+
+def test_answer_endpoint_resumes_conversation(env: ApiEnv) -> None:
+    """Full round-trip: agent stages, SSE delivers, client posts /answer,
+    resumed turn streams a `done` event."""
+    llm = FakeLlmClient(
+        script=[
+            tool_turn("tc-q1", "ask_user", _ASK_ARGS),
+            text_turn("got it"),
+        ]
+    )
+    client = build_client(env, llm=llm)
+
+    with client.stream(
+        "POST",
+        "/items/S-1/conversation/messages",
+        headers=AUTH_HEADERS,
+        json={"text": "advise me"},
+    ) as resp:
+        events = parse_sse(resp.iter_lines())
+    qid = json.loads(
+        next(e for e in events if e["event"] == "question")["data"]
+    )["id"]
+
+    with client.stream(
+        "POST",
+        "/items/S-1/conversation/answer",
+        headers=AUTH_HEADERS,
+        json={
+            "question_id": qid,
+            "answers": [{"selected": ["alpha"]}],
+        },
+    ) as resp:
+        assert resp.status_code == 200
+        answer_events = parse_sse(resp.iter_lines())
+
+    # The resumed turn streams the model's reply, then `done`.
+    text = "".join(
+        json.loads(e["data"])["text"]
+        for e in answer_events
+        if e["event"] == "delta"
+    )
+    assert text == "got it"
+    assert any(e["event"] == "done" for e in answer_events)
+
+
+def test_answer_endpoint_rejects_unknown_id(env: ApiEnv) -> None:
+    llm = FakeLlmClient(script=[tool_turn("tc-q1", "ask_user", _ASK_ARGS)])
+    client = build_client(env, llm=llm)
+
+    with client.stream(
+        "POST",
+        "/items/S-1/conversation/messages",
+        headers=AUTH_HEADERS,
+        json={"text": "?"},
+    ) as resp:
+        list(resp.iter_lines())
+
+    resp = client.post(
+        "/items/S-1/conversation/answer",
+        headers=AUTH_HEADERS,
+        json={
+            "question_id": "no-such-question",
+            "answers": [{"selected": ["alpha"]}],
+        },
+    )
+    assert resp.status_code == 409
+
+
+def test_answer_endpoint_rejects_wrong_arity(env: ApiEnv) -> None:
+    llm = FakeLlmClient(script=[tool_turn("tc-q1", "ask_user", _ASK_ARGS)])
+    client = build_client(env, llm=llm)
+
+    with client.stream(
+        "POST",
+        "/items/S-1/conversation/messages",
+        headers=AUTH_HEADERS,
+        json={"text": "?"},
+    ) as resp:
+        events = parse_sse(resp.iter_lines())
+    qid = json.loads(
+        next(e for e in events if e["event"] == "question")["data"]
+    )["id"]
+
+    resp = client.post(
+        "/items/S-1/conversation/answer",
+        headers=AUTH_HEADERS,
+        json={
+            "question_id": qid,
+            "answers": [],  # one question, zero answers
+        },
+    )
+    assert resp.status_code == 400

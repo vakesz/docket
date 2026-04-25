@@ -39,6 +39,8 @@ export const qk = {
   comments: (id: string) => [...qk.all, "item", id, "comments"] as const,
   linked: (id: string) => [...qk.all, "item", id, "linked"] as const,
   conversation: (id: string) => [...qk.all, "item", id, "conversation"] as const,
+  pendingQuestion: (id: string) =>
+    [...qk.all, "item", id, "conversation", "pendingQuestion"] as const,
 
   pinned: () => [...qk.all, "pinned"] as const,
   isPinned: (id: string) => [...qk.all, "item", id, "pinned"] as const,

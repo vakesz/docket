@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 from textual.app import ComposeResult
-from textual.containers import Vertical, VerticalScroll
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.message import Message
-from textual.widgets import Checkbox, Input, Markdown, Static
+from textual.widgets import Button, Checkbox, Input, Markdown, Static
 
 from docket.agent.types import ChatMessage, StreamDelta, Usage
 from docket.config.env import get_price_input_per_1m, get_price_output_per_1m
 from docket.core.acceptance import AcceptanceCriterion, extract_acceptance_criteria
 from docket.core.model import Item
+from docket.core.question import Question, QuestionAnswer
 
 
 class UserTurnRequest(Message):
@@ -34,6 +35,211 @@ class TurnFinished(Message):
         super().__init__()
         self.usage = usage
         self.cost_cents = cost_cents
+
+
+class AnswerQuestionRequest(Message):
+    """Posted by `QuestionCard` when the user submits answers to a staged
+    `ask_user` question. The app handles this by calling
+    `conversation_service.submit_question_answer` to resume the agent loop."""
+
+    def __init__(self, question_id: str, answers: tuple[QuestionAnswer, ...]) -> None:
+        super().__init__()
+        self.question_id = question_id
+        self.answers = answers
+
+
+class QuestionCard(Vertical):
+    """Inline structured question card.
+
+    Renders one fieldset per `QuestionItem` with selectable options and an
+    optional "Other" input. Posts `AnswerQuestionRequest` when the user
+    submits. Disabled state is set by the parent while the resume turn is
+    streaming so the user can't double-submit."""
+
+    DEFAULT_CSS = """
+    QuestionCard {
+        height: auto;
+        margin: 0 0 1 0;
+        padding: 1 1 1 1;
+        border: round $accent;
+        background: $boost;
+    }
+    QuestionCard #q-header {
+        height: auto;
+        color: $accent;
+        text-style: bold;
+        padding: 0 0 1 0;
+    }
+    QuestionCard .q-fieldset {
+        height: auto;
+        padding: 0 0 1 0;
+    }
+    QuestionCard .q-prompt {
+        height: auto;
+        color: $text;
+        padding: 0 0 0 0;
+    }
+    QuestionCard .q-meta {
+        height: 1;
+        color: $text-muted;
+    }
+    QuestionCard Checkbox {
+        height: auto;
+        background: transparent;
+        padding: 0 0 0 1;
+    }
+    QuestionCard .q-other {
+        height: 3;
+        margin: 0 0 0 1;
+    }
+    QuestionCard #q-actions {
+        height: auto;
+        padding-top: 1;
+    }
+    QuestionCard #q-actions Button { margin-right: 1; }
+    """
+
+    def __init__(self, question: Question, *, id: str | None = None) -> None:
+        super().__init__(id=id)
+        self._question = question
+        # Pre-allocate one selection set + "other" buffer per question item so
+        # the on-toggle handlers can mutate state without re-querying widgets.
+        self._selected: list[set[str]] = [set() for _ in question.questions]
+        self._other: list[str] = ["" for _ in question.questions]
+        self._submitted = False
+
+    @property
+    def question_id(self) -> str:
+        return self._question.id
+
+    def compose(self) -> ComposeResult:
+        yield Static("ask · awaiting your answer", id="q-header")
+        for idx, item in enumerate(self._question.questions):
+            with Vertical(classes="q-fieldset"):
+                kind = "multi-select" if item.multi_select else "pick one"
+                yield Static(f"[{item.header}] · {kind}", classes="q-meta")
+                yield Static(item.question, classes="q-prompt")
+                for opt in item.options:
+                    yield Checkbox(
+                        opt.label,
+                        value=False,
+                        id=f"q-opt-{idx}-{_safe_id(opt.label)}",
+                        classes=f"q-opt q-opt-{idx}",
+                    )
+                if item.allow_other:
+                    yield Input(
+                        placeholder="Other…",
+                        id=f"q-other-{idx}",
+                        classes="q-other",
+                    )
+        with Horizontal(id="q-actions"):
+            yield Button("Submit", id="q-submit", variant="primary")
+
+    def set_disabled(self, disabled: bool) -> None:
+        """Disable every interactive child — used while the resume turn streams.
+
+        Querying with the broad union keeps the call site simple; widgets that
+        have no `disabled` attribute (e.g. `Static`) are skipped."""
+        for w in list(self.query("Checkbox, Input, Button")):
+            w.disabled = disabled
+
+    def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
+        cb = event.checkbox
+        cb_id = cb.id or ""
+        if not cb_id.startswith("q-opt-"):
+            return
+        # Layout: q-opt-{idx}-{safe-label}
+        try:
+            idx = int(cb_id.split("-", 3)[2])
+        except (IndexError, ValueError):
+            return
+        item = self._question.questions[idx]
+        label = str(cb.label).strip()
+        if event.value:
+            if not item.multi_select:
+                # Single-select: clear every other checkbox in this fieldset
+                # (and any "Other" buffer), so the on-screen state matches the
+                # one-pick-per-question contract.
+                self._selected[idx] = {label}
+                self._other[idx] = ""
+                other = self._other_input(idx)
+                if other is not None:
+                    other.value = ""
+                for sibling in self.query(f".q-opt-{idx}").results(Checkbox):
+                    if sibling is cb:
+                        continue
+                    if sibling.value:
+                        sibling.value = False
+            else:
+                self._selected[idx].add(label)
+        else:
+            self._selected[idx].discard(label)
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        inp_id = event.input.id or ""
+        if not inp_id.startswith("q-other-"):
+            return
+        try:
+            idx = int(inp_id.split("-", 2)[2])
+        except (IndexError, ValueError):
+            return
+        item = self._question.questions[idx]
+        text = event.value
+        self._other[idx] = text
+        # Single-select: typing into "Other" clears any picked option, matching
+        # the frontend card's behavior.
+        if text and not item.multi_select:
+            self._selected[idx] = set()
+            for sibling in self.query(f".q-opt-{idx}").results(Checkbox):
+                if sibling.value:
+                    sibling.value = False
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        # Pressing Enter inside an "Other" field should not submit the form —
+        # users may still want to pick a checkbox after typing. Swallow the
+        # event so it doesn't bubble to the chat prompt.
+        event.stop()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id != "q-submit":
+            return
+        if self._submitted:
+            return
+        if not self._is_ready():
+            return
+        self._submitted = True
+        self.set_disabled(True)
+        answers = tuple(
+            QuestionAnswer(
+                selected=tuple(self._selected[idx]),
+                other_text=(self._other[idx].strip() or None),
+            )
+            for idx in range(len(self._question.questions))
+        )
+        self.post_message(AnswerQuestionRequest(self._question.id, answers))
+
+    def _other_input(self, idx: int) -> Input | None:
+        try:
+            return self.query_one(f"#q-other-{idx}", Input)
+        except Exception:
+            return None
+
+    def _is_ready(self) -> bool:
+        for idx, item in enumerate(self._question.questions):
+            if self._selected[idx]:
+                continue
+            if item.allow_other and self._other[idx].strip():
+                continue
+            return False
+        return True
+
+
+def _safe_id(label: str) -> str:
+    """Make `label` safe for use inside a Textual widget id.
+
+    Textual ids must match `^[a-zA-Z_][a-zA-Z0-9_-]*$`. We don't need a perfect
+    mapping back — the on-change handler reads `cb.label`, not the id."""
+    return "".join(c if c.isalnum() else "-" for c in label) or "opt"
 
 
 class ChatPane(Vertical):
@@ -138,6 +344,7 @@ class ChatPane(Vertical):
         self._active_assistant: Static | None = None
         self._active_text: str = ""
         self._show_acceptance_criteria = show_acceptance_criteria
+        self._question_card: QuestionCard | None = None
         self.tooltip = (
             "Chat about the selected item, stage proposals, and review acceptance criteria."
         )
@@ -163,6 +370,7 @@ class ChatPane(Vertical):
         self._item = item
         self._active_assistant = None
         self._active_text = ""
+        self._question_card = None
         self.set_thinking(False)
         transcript = self.query_one("#transcript", VerticalScroll)
         transcript.remove_children()
@@ -309,6 +517,43 @@ class ChatPane(Vertical):
             indicator.add_class("active")
         else:
             indicator.remove_class("active")
+
+    def show_question(self, question: Question) -> None:
+        """Render a structured `ask_user` question card inline at the bottom
+        of the transcript and prompt the user for an answer.
+
+        The card stays in place after the user submits — the parent will call
+        `clear_question()` once the resume turn finishes, so the user can see
+        what they answered alongside the assistant's reply that follows."""
+        # Seal any in-flight assistant segment first so the question card lands
+        # below the assistant's preamble text in the transcript.
+        self._finalize_active_assistant()
+        if self._question_card is not None:
+            self._question_card.remove()
+            self._question_card = None
+        card = QuestionCard(question, id="question-card")
+        self._question_card = card
+        transcript = self.query_one("#transcript", VerticalScroll)
+        transcript.mount(card)
+        transcript.scroll_end(animate=False)
+        prompt = self.query_one("#prompt", Input)
+        prompt.placeholder = (
+            "Pick from the card above, or type free text to answer the first question."
+        )
+
+    def clear_question(self) -> None:
+        if self._question_card is not None:
+            self._question_card.remove()
+            self._question_card = None
+        prompt = self.query_one("#prompt", Input)
+        prompt.placeholder = "Ask about this ticket… (enter to send)"
+
+    def has_pending_question(self) -> bool:
+        return self._question_card is not None
+
+    def set_question_disabled(self, disabled: bool) -> None:
+        if self._question_card is not None:
+            self._question_card.set_disabled(disabled)
 
     def seed_input(self, text: str) -> None:
         """Pre-fill the prompt input with `text` and focus it.

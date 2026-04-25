@@ -38,6 +38,7 @@ from docket.api.schemas import HealthDTO
 from docket.config.models import Config
 from docket.config.paths import Paths
 from docket.core.services.proposal_store import ProposalStore
+from docket.core.services.question_store import QuestionStore
 from docket.providers.base import WorkItemProvider
 
 
@@ -64,6 +65,7 @@ def create_app(
     bearer_token: str,
     llm: LlmClient | None = None,
     proposals: ProposalStore | None = None,
+    questions: QuestionStore | None = None,
     active_item: Callable[[], str | None] | None = None,
     compaction_threshold_tokens: int = 0,
     read_only: bool = False,
@@ -103,6 +105,7 @@ def create_app(
     app.state.provider = provider
     app.state.bearer_token = bearer_token
     app.state.proposals = proposals if proposals is not None else ProposalStore()
+    app.state.questions = questions if questions is not None else QuestionStore()
     app.state.llm = llm
     app.state.active_item = active_item
     app.state.compaction_threshold_tokens = compaction_threshold_tokens

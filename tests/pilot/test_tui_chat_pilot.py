@@ -268,3 +268,130 @@ async def test_chat_disabled_without_llm(chat_env) -> None:
     # No conversation should have been created.
     convos = conversation_repo.list_for_item(ctx.conn, "S-1", provider_key=ctx.provider_key)
     assert convos == []
+
+
+# -- ask_user question card --------------------------------------------------
+
+import json  # noqa: E402
+
+from docket.cli.tui.widgets.chat_pane import QuestionCard  # noqa: E402
+
+_ASK_USER_ARGS = json.dumps(
+    {
+        "questions": [
+            {
+                "question": "Which option?",
+                "header": "Pick",
+                "options": [
+                    {"label": "alpha"},
+                    {"label": "beta"},
+                ],
+            }
+        ]
+    }
+)
+
+
+async def test_ask_user_renders_question_card(chat_env) -> None:
+    """When the agent calls `ask_user`, the chat pane mounts a question card
+    and the turn ends without a final assistant bubble."""
+    ctx, client, _ = chat_env
+    client.script = [tool_turn("tc-q1", "ask_user", _ASK_USER_ARGS)]
+    app = DocketApp(ctx)
+    async with app.run_test() as pilot:
+        await _select_story(app, pilot)
+        prompt = app.query_one(ChatPane).query_one("#prompt")
+        prompt.value = "should I do something?"
+        await prompt.action_submit()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+
+        chat = app.query_one(ChatPane)
+        cards = list(chat.query(QuestionCard).results())
+        assert len(cards) == 1
+        assert cards[0].question_id  # has a generated id
+        assert chat.has_pending_question() is True
+
+
+async def test_ask_user_submit_resumes_turn(chat_env) -> None:
+    """Submitting the question card resumes the agent loop and the card is
+    cleared once the resume turn finishes without another `ask_user`."""
+    from textual.widgets import Button, Checkbox
+
+    ctx, client, _ = chat_env
+    client.script = [
+        tool_turn("tc-q1", "ask_user", _ASK_USER_ARGS),
+        text_turn("Got it — going with alpha."),
+    ]
+    app = DocketApp(ctx)
+    async with app.run_test() as pilot:
+        await _select_story(app, pilot)
+        prompt = app.query_one(ChatPane).query_one("#prompt")
+        prompt.value = "should I do something?"
+        await prompt.action_submit()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+
+        chat = app.query_one(ChatPane)
+        card = chat.query_one(QuestionCard)
+        # Tick "alpha" and submit.
+        boxes = list(card.query(Checkbox).results())
+        labels = [str(b.label) for b in boxes]
+        assert "alpha" in labels
+        boxes[labels.index("alpha")].value = True
+        await pilot.pause()
+        card.query_one("#q-submit", Button).press()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+
+        # Card removed; resume produced an assistant bubble.
+        assert app.query_one(ChatPane).has_pending_question() is False
+
+    # Persisted history: user → ask_user round → answered tool result → final assistant.
+    convos = conversation_repo.list_for_item(ctx.conn, "S-1", provider_key=ctx.provider_key)
+    assert len(convos) == 1
+    msgs = message_repo.list_for_conversation(ctx.conn, convos[0].id)
+    roles = [m.role for m in msgs]
+    assert roles == ["user", "assistant", "tool", "assistant"]
+    tool_row = msgs[2]
+    payload = json.loads(tool_row.content)
+    # The placeholder was rewritten with the structured answer.
+    assert payload["status"] == "answered"
+    assert payload["answers"][0]["selected"] == ["alpha"]
+    assert msgs[-1].content == "Got it — going with alpha."
+
+
+async def test_free_text_while_question_pending_redirects_as_other(chat_env) -> None:
+    """Typing in the chat prompt while a question is pending should resume the
+    turn with the typed text as the first question's `other` answer."""
+    ctx, client, _ = chat_env
+    client.script = [
+        tool_turn("tc-q1", "ask_user", _ASK_USER_ARGS),
+        text_turn("Thanks."),
+    ]
+    app = DocketApp(ctx)
+    async with app.run_test() as pilot:
+        await _select_story(app, pilot)
+        prompt = app.query_one(ChatPane).query_one("#prompt")
+        prompt.value = "should I do something?"
+        await prompt.action_submit()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+
+        # Free-text answer instead of clicking the card.
+        prompt = app.query_one(ChatPane).query_one("#prompt")
+        prompt.value = "neither — try gamma"
+        await prompt.action_submit()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+
+    msgs = message_repo.list_for_conversation(
+        ctx.conn,
+        conversation_repo.list_for_item(
+            ctx.conn, "S-1", provider_key=ctx.provider_key
+        )[0].id,
+    )
+    payload = json.loads(msgs[2].content)
+    assert payload["status"] == "answered"
+    assert payload["answers"][0]["other"] == "neither — try gamma"
+    assert msgs[-1].content == "Thanks."

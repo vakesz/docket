@@ -474,7 +474,23 @@ export function useStartThread() {
   return useMutation({
     mutationFn: (itemId: string) =>
       api.post<DTO["ConversationDTO"]>(`/items/${encodeURIComponent(itemId)}/conversation/thread`),
-    onSuccess: (_data, itemId) => qc.invalidateQueries({ queryKey: qk.conversation(itemId) }),
+    onSuccess: (_data, itemId) => {
+      void qc.invalidateQueries({ queryKey: qk.conversation(itemId) });
+      void qc.invalidateQueries({ queryKey: qk.pendingQuestion(itemId) });
+    },
+  });
+}
+
+export function usePendingQuestion(id: string | undefined) {
+  return useQuery({
+    queryKey: id ? qk.pendingQuestion(id) : qk.pendingQuestion("__none__"),
+    enabled: Boolean(id),
+    queryFn: ({ signal }) =>
+      api.get<DTO["QuestionDTO"] | null>(
+        `/items/${encodeURIComponent(id ?? "")}/conversation/pending_question`,
+        undefined,
+        signal,
+      ),
   });
 }
 

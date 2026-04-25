@@ -12,6 +12,7 @@ package re-export; submodule imports are fine too."""
 from __future__ import annotations
 
 from docket.api.schemas.core import (
+    AnswerQuestionRequest,
     AttachmentDTO,
     ChatRoleDTO,
     CommentDTO,
@@ -20,6 +21,10 @@ from docket.api.schemas.core import (
     CreateItemRequest,
     HealthDTO,
     ItemDTO,
+    QuestionAnswerDTO,
+    QuestionDTO,
+    QuestionItemDTO,
+    QuestionOptionDTO,
     SendMessageRequest,
     StatusDTO,
     UsageDTO,
@@ -88,6 +93,7 @@ from docket.api.schemas.setup import (
 )
 
 __all__ = [
+    "AnswerQuestionRequest",
     "AttachmentDTO",
     "ChatRoleDTO",
     "CommentDTO",
@@ -125,6 +131,10 @@ __all__ = [
     "ProposeTransitionRequest",
     "ProviderDTO",
     "ProviderSwitchRequest",
+    "QuestionAnswerDTO",
+    "QuestionDTO",
+    "QuestionItemDTO",
+    "QuestionOptionDTO",
     "ScopeDTO",
     "ScopeSwitchRequest",
     "SendMessageRequest",

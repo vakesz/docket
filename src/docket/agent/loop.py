@@ -9,6 +9,11 @@ Given a user message, a prefix, and a tool registry, the loop:
 
 The loop does not persist anything — conversation_service handles that after
 the loop returns.
+
+When a tool returns the `ask_user` awaiting-answer sentinel, the loop ends
+the turn early after persisting the staged tool-result as a placeholder.
+Any other tool calls in the same assistant response are discarded — the
+agent must wait for the user before doing more work.
 """
 
 from __future__ import annotations
@@ -22,8 +27,11 @@ from typing import TypeGuard, get_args
 from docket.agent.llm_client import LlmClient, accumulate_stream
 from docket.agent.tools import ToolRegistry
 from docket.agent.types import ChatMessage, ChatRole, CompletionResult, StreamDelta, ToolCall, Usage
+from docket.core.question import is_awaiting
+from docket.telemetry.logging import get_logger
 
 _CHAT_ROLES: frozenset[str] = frozenset(get_args(ChatRole))
+_log = get_logger(__name__)
 
 
 def _is_chat_role(value: str) -> TypeGuard[ChatRole]:
@@ -35,12 +43,16 @@ class AgentTurn:
     """Output of one user turn: all new messages generated, plus totals.
 
     `new_messages` is appended to conversation history in order; it always
-    starts with assistant turns and may interleave tool results."""
+    starts with assistant turns and may interleave tool results.
+    `awaiting_answer=True` signals that `ask_user` was called and the turn
+    ended early — the trailing tool-result message is a placeholder that
+    the conversation service must persist with `pending=1`."""
 
     final: ChatMessage
     new_messages: list[ChatMessage] = field(default_factory=list)
     usage: Usage = field(default_factory=Usage)
     rounds: int = 0
+    awaiting_answer: bool = False
 
 
 class AgentLoop:
@@ -56,6 +68,8 @@ class AgentLoop:
         self._tools = tools
         self._max_rounds = max_tool_rounds
         self._stream = stream
+        self._current_tool_call_id: str = ""
+        self._current_conversation_id: str = ""
 
     @property
     def client(self) -> LlmClient:
@@ -69,6 +83,24 @@ class AgentLoop:
         what's available on the live agent without reaching through privates."""
         return self._tools
 
+    def set_tools(self, tools: ToolRegistry) -> None:
+        """Swap the tool registry. Used by `build_agent` to register tools
+        whose handlers need to read state owned by the loop (currently the
+        active tool-call id, used by `ask_user`)."""
+        self._tools = tools
+
+    def current_tool_call_id(self) -> str:
+        """The tool-call id of the in-flight dispatch, or empty when idle.
+        Used by the `ask_user` tool to tag the staged Question so the
+        placeholder tool-result can be matched and rewritten on answer."""
+        return self._current_tool_call_id
+
+    def current_conversation_id(self) -> str:
+        """The conversation id of the in-flight turn, or empty when idle.
+        Set by `run_turn`; `ask_user` reads it through the registered
+        closure when staging a Question."""
+        return self._current_conversation_id
+
     def run_turn(
         self,
         *,
@@ -77,7 +109,9 @@ class AgentLoop:
         user_message: ChatMessage,
         on_delta: Callable[[StreamDelta], None] | None = None,
         on_message: Callable[[ChatMessage], None] | None = None,
+        conversation_id: str = "",
     ) -> AgentTurn:
+        self._current_conversation_id = conversation_id
         new_messages: list[ChatMessage] = [user_message]
         total = Usage()
         rounds = 0
@@ -105,12 +139,33 @@ class AgentLoop:
                     rounds=rounds,
                 )
 
-            for tc in assistant_msg.tool_calls:
+            awaiting = False
+            for idx, tc in enumerate(assistant_msg.tool_calls):
+                if awaiting:
+                    # Drop co-emitted tool calls after `ask_user` — the agent
+                    # cannot make progress until the user answers.
+                    _log.warning(
+                        "ask_user_co_call_dropped",
+                        tool_name=tc.name,
+                        index=idx,
+                    )
+                    continue
                 tool_result_msg = self._dispatch(tc)
                 new_messages.append(tool_result_msg)
                 working.append(tool_result_msg)
                 if on_message:
                     on_message(tool_result_msg)
+                if is_awaiting(tool_result_msg.content):
+                    awaiting = True
+
+            if awaiting:
+                return AgentTurn(
+                    final=assistant_msg,
+                    new_messages=new_messages,
+                    usage=total,
+                    rounds=rounds,
+                    awaiting_answer=True,
+                )
 
             if rounds >= self._max_rounds:
                 # Budget exhausted while the model still wants to call tools.
@@ -149,7 +204,11 @@ class AgentLoop:
         return self._client.complete(messages, schemas)
 
     def _dispatch(self, tc: ToolCall) -> ChatMessage:
-        content = self._tools.dispatch(tc.name, tc.arguments)
+        self._current_tool_call_id = tc.id
+        try:
+            content = self._tools.dispatch(tc.name, tc.arguments)
+        finally:
+            self._current_tool_call_id = ""
         return ChatMessage(
             role="tool",
             content=content,

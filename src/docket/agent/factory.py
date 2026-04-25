@@ -20,10 +20,12 @@ from docket.agent.memory_tools import (
     register_memory_readonly_tools,
 )
 from docket.agent.mutating_tools import register_mutating_tools
+from docket.agent.question_tool import register_ask_user_tool
 from docket.agent.source_tools import register_source_readonly_tools
 from docket.agent.tool_defs import register_readonly_tools
 from docket.agent.tools import ToolRegistry
 from docket.core.services.proposal_store import ProposalStore
+from docket.core.services.question_store import QuestionStore
 from docket.providers.base import WorkItemProvider
 
 
@@ -37,6 +39,9 @@ def build_tool_registry(
     provider_key: str = "",
     project_id: str = "",
     mcp_manager: MCPManager | None = None,
+    question_store: QuestionStore | None = None,
+    conversation_id: Callable[[], str] | None = None,
+    current_tool_call_id: Callable[[], str] | None = None,
 ) -> ToolRegistry:
     """Assemble the standard `ToolRegistry`.
 
@@ -46,8 +51,11 @@ def build_tool_registry(
     pinned sequence.
 
     Registration order (load-bearing): provider RO → link RO → memory RO →
-    sources RO → MCP → provider mutating → memory mutating. Changing it
-    invalidates every open conversation's prompt cache."""
+    sources RO → MCP → provider mutating → memory mutating → ask_user.
+    Changing it invalidates every open conversation's prompt cache.
+
+    `ask_user` is appended last and is registered regardless of read_only —
+    it does not mutate provider state."""
     registry = ToolRegistry()
     register_readonly_tools(registry, conn=conn, provider=provider, provider_key=provider_key)
     register_link_tools(registry)
@@ -67,6 +75,15 @@ def build_tool_registry(
         )
         if project_id:
             register_memory_mutating_tools(registry, conn=conn, store=store, project_id=project_id)
+    if question_store is not None and conversation_id is not None and current_tool_call_id is not None:
+        register_ask_user_tool(
+            registry,
+            store=question_store,
+            conversation_id=conversation_id,
+            current_tool_call_id=current_tool_call_id,
+            provider_key=provider_key,
+            project_id=project_id,
+        )
     return registry
 
 
@@ -81,6 +98,7 @@ def build_agent(
     provider_key: str = "",
     project_id: str = "",
     mcp_manager: MCPManager | None = None,
+    question_store: QuestionStore | None = None,
 ) -> AgentLoop:
     """Assemble an `AgentLoop` with the standard tool registry.
 
@@ -99,7 +117,13 @@ def build_agent(
 
     Read-only mode keeps every readonly tool so the agent can still answer
     questions; it just strips every `propose_*` tool so the agent can't
-    stage writes."""
+    stage writes.
+
+    `question_store` enables the `ask_user` tool. The loop carries the
+    conversation id and tool-call id through accessors so the tool's
+    closure can stage a Question keyed to the in-flight call without
+    rebuilding the agent on every turn."""
+    loop = AgentLoop(client=llm, tools=ToolRegistry())
     registry = build_tool_registry(
         conn=conn,
         provider=provider,
@@ -109,8 +133,12 @@ def build_agent(
         provider_key=provider_key,
         project_id=project_id,
         mcp_manager=mcp_manager,
+        question_store=question_store,
+        conversation_id=loop.current_conversation_id,
+        current_tool_call_id=loop.current_tool_call_id,
     )
-    return AgentLoop(client=llm, tools=registry)
+    loop.set_tools(registry)
+    return loop
 
 
 __all__ = ["build_agent", "build_tool_registry"]

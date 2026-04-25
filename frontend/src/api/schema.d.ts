@@ -140,6 +140,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/items/{item_id}/conversation/pending_question": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Pending Question
+         * @description The pending `ask_user` question for the active conversation, or null.
+         *
+         *     Lets the UI re-render the question card after a page reload — the
+         *     placeholder tool-result message is in history, but the structured options
+         *     only live in memory until the user answers.
+         */
+        get: operations["get_pending_question_items__item_id__conversation_pending_question_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/items/{item_id}/conversation/thread": {
         parameters: {
             query?: never;
@@ -175,10 +199,34 @@ export interface paths {
          *       - `message` — assistant or tool messages persisted during the turn
          *       - `proposal` — a staged mutation ready for confirmation (fired when the
          *         agent calls a mutating tool)
+         *       - `question` — a staged `ask_user` question awaiting user input
          *       - `done` — terminal, carries usage totals
          *       - `error` — terminal, carries a human-readable detail
          */
         post: operations["send_message_items__item_id__conversation_messages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{item_id}/conversation/answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Answer Question
+         * @description Resume the agent loop with the user's answer to a pending `ask_user`.
+         *
+         *     Streams the same event types as `/messages` (delta/message/proposal/question/done/error).
+         *     Returns 409 if no question is pending or the id does not match.
+         */
+        post: operations["answer_question_items__item_id__conversation_answer_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -283,11 +331,13 @@ export interface paths {
         put?: never;
         /**
          * Create Item
-         * @description Create a work item through the mutation pipeline.
+         * @description Stage a work-item creation as a proposal.
          *
-         *     With `dry_run=true`, returns a `ProposalDTO` the caller can preview. Without,
-         *     executes the create and returns the stored result (still via
-         *     `mutation_service.confirm`, so any provider-side validation runs).
+         *     Mirrors the propose/confirm/reject flow used for edits: the caller
+         *     receives a `ProposalDTO` (with `id` and a human-readable `diff`) and
+         *     must follow up with `POST /items/proposals/{proposal_id}/confirm` to
+         *     actually create the item, or `/reject` to discard it. Nothing hits the
+         *     provider until confirm.
          */
         post: operations["create_item_items_post"];
         delete?: never;
@@ -364,6 +414,40 @@ export interface paths {
         get: operations["get_item_items__item_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/proposals/{proposal_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm Item Create */
+        post: operations["confirm_item_create_items_proposals__proposal_id__confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/proposals/{proposal_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject Item Create */
+        post: operations["reject_item_create_items_proposals__proposal_id__reject_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -517,10 +601,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Test Provider Draft
+         * Test Provider Config
          * @description Dry-run a provider config without persisting it.
          */
-        post: operations["test_provider_draft_settings_providers_test_post"];
+        post: operations["test_provider_config_settings_providers_test_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1129,6 +1213,13 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AnswerQuestionRequest */
+        AnswerQuestionRequest: {
+            /** Question Id */
+            question_id: string;
+            /** Answers */
+            answers: components["schemas"]["QuestionAnswerDTO"][];
+        };
         /** AttachmentDTO */
         AttachmentDTO: {
             /** Filename */
@@ -1764,6 +1855,51 @@ export interface components {
             /** Key */
             key: string;
         };
+        /** QuestionAnswerDTO */
+        QuestionAnswerDTO: {
+            /** Selected */
+            selected?: string[];
+            /** Other */
+            other?: string | null;
+        };
+        /** QuestionDTO */
+        QuestionDTO: {
+            /** Id */
+            id: string;
+            /** Tool Call Id */
+            tool_call_id: string;
+            /** Questions */
+            questions: components["schemas"]["QuestionItemDTO"][];
+        };
+        /** QuestionItemDTO */
+        QuestionItemDTO: {
+            /** Question */
+            question: string;
+            /** Header */
+            header: string;
+            /**
+             * Multi Select
+             * @default false
+             */
+            multi_select: boolean;
+            /**
+             * Allow Other
+             * @default true
+             */
+            allow_other: boolean;
+            /** Options */
+            options: components["schemas"]["QuestionOptionDTO"][];
+        };
+        /** QuestionOptionDTO */
+        QuestionOptionDTO: {
+            /** Label */
+            label: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+        };
         /** ScopeDTO */
         ScopeDTO: {
             /** Name */
@@ -1981,12 +2117,8 @@ export interface components {
              * @default true
              */
             telemetry_enabled: boolean;
-            /**
-             * Telemetry Level
-             * @default DEBUG
-             * @enum {string}
-             */
-            telemetry_level: "DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL";
+            /** @default DEBUG */
+            telemetry_level: components["schemas"]["TelemetryLevel"];
             /**
              * Run Initial Sync
              * @default true
@@ -2270,6 +2402,17 @@ export interface components {
              */
             offline: boolean;
         };
+        /**
+         * TelemetryLevel
+         * @description Log levels surfaced in telemetry config + the setup wizard + settings UI.
+         *
+         *     Same string values stdlib logging uses so `logging.getLevelName(level)`
+         *     works unchanged — one source of truth instead of a regex pattern on the
+         *     model, a `Literal` on the setup schema, and hand-written tuples in the
+         *     wizard and Textual settings modal.
+         * @enum {string}
+         */
+        TelemetryLevel: "DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL";
         /**
          * TransitionIntent
          * @enum {string}
@@ -2562,6 +2705,37 @@ export interface operations {
             };
         };
     };
+    get_pending_question_items__item_id__conversation_pending_question_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionDTO"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     start_thread_items__item_id__conversation_thread_post: {
         parameters: {
             query?: never;
@@ -2605,6 +2779,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SendMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    answer_question_items__item_id__conversation_answer_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnswerQuestionRequest"];
             };
         };
         responses: {
@@ -2845,10 +3054,7 @@ export interface operations {
     };
     create_item_items_post: {
         parameters: {
-            query?: {
-                /** @description Return the proposal without creating. */
-                dry_run?: boolean;
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
@@ -2865,7 +3071,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProposalDTO"] | components["schemas"]["MutationConfirmedDTO"];
+                    "application/json": components["schemas"]["ProposalDTO"];
                 };
             };
             /** @description Validation Error */
@@ -3000,6 +3206,66 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ItemDTO"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_item_create_items_proposals__proposal_id__confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MutationConfirmedDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_item_create_items_proposals__proposal_id__reject_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -3255,7 +3521,7 @@ export interface operations {
             };
         };
     };
-    test_provider_draft_settings_providers_test_post: {
+    test_provider_config_settings_providers_test_post: {
         parameters: {
             query?: never;
             header?: never;

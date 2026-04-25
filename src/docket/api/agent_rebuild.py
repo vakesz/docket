@@ -22,12 +22,17 @@ def rebuild_agent(app: FastAPI, runtime: RuntimeState | None) -> None:
     """Re-bind `app.state.agent` from current `app.state` + `runtime`.
 
     Sets `app.state.agent = None` when the LLM isn't configured. Reads
-    `active_item` from `app.state` so callers don't have to thread the
-    callable through the rebuild path on every provider/project switch."""
+    `active_item` and `questions` from `app.state` so callers don't have to
+    thread them through the rebuild path on every provider/project switch.
+    A provider/project switch invalidates any in-flight pending question
+    because its closure was bound to the previous tuple."""
     state = app.state
     if state.llm is None:
         state.agent = None
         return
+    question_store = getattr(state, "questions", None)
+    if question_store is not None:
+        question_store.clear()
     state.agent = build_agent(
         llm=state.llm,
         conn=state.conn,
@@ -38,6 +43,7 @@ def rebuild_agent(app: FastAPI, runtime: RuntimeState | None) -> None:
         provider_key=runtime.provider_key if runtime is not None else "",
         project_id=runtime.project_id if runtime is not None else "",
         mcp_manager=runtime.mcp_manager if runtime is not None else None,
+        question_store=question_store,
     )
 
 

@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
 from docket.agent.loop import AgentLoop
+from docket.agent.question_tool import register_ask_user_tool
 from docket.agent.tool_defs import register_readonly_tools
 from docket.agent.tools import ToolRegistry
+from docket.core.question import QuestionAnswer
 from docket.core.services import conversation_service
+from docket.core.services.question_store import QuestionStore
 from docket.storage import init_db
 from docket.storage.repos import conversation_repo, item_repo, message_repo
 from tests.conftest import MakeItem
@@ -112,3 +116,152 @@ def test_history_feeds_back_into_prompt(env) -> None:
     # prefix (system x2) + prior user + prior assistant + new user
     assert roles_in_call.count("user") == 2
     assert roles_in_call.count("assistant") == 1
+
+
+# -- ask_user / question flow ----------------------------------------------
+
+
+def _build_ask_user_loop(conn, item, question_store: QuestionStore) -> tuple[AgentLoop, FakeLlmClient]:
+    """Loop pre-wired with the readonly toolset plus `ask_user`. Returns the
+    loop and the (still-empty) FakeLlmClient so the caller can script turns."""
+    registry = ToolRegistry()
+    register_readonly_tools(registry, conn=conn, provider=FakeProvider(items=[item]))
+    client = FakeLlmClient(script=[])
+    loop = AgentLoop(client=client, tools=registry)
+    register_ask_user_tool(
+        registry,
+        store=question_store,
+        conversation_id=loop.current_conversation_id,
+        current_tool_call_id=loop.current_tool_call_id,
+    )
+    return loop, client
+
+
+_ASK_ARGS = json.dumps(
+    {
+        "questions": [
+            {
+                "question": "Pick one",
+                "header": "Pick",
+                "options": [
+                    {"label": "alpha"},
+                    {"label": "beta"},
+                ],
+            }
+        ]
+    }
+)
+
+
+def test_ask_user_stages_question_and_persists_pending_tool_result(env) -> None:
+    conn, _reg, item = env
+    qstore = QuestionStore()
+    loop, client = _build_ask_user_loop(conn, item, qstore)
+    client.script = [tool_turn("tc-q1", "ask_user", _ASK_ARGS)]
+
+    result = conversation_service.send_user_message(
+        conn, loop, item.id, "should I do X?", question_store=qstore
+    )
+
+    assert result.pending_question is not None
+    assert result.pending_question.tool_call_id == "tc-q1"
+    pending_in_store = qstore.peek(("", "", result.conversation.id))
+    assert pending_in_store is result.pending_question
+
+    msgs = message_repo.list_for_conversation(conn, result.conversation.id)
+    assert [m.role for m in msgs] == ["user", "assistant", "tool"]
+    tool_row = msgs[-1]
+    assert tool_row.tool_call_id == "tc-q1"
+    # The placeholder content is the awaiting sentinel, JSON-encoded.
+    payload = json.loads(tool_row.content)
+    assert payload["status"] == "awaiting_answer"
+
+
+def test_submit_question_answer_resumes_turn(env) -> None:
+    conn, _reg, item = env
+    qstore = QuestionStore()
+    loop, client = _build_ask_user_loop(conn, item, qstore)
+    # Turn 1: ask_user.  Turn 2: model says "thanks" after the answer.
+    client.script = [
+        tool_turn("tc-q1", "ask_user", _ASK_ARGS),
+        text_turn("got it"),
+    ]
+
+    first = conversation_service.send_user_message(
+        conn, loop, item.id, "should I do X?", question_store=qstore
+    )
+    assert first.pending_question is not None
+
+    answers = (QuestionAnswer(selected=("alpha",)),)
+    second = conversation_service.submit_question_answer(
+        conn,
+        loop,
+        item.id,
+        first.pending_question.id,
+        answers,
+        question_store=qstore,
+    )
+
+    # Question is gone, model got the chance to reply.
+    assert qstore.peek(("", "", first.conversation.id)) is None
+    assert second.final_text == "got it"
+    assert second.pending_question is None
+
+    # The placeholder tool-result was rewritten with the structured answer.
+    msgs = message_repo.list_for_conversation(conn, first.conversation.id)
+    tool_row = next(m for m in msgs if m.role == "tool")
+    body = json.loads(tool_row.content)
+    assert body["status"] == "answered"
+    assert body["answers"][0]["selected"] == ["alpha"]
+
+
+def test_free_text_while_question_pending_redirects_as_other(env) -> None:
+    """User typing a regular chat message while a card is open is treated as
+    free-text for the first question — same code path as picking 'Other'."""
+    conn, _reg, item = env
+    qstore = QuestionStore()
+    loop, client = _build_ask_user_loop(conn, item, qstore)
+    client.script = [
+        tool_turn("tc-q1", "ask_user", _ASK_ARGS),
+        text_turn("noted"),
+    ]
+
+    first = conversation_service.send_user_message(
+        conn, loop, item.id, "advise me", question_store=qstore
+    )
+    assert first.pending_question is not None
+
+    # Second message arrives WITHOUT going through /answer.
+    second = conversation_service.send_user_message(
+        conn, loop, item.id, "actually, gamma", question_store=qstore
+    )
+    assert second.final_text == "noted"
+    assert qstore.peek(("", "", first.conversation.id)) is None
+
+    msgs = message_repo.list_for_conversation(conn, first.conversation.id)
+    tool_row = next(m for m in msgs if m.role == "tool")
+    body = json.loads(tool_row.content)
+    assert body["status"] == "answered"
+    assert body["answers"][0]["other"] == "actually, gamma"
+
+
+def test_submit_question_answer_rejects_mismatched_id(env) -> None:
+    conn, _reg, item = env
+    qstore = QuestionStore()
+    loop, client = _build_ask_user_loop(conn, item, qstore)
+    client.script = [tool_turn("tc-q1", "ask_user", _ASK_ARGS)]
+
+    first = conversation_service.send_user_message(
+        conn, loop, item.id, "?", question_store=qstore
+    )
+    assert first.pending_question is not None
+
+    with pytest.raises(KeyError):
+        conversation_service.submit_question_answer(
+            conn,
+            loop,
+            item.id,
+            "not-the-real-id",
+            (QuestionAnswer(other_text="x"),),
+            question_store=qstore,
+        )

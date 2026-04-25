@@ -137,6 +137,35 @@ class SendMessageRequest(BaseModel):
     text: str
 
 
+class QuestionOptionDTO(BaseModel):
+    label: str
+    description: str = ""
+
+
+class QuestionItemDTO(BaseModel):
+    question: str
+    header: str
+    multi_select: bool = False
+    allow_other: bool = True
+    options: list[QuestionOptionDTO]
+
+
+class QuestionDTO(BaseModel):
+    id: str
+    tool_call_id: str
+    questions: list[QuestionItemDTO]
+
+
+class QuestionAnswerDTO(BaseModel):
+    selected: list[str] = Field(default_factory=list)
+    other: str | None = None
+
+
+class AnswerQuestionRequest(BaseModel):
+    question_id: str
+    answers: list[QuestionAnswerDTO]
+
+
 class UsageDTO(BaseModel):
     tokens_in: int = 0
     tokens_out: int = 0

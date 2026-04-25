@@ -45,6 +45,7 @@ def append(
     tokens_in: int = 0,
     tokens_out: int = 0,
     created_at: datetime | None = None,
+    pending: bool = False,
 ) -> str:
     msg_id = str(uuid4())
     tool_calls_json: str | None = None
@@ -56,8 +57,8 @@ def append(
         """
         INSERT INTO messages (
             id, conversation_id, role, content, tool_calls_json,
-            tool_call_id, tool_name, tokens_in, tokens_out, created_at, compacted
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+            tool_call_id, tool_name, tokens_in, tokens_out, created_at, compacted, pending
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
         """,
         (
             msg_id,
@@ -70,9 +71,41 @@ def append(
             tokens_in,
             tokens_out,
             (created_at or now_utc()).isoformat(),
+            1 if pending else 0,
         ),
     )
     return msg_id
+
+
+def find_pending_tool_result(
+    conn: sqlite3.Connection,
+    convo_id: str,
+    tool_call_id: str,
+) -> sqlite3.Row | None:
+    row: sqlite3.Row | None = conn.execute(
+        """
+        SELECT * FROM messages
+        WHERE conversation_id = ?
+          AND tool_call_id = ?
+          AND role = 'tool'
+          AND pending = 1
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+        """,
+        (convo_id, tool_call_id),
+    ).fetchone()
+    return row
+
+
+def mark_tool_result_answered(
+    conn: sqlite3.Connection,
+    message_id: str,
+    content: str,
+) -> None:
+    conn.execute(
+        "UPDATE messages SET content = ?, pending = 0 WHERE id = ?",
+        (content, message_id),
+    )
 
 
 def list_for_conversation(

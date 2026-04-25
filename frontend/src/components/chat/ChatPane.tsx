@@ -1,37 +1,56 @@
 import { ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { DTO } from "~/api/client";
-import { useConversation, useItem, useStartThread, useStatus } from "~/api/hooks";
+import {
+  useConversation,
+  useItem,
+  usePendingQuestion,
+  useStartThread,
+  useStatus,
+} from "~/api/hooks";
 import { Markdown } from "~/components/detail/Markdown";
 import { ProposalCard } from "~/components/mutations/ProposalCard";
 import { cn } from "~/lib/cn";
 import { type IssueLinkContext, issueLinkContextFromUrl } from "~/lib/issueLinks";
 import { type ToolDisplayMode, useToolDisplayMode } from "~/lib/uiPrefs";
 import { useChatPaneController } from "./ChatPaneContext";
+import { QuestionCard } from "./QuestionCard";
 import { type ChatMessage, useChatStream } from "./useChatStream";
 
 export function ChatPane({ itemId }: { itemId: string }) {
   const status = useStatus();
   const history = useConversation(itemId);
+  const pendingQuestionQuery = usePendingQuestion(itemId);
   const startThread = useStartThread();
   const item = useItem(itemId);
   const chatController = useChatPaneController();
   const issueLinks = issueLinkContextFromUrl(item.data?.url);
   const [draft, setDraft] = useState("");
   const [proposals, setProposals] = useState<DTO["ProposalDTO"][]>([]);
+  const [pendingQuestion, setPendingQuestion] = useState<DTO["QuestionDTO"] | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
 
-  const { messages, streaming, error, send, reset } = useChatStream({
+  const { messages, streaming, error, send, answer, reset } = useChatStream({
     itemId,
     onProposal: (p) => setProposals((prev) => [...prev.filter((x) => x.id !== p.id), p]),
+    onQuestion: (q) => setPendingQuestion(q),
+    onQuestionResolved: (qid) => setPendingQuestion((prev) => (prev?.id === qid ? null : prev)),
   });
   const [toolDisplayMode] = useToolDisplayMode();
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: setProposals is stable; we intentionally reset when the viewed item changes.
+  // Hydrate pending-question state from the server on mount / item switch so a
+  // page reload mid-question still shows the card.
+  useEffect(() => {
+    if (pendingQuestionQuery.data === undefined) return;
+    setPendingQuestion(pendingQuestionQuery.data ?? null);
+  }, [pendingQuestionQuery.data]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: setProposals/setPendingQuestion are stable; we intentionally reset when the viewed item changes.
   useEffect(() => {
     reset();
     setProposals([]);
+    setPendingQuestion(null);
     // Also abort on unmount so navigating away mid-stream doesn't leave
     // the fetch reader + AbortController orphaned on a dead component.
     return reset;
@@ -123,6 +142,15 @@ export function ChatPane({ itemId }: { itemId: string }) {
                 ))}
               </div>
             )}
+            {pendingQuestion && (
+              <QuestionCard
+                question={pendingQuestion}
+                disabled={streaming}
+                onSubmit={(answers) => {
+                  void answer(pendingQuestion.id, answers);
+                }}
+              />
+            )}
             {error && (
               <div className="mt-2 rounded border border-danger bg-danger-bg p-2 text-xs text-danger-fg">
                 {error}
@@ -144,8 +172,9 @@ export function ChatPane({ itemId }: { itemId: string }) {
       >
         {!disabled && (
           <p className="mb-1 text-[10px] text-fg-faint">
-            Ask the agent to comment, transition, or rewrite — changes appear here as yellow cards
-            to confirm.
+            {pendingQuestion
+              ? "Pick from the card above — or type free text and it'll be sent as your answer."
+              : "Ask the agent to comment, transition, or rewrite — changes appear here as yellow cards to confirm."}
           </p>
         )}
         <textarea

@@ -33,7 +33,12 @@ from docket.cli.tui.view_resolver import (
     resolve_stale_threshold,
     resolve_sync_interval,
 )
-from docket.cli.tui.widgets.chat_pane import ChatPane, TurnFinished, UserTurnRequest
+from docket.cli.tui.widgets.chat_pane import (
+    AnswerQuestionRequest,
+    ChatPane,
+    TurnFinished,
+    UserTurnRequest,
+)
 from docket.cli.tui.widgets.help_modal import HelpModal
 from docket.cli.tui.widgets.item_detail import ItemDetail
 from docket.cli.tui.widgets.item_tree import ItemTree
@@ -49,6 +54,7 @@ from docket.core.model import (
     project_id_for,
 )
 from docket.core.mutation import ItemCreate, Proposal
+from docket.core.question import Question, QuestionAnswer
 from docket.core.services import (
     conversation_service,
     mutation_service,
@@ -56,6 +62,7 @@ from docket.core.services import (
     visual_filter,
 )
 from docket.core.services.proposal_store import PendingProposal, ProposalStore
+from docket.core.services.question_store import QuestionStore
 
 log = logging.getLogger(__name__)
 
@@ -161,6 +168,7 @@ class DocketApp(
         self.title = "Docket"
         self._selected_item_id: str | None = None
         self._proposals = ProposalStore()
+        self._questions = QuestionStore()
         self._agent: AgentLoop | None = None
         self._pane_pct: dict[str, int] = dict(self._DEFAULT_PANE_PCT)
         self._rebuild_agent()
@@ -266,6 +274,10 @@ class DocketApp(
         tool registry targets the new backend. No-op when no LLM is configured."""
         if self.tui_ctx.llm is None:
             return
+        # A provider/project switch invalidates any pending question — its
+        # tool-call closure was captured by the previous agent and would now
+        # publish into the wrong conversation key.
+        self._questions.clear()
         self._agent = build_agent(
             llm=self.tui_ctx.llm,
             conn=self.tui_ctx.conn,
@@ -276,6 +288,7 @@ class DocketApp(
             provider_key=self.tui_ctx.provider_key,
             project_id=project_id_for(self.tui_ctx.provider_key),
             mcp_manager=self.tui_ctx.mcp_manager,
+            question_store=self._questions,
         )
 
     def _require_project_context(self, feature: str) -> tuple[str, str] | None:
@@ -360,6 +373,23 @@ class DocketApp(
             thread=True,
         )
 
+    def on_answer_question_request(self, event: AnswerQuestionRequest) -> None:
+        """`QuestionCard` posted answers — resume the agent loop."""
+        if self._agent is None or self._selected_item_id is None:
+            self.query_one(ChatPane).note("Chat is not configured.", cls="msg-system")
+            return
+        item_id = self._selected_item_id
+        question_id = event.question_id
+        answers = event.answers
+        # The card disables its own controls on submit; we leave it visible so
+        # the user sees what they answered while the agent's reply streams in.
+        self.run_worker(
+            lambda: self._run_answer(item_id, question_id, answers),
+            group="chat",
+            exclusive=True,
+            thread=True,
+        )
+
     def _run_turn(self, item_id: str, text: str) -> None:
         chat = self.query_one(ChatPane)
         if self._agent is None:
@@ -397,6 +427,7 @@ class DocketApp(
                 compaction_threshold_tokens=self.tui_ctx.compaction_threshold_tokens or None,
                 provider_key=self.tui_ctx.provider_key,
                 project_id=project_id_for(self.tui_ctx.provider_key),
+                question_store=self._questions,
             )
         except Exception as e:
             log.exception("chat turn failed")
@@ -410,7 +441,73 @@ class DocketApp(
             return
         self.call_from_thread(chat.finish_turn, result.usage)
         self.call_from_thread(self._set_thinking, False)
+        if result.pending_question is not None:
+            self.call_from_thread(chat.show_question, result.pending_question)
+        else:
+            self.call_from_thread(chat.clear_question)
         # If the turn produced pending proposals, surface the first one.
+        if len(self._proposals) > 0:
+            self.call_from_thread(self._refresh_pending_count)
+            self.call_from_thread(self._open_next_pending)
+
+    def _run_answer(
+        self,
+        item_id: str,
+        question_id: str,
+        answers: tuple[QuestionAnswer, ...],
+    ) -> None:
+        """Worker that resumes a turn after the user answers an `ask_user`."""
+        chat = self.query_one(ChatPane)
+        if self._agent is None:
+            self.call_from_thread(chat.note, "Agent is not available.", cls="msg-system")
+            return
+
+        def on_delta(delta: StreamDelta) -> None:
+            self.call_from_thread(chat.append_delta, delta)
+
+        def on_message(msg: ChatMessage) -> None:
+            if msg.role == "assistant":
+                if msg.tool_calls:
+                    names = ", ".join(tc.name for tc in msg.tool_calls)
+                    self.call_from_thread(chat.note, f"→ calling {names}")
+                return
+            if msg.role == "tool":
+                preview = (msg.content or "")[:80].replace("\n", " ")
+                self.call_from_thread(chat.note, f"← {msg.name}: {preview}")
+
+        self.call_from_thread(chat.begin_assistant)
+        self.call_from_thread(self._set_thinking, True)
+        try:
+            result = conversation_service.submit_question_answer(
+                self.tui_ctx.conn,
+                self._agent,
+                item_id,
+                question_id,
+                answers,
+                on_delta=on_delta,
+                on_message=on_message,
+                compaction_threshold_tokens=self.tui_ctx.compaction_threshold_tokens or None,
+                provider_key=self.tui_ctx.provider_key,
+                project_id=project_id_for(self.tui_ctx.provider_key),
+                question_store=self._questions,
+            )
+        except Exception as e:
+            log.exception("answer resume failed")
+            friendly = humanize_error(e, action="Answer")
+            self.call_from_thread(
+                chat.note,
+                f"{friendly} (see logs for the full traceback)",
+                cls="msg-system",
+            )
+            self.call_from_thread(chat.clear_question)
+            self.call_from_thread(self._set_thinking, False)
+            return
+        self.call_from_thread(chat.finish_turn, result.usage)
+        self.call_from_thread(self._set_thinking, False)
+        if result.pending_question is not None:
+            self.call_from_thread(chat.show_question, result.pending_question)
+        else:
+            self.call_from_thread(chat.clear_question)
         if len(self._proposals) > 0:
             self.call_from_thread(self._refresh_pending_count)
             self.call_from_thread(self._open_next_pending)
@@ -467,6 +564,9 @@ class DocketApp(
     def action_new_thread(self) -> None:
         if self._selected_item_id is None:
             return
+        # Drop any pending question for the old conversation; the new thread
+        # starts clean and the agent has to re-ask if it still wants the info.
+        self._abandon_pending_question(self._selected_item_id)
         conversation_service.new_thread(
             self.tui_ctx.conn,
             self._selected_item_id,
@@ -474,8 +574,46 @@ class DocketApp(
         )
         chat = self.query_one(ChatPane)
         chat.show_history([])
+        chat.clear_question()
         chat.set_status("")
         self._reset_cost_display()
+
+    def _abandon_pending_question(self, item_id: str) -> None:
+        """Drop any in-memory question staged for this item's active convo.
+
+        Called on `new thread` and item switch so a stale closure can't fire
+        an answer back into a conversation the user already moved past."""
+        from docket.storage.repos import conversation_repo
+
+        try:
+            convo = conversation_repo.get_active_for_item(
+                self.tui_ctx.conn,
+                item_id,
+                provider_key=self.tui_ctx.provider_key,
+            )
+        except Exception:
+            return
+        if convo is None:
+            return
+        project_id = project_id_for(self.tui_ctx.provider_key)
+        self._questions.pop((self.tui_ctx.provider_key, project_id, convo.id))
+
+    def _hydrate_pending_question(self, item_id: str) -> Question | None:
+        """Look up a staged question for this item's active conversation, if any."""
+        from docket.storage.repos import conversation_repo
+
+        try:
+            convo = conversation_repo.get_active_for_item(
+                self.tui_ctx.conn,
+                item_id,
+                provider_key=self.tui_ctx.provider_key,
+            )
+        except Exception:
+            return None
+        if convo is None:
+            return None
+        project_id = project_id_for(self.tui_ctx.provider_key)
+        return self._questions.peek((self.tui_ctx.provider_key, project_id, convo.id))
 
     def _reset_cost_display(self) -> None:
         """Zero the status-bar conversation-cost counter. Called on item

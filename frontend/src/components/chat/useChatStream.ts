@@ -16,6 +16,8 @@ export type { ChatMessage } from "./chatStreamReducer";
 interface UseChatStreamOpts {
   itemId: string;
   onProposal: (p: DTO["ProposalDTO"]) => void;
+  onQuestion: (q: DTO["QuestionDTO"]) => void;
+  onQuestionResolved: (questionId: string) => void;
 }
 
 /**
@@ -28,7 +30,12 @@ interface UseChatStreamOpts {
  * of pinning all assistant text to the first slot and stacking tools beneath
  * it. See `chatStreamReducer.ts` for the pure state-transition logic.
  */
-export function useChatStream({ itemId, onProposal }: UseChatStreamOpts) {
+export function useChatStream({
+  itemId,
+  onProposal,
+  onQuestion,
+  onQuestionResolved,
+}: UseChatStreamOpts) {
   const qc = useQueryClient();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [streaming, setStreaming] = useState(false);
@@ -49,17 +56,15 @@ export function useChatStream({ itemId, onProposal }: UseChatStreamOpts) {
     setStreaming(false);
   }, []);
 
-  const send = useCallback(
-    async (text: string) => {
-      if (!text.trim() || streaming) return;
-      setError(null);
-      const turnId = `turn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const firstAssistantId = `assistant-${turnId}-0`;
-      // Local mutable state for this turn — we apply the reducer to this and
-      // then publish the resulting message list to React. Keeping the state
-      // local (instead of using a useReducer) avoids stale-closure races with
-      // rapid-fire delta callbacks.
-      let state: ReducerState = initialState(turnId, text, firstAssistantId);
+  const drainStream = useCallback(
+    async (
+      path: string,
+      body: unknown,
+      turnId: string,
+      seedState: ReducerState,
+      opts: { resolvedQuestionId?: string } = {},
+    ) => {
+      let state = seedState;
       const ctx = {
         turnId,
         mkToolCallId: () => `tool-call-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -69,8 +74,6 @@ export function useChatStream({ itemId, onProposal }: UseChatStreamOpts) {
       const publish = () =>
         setMessages((prev) => [...prev.filter((m) => m.turnId !== turnId), ...state.messages]);
 
-      // Seed user + empty assistant so the "thinking…" placeholder shows
-      // immediately after submission.
       setMessages((prev) => [...prev, ...state.messages]);
       setStreaming(true);
 
@@ -78,11 +81,7 @@ export function useChatStream({ itemId, onProposal }: UseChatStreamOpts) {
       abortRef.current = ctrl;
       let completed = false;
       try {
-        for await (const ev of api.stream(
-          `/items/${encodeURIComponent(itemId)}/conversation/messages`,
-          { text },
-          ctrl.signal,
-        )) {
+        for await (const ev of api.stream(path, body, ctrl.signal)) {
           if (ev.event === "delta") {
             const parsed = parseDelta(ev.data);
             if (parsed) {
@@ -107,6 +106,9 @@ export function useChatStream({ itemId, onProposal }: UseChatStreamOpts) {
           } else if (ev.event === "proposal") {
             const proposal = parseProposal(ev.data);
             if (proposal) onProposal(proposal);
+          } else if (ev.event === "question") {
+            const question = parseQuestion(ev.data);
+            if (question) onQuestion(question);
           } else if (ev.event === "error") {
             setError(parseError(ev.data));
           } else if (ev.event === "done") {
@@ -129,16 +131,63 @@ export function useChatStream({ itemId, onProposal }: UseChatStreamOpts) {
             qc.invalidateQueries({ queryKey: qk.status() }),
           ]);
           setMessages((prev) => prev.filter((message) => message.turnId !== turnId));
+          if (opts.resolvedQuestionId) onQuestionResolved(opts.resolvedQuestionId);
         } else {
           await qc.invalidateQueries({ queryKey: qk.status() });
         }
         abortRef.current = null;
       }
     },
-    [itemId, onProposal, qc, streaming],
+    [itemId, onProposal, onQuestion, onQuestionResolved, qc],
   );
 
-  return { messages, streaming, error, send, reset, stop };
+  const send = useCallback(
+    async (text: string) => {
+      if (!text.trim() || streaming) return;
+      setError(null);
+      const turnId = `turn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const firstAssistantId = `assistant-${turnId}-0`;
+      // Local mutable state for this turn — we apply the reducer to this and
+      // then publish the resulting message list to React. Keeping the state
+      // local (instead of using a useReducer) avoids stale-closure races with
+      // rapid-fire delta callbacks.
+      const seed = initialState(turnId, text, firstAssistantId);
+      await drainStream(
+        `/items/${encodeURIComponent(itemId)}/conversation/messages`,
+        { text },
+        turnId,
+        seed,
+      );
+    },
+    [drainStream, itemId, streaming],
+  );
+
+  const answer = useCallback(
+    async (questionId: string, answers: DTO["QuestionAnswerDTO"][]) => {
+      if (streaming) return;
+      setError(null);
+      const turnId = `answer-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const firstAssistantId = `assistant-${turnId}-0`;
+      // No user bubble — the answer was given via the card. Seed only the
+      // streaming-assistant placeholder so the user sees "thinking…" while
+      // the resumed turn produces text.
+      const seed: ReducerState = {
+        messages: [{ kind: "assistant", id: firstAssistantId, turnId, text: "", streaming: true }],
+        activeAssistantId: firstAssistantId,
+        assistantCounter: 1,
+      };
+      await drainStream(
+        `/items/${encodeURIComponent(itemId)}/conversation/answer`,
+        { question_id: questionId, answers },
+        turnId,
+        seed,
+        { resolvedQuestionId: questionId },
+      );
+    },
+    [drainStream, itemId, streaming],
+  );
+
+  return { messages, streaming, error, send, answer, reset, stop };
 }
 
 function parseDelta(data: string): string | null {
@@ -204,6 +253,15 @@ function parseProposal(data: string): DTO["ProposalDTO"] | null {
     return JSON.parse(data) as DTO["ProposalDTO"];
   } catch (err) {
     console.warn("chat: dropped malformed SSE proposal", { err, data });
+    return null;
+  }
+}
+
+function parseQuestion(data: string): DTO["QuestionDTO"] | null {
+  try {
+    return JSON.parse(data) as DTO["QuestionDTO"];
+  } catch (err) {
+    console.warn("chat: dropped malformed SSE question", { err, data });
     return null;
   }
 }
