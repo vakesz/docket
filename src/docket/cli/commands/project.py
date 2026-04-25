@@ -10,7 +10,7 @@ from __future__ import annotations
 import typer
 from rich.table import Table
 
-from docket.cli._console import console
+from docket._console import console
 from docket.cli.context import prepare_or_wizard
 from docket.core.model import project_id_for
 from docket.core.services import project_service

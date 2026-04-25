@@ -4,7 +4,7 @@ from pathlib import Path
 
 import typer
 
-from docket.cli._console import console
+from docket._console import console
 from docket.cli.commands._utils import DryRun
 from docket.cli.confirm import apply_mutation
 from docket.cli.context import prepare_or_wizard

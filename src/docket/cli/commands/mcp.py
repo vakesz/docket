@@ -12,8 +12,8 @@ from __future__ import annotations
 import typer
 from rich.table import Table
 
+from docket._console import console
 from docket.agent.mcp import MCPClient
-from docket.cli._console import console
 from docket.cli.context import prepare_or_wizard
 from docket.config.models import MCPServerEntry
 from docket.core.services import mcp_service

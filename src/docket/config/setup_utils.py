@@ -16,15 +16,13 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Final, Literal, overload
 from urllib.parse import urlparse
 
-from rich.console import Console
 from rich.prompt import Confirm, Prompt
 
+from docket._console import console
 from docket.providers.base import ProviderAuthError
 
 if TYPE_CHECKING:
     from docket.providers.github.discover import HostRef
-
-console = Console()
 
 CUSTOM_SENTINEL: Final[Literal["__custom__"]] = "__custom__"
 """Returned by `pick` when the user chose the 'custom…' option. Callers

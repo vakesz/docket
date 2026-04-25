@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from docket.cli._console import console
+from docket._console import console
 from docket.config.env import (
     get_llm_api_key,
     get_llm_api_version,

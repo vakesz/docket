@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from docket.cli._console import console
+from docket._console import console
 from docket.cli.commands._llm import build_llm_client
 from docket.cli.context import prepare_or_wizard
 from docket.config.env import get_read_only

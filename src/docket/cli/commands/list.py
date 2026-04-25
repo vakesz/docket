@@ -3,7 +3,7 @@ from __future__ import annotations
 import typer
 from rich.table import Table
 
-from docket.cli._console import console
+from docket._console import console
 from docket.cli.context import prepare_or_wizard
 from docket.core.model import ItemKind
 from docket.core.services import visual_filter

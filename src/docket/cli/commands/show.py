@@ -4,7 +4,7 @@ import typer
 from rich.markdown import Markdown
 from rich.panel import Panel
 
-from docket.cli._console import console
+from docket._console import console
 from docket.cli.context import prepare_or_wizard
 from docket.storage.repos import comment_repo, item_repo
 

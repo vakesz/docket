@@ -12,7 +12,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
-from docket.cli._console import console
+from docket._console import console
 from docket.cli.commands._utils import (
     format_updated,
     read_body,

@@ -5,7 +5,7 @@ import secrets
 
 import typer
 
-from docket.cli._console import console
+from docket._console import console
 from docket.cli.commands._llm import build_llm_client
 from docket.cli.context import prepare
 from docket.config import ConfigMissingError
