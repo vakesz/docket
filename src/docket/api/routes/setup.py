@@ -41,10 +41,8 @@ from docket.api.schemas import (
 )
 from docket.config.loader import ConfigLoadPolicy, load_config, save_config
 from docket.config.models import (
-    HttpConfig,
     ProviderEntry,
-    TelemetryConfig,
-    compose_config,
+    compose_setup_config,
 )
 from docket.config.paths import Paths
 from docket.core.services import sync_service
@@ -164,20 +162,16 @@ def setup_complete(
     llm_endpoint = req.llm.endpoint if req.llm is not None else None
     llm_deployment = req.llm.deployment if req.llm is not None else "gpt-5"
     try:
-        cfg = compose_config(
+        cfg = compose_setup_config(
             existing_cfg,
             providers=providers_cfg,
             active_provider=req.active_provider,
-            telemetry=TelemetryConfig(
-                enabled=req.telemetry_enabled,
-                level=req.telemetry_level,
-            ),
-            http=HttpConfig(
-                enabled=True,
-                bind=req.http_bind,
-                port=req.http_port,
-                token=http_token,
-            ),
+            telemetry_enabled=req.telemetry_enabled,
+            telemetry_level=req.telemetry_level,
+            http_enabled=True,
+            http_bind=req.http_bind,
+            http_port=req.http_port,
+            http_token=http_token,
             llm_endpoint=llm_endpoint,
             llm_deployment=llm_deployment,
         )

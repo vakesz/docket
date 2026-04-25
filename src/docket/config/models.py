@@ -224,13 +224,17 @@ class Config(BaseModel):
     stale: StaleConfig = Field(default_factory=StaleConfig)
 
 
-def compose_config(
+def compose_setup_config(
     existing: Config | None,
     *,
     providers: dict[str, ProviderEntry],
     active_provider: str,
-    telemetry: TelemetryConfig,
-    http: HttpConfig,
+    telemetry_enabled: bool,
+    telemetry_level: TelemetryLevel,
+    http_enabled: bool,
+    http_bind: str,
+    http_port: int,
+    http_token: str,
     llm_endpoint: str | None,
     llm_deployment: str,
 ) -> Config:
@@ -248,6 +252,13 @@ def compose_config(
     rebuilding a fresh `Config`. Routing both through this helper keeps
     them honest."""
     endpoint = HttpUrl(llm_endpoint) if llm_endpoint else None
+    telemetry = TelemetryConfig(enabled=telemetry_enabled, level=telemetry_level)
+    http = HttpConfig(
+        enabled=http_enabled,
+        bind=http_bind,
+        port=http_port,
+        token=http_token,
+    )
     if existing is None:
         return Config(
             providers=providers,

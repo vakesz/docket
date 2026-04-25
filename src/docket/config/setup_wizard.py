@@ -36,12 +36,10 @@ from docket.agent.prompt import scaffold as scaffold_prompts
 from docket.config.loader import ConfigLoadPolicy, load_config, save_config
 from docket.config.models import (
     Config,
-    HttpConfig,
     ScopeFilter,
-    TelemetryConfig,
     TelemetryLevel,
     build_provider_entry,
-    compose_config,
+    compose_setup_config,
 )
 from docket.config.paths import Paths, resolve_paths
 from docket.config.setup_utils import (
@@ -812,7 +810,7 @@ def _build_config_from_state(state: WizardState) -> Config:
     Non-wizard fields (`ui`, `sync`, `stale`, `projects`, LLM advanced knobs)
     survive untouched so partial runs with `--step=<name>` don't clobber
     them. The actual layering is shared with HTTP `/setup/complete` via
-    `compose_config`."""
+    `compose_setup_config`."""
     providers = dict(state.existing.providers)
     providers[state.provider_key] = build_provider_entry(
         type_id=state.type_id,
@@ -824,20 +822,16 @@ def _build_config_from_state(state: WizardState) -> Config:
     active_provider = state.existing.active_provider
     if state.make_active or not active_provider:
         active_provider = state.provider_key
-    return compose_config(
+    return compose_setup_config(
         state.existing,
         providers=providers,
         active_provider=active_provider,
-        telemetry=TelemetryConfig(
-            enabled=state.telemetry_enabled,
-            level=state.telemetry_level,
-        ),
-        http=HttpConfig(
-            enabled=state.http_enabled,
-            bind=state.http_bind,
-            port=state.http_port,
-            token=state.http_token,
-        ),
+        telemetry_enabled=state.telemetry_enabled,
+        telemetry_level=state.telemetry_level,
+        http_enabled=state.http_enabled,
+        http_bind=state.http_bind,
+        http_port=state.http_port,
+        http_token=state.http_token,
         llm_endpoint=state.llm_endpoint or None,
         llm_deployment=state.llm_deployment,
     )
