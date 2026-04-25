@@ -6,13 +6,13 @@ import { useApplyMcpPreset, useMcpPresets } from "~/api/hooks";
 import { Label } from "~/components/common/Label";
 import { Modal } from "~/components/common/Modal";
 import { Notice } from "~/components/common/Notice";
+import { Toggle } from "~/components/common/Toggle";
 import { cn } from "~/lib/cn";
 import {
   fieldClass,
   fieldMonoClass,
   outlineButtonClass,
   primaryButtonClass,
-  secondaryButtonClass,
 } from "~/lib/formClasses";
 
 /**
@@ -198,30 +198,11 @@ export function McpPresetPickerModal({
               </div>
             ))}
 
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                role="switch"
-                aria-checked={enabled}
-                onClick={() => setEnabled((v) => !v)}
-                className={secondaryButtonClass}
-              >
-                <span
-                  className={cn(
-                    "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
-                    enabled ? "bg-accent" : "bg-surface-alt",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "inline-block h-4 w-4 transform rounded-full bg-surface shadow transition-transform",
-                      enabled ? "translate-x-4" : "translate-x-0.5",
-                    )}
-                  />
-                </span>
-                <span>{enabled ? "Enabled on create" : "Disabled on create"}</span>
-              </button>
-            </div>
+            <Toggle
+              checked={enabled}
+              onChange={setEnabled}
+              label={enabled ? "Enabled on create" : "Disabled on create"}
+            />
           </div>
         )}
       </div>

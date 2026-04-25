@@ -9,6 +9,9 @@ import { McpPresetPickerModal } from "./McpPresetPickerModal";
 import { McpServerForm } from "./McpServerForm";
 import { blankDraft, draftFromServer, type McpServerDraft } from "./mcpServerDraft";
 
+const sidebarActionClass =
+  "inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm font-medium text-fg hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-40";
+
 /**
  * MCP page: left column lists the active project's configured servers,
  * right column edits the selected one (or a fresh draft). The TUI version
@@ -117,7 +120,7 @@ export function McpPage() {
               type="button"
               onClick={startNewDraft}
               disabled={readOnly}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm font-medium text-fg hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-40"
+              className={sidebarActionClass}
               title={readOnly ? "Read-only mode" : "Add a new MCP server"}
             >
               <Plus className="h-4 w-4" />
@@ -127,7 +130,7 @@ export function McpPage() {
               type="button"
               onClick={() => setShowPresets(true)}
               disabled={readOnly}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm font-medium text-fg hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-40"
+              className={sidebarActionClass}
               title={readOnly ? "Read-only mode" : "Pick from known-good server recipes"}
             >
               <Sparkles className="h-4 w-4" />

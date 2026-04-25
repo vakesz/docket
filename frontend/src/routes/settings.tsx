@@ -52,20 +52,17 @@ import {
   useUpdateProvider,
 } from "~/api/hooks";
 import type { components } from "~/api/schema";
+import { NumberInput, TextInput } from "~/components/common/FormInputs";
 import { Label } from "~/components/common/Label";
 import { Modal } from "~/components/common/Modal";
 import { Notice } from "~/components/common/Notice";
+import { Toggle } from "~/components/common/Toggle";
 import { McpPage } from "~/components/mcp/McpPage";
 import { ThemePicker } from "~/components/shell/ThemePicker";
 import { ToolDisplayPicker } from "~/components/shell/ToolDisplayPicker";
 import { docketCodeMirrorTheme } from "~/lib/cmTheme";
 import { cn } from "~/lib/cn";
-import {
-  fieldClass,
-  outlineButtonClass,
-  primaryButtonClass,
-  secondaryButtonClass,
-} from "~/lib/formClasses";
+import { fieldClass, outlineButtonClass, primaryButtonClass } from "~/lib/formClasses";
 
 type PromptSummary = components["schemas"]["PromptSummaryDTO"];
 
@@ -189,6 +186,9 @@ const THEME_OPTIONS = [
   "atom-one-light",
 ] as const;
 const MODE_STORAGE_KEY = "docket.settings.mode";
+
+const readOnlyFieldClass =
+  "rounded-xl border border-border bg-surface-alt px-3 py-2 font-mono text-sm text-fg-muted";
 
 // ---------- Route -----------------------------------------------------------
 
@@ -1010,9 +1010,7 @@ function ProviderModal(props: ProviderModalProps) {
             <div className="grid gap-4 sm:grid-cols-2">
               <FormField label="Provider type">
                 {isEdit ? (
-                  <div className="rounded-xl border border-border bg-surface-alt px-3 py-2 font-mono text-sm text-fg-muted">
-                    {existingType || "unknown"}
-                  </div>
+                  <div className={readOnlyFieldClass}>{existingType || "unknown"}</div>
                 ) : (
                   <Select
                     value={selectedType}
@@ -1033,9 +1031,7 @@ function ProviderModal(props: ProviderModalProps) {
                 }
               >
                 {isEdit ? (
-                  <div className="rounded-xl border border-border bg-surface-alt px-3 py-2 font-mono text-sm text-fg-muted">
-                    {key}
-                  </div>
+                  <div className={readOnlyFieldClass}>{key}</div>
                 ) : (
                   <TextInput value={key} onChange={setKey} placeholder="github-work" />
                 )}
@@ -1690,71 +1686,6 @@ function HelpText({ children }: { children: ReactNode }) {
   return <span className="text-xs leading-5 text-fg-muted">{children}</span>;
 }
 
-function TextInput({
-  value,
-  onChange,
-  type = "text",
-  placeholder,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  type?: string;
-  placeholder?: string;
-}) {
-  return (
-    <input
-      type={type}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      className={cn(fieldClass, "transition-colors")}
-    />
-  );
-}
-
-function NumberInput({
-  value,
-  onChange,
-  min,
-  max,
-  step,
-  suffix,
-}: {
-  value: number | null;
-  onChange: (v: number | null) => void;
-  min?: number;
-  max?: number;
-  step?: number;
-  suffix?: string;
-}) {
-  return (
-    <div className="flex w-full items-stretch overflow-hidden rounded-xl border border-border bg-surface focus-within:border-accent">
-      <input
-        type="number"
-        value={value === null ? "" : value}
-        onChange={(e) => {
-          const raw = e.target.value;
-          if (raw === "") {
-            onChange(null);
-            return;
-          }
-          const n = Number(raw);
-          onChange(Number.isFinite(n) ? n : null);
-        }}
-        min={min}
-        max={max}
-        step={step}
-        className="w-full bg-transparent px-3 py-2 text-sm text-fg outline-none"
-      />
-      {suffix && (
-        <span className="flex items-center border-l border-border bg-bg px-2 text-xs text-fg-muted">
-          {suffix}
-        </span>
-      )}
-    </div>
-  );
-}
-
 function Select({
   value,
   options,
@@ -1810,41 +1741,6 @@ function Select({
         </button>
       )}
     </div>
-  );
-}
-
-function Toggle({
-  checked,
-  onChange,
-  label,
-}: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  label?: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className={cn(secondaryButtonClass, "w-fit")}
-    >
-      <span
-        className={cn(
-          "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
-          checked ? "bg-accent" : "bg-surface-alt",
-        )}
-      >
-        <span
-          className={cn(
-            "inline-block h-4 w-4 transform rounded-full bg-surface shadow transition-transform",
-            checked ? "translate-x-4" : "translate-x-0.5",
-          )}
-        />
-      </span>
-      {label && <span>{label}</span>}
-    </button>
   );
 }
 
