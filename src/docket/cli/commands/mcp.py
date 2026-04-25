@@ -15,6 +15,13 @@ from rich.table import Table
 from docket._console import console
 from docket.agent.mcp import MCPClient
 from docket.cli.context import prepare_or_wizard
+from docket.config.mcp_presets import (
+    MissingPresetEnvError,
+    UnknownPresetError,
+    apply_preset,
+    get_preset,
+    list_presets,
+)
 from docket.config.models import MCPServerEntry
 from docket.core.services import mcp_service
 
@@ -125,8 +132,6 @@ def mcp_add(
 @mcp_app.command("presets")
 def mcp_presets() -> None:
     """List known MCP server presets (`docket mcp add-preset <id>`)."""
-    from docket.config.mcp_presets import list_presets
-
     presets = list_presets()
     if not presets:
         console.print("[dim]No presets registered.[/dim]")
@@ -165,13 +170,6 @@ def mcp_add_preset(
     The preset defines the `command`, `args`, and transport; you only supply
     the env values (typically an API token). `docket mcp presets` lists the
     env vars each preset needs."""
-    from docket.config.mcp_presets import (
-        MissingPresetEnvError,
-        UnknownPresetError,
-        apply_preset,
-        get_preset,
-    )
-
     with prepare_or_wizard() as ctx:
         project = ctx.active_project()
         try:

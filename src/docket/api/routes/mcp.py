@@ -37,7 +37,7 @@ from docket.api.schemas import (
     MCPServerUpdateRequest,
     MCPToolDTO,
 )
-from docket.config.mcp_presets import MCPPreset, list_presets
+from docket.config.mcp_presets import MCPPreset, apply_preset, get_preset, list_presets
 from docket.config.models import Config, MCPServerEntry
 from docket.config.paths import Paths
 from docket.core.services import mcp_service
@@ -199,14 +199,7 @@ def update_mcp_server(
     runtime: RuntimeState = Depends(get_runtime),
 ) -> MCPServerDTO:
     require_project(config, project_id)
-    if (
-        payload.command is None
-        and payload.args is None
-        and payload.env is None
-        and payload.transport is None
-        and payload.enabled is None
-        and payload.startup_timeout_seconds is None
-    ):
+    if not payload.model_dump(exclude_none=True):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             "At least one of command, args, env, transport, enabled, "
@@ -334,8 +327,6 @@ def apply_mcp_preset(
     The preset supplies `command`/`args`/`transport`; the caller supplies env
     values (typically an API token) via `payload.env`. Returns 400 if the
     preset or a required env var is missing, 409 on name conflict."""
-    from docket.config.mcp_presets import apply_preset, get_preset
-
     require_project(config, project_id)
     try:
         preset = get_preset(preset_id)
