@@ -21,7 +21,6 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from docket.cli.tui._status_helpers import update_status_bar
 from docket.cli.tui.widgets.chat_pane import ChatPane
 from docket.cli.tui.widgets.item_detail import ItemDetail
 from docket.cli.tui.widgets.status_bar import StatusBar
@@ -40,7 +39,8 @@ def schedule_next_sync(app: DocketApp, interval: float) -> None:
     startup (once `on_mount` resolves the interval) and after each tick
     so the countdown stays roughly accurate without its own repaint."""
     target = datetime.now(UTC) + timedelta(seconds=interval)
-    update_status_bar(app, next_sync_at=target)
+    with contextlib.suppress(Exception):
+        app.query_one(StatusBar).next_sync_at = target
 
 
 def tick_background_sync(app: DocketApp) -> None:
@@ -168,7 +168,8 @@ def mark_sync_now(app: DocketApp) -> None:
 
 
 def set_offline(app: DocketApp, offline: bool) -> None:
-    update_status_bar(app, offline=offline)
+    with contextlib.suppress(Exception):
+        app.query_one(StatusBar).offline = offline
 
 
 __all__ = [
