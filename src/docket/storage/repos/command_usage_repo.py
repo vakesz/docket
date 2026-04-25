@@ -9,13 +9,12 @@ commands are app-global and the user's muscle memory is too.
 from __future__ import annotations
 
 import sqlite3
-
-from docket.storage._time import now_iso
+from datetime import UTC, datetime
 
 
 def record(conn: sqlite3.Connection, command_id: str) -> None:
     """Upsert a usage row for `command_id` at now (UTC)."""
-    now = now_iso()
+    now = datetime.now(UTC).isoformat()
     conn.execute(
         """
         INSERT INTO command_usage (id, last_used_at, usage_count)

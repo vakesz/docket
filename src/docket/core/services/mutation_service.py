@@ -15,6 +15,7 @@ import sqlite3
 import time
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from docket.core.model import Comment, Item, MemoryEntry, TransitionIntent
 from docket.core.mutation import (
@@ -29,7 +30,6 @@ from docket.core.mutation import (
 )
 from docket.providers.base import ProviderError, WorkItemProvider
 from docket.storage import transaction
-from docket.storage._time import now_iso
 from docket.storage.item_keys import item_storage_key
 from docket.storage.repos import comment_repo, item_repo, memory_repo, project_repo
 from docket.telemetry.logging import elapsed_ms, get_logger
@@ -247,7 +247,7 @@ def _execute(
                         ),
                         proposal.filename,
                         url,
-                        now_iso(),
+                        datetime.now(UTC).isoformat(),
                     ),
                 )
             return MutationResult(proposal_id=proposal.id, dry_run=False, attachment_url=url)

@@ -23,13 +23,11 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from docket.core.model import MemoryEntry
-from docket.storage._time import now_iso, now_utc
 from docket.storage.db import transaction
 from docket.storage.repos import project_repo
-from docket.storage.repos._patch import build_set_clause
 from docket.storage.repos._tags import clean_tags, clean_title, parse_tags
 
 
@@ -77,7 +75,7 @@ def create(
 
     Raises `KeyError` if the project is unknown."""
     project_repo.require_project(conn, project_id)
-    now = now_utc()
+    now = datetime.now(UTC)
     memory_id = str(uuid.uuid4())
     tags_clean = clean_tags(tags)
     with transaction(conn):
@@ -130,14 +128,15 @@ def update(
         fields.append(("body_md", body_md))
     if tags is not None:
         fields.append(("tags_json", json.dumps(clean_tags(tags))))
-    clause = build_set_clause(fields)
-    if clause is None:
+    if not fields:
         return existing
-    set_sql, params = clause
+    cols = [f"{name} = ?" for name, _ in fields] + ["updated_at = ?"]
+    params: list[object] = [val for _, val in fields]
+    params.append(datetime.now(UTC).isoformat())
     params.append(memory_id)
     with transaction(conn):
         row = conn.execute(
-            f"UPDATE memory SET {set_sql} WHERE id = ? RETURNING *", params
+            f"UPDATE memory SET {', '.join(cols)} WHERE id = ? RETURNING *", params
         ).fetchone()
         bump_revision(conn, existing.project_id)
     return _row_to_entry(row) if row else None
@@ -240,7 +239,7 @@ def get_revision(conn: sqlite3.Connection, project_id: str) -> int:
 
 def bump_revision(conn: sqlite3.Connection, project_id: str) -> int:
     """Increment (or initialize) the project's revision counter; return new value."""
-    now = now_iso()
+    now = datetime.now(UTC).isoformat()
     conn.execute(
         """
         INSERT INTO memory_revisions (project_id, revision, updated_at)

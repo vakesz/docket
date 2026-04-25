@@ -3,10 +3,9 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections.abc import Iterable, Iterator, Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 
 from docket.core.model import Item, ItemKind, ItemState
-from docket.storage._time import now_iso
 from docket.storage.item_keys import item_storage_key
 
 
@@ -76,14 +75,14 @@ def _upsert_row(item: Item, synced_at: str) -> tuple[object, ...]:
 
 
 def upsert_item(conn: sqlite3.Connection, item: Item) -> None:
-    conn.execute(_UPSERT_SQL, _upsert_row(item, now_iso()))
+    conn.execute(_UPSERT_SQL, _upsert_row(item, datetime.now(UTC).isoformat()))
 
 
 def upsert_items(conn: sqlite3.Connection, items: Iterable[Item]) -> int:
     """Bulk upsert via a single `executemany`. On a fresh sync of ~1k items
     this collapses 1k individual `execute` round-trips into one call — the
     per-item Python ↔ sqlite bridging cost is what dominated the old loop."""
-    synced_at = now_iso()
+    synced_at = datetime.now(UTC).isoformat()
     rows = [_upsert_row(it, synced_at) for it in items]
     if not rows:
         return 0

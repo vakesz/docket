@@ -10,11 +10,9 @@ one.
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime
+from datetime import UTC, datetime
 
 from docket.core.model import Project, project_id_for
-from docket.storage._time import now_iso, now_utc
-from docket.storage.repos._patch import build_set_clause
 
 
 def _row_to_project(row: sqlite3.Row) -> Project:
@@ -48,7 +46,7 @@ def ensure(
     row = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
     if row is not None:
         return _row_to_project(row)
-    now = now_utc()
+    now = datetime.now(UTC)
     final_name = (name or _default_name(provider_key)).strip() or "default"
     conn.execute(
         """
@@ -105,19 +103,19 @@ def update(
         fields.append(("name", name.strip() or "default"))
     if description is not None:
         fields.append(("description", description.strip()))
-    clause = build_set_clause(fields, touch_updated_at=False)
-    if clause is None:
+    if not fields:
         return get(conn, project_id)
-    set_sql, params = clause
+    cols = [f"{col} = ?" for col, _ in fields]
+    params: list[object] = [val for _, val in fields]
     params.append(project_id)
-    conn.execute(f"UPDATE projects SET {set_sql} WHERE id = ?", params)
+    conn.execute(f"UPDATE projects SET {', '.join(cols)} WHERE id = ?", params)
     return get(conn, project_id)
 
 
 def archive(conn: sqlite3.Connection, project_id: str) -> None:
     conn.execute(
         "UPDATE projects SET archived_at = ? WHERE id = ? AND archived_at IS NULL",
-        (now_iso(), project_id),
+        (datetime.now(UTC).isoformat(), project_id),
     )
 
 

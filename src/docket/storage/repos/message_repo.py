@@ -3,11 +3,10 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections.abc import Iterable
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from docket.agent.types import ChatMessage, ToolCall
-from docket.storage._time import now_utc
 
 
 def row_to_message(row: sqlite3.Row) -> ChatMessage:
@@ -70,7 +69,7 @@ def append(
             message.name,
             tokens_in,
             tokens_out,
-            (created_at or now_utc()).isoformat(),
+            (created_at or datetime.now(UTC)).isoformat(),
             1 if pending else 0,
         ),
     )

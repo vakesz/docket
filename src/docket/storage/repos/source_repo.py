@@ -16,13 +16,11 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from docket.core.model import Source
-from docket.storage._time import now_utc
 from docket.storage.db import transaction
 from docket.storage.repos import project_repo
-from docket.storage.repos._patch import build_set_clause
 from docket.storage.repos._tags import clean_tags, clean_title, parse_tags
 
 
@@ -78,7 +76,7 @@ def create(
 ) -> Source:
     """Insert a new source row. Raises `KeyError` if the project is unknown."""
     project_repo.require_project(conn, project_id)
-    now = now_utc()
+    now = datetime.now(UTC)
     source_id = str(uuid.uuid4())
     tags_clean = clean_tags(tags)
     with transaction(conn):
@@ -138,13 +136,14 @@ def update(
         fields.append(("uri", uri.strip()))
     if tags is not None:
         fields.append(("tags_json", json.dumps(clean_tags(tags))))
-    clause = build_set_clause(fields)
-    if clause is None:
+    if not fields:
         return existing
-    set_sql, params = clause
+    cols = [f"{name} = ?" for name, _ in fields] + ["updated_at = ?"]
+    params: list[object] = [val for _, val in fields]
+    params.append(datetime.now(UTC).isoformat())
     params.append(source_id)
     with transaction(conn):
-        conn.execute(f"UPDATE sources SET {set_sql} WHERE id = ?", params)
+        conn.execute(f"UPDATE sources SET {', '.join(cols)} WHERE id = ?", params)
     return get(conn, source_id)
 
 

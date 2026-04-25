@@ -7,6 +7,7 @@ relies on this endpoint for the equivalent manual refresh. Updates
 from __future__ import annotations
 
 import sqlite3
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
@@ -15,7 +16,6 @@ from docket.api.deps import get_conn, get_runtime, require_not_read_only
 from docket.api.runtime import RuntimeState
 from docket.api.schemas import SyncSummaryDTO
 from docket.core.services import sync_service
-from docket.storage._time import now_utc
 
 router = APIRouter(
     prefix="/sync",
@@ -47,7 +47,7 @@ def manual_sync(
         runtime.offline = True
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Sync failed: {e}") from e
     runtime.offline = False
-    runtime.last_sync_at = now_utc()
+    runtime.last_sync_at = datetime.now(UTC)
     return SyncSummaryDTO(
         upserted=summary.upserted,
         archived=summary.archived,
