@@ -6,7 +6,6 @@ import {
   Activity,
   Bot,
   Braces,
-  CheckCircle2,
   CircleAlert,
   Clock,
   FileText,
@@ -53,6 +52,9 @@ import {
   useUpdateProvider,
 } from "~/api/hooks";
 import type { components } from "~/api/schema";
+import { Label } from "~/components/common/Label";
+import { Modal } from "~/components/common/Modal";
+import { Notice } from "~/components/common/Notice";
 import { McpPage } from "~/components/mcp/McpPage";
 import { ThemePicker } from "~/components/shell/ThemePicker";
 import { ToolDisplayPicker } from "~/components/shell/ToolDisplayPicker";
@@ -962,14 +964,6 @@ function ProviderModal(props: ProviderModalProps) {
     );
   };
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   const title = isEdit ? "Edit provider" : "Add provider";
   const subtitle = isEdit
     ? "Rotate credentials or tweak config for this backend. Key and type are fixed — remove and re-add to change them."
@@ -983,164 +977,155 @@ function ProviderModal(props: ProviderModalProps) {
       : "Add provider";
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-xl">
-        <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-4">
-          <div>
-            <h3 className="text-base font-semibold text-fg">{title}</h3>
-            <p className="mt-0.5 text-xs text-fg-muted">{subtitle}</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-xl border border-border px-2 py-1 text-xs text-fg-muted hover:bg-surface-alt"
-          >
-            Close
-          </button>
+    <Modal onClose={onClose} className="max-h-[85vh] max-w-3xl">
+      <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-4">
+        <div>
+          <h3 className="text-base font-semibold text-fg">{title}</h3>
+          <p className="mt-0.5 text-xs text-fg-muted">{subtitle}</p>
         </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-xl border border-border px-2 py-1 text-xs text-fg-muted hover:bg-surface-alt"
+        >
+          Close
+        </button>
+      </div>
 
-        <div className="flex flex-1 flex-col gap-4 overflow-auto px-6 py-5">
-          {types.isPending ? (
-            <p className="text-sm text-fg-muted">Loading provider types…</p>
-          ) : types.error ? (
-            <Notice tone="error" title="Failed to load provider types">
-              {(types.error as Error).message}
-            </Notice>
-          ) : (
-            <>
+      <div className="flex flex-1 flex-col gap-4 overflow-auto px-6 py-5">
+        {types.isPending ? (
+          <p className="text-sm text-fg-muted">Loading provider types…</p>
+        ) : types.error ? (
+          <Notice tone="error" title="Failed to load provider types">
+            {(types.error as Error).message}
+          </Notice>
+        ) : (
+          <>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField label="Provider type">
+                {isEdit ? (
+                  <div className="rounded-xl border border-border bg-surface-alt px-3 py-2 font-mono text-sm text-fg-muted">
+                    {existingType || "unknown"}
+                  </div>
+                ) : (
+                  <Select
+                    value={selectedType}
+                    options={(types.data ?? []).map((t) => ({
+                      value: t.id,
+                      label: `${t.display} (${t.id})`,
+                    }))}
+                    onChange={setSelectedType}
+                  />
+                )}
+              </FormField>
+              <FormField
+                label="Config key"
+                help={
+                  isEdit
+                    ? "Immutable once created. Remove and re-add to change."
+                    : "Short id used internally (e.g. in tool names, tickets). Must be unique."
+                }
+              >
+                {isEdit ? (
+                  <div className="rounded-xl border border-border bg-surface-alt px-3 py-2 font-mono text-sm text-fg-muted">
+                    {key}
+                  </div>
+                ) : (
+                  <TextInput value={key} onChange={setKey} placeholder="github-work" />
+                )}
+              </FormField>
+            </div>
+
+            <FormField label="Display name" help="Shown in the UI.">
+              <TextInput
+                value={displayName}
+                onChange={setDisplayName}
+                placeholder={isEdit ? props.existingKey : key}
+              />
+            </FormField>
+
+            {!isEdit && keyInvalid && key.trim() && (
+              <p className="text-xs text-danger">
+                Provider '{key}' already exists. Pick a different key.
+              </p>
+            )}
+
+            {spec?.requires_cli && spec.requires_cli.length > 0 && (
+              <Notice tone="warning" title="CLI auth required">
+                {`This provider uses the \`${spec.requires_cli.join(", ")}\` CLI(s). Make sure you're signed in on the server host before ${isEdit ? "saving" : "adding"}.`}
+              </Notice>
+            )}
+
+            {(spec?.fields ?? []).length > 0 && (
               <div className="grid gap-4 sm:grid-cols-2">
-                <FormField label="Provider type">
-                  {isEdit ? (
-                    <div className="rounded-xl border border-border bg-surface-alt px-3 py-2 font-mono text-sm text-fg-muted">
-                      {existingType || "unknown"}
-                    </div>
-                  ) : (
-                    <Select
-                      value={selectedType}
-                      options={(types.data ?? []).map((t) => ({
-                        value: t.id,
-                        label: `${t.display} (${t.id})`,
-                      }))}
-                      onChange={setSelectedType}
-                    />
-                  )}
-                </FormField>
-                <FormField
-                  label="Config key"
-                  help={
-                    isEdit
-                      ? "Immutable once created. Remove and re-add to change."
-                      : "Short id used internally (e.g. in tool names, tickets). Must be unique."
-                  }
-                >
-                  {isEdit ? (
-                    <div className="rounded-xl border border-border bg-surface-alt px-3 py-2 font-mono text-sm text-fg-muted">
-                      {key}
-                    </div>
-                  ) : (
-                    <TextInput value={key} onChange={setKey} placeholder="github-work" />
-                  )}
-                </FormField>
+                {(spec?.fields ?? []).map((f) => (
+                  <ProviderFieldInput
+                    key={f.key}
+                    field={f}
+                    value={fieldValues[f.key] ?? ""}
+                    onChange={(v) => onField(f.key, v)}
+                  />
+                ))}
               </div>
+            )}
 
-              <FormField label="Display name" help="Shown in the UI.">
-                <TextInput
-                  value={displayName}
-                  onChange={setDisplayName}
-                  placeholder={isEdit ? props.existingKey : key}
+            {!isEdit && (
+              <FormField label="Make active">
+                <Toggle
+                  checked={makeActive}
+                  onChange={setMakeActive}
+                  label={makeActive ? "Will become active" : "Keep current active provider"}
                 />
               </FormField>
+            )}
 
-              {!isEdit && keyInvalid && key.trim() && (
-                <p className="text-xs text-danger">
-                  Provider '{key}' already exists. Pick a different key.
-                </p>
-              )}
-
-              {spec?.requires_cli && spec.requires_cli.length > 0 && (
-                <Notice tone="warning" title="CLI auth required">
-                  {`This provider uses the \`${spec.requires_cli.join(", ")}\` CLI(s). Make sure you're signed in on the server host before ${isEdit ? "saving" : "adding"}.`}
-                </Notice>
-              )}
-
-              {(spec?.fields ?? []).length > 0 && (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {(spec?.fields ?? []).map((f) => (
-                    <ProviderFieldInput
-                      key={f.key}
-                      field={f}
-                      value={fieldValues[f.key] ?? ""}
-                      onChange={(v) => onField(f.key, v)}
-                    />
-                  ))}
-                </div>
-              )}
-
-              {!isEdit && (
-                <FormField label="Make active">
-                  <Toggle
-                    checked={makeActive}
-                    onChange={setMakeActive}
-                    label={makeActive ? "Will become active" : "Keep current active provider"}
-                  />
-                </FormField>
-              )}
-
-              {testResult && (
-                <Notice
-                  tone={testResult.ok ? "ok" : "error"}
-                  title={testResult.ok ? "Provider reachable" : "Provider test failed"}
-                >
-                  {testResult.ok
-                    ? isEdit
-                      ? "Connection test passed. You can save now."
-                      : "Connection test passed. You can add the provider now."
-                    : (testResult.error ?? "Unknown error")}
-                </Notice>
-              )}
-              {submitMutation.error && (
-                <Notice tone="error" title={isEdit ? "Save failed" : "Add failed"}>
-                  {(submitMutation.error as Error).message}
-                </Notice>
-              )}
-            </>
-          )}
-        </div>
-
-        <div className="flex items-center justify-end gap-2 border-t border-border px-6 py-3">
-          <button
-            type="button"
-            onClick={runTest}
-            disabled={!spec || missingRequired || testMutation.isPending}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-sm font-medium text-fg hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {testMutation.isPending ? "Testing…" : "Test connection"}
-          </button>
-          <button
-            type="button"
-            onClick={runSubmit}
-            disabled={
-              !spec ||
-              keyInvalid ||
-              missingRequired ||
-              submitMutation.isPending ||
-              (!!testResult && !testResult.ok)
-            }
-            className="inline-flex items-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-accent-fg hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {isEdit ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-            {submitLabel}
-          </button>
-        </div>
+            {testResult && (
+              <Notice
+                tone={testResult.ok ? "ok" : "error"}
+                title={testResult.ok ? "Provider reachable" : "Provider test failed"}
+              >
+                {testResult.ok
+                  ? isEdit
+                    ? "Connection test passed. You can save now."
+                    : "Connection test passed. You can add the provider now."
+                  : (testResult.error ?? "Unknown error")}
+              </Notice>
+            )}
+            {submitMutation.error && (
+              <Notice tone="error" title={isEdit ? "Save failed" : "Add failed"}>
+                {(submitMutation.error as Error).message}
+              </Notice>
+            )}
+          </>
+        )}
       </div>
-    </div>
+
+      <div className="flex items-center justify-end gap-2 border-t border-border px-6 py-3">
+        <button
+          type="button"
+          onClick={runTest}
+          disabled={!spec || missingRequired || testMutation.isPending}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-sm font-medium text-fg hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {testMutation.isPending ? "Testing…" : "Test connection"}
+        </button>
+        <button
+          type="button"
+          onClick={runSubmit}
+          disabled={
+            !spec ||
+            keyInvalid ||
+            missingRequired ||
+            submitMutation.isPending ||
+            (!!testResult && !testResult.ok)
+          }
+          className="inline-flex items-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-accent-fg hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {isEdit ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+          {submitLabel}
+        </button>
+      </div>
+    </Modal>
   );
 }
 
@@ -1695,14 +1680,6 @@ function FormField({
   );
 }
 
-function Label({ children }: { children: ReactNode }) {
-  return (
-    <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-fg-muted">
-      {children}
-    </span>
-  );
-}
-
 function HelpText({ children }: { children: ReactNode }) {
   return <span className="text-xs leading-5 text-fg-muted">{children}</span>;
 }
@@ -2006,41 +1983,6 @@ function StatusPill({ tone, label }: { tone: "ok" | "warn" | "error" | "muted"; 
           ? "bg-danger-bg text-danger-fg"
           : "bg-surface-alt text-fg-muted";
   return <span className={cn("rounded-full px-2.5 py-1 text-xs font-medium", cls)}>{label}</span>;
-}
-
-function Notice({
-  title,
-  children,
-  tone,
-}: {
-  title: string;
-  children: string;
-  tone: "error" | "warning" | "ok";
-}) {
-  return (
-    <div
-      className={cn(
-        "rounded-2xl border px-4 py-3 text-sm",
-        tone === "error"
-          ? "border-danger bg-danger-bg text-danger-fg"
-          : tone === "ok"
-            ? "border-success bg-success-bg text-success-fg"
-            : "border-warning bg-warning-bg text-warning-fg",
-      )}
-    >
-      <div className="flex items-start gap-3">
-        {tone === "error" ? (
-          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-        ) : (
-          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-        )}
-        <div>
-          <div className="font-semibold">{title}</div>
-          <div className="mt-1 leading-6">{children}</div>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function PageState({

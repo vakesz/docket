@@ -7,6 +7,7 @@ import {
   useTestLlm,
   useTestProvider,
 } from "~/api/hooks";
+import { Label } from "~/components/common/Label";
 import { cn } from "~/lib/cn";
 
 type Step = "welcome" | "provider" | "llm" | "review";
@@ -466,17 +467,6 @@ function ReloadTimer() {
     return () => window.clearTimeout(id);
   }, []);
   return <div className="font-mono text-[11px] text-fg-muted">Reloading in ~6 seconds…</div>;
-}
-
-function Label({ children, required }: { children: React.ReactNode; required?: boolean }) {
-  // Rendered above its TextInput sibling rather than wrapping it; a plain
-  // span is sufficient since each field has a single labeled control.
-  return (
-    <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-      {children}
-      {required && <span className="ml-1 text-danger">*</span>}
-    </span>
-  );
 }
 
 function HelpText({ children }: { children: React.ReactNode }) {

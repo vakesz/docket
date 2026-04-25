@@ -1,7 +1,7 @@
 import { markdown } from "@codemirror/lang-markdown";
 import { EditorView } from "@codemirror/view";
 import CodeMirror from "@uiw/react-codemirror";
-import { AlertCircle, FilePlus2, X } from "lucide-react";
+import { FilePlus2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { DTO } from "~/api/client";
@@ -13,13 +13,15 @@ import {
   useStageItemCreate,
   useStatus,
 } from "~/api/hooks";
+import { Label } from "~/components/common/Label";
+import { Modal } from "~/components/common/Modal";
+import { Notice } from "~/components/common/Notice";
 import {
   buildCreateRequest,
   pickInitialKind,
   resolveSupportedKinds,
 } from "~/components/items/newItemForm";
 import { docketCodeMirrorTheme } from "~/lib/cmTheme";
-import { cn } from "~/lib/cn";
 import { formatKind, formatState } from "~/lib/format";
 
 type ItemKind = DTO["ItemKind"];
@@ -62,15 +64,6 @@ export function NewItemModal({ defaultKind, onClose, onCreated }: Props) {
   useEffect(() => {
     if (!supportedKinds.includes(kind)) setKind(supportedKinds[0] ?? "task");
   }, [supportedKinds, kind]);
-
-  // Esc closes, matching McpPresetPickerModal.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
 
   // Autofocus the title when the modal mounts. Using a ref + useEffect keeps
   // biome's a11y rule happy while preserving the feel of `autoFocus`.
@@ -121,7 +114,7 @@ export function NewItemModal({ defaultKind, onClose, onCreated }: Props) {
     confirmMutation.reset();
   };
 
-  const onFormKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+  const onFormKeyDown = (e: React.KeyboardEvent<HTMLFormElement>) => {
     // Ctrl/Cmd+S from any field in edit phase stages the proposal.
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s" && proposal === null) {
       e.preventDefault();
@@ -130,120 +123,114 @@ export function NewItemModal({ defaultKind, onClose, onCreated }: Props) {
   };
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      onKeyDown={onFormKeyDown}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-xl">
-        <header className="flex items-center gap-3 border-b border-border px-6 py-4">
-          <div className="rounded-xl bg-accent/10 p-2 text-accent">
-            <FilePlus2 className="h-4 w-4" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h2 className="truncate text-base font-semibold text-fg">
-              {proposal ? "Review proposal" : "New work item"}
-            </h2>
-            <p className="truncate text-xs text-fg-muted">
-              {proposal
-                ? "Confirm to create. The proposal is not staged until you click Create item."
-                : "Draft a ticket. A proposal with a diff will be shown before anything is written."}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-xl p-1.5 text-fg-muted hover:bg-surface-alt"
-            title="Close (Esc)"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </header>
-
-        <div className="flex min-h-0 flex-1 flex-col overflow-auto px-6 py-5">
-          {readOnly && (
-            <Notice tone="warning" title="Read-only mode">
-              Mutations are disabled. Disable read-only mode to create items.
-            </Notice>
-          )}
-          {mutationError && (
-            <Notice tone="error" title="Create failed">
-              {mutationError.message}
-            </Notice>
-          )}
-
-          {proposal ? (
-            <pre className="whitespace-pre-wrap rounded-xl border border-border bg-bg p-4 font-mono text-xs text-fg">
-              {proposal.diff}
-            </pre>
-          ) : (
-            <EditPhase
-              kind={kind}
-              kinds={supportedKinds}
-              title={title}
-              description={description}
-              parentId={parentId}
-              assignee={assignee}
-              tagsRaw={tagsRaw}
-              duplicates={duplicates.data}
-              duplicatesLoading={duplicates.isFetching}
-              titleRef={titleRef}
-              onKind={setKind}
-              onTitle={setTitle}
-              onDescription={setDescription}
-              onParent={setParentId}
-              onAssignee={setAssignee}
-              onTags={setTagsRaw}
-            />
-          )}
+    <Modal onClose={onClose} className="max-w-3xl">
+      <header className="flex items-center gap-3 border-b border-border px-6 py-4">
+        <div className="rounded-xl bg-accent/10 p-2 text-accent">
+          <FilePlus2 className="h-4 w-4" />
         </div>
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate text-base font-semibold text-fg">
+            {proposal ? "Review proposal" : "New work item"}
+          </h2>
+          <p className="truncate text-xs text-fg-muted">
+            {proposal
+              ? "Confirm to create. The proposal is not staged until you click Create item."
+              : "Draft a ticket. A proposal with a diff will be shown before anything is written."}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-xl p-1.5 text-fg-muted hover:bg-surface-alt"
+          title="Close (Esc)"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </header>
 
-        <footer className="flex items-center justify-end gap-2 border-t border-border bg-surface/70 px-6 py-3">
-          {proposal ? (
-            <>
-              <button
-                type="button"
-                onClick={backToEdit}
-                className="rounded-xl border border-border px-3 py-2 text-sm font-medium text-fg hover:bg-bg"
-              >
-                Back to edit
-              </button>
-              <button
-                type="button"
-                onClick={() => void confirm()}
-                disabled={!canCreate}
-                className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-accent-fg hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {confirmMutation.isPending ? "Creating…" : "Create item"}
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-xl border border-border px-3 py-2 text-sm font-medium text-fg hover:bg-bg"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => void stage()}
-                disabled={!canStage}
-                title="Ctrl/Cmd+S"
-                className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-accent-fg hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {stageMutation.isPending ? "Staging…" : "Stage proposal"}
-              </button>
-            </>
-          )}
-        </footer>
-      </div>
-    </div>
+      <form
+        onSubmit={(e) => e.preventDefault()}
+        onKeyDown={onFormKeyDown}
+        className="flex min-h-0 flex-1 flex-col overflow-auto px-6 py-5"
+      >
+        {readOnly && (
+          <Notice tone="warning" title="Read-only mode" className="mb-4">
+            Mutations are disabled. Disable read-only mode to create items.
+          </Notice>
+        )}
+        {mutationError && (
+          <Notice tone="error" title="Create failed" className="mb-4">
+            {mutationError.message}
+          </Notice>
+        )}
+
+        {proposal ? (
+          <pre className="whitespace-pre-wrap rounded-xl border border-border bg-bg p-4 font-mono text-xs text-fg">
+            {proposal.diff}
+          </pre>
+        ) : (
+          <EditPhase
+            kind={kind}
+            kinds={supportedKinds}
+            title={title}
+            description={description}
+            parentId={parentId}
+            assignee={assignee}
+            tagsRaw={tagsRaw}
+            duplicates={duplicates.data}
+            duplicatesLoading={duplicates.isFetching}
+            titleRef={titleRef}
+            onKind={setKind}
+            onTitle={setTitle}
+            onDescription={setDescription}
+            onParent={setParentId}
+            onAssignee={setAssignee}
+            onTags={setTagsRaw}
+          />
+        )}
+      </form>
+
+      <footer className="flex items-center justify-end gap-2 border-t border-border bg-surface/70 px-6 py-3">
+        {proposal ? (
+          <>
+            <button
+              type="button"
+              onClick={backToEdit}
+              className="rounded-xl border border-border px-3 py-2 text-sm font-medium text-fg hover:bg-bg"
+            >
+              Back to edit
+            </button>
+            <button
+              type="button"
+              onClick={() => void confirm()}
+              disabled={!canCreate}
+              className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-accent-fg hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {confirmMutation.isPending ? "Creating…" : "Create item"}
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl border border-border px-3 py-2 text-sm font-medium text-fg hover:bg-bg"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void stage()}
+              disabled={!canStage}
+              title="Ctrl/Cmd+S"
+              className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-accent-fg hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {stageMutation.isPending ? "Staging…" : "Stage proposal"}
+            </button>
+          </>
+        )}
+      </footer>
+    </Modal>
   );
 }
 
@@ -397,43 +384,6 @@ function DuplicatesPanel({
           </li>
         ))}
       </ul>
-    </div>
-  );
-}
-
-function Label({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-fg-muted">
-      {children}
-    </span>
-  );
-}
-
-function Notice({
-  title,
-  children,
-  tone,
-}: {
-  title: string;
-  children: React.ReactNode;
-  tone: "error" | "warning";
-}) {
-  return (
-    <div
-      className={cn(
-        "mb-4 rounded-2xl border px-4 py-3 text-sm",
-        tone === "error"
-          ? "border-danger bg-danger-bg text-danger-fg"
-          : "border-warning bg-warning-bg text-warning-fg",
-      )}
-    >
-      <div className="flex items-start gap-3">
-        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-        <div>
-          <div className="font-semibold">{title}</div>
-          <div className="mt-1 leading-6">{children}</div>
-        </div>
-      </div>
     </div>
   );
 }

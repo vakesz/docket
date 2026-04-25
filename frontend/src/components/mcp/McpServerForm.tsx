@@ -9,6 +9,7 @@ import {
   useTestMcpServerDraft,
   useUpdateMcpServer,
 } from "~/api/hooks";
+import { Notice } from "~/components/common/Notice";
 import { cn } from "~/lib/cn";
 
 // Server names act as dict keys in `config.toml` under `[projects.<id>.mcp.<name>]`;
@@ -677,37 +678,4 @@ function StatusPill({ tone, label }: { tone: "ok" | "warn" | "muted"; label: str
         ? "bg-warning-bg text-warning-fg"
         : "bg-surface-alt text-fg-muted";
   return <span className={cn("rounded-full px-2.5 py-1 text-xs font-medium", cls)}>{label}</span>;
-}
-
-function Notice({
-  title,
-  children,
-  tone,
-}: {
-  title: string;
-  children: React.ReactNode;
-  tone: "error" | "warning";
-}) {
-  return (
-    <div
-      className={cn(
-        "rounded-2xl border px-4 py-3 text-sm",
-        tone === "error"
-          ? "border-danger bg-danger-bg text-danger-fg"
-          : "border-warning bg-warning-bg text-warning-fg",
-      )}
-    >
-      <div className="flex items-start gap-3">
-        {tone === "error" ? (
-          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-        ) : (
-          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-        )}
-        <div>
-          <div className="font-semibold">{title}</div>
-          <div className="mt-1 leading-6">{children}</div>
-        </div>
-      </div>
-    </div>
-  );
 }
