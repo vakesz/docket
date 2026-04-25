@@ -8,7 +8,7 @@ from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Select, Static, TextArea
 
-from docket.agent.prompt_templates import (
+from docket.agent.prompt import (
     get_template,
     list_templates,
     read_prompt,

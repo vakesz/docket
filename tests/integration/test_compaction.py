@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from docket.agent.loop import AgentLoop
 from docket.agent.factory import register_readonly_tools
+from docket.agent.loop import AgentLoop
 from docket.agent.tools import ToolRegistry
 from docket.agent.types import Usage
 from docket.core.services import conversation_service

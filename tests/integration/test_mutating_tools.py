@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from docket.agent.mutating_tools import register_mutating_tools
 from docket.agent.factory import register_readonly_tools
+from docket.agent.mutating_tools import register_mutating_tools
 from docket.agent.tools import ToolRegistry
 from docket.core.model import ItemState
 from docket.core.mutation import CommentAdd, DescriptionPatch, ItemCreate, StateChange

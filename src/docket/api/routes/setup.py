@@ -22,7 +22,7 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import ValidationError
 
-from docket.agent.prompt_templates import scaffold as scaffold_prompts
+from docket.agent.prompt import scaffold as scaffold_prompts
 from docket.api._provider_setup import (
     provider_type_dtos,
     test_provider_draft,

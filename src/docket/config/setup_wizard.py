@@ -27,7 +27,7 @@ from pydantic import HttpUrl, ValidationError
 from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 
-from docket.agent.prompt_templates import scaffold as scaffold_prompts
+from docket.agent.prompt import scaffold as scaffold_prompts
 from docket.config.loader import ConfigLoadPolicy, load_config, save_config
 from docket.config.models import (
     Config,

@@ -11,8 +11,8 @@ from docket.agent.prompt import (
     PromptLoader,
     build_system_message,
     configure_prompt_loader,
+    scaffold,
 )
-from docket.agent.prompt_templates import scaffold
 from docket.core.model import Item, ItemKind, ItemState
 
 

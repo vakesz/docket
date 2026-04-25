@@ -9,7 +9,16 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from docket.agent import prompt_templates
+from docket.agent.prompt import (
+    PromptTemplate,
+    get_template,
+    list_templates,
+    read_prompt,
+    write_prompt,
+)
+from docket.agent.prompt import (
+    reset_prompt as reset_prompt_file,
+)
 from docket.api.deps import get_paths, require_not_read_only
 from docket.api.schemas import PromptDTO, PromptSummaryDTO, PromptUpdateRequest
 from docket.config.paths import Paths
@@ -17,7 +26,7 @@ from docket.config.paths import Paths
 router = APIRouter(prefix="/prompts", tags=["prompts"])
 
 
-def _is_customized(paths: Paths, template: prompt_templates.PromptTemplate) -> bool:
+def _is_customized(paths: Paths, template: PromptTemplate) -> bool:
     return (paths.prompts_dir / template.filename).exists()
 
 
@@ -30,17 +39,17 @@ def list_prompts(paths: Paths = Depends(get_paths)) -> list[PromptSummaryDTO]:
             filename=t.filename,
             customized=_is_customized(paths, t),
         )
-        for t in prompt_templates.list_templates()
+        for t in list_templates()
     ]
 
 
 @router.get("/{key}", response_model=PromptDTO)
 def get_prompt(key: str, paths: Paths = Depends(get_paths)) -> PromptDTO:
     try:
-        template = prompt_templates.get_template(key)
+        template = get_template(key)
     except KeyError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown prompt '{key}'") from e
-    content = prompt_templates.read_prompt(paths.prompts_dir, key)
+    content = read_prompt(paths.prompts_dir, key)
     return PromptDTO(
         key=template.key,
         label=template.label,
@@ -61,10 +70,10 @@ def put_prompt(
     paths: Paths = Depends(get_paths),
 ) -> PromptDTO:
     try:
-        template = prompt_templates.get_template(key)
+        template = get_template(key)
     except KeyError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown prompt '{key}'") from e
-    prompt_templates.write_prompt(paths.prompts_dir, key, payload.content_md)
+    write_prompt(paths.prompts_dir, key, payload.content_md)
     return PromptDTO(
         key=template.key,
         label=template.label,
@@ -89,10 +98,10 @@ def reset_prompt(
     default rather than deleting it. Clients can distinguish by reading the
     content — the returned `content_md` is exactly the canonical template."""
     try:
-        template = prompt_templates.get_template(key)
+        template = get_template(key)
     except KeyError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown prompt '{key}'") from e
-    prompt_templates.reset_prompt(paths.prompts_dir, key)
+    reset_prompt_file(paths.prompts_dir, key)
     return PromptDTO(
         key=template.key,
         label=template.label,

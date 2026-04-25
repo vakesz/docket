@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
+from docket.agent.factory import register_readonly_tools
 from docket.agent.loop import AgentLoop
 from docket.agent.question_tool import register_ask_user_tool
-from docket.agent.factory import register_readonly_tools
 from docket.agent.tools import ToolRegistry
 from docket.core.question import QuestionAnswer
 from docket.core.services import conversation_service
