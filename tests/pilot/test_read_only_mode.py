@@ -11,7 +11,6 @@ API and CLI read-only paths are covered in their own test modules."""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -22,30 +21,18 @@ from docket.cli.tui.widgets.batch_diff_modal import BatchDiffModal
 from docket.cli.tui.widgets.diff_modal import DiffModal
 from docket.cli.tui.widgets.new_item_modal import NewItemModal
 from docket.cli.tui.widgets.status_bar import StatusBar
-from docket.core.model import Item, ItemKind, ItemState, ScopeFilters
+from docket.core.model import ScopeFilters
 from docket.storage import init_db
 from docket.storage.repos import item_repo
+from tests.conftest import MakeItem
 from tests.fakes.llm import FakeLlmClient
 from tests.fakes.provider import FakeProvider
 
 
-def _mk_item() -> Item:
-    return Item(
-        id="S-1",
-        kind=ItemKind.STORY,
-        title="Add login",
-        description_md="Body.",
-        state=ItemState.NEW,
-        assignee=None,
-        parent_id=None,
-        updated_at=datetime.now(UTC),
-    )
-
-
 @pytest.fixture
-def ro_ctx(tmp_path: Path):
+def ro_ctx(tmp_path: Path, make_item: MakeItem):
     conn = init_db(tmp_path / "docket.db")
-    item = _mk_item()
+    item = make_item(title="Add login", description_md="Body.")
     item_repo.upsert_item(conn, item)
     provider = FakeProvider(items=[item])
     yield TuiContext(
@@ -64,8 +51,8 @@ async def test_read_only_agent_has_no_mutating_tools(ro_ctx) -> None:
     the propose_* writers."""
     app = DocketApp(ro_ctx)
     async with app.run_test():
-        assert app._agent is not None
-        registry = app._agent._tools  # type: ignore[attr-defined]
+        registry = app.active_agent_tools()
+        assert registry is not None
         assert "get_item" in registry  # read tool still present
         assert "propose_transition" not in registry
         assert "propose_description_patch" not in registry
@@ -101,15 +88,15 @@ async def test_read_only_blocks_transition_action(ro_ctx) -> None:
         await app.run_action("transition('start_work')")
         await pilot.pause()
         # Mutation pipeline never fired — no proposal staged, no modal.
-        assert len(app._proposals) == 0
+        assert app.pending_proposal_count() == 0
         assert not isinstance(app.screen, DiffModal | BatchDiffModal)
 
 
-async def test_writable_ctx_allows_new_item(tmp_path: Path) -> None:
+async def test_writable_ctx_allows_new_item(tmp_path: Path, make_item: MakeItem) -> None:
     """Sanity check: the same harness with read_only=False still opens the
     form. Guards against a regression where the guard always blocks."""
     conn = init_db(tmp_path / "docket.db")
-    item = _mk_item()
+    item = make_item(title="Add login", description_md="Body.")
     item_repo.upsert_item(conn, item)
     provider = FakeProvider(items=[item])
     ctx = TuiContext(

@@ -62,11 +62,11 @@ class SuggestionFlowMixin(_AppBase):
     _selected_item_id: str | None
     _proposals: ProposalStore
 
-    def _blocked_read_only(self) -> bool:
-        raise NotImplementedError
-
-    def _refresh_pending_count(self) -> None: ...
-    def _open_next_pending(self) -> None: ...
+    if TYPE_CHECKING:
+        # Sibling-mixin / host methods.
+        def _blocked_read_only(self) -> bool: ...
+        def _refresh_pending_count(self) -> None: ...
+        def _open_next_pending(self) -> None: ...
 
     # -- action + dispatch -------------------------------------------------
 

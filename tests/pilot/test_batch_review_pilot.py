@@ -14,7 +14,6 @@ instead of chaining y/n modals. Covers:
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -26,26 +25,14 @@ from docket.cli.tui.widgets.batch_diff_modal import BatchDiffModal
 from docket.cli.tui.widgets.chat_pane import ChatPane
 from docket.cli.tui.widgets.diff_modal import DiffModal
 from docket.cli.tui.widgets.item_tree import ItemTree
-from docket.core.model import Item, ItemKind, ItemState, ScopeFilters, TransitionIntent
+from docket.core.model import ItemState, ScopeFilters, TransitionIntent
 from docket.core.services import mutation_service
 from docket.storage import init_db
 from docket.storage.repos import item_repo
+from tests.conftest import MakeItem
 from tests.fakes.llm import FakeLlmClient, text_turn, tool_turn
 from tests.fakes.provider import FakeProvider
 from tests.pilot.conftest import find_node
-
-
-def _mk_item(id_: str = "S-1", *, state: ItemState = ItemState.NEW) -> Item:
-    return Item(
-        id=id_,
-        kind=ItemKind.STORY,
-        title=f"Item {id_}",
-        description_md="Original body.",
-        state=state,
-        assignee=None,
-        parent_id=None,
-        updated_at=datetime.now(UTC),
-    )
 
 
 async def _select(app: DocketApp, pilot, id_: str) -> None:
@@ -57,9 +44,12 @@ async def _select(app: DocketApp, pilot, id_: str) -> None:
 
 
 @pytest.fixture
-def batch_env(tmp_path: Path):
+def batch_env(tmp_path: Path, make_item: MakeItem):
     conn = init_db(tmp_path / "docket.db")
-    items = [_mk_item("S-1"), _mk_item("S-2"), _mk_item("S-3")]
+    items = [
+        make_item(id_, title=f"Item {id_}", description_md="Original body.")
+        for id_ in ("S-1", "S-2", "S-3")
+    ]
     for it in items:
         item_repo.upsert_item(conn, it)
     provider = FakeProvider(items=list(items))
@@ -80,8 +70,8 @@ def _stage_two_transitions(app: DocketApp, conn) -> tuple[str, str]:
     batch-UX tests don't depend on agent-loop scripting."""
     p1 = mutation_service.propose_transition(conn, "S-1", TransitionIntent.START_WORK)
     p2 = mutation_service.propose_transition(conn, "S-2", TransitionIntent.START_WORK)
-    app._proposals.add(p1, source="agent")
-    app._proposals.add(p2, source="agent")
+    app.stage_proposal(p1, source="agent")
+    app.stage_proposal(p2, source="agent")
     return p1.id, p2.id
 
 
@@ -105,7 +95,7 @@ async def test_single_proposal_still_uses_diff_modal(batch_env) -> None:
     app = DocketApp(ctx)
     async with app.run_test() as pilot:
         p = mutation_service.propose_transition(ctx.conn, "S-1", TransitionIntent.START_WORK)
-        app._proposals.add(p, source="agent")
+        app.stage_proposal(p, source="agent")
         await app.run_action("review_pending")
         await pilot.pause()
         assert isinstance(app.screen, DiffModal)
@@ -129,7 +119,7 @@ async def test_apply_all_confirms_each_through_provider(batch_env) -> None:
         assert by_id["S-1"].state == ItemState.ACTIVE
         assert by_id["S-2"].state == ItemState.ACTIVE
         # Queue fully drained.
-        assert len(app._proposals) == 0
+        assert app.pending_proposal_count() == 0
 
 
 async def test_reject_all_drains_without_touching_provider(batch_env) -> None:
@@ -146,7 +136,7 @@ async def test_reject_all_drains_without_touching_provider(batch_env) -> None:
         by_id = {it.id: it for it in provider.items}
         assert by_id["S-1"].state == ItemState.NEW
         assert by_id["S-2"].state == ItemState.NEW
-        assert len(app._proposals) == 0
+        assert app.pending_proposal_count() == 0
 
 
 async def test_apply_selected_drops_unchecked_rows(batch_env) -> None:
@@ -171,7 +161,7 @@ async def test_apply_selected_drops_unchecked_rows(batch_env) -> None:
         by_id = {it.id: it for it in provider.items}
         assert by_id["S-1"].state == ItemState.NEW  # dropped, not applied
         assert by_id["S-2"].state == ItemState.ACTIVE  # applied
-        assert len(app._proposals) == 0
+        assert app.pending_proposal_count() == 0
 
 
 async def test_cancel_preserves_queue_for_later(batch_env) -> None:
@@ -186,7 +176,7 @@ async def test_cancel_preserves_queue_for_later(batch_env) -> None:
         await pilot.pause()
 
         # Queue untouched, provider untouched — user can come back.
-        assert len(app._proposals) == 2
+        assert app.pending_proposal_count() == 2
         by_id = {it.id: it for it in provider.items}
         assert by_id["S-1"].state == ItemState.NEW
         assert by_id["S-2"].state == ItemState.NEW
@@ -224,4 +214,4 @@ async def test_agent_three_proposals_land_in_single_review_pass(batch_env) -> No
         assert by_id["S-1"].state == ItemState.ACTIVE
         assert by_id["S-2"].state == ItemState.ACTIVE
         assert by_id["S-3"].state == ItemState.ACTIVE
-        assert len(app._proposals) == 0
+        assert app.pending_proposal_count() == 0

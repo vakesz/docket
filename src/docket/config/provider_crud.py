@@ -10,8 +10,6 @@ import them without either depending on the other."""
 
 from __future__ import annotations
 
-from urllib.parse import urlparse
-
 from pydantic import HttpUrl
 from rich.prompt import Confirm, Prompt
 
@@ -19,6 +17,7 @@ from docket.config.loader import ConfigLoadPolicy, load_config, save_config
 from docket.config.models import Config, ScopeFilter, build_provider_entry
 from docket.config.paths import resolve_paths
 from docket.config.setup_utils import (
+    build_label_suggestion,
     console,
     looks_like_http_url,
     pick_github_host,
@@ -66,7 +65,7 @@ def provider_add(
         raise SystemExit(2)
 
     config: dict[str, object] = {}
-    label_hint = ""
+    github_host_hint = ""
     match type_id:
         case "azure_devops":
             org = Prompt.ask("Azure DevOps organization URL").strip().rstrip("/")
@@ -78,25 +77,16 @@ def provider_add(
                 console.print("[red]Project name is required.[/red]")
                 raise SystemExit(2)
             config = {"organization": str(HttpUrl(org)), "project": project}
-            org_slug = (
-                urlparse(str(config["organization"])).path.strip("/")
-                or urlparse(str(config["organization"])).netloc
-            )
-            label_hint = (
-                f"Azure DevOps · {org_slug}/{project}" if org_slug else f"Azure DevOps · {project}"
-            )
         case "github":
             host = pick_github_host()
             default_repo = pick_github_repo(host=host.hostname if host else None)
             config = {"default_repo": default_repo}
             if host and host.api_base_url != "https://api.github.com":
                 config["base_url"] = host.api_base_url
-            prefix = host.hostname if host and host.hostname != "github.com" else "GitHub"
-            label_hint = f"{prefix} · {default_repo}"
+            github_host_hint = host.hostname if host else ""
         case "github_stub":
             default_repo = Prompt.ask("Default repo (owner/name)", default="example/repo").strip()
             config = {"default_repo": default_repo}
-            label_hint = f"GitHub (stub) · {default_repo}"
         case _:
             # Custom provider types (from entry points) self-validate via the
             # factory on first build; the wizard just records an empty config
@@ -105,6 +95,11 @@ def provider_add(
                 f"[dim]No wizard prompts for '{type_id}' — config starts empty. "
                 "Edit config.toml to fill it in.[/dim]"
             )
+    label_hint = build_label_suggestion(
+        type_id=type_id,
+        config=dict(config),
+        github_host_hint=github_host_hint,
+    )
 
     cfg = load_config(paths, policy=ConfigLoadPolicy.OPTIONAL) or Config()
     if name in cfg.providers and not Confirm.ask(

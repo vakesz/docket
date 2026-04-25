@@ -10,7 +10,6 @@ Drives the chat pane via Textual's pilot against a scripted fake LLM. Verifies:
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -19,31 +18,19 @@ from docket.cli.tui.app import DocketApp
 from docket.cli.tui.tui_context import TuiContext
 from docket.cli.tui.widgets.chat_pane import ChatPane
 from docket.cli.tui.widgets.item_tree import ItemTree
-from docket.core.model import Item, ItemKind, ItemState, ScopeFilters
+from docket.core.model import ScopeFilters
 from docket.storage import init_db
 from docket.storage.repos import conversation_repo, item_repo, message_repo
+from tests.conftest import MakeItem
 from tests.fakes.llm import FakeLlmClient, text_turn, tool_turn
 from tests.fakes.provider import FakeProvider
 from tests.pilot.conftest import find_node
 
 
-def _mk_item(id_: str = "S-1") -> Item:
-    return Item(
-        id=id_,
-        kind=ItemKind.STORY,
-        title="Add login",
-        description_md="User should be able to log in.",
-        state=ItemState.NEW,
-        assignee=None,
-        parent_id=None,
-        updated_at=datetime.now(UTC),
-    )
-
-
 @pytest.fixture
-def chat_env(tmp_path: Path):
+def chat_env(tmp_path: Path, make_item: MakeItem):
     conn = init_db(tmp_path / "docket.db")
-    item = _mk_item()
+    item = make_item(title="Add login", description_md="User should be able to log in.")
     item_repo.upsert_item(conn, item)
     provider = FakeProvider(items=[item])
     client = FakeLlmClient()
@@ -224,21 +211,18 @@ async def test_t_starts_new_thread(chat_env) -> None:
     assert len(active) == 1
 
 
-async def test_acceptance_checklist_mounts_from_description(tmp_path: Path) -> None:
+async def test_acceptance_checklist_mounts_from_description(
+    tmp_path: Path, make_item: MakeItem
+) -> None:
     """Selecting an item whose description has task-list items should populate
     the criteria panel with one Checkbox per criterion, preserving check state."""
     from textual.widgets import Checkbox
 
     conn = init_db(tmp_path / "docket.db")
-    item = Item(
-        id="S-2",
-        kind=ItemKind.STORY,
+    item = make_item(
+        "S-2",
         title="Ship login",
         description_md="- [ ] write the spec\n- [x] ship the migration\n",
-        state=ItemState.NEW,
-        assignee=None,
-        parent_id=None,
-        updated_at=datetime.now(UTC),
     )
     item_repo.upsert_item(conn, item)
     provider = FakeProvider(items=[item])

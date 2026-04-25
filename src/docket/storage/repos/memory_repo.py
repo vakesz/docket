@@ -26,6 +26,7 @@ import uuid
 from datetime import UTC, datetime
 
 from docket.core.model import MemoryEntry
+from docket.storage._time import now_iso
 from docket.storage.db import transaction
 from docket.storage.repos import project_repo
 from docket.storage.repos._tags import clean_tags, clean_title, parse_tags
@@ -135,7 +136,7 @@ def update(
     if not fields:
         return existing
     fields.append("updated_at = ?")
-    params.append(datetime.now(UTC).isoformat())
+    params.append(now_iso())
     params.append(memory_id)
     with transaction(conn):
         row = conn.execute(
@@ -242,7 +243,7 @@ def get_revision(conn: sqlite3.Connection, project_id: str) -> int:
 
 def bump_revision(conn: sqlite3.Connection, project_id: str) -> int:
     """Increment (or initialize) the project's revision counter; return new value."""
-    now = datetime.now(UTC).isoformat()
+    now = now_iso()
     conn.execute(
         """
         INSERT INTO memory_revisions (project_id, revision, updated_at)

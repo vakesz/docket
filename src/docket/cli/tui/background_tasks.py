@@ -53,9 +53,10 @@ class BackgroundTasksMixin(_AppBase):
     tui_ctx: TuiContext
     _selected_item_id: str | None
 
-    def _reload_tree(self) -> None: ...
-    def _resolved_sync_interval(self) -> float:
-        raise NotImplementedError
+    if TYPE_CHECKING:
+        # Sibling-mixin methods (live on ItemSelectionMixin / DocketApp).
+        def _reload_tree(self) -> None: ...
+        def _resolved_sync_interval(self) -> float: ...
 
     def _schedule_next_sync(self, interval: float) -> None:
         """Publish the next-sync timestamp to the status bar. Called at

@@ -12,24 +12,97 @@ the caller folds back into whatever state container it uses."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, Final, Literal, overload
 from urllib.parse import urlparse
 
 from rich.console import Console
-from rich.prompt import Prompt
+from rich.prompt import Confirm, Prompt
+
+from docket.providers.base import ProviderAuthError
 
 if TYPE_CHECKING:
     from docket.providers.github.discover import HostRef
 
 console = Console()
 
-CUSTOM_SENTINEL = "__custom__"
+CUSTOM_SENTINEL: Final[Literal["__custom__"]] = "__custom__"
 """Returned by `pick` when the user chose the 'custom…' option. Callers
-compare via `is` so the literal never collides with a legitimate option."""
+match on the literal so it never collides with a legitimate option."""
 
-ANY_SENTINEL = "__any__"
+ANY_SENTINEL: Final[Literal["__any__"]] = "__any__"
 """Returned by `pick` with `allow_any=True` when the user chose 'any'.
 Callers translate this to an empty-string scope filter."""
+
+PickChoice = int | Literal["__any__", "__custom__"]
+"""Result of `pick`: either a 0-based option index, or a sentinel for the
+'any' / 'custom…' escape hatches. The Literal types let `match`/`is`
+branches narrow away the sentinels without an explicit `isinstance` check."""
+
+
+def step_auth_with_retry(
+    ensure_logged_in: Callable[[], str],
+    *,
+    service_label: str,
+) -> str:
+    """Run `ensure_logged_in` with user-driven retry on auth failure.
+
+    Prints a "Checking ... session..." header, loops until the provider's
+    auth helper returns an identity string, and returns it. A declined retry
+    raises `SystemExit(1)` — the wizard cannot meaningfully continue without
+    an authenticated session.
+
+    Shared by `setup_wizard_github` and `setup_wizard_azure_devops` so the
+    retry policy, messaging, and exit semantics stay in one place."""
+    console.print(f"Checking {service_label} session...")
+    while True:
+        try:
+            identity = ensure_logged_in()
+        except ProviderAuthError as e:
+            console.print(f"[yellow]{e}[/yellow]")
+            if not Confirm.ask("Retry now?", default=True):
+                raise SystemExit(1) from e
+            continue
+        console.print(f"[green]✓ signed in as[/green] {identity}")
+        return identity
+
+
+def build_label_suggestion(
+    *,
+    type_id: str,
+    config: dict[str, Any],
+    github_host_hint: str = "",
+) -> str:
+    """Build a human-readable provider label from its config dict.
+
+    Used as the default for the display-name prompt in both the first-run
+    wizard (`setup_wizard._suggest_display_name`) and incremental
+    `docket setup provider add` (`provider_crud`). Returns an empty string
+    only for unknown provider types where no useful label can be inferred —
+    callers fall back to their own default (usually the provider key).
+
+    `github_host_hint` is the signed-in GH hostname captured during the
+    connection step; when it's a GHE host (not `github.com`) it replaces
+    the "GitHub" prefix so labels distinguish cloud from enterprise."""
+    if type_id == "azure_devops":
+        org_url = str(config.get("organization", ""))
+        project = str(config.get("project", ""))
+        org_slug = urlparse(org_url).path.strip("/") or urlparse(org_url).netloc
+        if org_slug and project:
+            return f"Azure DevOps · {org_slug}/{project}"
+        if project:
+            return f"Azure DevOps · {project}"
+        return "Azure DevOps"
+    if type_id == "github":
+        repo = str(config.get("default_repo", ""))
+        prefix = (
+            github_host_hint if github_host_hint and github_host_hint != "github.com" else "GitHub"
+        )
+        return f"{prefix} · {repo}" if repo else prefix
+    if type_id == "github_stub":
+        repo = str(config.get("default_repo", ""))
+        return f"GitHub (stub) · {repo}" if repo else "GitHub (stub)"
+    return ""
 
 
 def looks_like_http_url(value: str) -> bool:
@@ -42,13 +115,39 @@ def looks_like_http_url(value: str) -> bool:
     return parsed.scheme in ("http", "https") and bool(parsed.netloc)
 
 
+@overload
+def pick(label: str, options: list[str]) -> int: ...
+@overload
+def pick(
+    label: str,
+    options: list[str],
+    *,
+    allow_any: Literal[True],
+    allow_custom: Literal[True],
+) -> int | Literal["__any__", "__custom__"]: ...
+@overload
+def pick(
+    label: str,
+    options: list[str],
+    *,
+    allow_any: Literal[True],
+    allow_custom: Literal[False] = False,
+) -> int | Literal["__any__"]: ...
+@overload
+def pick(
+    label: str,
+    options: list[str],
+    *,
+    allow_any: Literal[False] = False,
+    allow_custom: Literal[True],
+) -> int | Literal["__custom__"]: ...
 def pick(
     label: str,
     options: list[str],
     *,
     allow_any: bool = False,
     allow_custom: bool = False,
-) -> int | str:
+) -> PickChoice:
     """Render a numbered chooser. Returns an int index or a sentinel ('any' / 'custom').
 
     When `allow_any` is set, 'any' is rendered as option 1 and is the default
@@ -87,14 +186,13 @@ def pick_assignee(*, signed_in_email: str | None, current_assignee: str) -> str:
     options: list[str] = ["@me"]
     if signed_in_email and signed_in_email not in options:
         options.append(signed_in_email)
-    choice = pick("Assignee", options, allow_any=True, allow_custom=True)
-    if choice is ANY_SENTINEL:
-        return ""
-    if choice is CUSTOM_SENTINEL:
-        raw = Prompt.ask("Assignee (email or @me)", default=current_assignee or "@me").strip()
-        return raw
-    assert isinstance(choice, int)
-    return options[choice]
+    match pick("Assignee", options, allow_any=True, allow_custom=True):
+        case "__any__":
+            return ""
+        case "__custom__":
+            return Prompt.ask("Assignee (email or @me)", default=current_assignee or "@me").strip()
+        case int(idx):
+            return options[idx]
 
 
 def pick_github_host() -> HostRef | None:
@@ -118,11 +216,11 @@ def pick_github_host() -> HostRef | None:
         "Pick which one this provider should use.[/dim]"
     )
     labels = [f"{h.hostname}  [dim]→ {h.api_base_url}[/dim]" for h in hosts]
-    choice = pick("GitHub host", labels, allow_custom=True)
-    if choice is CUSTOM_SENTINEL:
-        return _prompt_github_host_manual()
-    assert isinstance(choice, int)
-    return hosts[choice]
+    match pick("GitHub host", labels, allow_custom=True):
+        case "__custom__":
+            return _prompt_github_host_manual()
+        case int(idx):
+            return hosts[idx]
 
 
 def _prompt_github_host_manual() -> HostRef:
@@ -228,11 +326,11 @@ def pick_github_repo(*, host: str | None = None) -> str:
         "[dim]Don't see the repo you want? Choose [cyan]custom…[/cyan] to type "
         "any repo you can read (e.g. [cyan]anthropics/claude-code[/cyan]).[/dim]"
     )
-    choice = pick("GitHub repository", repos, allow_custom=True)
-    if choice is CUSTOM_SENTINEL:
-        return _prompt_github_repo_manual()
-    assert isinstance(choice, int)
-    return repos[choice]
+    match pick("GitHub repository", repos, allow_custom=True):
+        case "__custom__":
+            return _prompt_github_repo_manual()
+        case int(idx):
+            return repos[idx]
 
 
 def _prompt_github_repo_manual() -> str:
@@ -246,10 +344,12 @@ def _prompt_github_repo_manual() -> str:
 __all__ = [
     "ANY_SENTINEL",
     "CUSTOM_SENTINEL",
+    "build_label_suggestion",
     "console",
     "looks_like_http_url",
     "pick",
     "pick_assignee",
     "pick_github_host",
     "pick_github_repo",
+    "step_auth_with_retry",
 ]

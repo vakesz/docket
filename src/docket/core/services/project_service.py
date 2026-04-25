@@ -83,7 +83,8 @@ def upsert(
     save_config(paths, config)
     mirror_into_db(config, conn)
     project = project_repo.get(conn, project_id)
-    assert project is not None  # mirror_into_db just created it
+    if project is None:
+        raise RuntimeError(f"project mirror did not persist {provider_key!r}")
     return project
 
 
@@ -113,7 +114,8 @@ def activate(
         description=config.projects[project_id].description,
     )
     project = project_repo.get(conn, project_id)
-    assert project is not None
+    if project is None:
+        raise RuntimeError(f"project mirror did not persist {provider_key!r}")
     return project
 
 

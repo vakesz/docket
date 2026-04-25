@@ -8,7 +8,6 @@ persistence fires) rather than rendering fidelity.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -20,29 +19,17 @@ from docket.cli.tui.widgets.item_detail import ItemDetail
 from docket.cli.tui.widgets.quick_open import QuickOpenModal
 from docket.cli.tui.widgets.theme_picker import ThemePicker
 from docket.config import Config, ProviderEntry, ScopeFilter, load_config, resolve_paths
-from docket.core.model import Item, ItemKind, ItemState, ScopeFilters
+from docket.core.model import ScopeFilters
 from docket.storage import init_db
 from docket.storage.repos import item_repo
+from tests.conftest import MakeItem
 from tests.fakes.provider import FakeProvider
 
 
-def _mk_item(id_: str = "S-1", *, title: str = "Add login") -> Item:
-    return Item(
-        id=id_,
-        kind=ItemKind.STORY,
-        title=title,
-        description_md="body",
-        state=ItemState.NEW,
-        assignee=None,
-        parent_id=None,
-        updated_at=datetime.now(UTC),
-    )
-
-
 @pytest.fixture
-def ctx(tmp_path: Path):
+def ctx(tmp_path: Path, make_item: MakeItem):
     conn = init_db(tmp_path / "docket.db")
-    item = _mk_item()
+    item = make_item(title="Add login", description_md="body")
     item_repo.upsert_item(conn, item)
     provider = FakeProvider(items=[item])
     yield TuiContext(
@@ -151,7 +138,7 @@ async def test_quick_open_unknown_id_notifies_without_selecting(ctx) -> None:
         await qo_input.action_submit()
         await pilot.pause()
 
-        assert app._selected_item_id is None
+        assert app.selected_item_id() is None
 
 
 async def test_command_palette_provider_registered(ctx) -> None:
@@ -272,8 +259,8 @@ async def test_new_item_form_surfaces_duplicates_and_stages_proposal(ctx) -> Non
 
         # Form dismissed → diff modal open, proposal staged, provider untouched.
         assert isinstance(app.screen, DiffModal)
-        assert len(app._proposals) == 1
-        pending = app._proposals.peek_next()
+        assert app.pending_proposal_count() == 1
+        pending = app.peek_next_proposal()
         assert pending is not None
         assert isinstance(pending.proposal, ItemCreate)
         assert pending.proposal.fields.title == "Add login flow"
@@ -294,7 +281,7 @@ async def test_transition_command_stages_proposal_and_opens_modal(ctx) -> None:
         await pilot.pause()
 
         assert isinstance(app.screen, DiffModal)
-        assert len(app._proposals) == 1
+        assert app.pending_proposal_count() == 1
 
 
 async def test_fullscreen_toggle_maximizes_then_restores(ctx) -> None:

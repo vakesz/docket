@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from rich.prompt import Confirm, Prompt
+from rich.prompt import Prompt
 
 from docket.config.models import ScopeFilter
 from docket.config.setup_utils import (
@@ -17,8 +17,8 @@ from docket.config.setup_utils import (
     pick_assignee,
     pick_github_host,
     pick_github_repo,
+    step_auth_with_retry,
 )
-from docket.providers.base import ProviderAuthError
 
 if TYPE_CHECKING:
     from docket.config.setup_wizard import WizardState
@@ -32,18 +32,8 @@ def step_auth(state: WizardState) -> None:
         signed_in_email as gh_signed_in_email,
     )
 
-    console.print("Checking GitHub CLI session...")
-    while True:
-        try:
-            login = gh_ensure_logged_in()
-        except ProviderAuthError as e:
-            console.print(f"[yellow]{e}[/yellow]")
-            if not Confirm.ask("Retry now?", default=True):
-                raise SystemExit(1) from e
-            continue
-        console.print(f"[green]✓ signed in as[/green] {login}")
-        state.signed_in_email = gh_signed_in_email()
-        return
+    step_auth_with_retry(gh_ensure_logged_in, service_label="GitHub CLI")
+    state.signed_in_email = gh_signed_in_email()
 
 
 def step_connection(state: WizardState) -> None:

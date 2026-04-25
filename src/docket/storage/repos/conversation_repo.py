@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from docket.core.model import Conversation
+from docket.storage._time import now_iso
 from docket.storage.item_keys import item_id_from_storage_key, item_storage_key
 
 
@@ -69,7 +70,7 @@ def list_for_item(
 def archive(conn: sqlite3.Connection, convo_id: str) -> None:
     conn.execute(
         "UPDATE conversations SET archived_at = ? WHERE id = ? AND archived_at IS NULL",
-        (datetime.now(UTC).isoformat(), convo_id),
+        (now_iso(), convo_id),
     )
 
 

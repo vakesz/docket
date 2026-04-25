@@ -19,6 +19,7 @@ import uuid
 from datetime import UTC, datetime
 
 from docket.core.model import Source
+from docket.storage._time import now_iso
 from docket.storage.db import transaction
 from docket.storage.repos import project_repo
 from docket.storage.repos._tags import clean_tags, clean_title, parse_tags
@@ -145,7 +146,7 @@ def update(
     if not fields:
         return existing
     fields.append("updated_at = ?")
-    params.append(datetime.now(UTC).isoformat())
+    params.append(now_iso())
     params.append(source_id)
     with transaction(conn):
         conn.execute(f"UPDATE sources SET {', '.join(fields)} WHERE id = ?", params)

@@ -19,35 +19,24 @@ from rich.prompt import Confirm, Prompt
 
 from docket.config.models import ScopeFilter
 from docket.config.setup_utils import (
-    ANY_SENTINEL,
-    CUSTOM_SENTINEL,
     console,
     looks_like_http_url,
     pick,
     pick_assignee,
+    step_auth_with_retry,
 )
 from docket.providers.azure_devops import AzureDevOpsProvider, discover
 from docket.providers.azure_devops.auth import ensure_logged_in
 from docket.providers.azure_devops.discover import DiscoveryError
-from docket.providers.base import ProviderAuthError, ProviderError
+from docket.providers.base import ProviderError
 
 if TYPE_CHECKING:
     from docket.config.setup_wizard import WizardState
 
 
 def step_auth(state: WizardState) -> None:
-    console.print("Checking Azure CLI session...")
-    while True:
-        try:
-            account = ensure_logged_in()
-        except ProviderAuthError as e:
-            console.print(f"[yellow]{e}[/yellow]")
-            if not Confirm.ask("Retry now?", default=True):
-                raise SystemExit(1) from e
-            continue
-        console.print(f"[green]✓ signed in as[/green] {account}")
-        state.signed_in_email = discover.signed_in_email()
-        return
+    step_auth_with_retry(ensure_logged_in, service_label="Azure CLI")
+    state.signed_in_email = discover.signed_in_email()
 
 
 def step_connection(state: WizardState) -> None:
@@ -124,14 +113,14 @@ def _pick_org(state: WizardState) -> str:
     except DiscoveryError as e:
         console.print(f"[dim]Couldn't auto-list organizations ({e}) — entering manually.[/dim]")
         orgs = []
-    if orgs:
-        labels = [f"{o.name} ({o.url})" for o in orgs]
-        choice = pick("Azure DevOps organization", labels, allow_custom=True)
-        if choice is CUSTOM_SENTINEL:
+    if not orgs:
+        return _prompt_org_url(state)
+    labels = [f"{o.name} ({o.url})" for o in orgs]
+    match pick("Azure DevOps organization", labels, allow_custom=True):
+        case "__custom__":
             return _prompt_org_url(state)
-        assert isinstance(choice, int)
-        return orgs[choice].url
-    return _prompt_org_url(state)
+        case int(idx):
+            return orgs[idx].url
 
 
 def _prompt_org_url(state: WizardState) -> str:
@@ -159,14 +148,14 @@ def _pick_project(state: WizardState, org_url: str) -> str:
     except DiscoveryError as e:
         console.print(f"[dim]Couldn't auto-list projects ({e}) — entering manually.[/dim]")
         projects = []
-    if projects:
-        labels = [p.name for p in projects]
-        choice = pick("Project", labels, allow_custom=True)
-        if choice is CUSTOM_SENTINEL:
+    if not projects:
+        return _prompt_project_name(state)
+    labels = [p.name for p in projects]
+    match pick("Project", labels, allow_custom=True):
+        case "__custom__":
             return _prompt_project_name(state)
-        assert isinstance(choice, int)
-        return projects[choice].name
-    return _prompt_project_name(state)
+        case int(idx):
+            return projects[idx].name
 
 
 def _prompt_project_name(state: WizardState) -> str:
@@ -198,14 +187,13 @@ def _pick_optional(
         raw = Prompt.ask(f"{label} (blank for any)", default=current or "")
         return raw.strip()
 
-    choice = pick(label, options, allow_any=True, allow_custom=True)
-    if choice is ANY_SENTINEL:
-        return ""
-    if choice is CUSTOM_SENTINEL:
-        raw = Prompt.ask(f"{label} (free-form)", default=current or "")
-        return raw.strip()
-    assert isinstance(choice, int)
-    return options[choice]
+    match pick(label, options, allow_any=True, allow_custom=True):
+        case "__any__":
+            return ""
+        case "__custom__":
+            return Prompt.ask(f"{label} (free-form)", default=current or "").strip()
+        case int(idx):
+            return options[idx]
 
 
 def _count_items_for_scope(org: str, project: str, scope: ScopeFilter) -> int | None:

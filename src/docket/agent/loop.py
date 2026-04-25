@@ -63,6 +63,12 @@ class AgentLoop:
         with the same client without plumbing a second handle through."""
         return self._client
 
+    @property
+    def tools(self) -> ToolRegistry:
+        """The registered tool set. Tests and diagnostics use this to inspect
+        what's available on the live agent without reaching through privates."""
+        return self._tools
+
     def run_turn(
         self,
         *,

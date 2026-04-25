@@ -22,7 +22,6 @@ import secrets
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
-from urllib.parse import urlparse
 
 from pydantic import HttpUrl, ValidationError
 from rich.panel import Panel
@@ -41,6 +40,7 @@ from docket.config.models import (
 )
 from docket.config.paths import Paths, resolve_paths
 from docket.config.setup_utils import (
+    build_label_suggestion,
     console,
     looks_like_http_url,
     pick,
@@ -221,9 +221,7 @@ def _step_pick_provider(state: WizardState) -> None:
         console.print("[red]No provider types registered.[/red]")
         raise SystemExit(2)
     labels = [f"{s.display_name} ({s.type_id})" for s in specs]
-    choice = pick("Provider type", labels)
-    assert isinstance(choice, int)
-    spec = specs[choice]
+    spec = specs[pick("Provider type", labels)]
     state.type_id = spec.type_id
     state.display_name = spec.display_name
 
@@ -363,28 +361,18 @@ def _step_pick_label(state: WizardState) -> None:
 
 
 def _suggest_display_name(state: WizardState) -> str:
-    """Build a sensible default label from the provider config we've collected."""
-    if state.type_id == "azure_devops":
-        org_url = str(state.provider_config.get("organization", ""))
-        project = str(state.provider_config.get("project", ""))
-        org = urlparse(org_url).path.strip("/") or urlparse(org_url).netloc
-        if org and project:
-            return f"Azure DevOps · {org}/{project}"
-        if state.display_name:
-            return state.display_name
-        return "Azure DevOps"
-    if state.type_id in ("github", "github_stub"):
-        repo = str(state.provider_config.get("default_repo", ""))
-        host = state.signed_in_github_host
-        prefix = "GitHub"
-        if host and host != "github.com":
-            # Surface the host so "GitHub · foo/bar" on github.com and
-            # "ghe.example.com · foo/bar" on Enterprise don't collide.
-            prefix = host
-        if repo:
-            return f"{prefix} · {repo}"
-        return prefix
-    return state.display_name or state.type_id
+    """Build a sensible default label from the provider config we've collected.
+
+    Delegates to `build_label_suggestion` so the wizard and
+    `docket setup provider add` offer identical defaults. Falls back to the
+    user's existing `state.display_name` (or the raw `type_id`) when the
+    provider type isn't built-in and no label can be inferred."""
+    suggested = build_label_suggestion(
+        type_id=state.type_id,
+        config=state.provider_config,
+        github_host_hint=state.signed_in_github_host or "",
+    )
+    return suggested or state.display_name or state.type_id
 
 
 # ---- step 4: scope (per-provider) -------------------------------------------

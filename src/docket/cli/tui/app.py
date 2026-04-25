@@ -2,11 +2,9 @@ from __future__ import annotations
 
 import contextlib
 import logging
-import webbrowser
 from collections.abc import Callable
 from typing import ClassVar
 
-from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.command import Provider
@@ -15,10 +13,13 @@ from textual.widgets import Input
 
 from docket.agent.factory import build_agent
 from docket.agent.loop import AgentLoop
+from docket.agent.tools import ToolRegistry
 from docket.agent.types import ChatMessage, StreamDelta
 from docket.cli.tui.background_tasks import BackgroundTasksMixin
+from docket.cli.tui.config_actions import ConfigMixin
 from docket.cli.tui.errors import humanize as humanize_error
 from docket.cli.tui.errors import retry_hint
+from docket.cli.tui.item_selection import ItemSelectionMixin
 from docket.cli.tui.pane_layout import PaneLayoutMixin
 from docket.cli.tui.panes import FullscreenToggle, Pane
 from docket.cli.tui.review_flow import ReviewFlowMixin
@@ -27,8 +28,6 @@ from docket.cli.tui.tui_context import TuiContext
 from docket.cli.tui.view_resolver import (
     active_provider_entry,
     active_view_filter,
-    resolve_grouping,
-    resolve_list_item_states,
     resolve_project_name,
     resolve_stale_threshold,
     resolve_sync_interval,
@@ -36,42 +35,26 @@ from docket.cli.tui.view_resolver import (
 from docket.cli.tui.widgets.chat_pane import ChatPane, TurnFinished, UserTurnRequest
 from docket.cli.tui.widgets.help_modal import HelpModal
 from docket.cli.tui.widgets.item_detail import ItemDetail
-from docket.cli.tui.widgets.item_tree import ItemSelected, ItemTree
+from docket.cli.tui.widgets.item_tree import ItemTree
 from docket.cli.tui.widgets.mcp_pane import MCPPane
 from docket.cli.tui.widgets.memory_pane import MemoryPane
 from docket.cli.tui.widgets.new_item_modal import NewItemModal
-from docket.cli.tui.widgets.prompt_library import PromptLibraryModal
-from docket.cli.tui.widgets.quick_open import QuickOpenModal, QuickOpenResult
-from docket.cli.tui.widgets.settings_modal import SettingsModal
 from docket.cli.tui.widgets.source_pane import SourcePane
 from docket.cli.tui.widgets.status_bar import StatusBar
-from docket.cli.tui.widgets.theme_picker import ThemePicker
-from docket.config import save_config
-from docket.config.models import Config, ProviderEntry
+from docket.config.models import ProviderEntry
 from docket.core.model import (
-    ItemKind,
-    ItemState,
     SyncSummary,
     TransitionIntent,
     project_id_for,
 )
-from docket.core.mutation import ItemCreate
+from docket.core.mutation import ItemCreate, Proposal
 from docket.core.services import (
     conversation_service,
     mutation_service,
     sync_service,
     visual_filter,
 )
-from docket.core.services.proposal_store import ProposalStore
-from docket.providers.base import GroupingStrategy
-from docket.storage.repos import (
-    comment_repo,
-    conversation_repo,
-    item_repo,
-    message_repo,
-    search_repo,
-    watchlist_repo,
-)
+from docket.core.services.proposal_store import PendingProposal, ProposalStore
 
 log = logging.getLogger(__name__)
 
@@ -89,6 +72,8 @@ def _docket_commands_provider() -> type[Provider]:
 class DocketApp(
     BackgroundTasksMixin,
     PaneLayoutMixin,
+    ItemSelectionMixin,
+    ConfigMixin,
     ReviewFlowMixin,
     SuggestionFlowMixin,
     App[None],
@@ -226,20 +211,11 @@ class DocketApp(
     def _active_view_filter(self) -> visual_filter.ResolvedFilter:
         return active_view_filter(self.tui_ctx)
 
-    def _reload_tree(self) -> None:
-        self._apply_filter("")
-
     def _resolved_stale_threshold(self) -> int | None:
         return resolve_stale_threshold(self.tui_ctx)
 
     def _resolved_sync_interval(self) -> float:
         return resolve_sync_interval(self.tui_ctx)
-
-    def _resolved_grouping(self) -> GroupingStrategy:
-        return resolve_grouping(self.tui_ctx)
-
-    def _list_item_states(self) -> tuple[ItemState, ...] | None:
-        return resolve_list_item_states(self.tui_ctx)
 
     def _init_status_bar(self) -> None:
         """Populate the static status-bar segments (provider name, scope key).
@@ -311,6 +287,37 @@ class DocketApp(
         project_id = project_id_for(self.tui_ctx.provider_key)
         return project_id, self._resolve_project_name() or project_id
 
+    # ---- public accessors (pilot tests, diagnostics) -----------------------
+    # These exist so tests don't have to reach through private attributes to
+    # observe state. Keeping them as methods (not properties) mirrors the
+    # existing `_resolved_*` pattern and makes the "public API for tests"
+    # boundary visible in rg.
+
+    def pending_proposal_count(self) -> int:
+        """Number of proposals staged and awaiting user confirmation."""
+        return len(self._proposals)
+
+    def peek_next_proposal(self) -> PendingProposal | None:
+        """Head of the proposal queue, or None when nothing is pending."""
+        return self._proposals.peek_next()
+
+    def stage_proposal(self, proposal: Proposal, *, source: str) -> None:
+        """Stage a proposal as if the agent had produced it.
+
+        Used by pilot tests to exercise the review flow without running a
+        full LLM turn. Production code paths stage through `mutation_service`
+        + agent tools; both funnel into the same `ProposalStore`."""
+        self._proposals.add(proposal, source=source)
+        self._refresh_pending_count()
+
+    def active_agent_tools(self) -> ToolRegistry | None:
+        """Tool registry for the running agent, or None when LLM is unconfigured."""
+        return self._agent.tools if self._agent else None
+
+    def effective_sync_interval(self) -> float:
+        """Sync interval that actually drives the background timer."""
+        return self._resolved_sync_interval()
+
     def _rebind_mcp_for_active_project(self) -> None:
         """Switch the MCP fleet to match the current project (= provider).
 
@@ -339,166 +346,6 @@ class DocketApp(
                 "Maximize this pane to fill the screen, or restore the three-pane layout. "
                 "Ctrl+F does the same."
             )
-
-    def on_item_selected(self, message: ItemSelected) -> None:
-        item = item_repo.get_item(
-            self.tui_ctx.conn, message.item_id, provider_key=self.tui_ctx.provider_key
-        )
-        comments = comment_repo.list_comments(
-            self.tui_ctx.conn, message.item_id, provider_key=self.tui_ctx.provider_key
-        )
-        self.query_one(ItemDetail).show(item, comments)
-        chat = self.query_one(ChatPane)
-        chat.bind_item(item)
-        self._selected_item_id = item.id if item else None
-        self._reset_cost_display()
-        if item is not None:
-            active = conversation_repo.get_active_for_item(
-                self.tui_ctx.conn,
-                item.id,
-                provider_key=self.tui_ctx.provider_key,
-            )
-            if active is None:
-                chat.show_history([])
-            else:
-                history = message_repo.list_for_conversation(self.tui_ctx.conn, active.id)
-                chat.show_history(history)
-            # Fetch fresh details (attachments, up-to-date description, comments)
-            # from the provider in the background — the WIQL sync batch can't carry
-            # relations, so attachments only show up after this hydrates.
-            self.run_worker(
-                lambda item_id=item.id: self._hydrate_detail(item_id),
-                group=f"hydrate-{item.id}",
-                exclusive=True,
-                thread=True,
-            )
-
-    def _hydrate_detail(self, item_id: str) -> None:
-        try:
-            fresh = self.tui_ctx.provider.get_item(item_id)
-            fresh_comments = self.tui_ctx.provider.get_comments(item_id)
-        except Exception:
-            log.exception("detail hydrate failed for %s", item_id)
-            return
-        if self.tui_ctx.provider_key:
-            fresh.provider_key = self.tui_ctx.provider_key
-        item_repo.upsert_item(self.tui_ctx.conn, fresh)
-        comment_repo.replace_comments_for_item(
-            self.tui_ctx.conn,
-            item_id,
-            fresh_comments,
-            provider_key=self.tui_ctx.provider_key,
-        )
-
-        # Only repaint if the user hasn't moved on to another item.
-        def paint() -> None:
-            if self._selected_item_id == item_id:
-                self.query_one(ItemDetail).show(fresh, fresh_comments)
-
-        self.call_from_thread(paint)
-
-    def on_input_changed(self, event: Input.Changed) -> None:
-        if event.input.id != "filter":
-            return
-        self._apply_filter(event.value or "")
-
-    def on_input_submitted(self, event: Input.Submitted) -> None:
-        # Enter in the filter is redundant with the live-filter path, but we
-        # still honor it so nothing feels broken and pilot tests that drive
-        # `action_submit` continue to work.
-        if event.input.id != "filter":
-            return
-        self._apply_filter(event.value or "")
-
-    def on_key(self, event: events.Key) -> None:
-        filter_input = self.query_one("#filter", Input)
-        tree = self.query_one(ItemTree)
-        if event.key == "escape" and self._defocus_chat_prompt():
-            event.stop()
-            event.prevent_default()
-            return
-        if event.key == "down" and self.focused is filter_input:
-            self._move_from_filter_to_tree()
-            event.stop()
-            event.prevent_default()
-            return
-        if event.key == "up" and self.focused is tree and self._move_from_tree_to_filter():
-            event.stop()
-            event.prevent_default()
-
-    def _apply_filter(self, raw: str) -> None:
-        """Re-render the tree for the given filter query.
-
-        Empty query = full list (same as _reload_tree). Non-empty delegates
-        to the FTS5-backed search_repo so title + description + comments all
-        match, returning items in bm25 rank order. The active view filter
-        (assignee, area, iteration, team) is layered on top of the search
-        hits so scope and free-text narrow together."""
-        query = raw.strip()
-        tree = self.query_one(ItemTree)
-        pinned = watchlist_repo.list_pinned_items(
-            self.tui_ctx.conn, provider_key=self.tui_ctx.provider_key
-        )
-        resolved = self._active_view_filter()
-        grouping = self._resolved_grouping()
-        states = self._list_item_states()
-        if not query:
-            items = item_repo.list_items(
-                self.tui_ctx.conn,
-                provider_key=self.tui_ctx.provider_key,
-                assignee=resolved.assignee,
-                states=states,
-            )
-            tree.load_items(
-                visual_filter.apply_to_items(items, resolved),
-                pinned=pinned,
-                grouping=grouping,
-            )
-            return
-        ids = search_repo.search(
-            self.tui_ctx.conn,
-            query,
-            provider_key=self.tui_ctx.provider_key,
-            assignee=resolved.assignee,
-        )
-        if not ids:
-            tree.load_items([], pinned=pinned, grouping=grouping)
-            return
-        by_id = {
-            i.id: i
-            for i in item_repo.list_items_by_ids(
-                self.tui_ctx.conn,
-                ids,
-                provider_key=self.tui_ctx.provider_key,
-                states=states,
-            )
-        }
-        ordered = [by_id[iid] for iid in ids if iid in by_id]
-        tree.load_items(
-            visual_filter.apply_to_items(ordered, resolved),
-            pinned=pinned,
-            grouping=grouping,
-        )
-
-    def _move_from_filter_to_tree(self) -> None:
-        tree = self.query_one(ItemTree)
-        tree.focus()
-        if tree.cursor_node is not None and tree.cursor_line >= 0:
-            tree.action_cursor_down()
-            return
-        first_item = tree.first_visible_item_node()
-        if first_item is not None:
-            tree.move_cursor(first_item, animate=False)
-
-    def _move_from_tree_to_filter(self) -> bool:
-        tree = self.query_one(ItemTree)
-        first_item = tree.first_visible_item_node()
-        if first_item is None:
-            return False
-        if tree.cursor_node is not first_item and tree.cursor_line > first_item.line:
-            return False
-        self.query_one("#filter", Input).focus()
-        return True
 
     def on_user_turn_request(self, event: UserTurnRequest) -> None:
         """User submitted text in the chat pane — drive the agent turn."""
@@ -615,66 +462,8 @@ class DocketApp(
             ),
         )
 
-    def action_focus_filter(self) -> None:
-        self.query_one("#filter", Input).focus()
-
-    def action_quick_open(self) -> None:
-        """Prompt for a ticket id; on submit, route through the normal
-        item-selection path so detail + chat wire up the same way as if
-        the user clicked the row in the tree."""
-
-        def on_result(result: QuickOpenResult | None) -> None:
-            if result is None or result.item_id is None:
-                return
-            item = item_repo.get_item(
-                self.tui_ctx.conn, result.item_id, provider_key=self.tui_ctx.provider_key
-            )
-            if item is None:
-                self.notify(f"No item '{result.item_id}' in cache.", severity="warning")
-                return
-            # Reuse the tree's message path so on_item_selected runs unchanged.
-            self.post_message(ItemSelected(item.id))
-
-        self.push_screen(
-            QuickOpenModal(conn=self.tui_ctx.conn, provider_key=self.tui_ctx.provider_key),
-            on_result,
-        )
-
-    def action_pick_theme(self) -> None:
-        """Open the theme picker modal."""
-        self.push_screen(ThemePicker(paths=self.tui_ctx.paths, config=self.tui_ctx.config))
-
-    def _apply_saved_theme(self) -> None:
-        """If the caller provided a config, honor its saved theme at startup.
-
-        Silently ignores an unknown theme name so a stale config doesn't
-        crash the TUI — the user can just pick a new one."""
-        config = self.tui_ctx.config
-        if config is None:
-            return
-        saved = getattr(getattr(config, "ui", None), "theme", None)
-        if not saved:
-            return
-        if saved in self.available_themes:
-            self.theme = saved
-
     def action_show_help(self) -> None:
         self.push_screen(HelpModal())
-
-    def action_open_in_browser(self) -> None:
-        if self._selected_item_id is None:
-            self.notify("Select an item first.", severity="warning")
-            return
-        item = item_repo.get_item(
-            self.tui_ctx.conn,
-            self._selected_item_id,
-            provider_key=self.tui_ctx.provider_key,
-        )
-        if item is None or not item.url:
-            self.notify("This item has no URL on file.", severity="warning")
-            return
-        webbrowser.open(item.url)
-        self.notify(f"Opened {item.id} in browser")
 
     def action_new_thread(self) -> None:
         if self._selected_item_id is None:
@@ -701,49 +490,6 @@ class DocketApp(
         with contextlib.suppress(Exception):
             bar = self.query_one(StatusBar)
             bar.cost_cents = bar.cost_cents + event.cost_cents
-
-    def action_toggle_pin(self) -> None:
-        """Pin or unpin the focused item. Pins survive scope/view switches —
-        they come from the `watchlist` table, joined on `items.id` at reload
-        time, so archived rows drop out without any bookkeeping here."""
-        if self._selected_item_id is None:
-            self.notify("Select an item first.", severity="warning")
-            return
-        item_id = self._selected_item_id
-        if watchlist_repo.is_pinned(
-            self.tui_ctx.conn, item_id, provider_key=self.tui_ctx.provider_key
-        ):
-            watchlist_repo.unpin(self.tui_ctx.conn, item_id, provider_key=self.tui_ctx.provider_key)
-            self.notify(f"Unpinned {item_id}.", severity="information")
-        else:
-            watchlist_repo.pin(self.tui_ctx.conn, item_id, provider_key=self.tui_ctx.provider_key)
-            self.notify(f"Pinned {item_id}.", severity="information")
-        self._reload_tree()
-
-    def action_toggle_done_visibility(self) -> None:
-        """Flip the backlog's show/hide for resolved + closed items.
-
-        Persists the new value to config.toml so the choice survives
-        relaunches. Falls back gracefully if paths/config aren't wired
-        (pilot tests, read-only sessions)."""
-        self.tui_ctx.hide_done = not self.tui_ctx.hide_done
-        # Persist to config so the next launch opens with the same setting.
-        cfg = self.tui_ctx.config
-        paths = self.tui_ctx.paths
-        if cfg is not None and paths is not None:
-            cfg.ui.hide_done = self.tui_ctx.hide_done
-            with contextlib.suppress(Exception):
-                save_config(paths, cfg)
-        # Re-run the active search (if any) so the toggle respects the current
-        # filter input rather than silently dropping it.
-        try:
-            filter_input = self.query_one("#filter", Input)
-        except Exception:
-            self._reload_tree()
-        else:
-            self._apply_filter(filter_input.value or "")
-        label = "hidden" if self.tui_ctx.hide_done else "visible"
-        self.notify(f"Done items {label}.", severity="information")
 
     def _blocked_read_only(self) -> bool:
         """Toast and return True if the user just tried to stage a mutation
@@ -773,24 +519,6 @@ class DocketApp(
         self._proposals.add(ItemCreate(item_kind=result.kind, fields=result.fields), source="form")
         self._refresh_pending_count()
         self._open_next_pending()
-
-    def action_open_settings(self) -> None:
-        if self.tui_ctx.paths is None or self.tui_ctx.config is None:
-            self.notify("Settings are unavailable in this session.", severity="warning")
-            return
-        self.run_worker(self._open_settings_flow(), group="settings", exclusive=False)
-
-    async def _open_settings_flow(self) -> None:
-        assert self.tui_ctx.paths is not None and self.tui_ctx.config is not None
-        result = await self.push_screen_wait(SettingsModal(self.tui_ctx.paths, self.tui_ctx.config))
-        if result is not None:
-            self._apply_saved_config(result)
-
-    def action_edit_prompts(self) -> None:
-        if self.tui_ctx.paths is None:
-            self.notify("Prompt library is unavailable in this session.", severity="warning")
-            return
-        self.push_screen(PromptLibraryModal(self.tui_ctx.paths))
 
     def action_open_memory(self) -> None:
         """Open the per-project memory editor for the active project."""
@@ -970,76 +698,6 @@ class DocketApp(
 
     def _active_provider_entry(self) -> ProviderEntry | None:
         return active_provider_entry(self.tui_ctx)
-
-    def action_set_default_provider(self) -> None:
-        """Persist the current provider as `config.active_provider`.
-
-        Writes the full config back to `config.toml` via `save_config` so the
-        choice sticks across launches. Pilot tests that mount the TUI without
-        `paths`/`config` get a warning toast instead of a crash."""
-        config = self.tui_ctx.config
-        paths = self.tui_ctx.paths
-        key = self.tui_ctx.provider_key
-        if config is None or paths is None:
-            self.notify(
-                "Can't persist default provider — config paths not wired.",
-                severity="warning",
-            )
-            return
-        if not key or key not in config.providers:
-            self.notify("No active provider to pin as default.", severity="warning")
-            return
-        if config.active_provider == key:
-            entry = config.providers[key]
-            self.notify(
-                f"'{entry.display_name}' is already the default provider.",
-                severity="information",
-            )
-            return
-        config.active_provider = key
-        try:
-            save_config(paths, config)
-        except Exception as e:
-            self.notify(humanize_error(e, action="Save config"), severity="error")
-            return
-        entry = config.providers[key]
-        self.notify(
-            f"Default provider set to '{entry.display_name}'. Opens here on next launch.",
-            severity="information",
-        )
-
-    def _apply_saved_config(self, config: Config) -> None:
-        """Update the in-memory settings after the modal persists config.toml.
-
-        Display and form behavior can refresh in-session. Provider wiring and
-        recurring timers are read at startup, so those changes take effect on
-        the next app launch.
-        """
-        self.tui_ctx.config = config
-        self.tui_ctx.compaction_threshold_tokens = config.llm.compaction_threshold_tokens
-        self.tui_ctx.external_watch_interval_seconds = config.llm.external_watch_interval_seconds
-        self.tui_ctx.background_sync_interval_seconds = config.sync.background_interval_seconds
-        self.tui_ctx.background_sync_min_interval_by_provider = dict(
-            config.sync.min_interval_seconds_by_provider
-        )
-        self.tui_ctx.stale_threshold_days = config.stale.threshold_days
-        self.tui_ctx.stale_threshold_by_provider = dict(config.stale.threshold_days_by_provider)
-        self.tui_ctx.default_new_item_kind = ItemKind(config.ui.default_new_item_kind)
-        self.tui_ctx.show_acceptance_criteria = config.ui.show_acceptance_criteria
-        self.tui_ctx.hide_done = config.ui.hide_done
-        self.query_one(ItemTree).stale_threshold_days = self._resolved_stale_threshold()
-        self.query_one(ChatPane).set_show_acceptance_criteria(config.ui.show_acceptance_criteria)
-        entry = (
-            config.providers.get(self.tui_ctx.provider_key) if self.tui_ctx.provider_key else None
-        )
-        if entry is not None and entry.active_scope in entry.scopes:
-            self.action_switch_view(entry.active_scope)
-        else:
-            self._reload_tree()
-        self.notify(
-            "Settings saved. View and prompt behavior updated now; provider and timer changes apply on the next launch.",
-            severity="information",
-        )
 
 
 __all__ = ["DocketApp", "Pane", "TuiContext"]

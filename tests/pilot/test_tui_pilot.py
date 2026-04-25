@@ -21,41 +21,28 @@ from docket.cli.tui.widgets.item_detail import ItemDetail
 from docket.cli.tui.widgets.item_tree import ItemTree
 from docket.cli.tui.widgets.status_bar import StatusBar
 from docket.config import Config, ProjectEntry, ProviderEntry
-from docket.core.model import Comment, Item, ItemKind, ItemState, ScopeFilters
+from docket.core.model import Comment, ItemKind, ItemState, ScopeFilters
 from docket.storage import init_db
 from docket.storage.repos import comment_repo, item_repo
+from tests.conftest import MakeItem
 from tests.fakes.provider import FakeProvider
 from tests.pilot.conftest import find_node
 
 
-def _mk_item(
-    id: str,
-    *,
-    kind: ItemKind = ItemKind.STORY,
-    title: str = "A story",
-    state: ItemState = ItemState.NEW,
-    parent_id: str | None = None,
-    description_md: str = "Hello",
-) -> Item:
-    return Item(
-        id=id,
-        kind=kind,
-        title=title,
-        description_md=description_md,
-        state=state,
-        assignee=None,
-        parent_id=parent_id,
-        tags=[],
-        updated_at=datetime.now(UTC),
-    )
-
-
 @pytest.fixture
-def tui_setup(tmp_path: Path):
+def tui_setup(tmp_path: Path, make_item: MakeItem):
     conn = init_db(tmp_path / "docket.db")
-    epic = _mk_item("E-1", kind=ItemKind.EPIC, title="Platform")
-    story = _mk_item("S-1", kind=ItemKind.STORY, title="Add login", parent_id="E-1")
-    bug = _mk_item("B-1", kind=ItemKind.BUG, title="Login crash", state=ItemState.ACTIVE)
+    epic = make_item("E-1", kind=ItemKind.EPIC, title="Platform", description_md="Hello")
+    story = make_item(
+        "S-1", kind=ItemKind.STORY, title="Add login", parent_id="E-1", description_md="Hello"
+    )
+    bug = make_item(
+        "B-1",
+        kind=ItemKind.BUG,
+        title="Login crash",
+        state=ItemState.ACTIVE,
+        description_md="Hello",
+    )
     for it in (epic, story, bug):
         item_repo.upsert_item(conn, it)
     comment_repo.replace_comments_for_item(
@@ -121,11 +108,13 @@ async def test_layout_has_status_bar_and_no_header(tui_setup) -> None:
         assert "FakeProvider" in str(bar.render())
 
 
-async def test_tree_rows_show_short_ids_and_status_bar_shows_project_name(tui_setup) -> None:
+async def test_tree_rows_show_short_ids_and_status_bar_shows_project_name(
+    tui_setup, make_item: MakeItem
+) -> None:
     ctx, _ = tui_setup
     pid = "FakeProvider"
     ctx.provider_key = pid
-    short_id_item = _mk_item("Ericsson/CodeChecker#1", title="Upgrade Vue")
+    short_id_item = make_item("Ericsson/CodeChecker#1", title="Upgrade Vue", description_md="Hello")
     short_id_item.provider_key = pid
     item_repo.upsert_item(ctx.conn, short_id_item)
     ctx.provider.items.append(short_id_item)
@@ -207,11 +196,19 @@ async def test_azure_provider_keeps_kind_grouping(tui_setup) -> None:
         assert not any(label.startswith("Open ") for label in labels)
 
 
-async def test_closed_items_hidden_by_default_and_toggle_reveals_them(tui_setup) -> None:
+async def test_closed_items_hidden_by_default_and_toggle_reveals_them(
+    tui_setup, make_item: MakeItem
+) -> None:
     """`hide_done` defaults to True so the backlog matches the frontend's
     "open" bucket; `c` flips it and the tree repaints with the closed rows."""
     ctx, _ = tui_setup
-    closed = _mk_item("C-1", kind=ItemKind.TASK, title="Old and done", state=ItemState.CLOSED)
+    closed = make_item(
+        "C-1",
+        kind=ItemKind.TASK,
+        title="Old and done",
+        state=ItemState.CLOSED,
+        description_md="Hello",
+    )
     item_repo.upsert_item(ctx.conn, closed)
     ctx.provider.items.append(closed)
     app = DocketApp(ctx)
@@ -226,10 +223,12 @@ async def test_closed_items_hidden_by_default_and_toggle_reveals_them(tui_setup)
         assert find_node(tree.root, "C-1") is not None
 
 
-async def test_refresh_action_invokes_sync(tui_setup) -> None:
+async def test_refresh_action_invokes_sync(tui_setup, make_item: MakeItem) -> None:
     ctx, provider = tui_setup
     # Add a fresh item on the provider only; refresh should pull it into the cache.
-    provider.items.append(_mk_item("T-1", kind=ItemKind.TASK, title="New task from provider"))
+    provider.items.append(
+        make_item("T-1", kind=ItemKind.TASK, title="New task from provider", description_md="Hello")
+    )
     app = DocketApp(ctx)
     async with app.run_test() as pilot:
         await app.run_action("refresh")
@@ -314,10 +313,10 @@ async def test_tree_up_from_first_item_moves_focus_to_filter(tui_setup) -> None:
         assert filter_input.has_focus
 
 
-async def test_tree_clamps_virtual_width_to_viewport(tmp_path: Path) -> None:
+async def test_tree_clamps_virtual_width_to_viewport(tmp_path: Path, make_item: MakeItem) -> None:
     conn = init_db(tmp_path / "docket.db")
     long_title = "This is a very long ticket title that should stay on one line and trim cleanly in the tree view"
-    item = _mk_item("S-long", title=long_title)
+    item = make_item("S-long", title=long_title, description_md="Hello")
     item_repo.upsert_item(conn, item)
     ctx = TuiContext(
         conn=conn,

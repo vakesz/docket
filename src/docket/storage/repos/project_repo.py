@@ -14,6 +14,7 @@ import sqlite3
 from datetime import UTC, datetime
 
 from docket.core.model import Project, project_id_for
+from docket.storage._time import now_iso
 
 _SLUG_BAD = re.compile(r"[^a-z0-9]+")
 
@@ -125,7 +126,7 @@ def update(
 def archive(conn: sqlite3.Connection, project_id: str) -> None:
     conn.execute(
         "UPDATE projects SET archived_at = ? WHERE id = ? AND archived_at IS NULL",
-        (datetime.now(UTC).isoformat(), project_id),
+        (now_iso(), project_id),
     )
 
 

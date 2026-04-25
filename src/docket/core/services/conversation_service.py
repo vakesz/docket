@@ -38,13 +38,6 @@ class TurnResult:
     usage: Usage
 
 
-def open_thread(conn: sqlite3.Connection, item_id: str, *, provider_key: str = "") -> Conversation:
-    existing = conversation_repo.get_active_for_item(conn, item_id, provider_key=provider_key)
-    if existing is not None:
-        return existing
-    return conversation_repo.create(conn, item_id, provider_key=provider_key)
-
-
 def new_thread(conn: sqlite3.Connection, item_id: str, *, provider_key: str = "") -> Conversation:
     active = conversation_repo.get_active_for_item(conn, item_id, provider_key=provider_key)
     if active is not None:
@@ -67,7 +60,9 @@ def send_user_message(
     item = item_repo.get_item(conn, item_id, provider_key=provider_key)
     if item is None:
         raise KeyError(f"unknown item '{item_id}'")
-    convo = open_thread(conn, item_id, provider_key=provider_key)
+    convo = conversation_repo.get_active_for_item(
+        conn, item_id, provider_key=provider_key
+    ) or conversation_repo.create(conn, item_id, provider_key=provider_key)
     # Compact BEFORE building the prompt so the history we feed the model is
     # already trimmed. A just-crossed threshold collapses on this turn, not the
     # next.

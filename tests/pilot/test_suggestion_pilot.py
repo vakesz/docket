@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -14,25 +13,13 @@ from docket.cli.tui.widgets.batch_diff_modal import BatchDiffModal
 from docket.cli.tui.widgets.chat_pane import ChatPane
 from docket.cli.tui.widgets.item_tree import ItemTree
 from docket.cli.tui.widgets.suggestion_modal import SuggestionModal
-from docket.core.model import Item, ItemKind, ItemState, ScopeFilters
+from docket.core.model import ItemState, ScopeFilters
 from docket.storage import init_db
 from docket.storage.repos import item_repo
+from tests.conftest import MakeItem
 from tests.fakes.llm import FakeLlmClient, text_turn
 from tests.fakes.provider import FakeProvider
 from tests.pilot.conftest import find_node
-
-
-def _mk_item() -> Item:
-    return Item(
-        id="S-1",
-        kind=ItemKind.STORY,
-        title="Add login",
-        description_md="Original.",
-        state=ItemState.NEW,
-        assignee=None,
-        parent_id=None,
-        updated_at=datetime.now(UTC),
-    )
 
 
 async def _select_story(app: DocketApp, pilot) -> None:
@@ -44,9 +31,9 @@ async def _select_story(app: DocketApp, pilot) -> None:
 
 
 @pytest.fixture
-def pilot_env(tmp_path: Path):
+def pilot_env(tmp_path: Path, make_item: MakeItem):
     conn = init_db(tmp_path / "docket.db")
-    item = _mk_item()
+    item = make_item(title="Add login", description_md="Original.")
     item_repo.upsert_item(conn, item)
     provider = FakeProvider(items=[item])
     client = FakeLlmClient()
@@ -89,7 +76,7 @@ async def test_suggest_accept_stages_state_and_patch(pilot_env) -> None:
 
         # Two proposals staged → batch review modal, not a y/n chain.
         assert isinstance(app.screen, BatchDiffModal)
-        assert len(app._proposals) == 2  # state_change + description_patch
+        assert app.pending_proposal_count() == 2  # state_change + description_patch
 
         # Provider untouched until the user confirms the actual diff.
         assert provider.items[0].state == ItemState.NEW
@@ -118,7 +105,7 @@ async def test_suggest_reject_leaves_store_empty(pilot_env) -> None:
         await pilot.press("n")
         await pilot.pause()
 
-        assert len(app._proposals) == 0
+        assert app.pending_proposal_count() == 0
 
 
 async def test_suggest_refine_seeds_chat_input(pilot_env) -> None:
@@ -148,7 +135,7 @@ async def test_suggest_refine_seeds_chat_input(pilot_env) -> None:
         # Modal closed and nothing was staged — refining is a handoff,
         # not a stage.
         assert not isinstance(app.screen, SuggestionModal)
-        assert len(app._proposals) == 0
+        assert app.pending_proposal_count() == 0
         assert provider.items[0].state == ItemState.NEW
 
         # Chat pane prompt is pre-filled with the suggestion as a draft.

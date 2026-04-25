@@ -19,7 +19,7 @@ from docket.agent.tool_defs import register_readonly_tools
 from docket.agent.tools import ToolRegistry
 from docket.agent.types import ChatMessage
 from docket.core.mutation import AttachmentUpload
-from docket.core.services import conversation_service, mutation_service
+from docket.core.services import mutation_service
 from docket.core.services.proposal_store import ProposalStore
 from docket.storage import init_db
 from docket.storage.repos import conversation_repo, item_repo, message_repo
@@ -40,7 +40,7 @@ def env(tmp_path: Path, make_item: MakeItem):
         reg, conn=conn, store=store, active_item=lambda: item.id, provider=provider
     )
     # Seed a conversation so the transcript tool has something to render.
-    convo = conversation_service.open_thread(conn, item.id)
+    convo = conversation_repo.create(conn, item.id)
     message_repo.append(conn, convo.id, ChatMessage(role="user", content="Why is this blocked?"))
     message_repo.append(
         conn,

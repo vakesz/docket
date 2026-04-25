@@ -16,29 +16,12 @@ from docket.cli.tui.tui_context import TuiContext
 from docket.cli.tui.widgets.item_tree import ItemTree
 from docket.cli.tui.widgets.status_bar import StatusBar, _format_countdown
 from docket.config.models import Config, ProviderEntry, ScopeFilter
-from docket.core.model import Item, ItemKind, ItemState, ScopeFilters
+from docket.core.model import ScopeFilters
 from docket.storage import init_db
 from docket.storage.repos import item_repo
+from tests.conftest import MakeItem
 from tests.fakes.provider import FakeProvider
 from tests.pilot.conftest import find_label
-
-
-def _mk_item(
-    id: str,
-    *,
-    updated_at: datetime | None = None,
-    title: str = "A story",
-) -> Item:
-    return Item(
-        id=id,
-        kind=ItemKind.STORY,
-        title=title,
-        description_md="",
-        state=ItemState.NEW,
-        assignee=None,
-        parent_id=None,
-        updated_at=updated_at or datetime.now(UTC),
-    )
 
 
 def _single_provider_cfg(
@@ -62,11 +45,13 @@ def _single_provider_cfg(
 
 
 @pytest.fixture
-def stale_ctx(tmp_path: Path):
+def stale_ctx(tmp_path: Path, make_item: MakeItem):
     conn = init_db(tmp_path / "docket.db")
     now = datetime.now(UTC)
-    fresh = _mk_item("S-fresh", updated_at=now, title="Just updated")
-    stale = _mk_item("S-stale", updated_at=now - timedelta(days=14), title="Two weeks old")
+    fresh = make_item("S-fresh", title="Just updated", description_md="", updated_at=now)
+    stale = make_item(
+        "S-stale", title="Two weeks old", description_md="", updated_at=now - timedelta(days=14)
+    )
     for it in (fresh, stale):
         item_repo.upsert_item(conn, it)
     provider = FakeProvider(items=[fresh, stale])
@@ -93,9 +78,16 @@ async def test_stale_marker_only_on_old_rows(stale_ctx) -> None:
         assert "0d" in fresh_label
 
 
-async def test_stale_marker_disabled_when_threshold_zero(tmp_path: Path) -> None:
+async def test_stale_marker_disabled_when_threshold_zero(
+    tmp_path: Path, make_item: MakeItem
+) -> None:
     conn = init_db(tmp_path / "docket.db")
-    old = _mk_item("S-old", updated_at=datetime.now(UTC) - timedelta(days=365))
+    old = make_item(
+        "S-old",
+        title="A story",
+        description_md="",
+        updated_at=datetime.now(UTC) - timedelta(days=365),
+    )
     item_repo.upsert_item(conn, old)
     ctx = TuiContext(
         conn=conn,
@@ -115,10 +107,14 @@ async def test_stale_marker_disabled_when_threshold_zero(tmp_path: Path) -> None
         conn.close()
 
 
-async def test_stale_per_provider_override(tmp_path: Path) -> None:
+async def test_stale_per_provider_override(tmp_path: Path, make_item: MakeItem) -> None:
     """Per-provider override beats the global default."""
     conn = init_db(tmp_path / "docket.db")
-    item = _mk_item("S-1", updated_at=datetime.now(UTC) - timedelta(days=10))
+    item = make_item(
+        title="A story",
+        description_md="",
+        updated_at=datetime.now(UTC) - timedelta(days=10),
+    )
     item_repo.upsert_item(conn, item)
     provider = FakeProvider(items=[item])
     # Global default is 30 (item not stale) but this provider's override is 7.
@@ -141,9 +137,11 @@ async def test_stale_per_provider_override(tmp_path: Path) -> None:
         conn.close()
 
 
-async def test_status_bar_shows_active_view_and_next_sync(tmp_path: Path) -> None:
+async def test_status_bar_shows_active_view_and_next_sync(
+    tmp_path: Path, make_item: MakeItem
+) -> None:
     conn = init_db(tmp_path / "docket.db")
-    item = _mk_item("S-1")
+    item = make_item(title="A story", description_md="")
     item_repo.upsert_item(conn, item)
     cfg = _single_provider_cfg(
         scopes={"default": ScopeFilter(), "my-team": ScopeFilter(team="Team A")},
@@ -173,10 +171,10 @@ async def test_status_bar_shows_active_view_and_next_sync(tmp_path: Path) -> Non
         conn.close()
 
 
-async def test_switch_view_reloads_tree_with_new_scope(tmp_path: Path) -> None:
+async def test_switch_view_reloads_tree_with_new_scope(tmp_path: Path, make_item: MakeItem) -> None:
     """Switch view through the action and verify scope_key + status bar update."""
     conn = init_db(tmp_path / "docket.db")
-    item = _mk_item("S-1")
+    item = make_item(title="A story", description_md="")
     item_repo.upsert_item(conn, item)
     cfg = _single_provider_cfg(
         scopes={
@@ -278,7 +276,7 @@ def test_provider_floor_clamps_background_sync(tmp_path: Path) -> None:
     )
     app = DocketApp(ctx)
     try:
-        assert app._resolved_sync_interval() == 900.0
+        assert app.effective_sync_interval() == 900.0
     finally:
         conn.close()
 
@@ -296,7 +294,7 @@ def test_disabled_sync_stays_disabled_despite_floor(tmp_path: Path) -> None:
     )
     app = DocketApp(ctx)
     try:
-        assert app._resolved_sync_interval() == 0.0
+        assert app.effective_sync_interval() == 0.0
     finally:
         conn.close()
 

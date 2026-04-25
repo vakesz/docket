@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -11,30 +10,24 @@ import pytest
 from docket.cli.tui.app import DocketApp
 from docket.cli.tui.tui_context import TuiContext
 from docket.cli.tui.widgets.item_tree import ItemSelected, ItemTree
-from docket.core.model import Item, ItemKind, ItemState, ScopeFilters
+from docket.core.model import ItemKind, ItemState, ScopeFilters
 from docket.storage import init_db
 from docket.storage.repos import item_repo, watchlist_repo
+from tests.conftest import MakeItem
 from tests.fakes.provider import FakeProvider
 
 
-def _mk_item(id: str, *, kind: ItemKind = ItemKind.STORY) -> Item:
-    return Item(
-        id=id,
-        kind=kind,
-        title=f"item {id}",
-        description_md="",
-        state=ItemState.ACTIVE,
-        assignee=None,
-        parent_id=None,
-        tags=[],
-        updated_at=datetime.now(UTC),
-    )
-
-
 @pytest.fixture
-def tui_setup(tmp_path: Path):
+def tui_setup(tmp_path: Path, make_item: MakeItem):
     conn = init_db(tmp_path / "docket.db")
-    items = [_mk_item("S-1"), _mk_item("S-2"), _mk_item("B-1", kind=ItemKind.BUG)]
+    items = [
+        make_item(id_, title=f"item {id_}", description_md="", state=ItemState.ACTIVE, kind=kind)
+        for id_, kind in (
+            ("S-1", ItemKind.STORY),
+            ("S-2", ItemKind.STORY),
+            ("B-1", ItemKind.BUG),
+        )
+    ]
     for it in items:
         item_repo.upsert_item(conn, it)
     provider = FakeProvider(items=items)

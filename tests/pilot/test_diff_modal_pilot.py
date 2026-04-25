@@ -8,7 +8,6 @@ tool itself never mutates state.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -18,25 +17,13 @@ from docket.cli.tui.tui_context import TuiContext
 from docket.cli.tui.widgets.chat_pane import ChatPane
 from docket.cli.tui.widgets.diff_modal import DiffModal
 from docket.cli.tui.widgets.item_tree import ItemTree
-from docket.core.model import Item, ItemKind, ItemState, ScopeFilters
+from docket.core.model import ItemState, ScopeFilters
 from docket.storage import init_db
 from docket.storage.repos import item_repo
+from tests.conftest import MakeItem
 from tests.fakes.llm import FakeLlmClient, text_turn, tool_turn
 from tests.fakes.provider import FakeProvider
 from tests.pilot.conftest import find_node
-
-
-def _mk_item(id_: str = "S-1") -> Item:
-    return Item(
-        id=id_,
-        kind=ItemKind.STORY,
-        title="Add login",
-        description_md="Original.",
-        state=ItemState.NEW,
-        assignee=None,
-        parent_id=None,
-        updated_at=datetime.now(UTC),
-    )
 
 
 async def _select_story(app: DocketApp, pilot) -> None:
@@ -56,9 +43,9 @@ async def _drive_agent_turn(app: DocketApp, pilot, text: str) -> None:
 
 
 @pytest.fixture
-def modal_env(tmp_path: Path):
+def modal_env(tmp_path: Path, make_item: MakeItem):
     conn = init_db(tmp_path / "docket.db")
-    item = _mk_item()
+    item = make_item(title="Add login", description_md="Original.")
     item_repo.upsert_item(conn, item)
     provider = FakeProvider(items=[item])
     client = FakeLlmClient()
@@ -95,7 +82,7 @@ async def test_confirm_routes_through_provider(modal_env) -> None:
         assert cached is not None
         assert cached.state == ItemState.ACTIVE
         # Store drained.
-        assert len(app._proposals) == 0
+        assert app.pending_proposal_count() == 0
 
 
 async def test_reject_leaves_provider_untouched(modal_env) -> None:
@@ -117,7 +104,7 @@ async def test_reject_leaves_provider_untouched(modal_env) -> None:
         assert provider.items[0].state == ItemState.NEW
         cached = item_repo.get_item(ctx.conn, "S-1")
         assert cached is not None and cached.state == ItemState.NEW
-        assert len(app._proposals) == 0
+        assert app.pending_proposal_count() == 0
 
 
 async def test_description_patch_confirm_applies_via_provider(modal_env) -> None:
@@ -216,4 +203,4 @@ async def test_agent_tool_call_alone_does_not_mutate(modal_env) -> None:
         # Modal is open but no decision yet — provider still NEW.
         assert isinstance(app.screen, DiffModal)
         assert provider.items[0].state == ItemState.NEW
-        assert len(app._proposals) == 1
+        assert app.pending_proposal_count() == 1
