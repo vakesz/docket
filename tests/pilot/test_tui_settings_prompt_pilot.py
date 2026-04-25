@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from docket.cli.tui.app import DocketApp
-from docket.cli.tui.tui_context import TuiContext
+from docket.cli.tui.app import DocketApp, TuiContext
 from docket.cli.tui.widgets.chat_pane import ChatPane
 from docket.cli.tui.widgets.help_modal import HelpModal
 from docket.cli.tui.widgets.prompt_library import PromptLibraryModal

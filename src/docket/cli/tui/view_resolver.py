@@ -21,7 +21,7 @@ from docket.core.services import visual_filter
 from docket.providers import registry
 
 if TYPE_CHECKING:
-    from docket.cli.tui.tui_context import TuiContext
+    from docket.cli.tui.app import TuiContext
     from docket.config.models import ProviderEntry
     from docket.providers.base import GroupingStrategy
 

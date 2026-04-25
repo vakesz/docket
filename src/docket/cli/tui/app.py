@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import sqlite3
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import ClassVar
 
 from textual import events
@@ -13,7 +15,9 @@ from textual.containers import Horizontal
 from textual.widgets import Input
 
 from docket.agent.factory import build_agent
+from docket.agent.llm_client import LlmClient
 from docket.agent.loop import AgentLoop
+from docket.agent.mcp import MCPManager
 from docket.agent.tools import ToolRegistry
 from docket.agent.types import ChatMessage, StreamDelta
 from docket.cli.tui import config_actions, item_selection
@@ -35,7 +39,6 @@ from docket.cli.tui.pane_layout import (
 )
 from docket.cli.tui.review_flow import review_pending
 from docket.cli.tui.suggestion_flow import suggest_next
-from docket.cli.tui.tui_context import TuiContext
 from docket.cli.tui.view_resolver import (
     active_provider_entry,
     active_view_filter,
@@ -57,8 +60,11 @@ from docket.cli.tui.widgets.memory_pane import MemoryPane
 from docket.cli.tui.widgets.new_item_modal import NewItemModal
 from docket.cli.tui.widgets.source_pane import SourcePane
 from docket.cli.tui.widgets.status_bar import StatusBar
-from docket.config.models import ProviderEntry
+from docket.config.models import Config, ProviderEntry
+from docket.config.paths import Paths
 from docket.core.model import (
+    ItemKind,
+    ScopeFilters,
     SyncSummary,
     TransitionIntent,
     project_id_for,
@@ -73,9 +79,56 @@ from docket.core.services import (
 )
 from docket.core.services.proposal_store import PendingProposal, ProposalStore
 from docket.core.services.question_store import QuestionStore
-from docket.providers.base import GroupingStrategy
+from docket.providers.base import GroupingStrategy, WorkItemProvider
 
 log = logging.getLogger(__name__)
+
+
+@dataclass
+class TuiContext:
+    """What the TUI needs from the caller to run. Kept small so the app can be mounted
+    from production code (via Context) and from pilot-style tests (via fakes).
+
+    Multi-provider shape: `providers` is the full set, `provider_key` selects
+    the active one, and `provider` is a convenience alias that always points at
+    `providers[provider_key]`. Callers that only have one backend can pass
+    `provider=...` alone and a single-entry mapping is synthesized."""
+
+    conn: sqlite3.Connection
+    provider: WorkItemProvider
+    scope: ScopeFilters
+    scope_key: str = "default"
+    providers: dict[str, WorkItemProvider] | None = None
+    provider_key: str = ""
+    llm: LlmClient | None = None  # None disables chat
+    compaction_threshold_tokens: int = 0  # 0 disables — passed to conversation_service
+    external_watch_interval_seconds: float = 60.0  # 0 disables external-update watcher
+    # Read-only mode: agent mutating tools are not registered, TUI mutation
+    # actions toast and bail, status bar shows a visible READ-ONLY badge.
+    read_only: bool = False
+    # Background list sync: 0 disables; the palette "Sync now" action still
+    # works regardless. A per-provider floor (seconds) clamps very short
+    # intervals — the resolver below takes the max of the configured global
+    # and the floor for the active provider.
+    background_sync_interval_seconds: float = 0.0
+    background_sync_min_interval_by_provider: dict[str, float] | None = None
+    # Stale marker: append `STALE - Xd` to list rows once `updated_at` is
+    # older than N days. 0/negative disables. Per-provider override wins.
+    stale_threshold_days: int = 0
+    stale_threshold_by_provider: dict[str, int] | None = None
+    default_new_item_kind: ItemKind = ItemKind.TASK
+    show_acceptance_criteria: bool = True
+    # Hide resolved/closed items from the backlog tree by default. Matches the
+    # frontend's "open" state bucket; `c` toggles it at runtime. In-memory only —
+    # not persisted — so a relaunch starts back at "hide done" on every provider.
+    hide_done: bool = True
+    # Optional handles for features that persist to config (theme picker, etc).
+    # Pilot tests can leave these as None; persistence becomes a no-op.
+    paths: Paths | None = None
+    config: Config | None = None
+    # Per-project MCP fleet. Built by `serve`/`open`; pilot tests leave it
+    # `None` and the agent skips MCP tool registration entirely.
+    mcp_manager: MCPManager | None = None
 
 
 def _docket_commands_provider() -> type[Provider]:

@@ -12,9 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from docket.cli.tui.app import DocketApp, Pane
+from docket.cli.tui.app import DocketApp, Pane, TuiContext
 from docket.cli.tui.commands import DocketCommands
-from docket.cli.tui.tui_context import TuiContext
 from docket.cli.tui.widgets.item_detail import ItemDetail
 from docket.cli.tui.widgets.quick_open import QuickOpenModal
 from docket.cli.tui.widgets.theme_picker import ThemePicker

@@ -9,8 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from docket.cli.tui.app import DocketApp
-from docket.cli.tui.tui_context import TuiContext
+from docket.cli.tui.app import DocketApp, TuiContext
 from docket.cli.tui.widgets.mcp_pane import MCPPane
 from docket.config import (
     Config,

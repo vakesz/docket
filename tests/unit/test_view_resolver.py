@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from docket.cli.tui.tui_context import TuiContext
+from docket.cli.tui.app import TuiContext
 from docket.cli.tui.view_resolver import (
     active_provider_entry,
     provider_display_key,

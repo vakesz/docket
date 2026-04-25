@@ -14,8 +14,7 @@ from pathlib import Path
 import pytest
 from textual.widgets import Input
 
-from docket.cli.tui.app import DocketApp
-from docket.cli.tui.tui_context import TuiContext
+from docket.cli.tui.app import DocketApp, TuiContext
 from docket.cli.tui.widgets.chat_pane import ChatPane
 from docket.cli.tui.widgets.item_detail import ItemDetail
 from docket.cli.tui.widgets.item_tree import ItemTree
