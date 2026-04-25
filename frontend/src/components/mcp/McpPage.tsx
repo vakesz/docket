@@ -6,7 +6,8 @@ import { useActiveProject, useMcpServers, useStatus } from "~/api/hooks";
 import { cn } from "~/lib/cn";
 
 import { McpPresetPickerModal } from "./McpPresetPickerModal";
-import { blankDraft, draftFromServer, type McpServerDraft, McpServerForm } from "./McpServerForm";
+import { McpServerForm } from "./McpServerForm";
+import { blankDraft, draftFromServer, type McpServerDraft } from "./mcpServerDraft";
 
 /**
  * MCP page: left column lists the active project's configured servers,
