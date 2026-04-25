@@ -13,7 +13,7 @@ import difflib
 import json
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any
 
 from docket.core.model import CreateFields, Item, ItemKind, TransitionIntent
 
@@ -24,7 +24,6 @@ def _new_id() -> str:
 
 @dataclass(frozen=True)
 class StateChange:
-    kind: Literal["state_change"] = field(default="state_change", init=False)
     item: Item
     intent: TransitionIntent
     id: str = field(default_factory=_new_id)
@@ -32,7 +31,6 @@ class StateChange:
 
 @dataclass(frozen=True)
 class DescriptionPatch:
-    kind: Literal["description_patch"] = field(default="description_patch", init=False)
     item: Item
     new_md: str
     id: str = field(default_factory=_new_id)
@@ -40,7 +38,6 @@ class DescriptionPatch:
 
 @dataclass(frozen=True)
 class AttachmentUpload:
-    kind: Literal["attachment_upload"] = field(default="attachment_upload", init=False)
     item: Item
     filename: str
     content: bytes
@@ -50,7 +47,6 @@ class AttachmentUpload:
 
 @dataclass(frozen=True)
 class ItemCreate:
-    kind: Literal["item_create"] = field(default="item_create", init=False)
     item_kind: ItemKind
     fields: CreateFields
     id: str = field(default_factory=_new_id)
@@ -58,7 +54,6 @@ class ItemCreate:
 
 @dataclass(frozen=True)
 class CommentAdd:
-    kind: Literal["comment_add"] = field(default="comment_add", init=False)
     item: Item
     body_md: str
     id: str = field(default_factory=_new_id)
@@ -74,7 +69,6 @@ class MemoryWrite:
     would only ever show "what's about to land", which doesn't read like a
     diff for a human reviewer."""
 
-    kind: Literal["memory_write"] = field(default="memory_write", init=False)
     project_id: str = ""
     title: str = ""
     body_md: str = ""
@@ -88,7 +82,6 @@ class MemoryWrite:
 
 @dataclass(frozen=True)
 class MemoryDelete:
-    kind: Literal["memory_delete"] = field(default="memory_delete", init=False)
     project_id: str = ""
     memory_id: str = ""
     title: str = ""  # snapshot at propose time so the diff is human-readable
@@ -104,6 +97,24 @@ Proposal = (
     | MemoryWrite
     | MemoryDelete
 )
+
+
+# Wire-format discriminator for proposals. Strings are byte-stable — they
+# appear in agent tool replies (`pending_payload`) and HTTP DTOs, so renaming
+# any value is a breaking change for in-flight conversations and clients.
+_KIND_NAMES: dict[type, str] = {
+    StateChange: "state_change",
+    DescriptionPatch: "description_patch",
+    AttachmentUpload: "attachment_upload",
+    ItemCreate: "item_create",
+    CommentAdd: "comment_add",
+    MemoryWrite: "memory_write",
+    MemoryDelete: "memory_delete",
+}
+
+
+def kind_of(proposal: Proposal) -> str:
+    return _KIND_NAMES[type(proposal)]
 
 
 def render_diff(proposal: Proposal) -> str:
@@ -191,7 +202,7 @@ def pending_payload(proposal: Proposal, *, extra: dict[str, Any] | None = None) 
     body: dict[str, Any] = {
         "status": "pending_confirmation",
         "proposal_id": proposal.id,
-        "kind": proposal.kind,
+        "kind": kind_of(proposal),
         "diff": render_diff(proposal),
     }
     if extra:

@@ -17,6 +17,7 @@ from docket.core.mutation import (
     MemoryWrite,
     Proposal,
     StateChange,
+    kind_of,
     render_diff,
 )
 
@@ -85,7 +86,7 @@ class ProposalDTO(BaseModel):
                 details = {"project_id": p.project_id, "memory_id": p.memory_id}
             case _:
                 raise TypeError(f"unknown proposal type: {type(p)!r}")
-        return cls(id=p.id, kind=p.kind, item_id=item_id, diff=render_diff(p), details=details)
+        return cls(id=p.id, kind=kind_of(p), item_id=item_id, diff=render_diff(p), details=details)
 
 
 class ProposeTransitionRequest(BaseModel):
