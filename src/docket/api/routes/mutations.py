@@ -20,6 +20,7 @@ from docket.api.deps import (
     get_proposals,
     get_provider,
     require_not_read_only,
+    require_pending_proposal,
 )
 from docket.api.schemas import (
     CommentDTO,
@@ -143,9 +144,7 @@ def get_proposal(
     proposal_id: str,
     store: ProposalStore = Depends(get_proposals),
 ) -> ProposalDTO:
-    pending = store.get(proposal_id)
-    if pending is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown proposal '{proposal_id}'")
+    pending = require_pending_proposal(store, proposal_id)
     return ProposalDTO.from_core(pending.proposal)
 
 
@@ -158,9 +157,7 @@ def confirm_proposal(
     store: ProposalStore = Depends(get_proposals),
     provider_key: str = Depends(get_active_provider_key),
 ) -> MutationConfirmedDTO:
-    pending = store.pop(proposal_id)
-    if pending is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown proposal '{proposal_id}'")
+    pending = require_pending_proposal(store, proposal_id, consume=True)
     try:
         result = mutation_service.confirm(
             conn, provider, pending.proposal, provider_key=provider_key
@@ -184,9 +181,7 @@ def reject_proposal(
     proposal_id: str,
     store: ProposalStore = Depends(get_proposals),
 ) -> None:
-    popped = store.pop(proposal_id)
-    if popped is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown proposal '{proposal_id}'")
+    require_pending_proposal(store, proposal_id, consume=True)
 
 
 __all__ = ["router"]

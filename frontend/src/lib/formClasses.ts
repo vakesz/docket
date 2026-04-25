@@ -11,3 +11,15 @@ export const primaryButtonClass =
 
 export const outlineButtonClass =
   "inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-medium text-fg hover:bg-bg disabled:cursor-not-allowed disabled:opacity-40";
+
+export const xsBorderButtonClass =
+  "rounded border border-border px-3 py-1 text-xs text-fg hover:bg-surface-alt";
+
+export const xsAccentButtonClass =
+  "rounded bg-accent px-3 py-1 text-xs font-semibold text-accent-fg hover:bg-accent/90 disabled:opacity-50";
+
+export const microCapsButtonClass =
+  "rounded border border-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:bg-surface-alt";
+
+export const setupCardClass =
+  "flex flex-col gap-4 rounded border border-border bg-surface p-6 text-sm text-fg";

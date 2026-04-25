@@ -10,7 +10,9 @@ import {
 } from "~/api/hooks";
 import { Markdown } from "~/components/detail/Markdown";
 import { ProposalCard } from "~/components/mutations/ProposalCard";
+import { useLocalProposals } from "~/components/mutations/useLocalProposals";
 import { cn } from "~/lib/cn";
+import { microCapsButtonClass } from "~/lib/formClasses";
 import { type IssueLinkContext, issueLinkContextFromUrl } from "~/lib/issueLinks";
 import { type ToolDisplayMode, useToolDisplayMode } from "~/lib/uiPrefs";
 import { useChatPaneController } from "./ChatPaneContext";
@@ -26,14 +28,19 @@ export function ChatPane({ itemId }: { itemId: string }) {
   const chatController = useChatPaneController();
   const issueLinks = issueLinkContextFromUrl(item.data?.url);
   const [draft, setDraft] = useState("");
-  const [proposals, setProposals] = useState<DTO["ProposalDTO"][]>([]);
+  const {
+    proposals,
+    push: pushProposal,
+    dismiss: dismissProposal,
+    reset: resetProposals,
+  } = useLocalProposals();
   const [pendingQuestion, setPendingQuestion] = useState<DTO["QuestionDTO"] | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
 
   const { messages, streaming, error, send, answer, reset } = useChatStream({
     itemId,
-    onProposal: (p) => setProposals((prev) => [...prev.filter((x) => x.id !== p.id), p]),
+    onProposal: pushProposal,
     onQuestion: (q) => setPendingQuestion(q),
     onQuestionResolved: (qid) => setPendingQuestion((prev) => (prev?.id === qid ? null : prev)),
   });
@@ -46,15 +53,15 @@ export function ChatPane({ itemId }: { itemId: string }) {
     setPendingQuestion(pendingQuestionQuery.data ?? null);
   }, [pendingQuestionQuery.data]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: setProposals/setPendingQuestion are stable; we intentionally reset when the viewed item changes.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: itemId is the trigger — body only calls stable callbacks, so biome flags it as extra, but losing it means we never reset on item switch.
   useEffect(() => {
     reset();
-    setProposals([]);
+    resetProposals();
     setPendingQuestion(null);
     // Also abort on unmount so navigating away mid-stream doesn't leave
     // the fetch reader + AbortController orphaned on a dead component.
     return reset;
-  }, [itemId, reset]);
+  }, [itemId, reset, resetProposals]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll on every new chunk / history refresh.
   useEffect(() => {
@@ -100,10 +107,10 @@ export function ChatPane({ itemId }: { itemId: string }) {
           onClick={() => {
             startThread.mutate(itemId);
             reset();
-            setProposals([]);
+            resetProposals();
           }}
           disabled={startThread.isPending || disabled}
-          className="ml-auto rounded border border-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:bg-surface-alt disabled:opacity-50"
+          className={cn("ml-auto disabled:opacity-50", microCapsButtonClass)}
         >
           New thread
         </button>
@@ -134,11 +141,7 @@ export function ChatPane({ itemId }: { itemId: string }) {
             {proposals.length > 0 && (
               <div className="mt-3 flex flex-col gap-2">
                 {proposals.map((p) => (
-                  <ProposalCard
-                    key={p.id}
-                    proposal={p}
-                    onResolved={() => setProposals((prev) => prev.filter((x) => x.id !== p.id))}
-                  />
+                  <ProposalCard key={p.id} proposal={p} onResolved={() => dismissProposal(p.id)} />
                 ))}
               </div>
             )}

@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { DTO } from "~/api/client";
 import { useProposeComment } from "~/api/hooks";
 import { MarkdownEditor } from "~/components/common/MarkdownEditor";
+import { xsAccentButtonClass, xsBorderButtonClass } from "~/lib/formClasses";
 
 interface Props {
   itemId: string;
@@ -46,7 +47,7 @@ export function CommentComposer({ itemId, onStaged }: Props) {
             setOpen(false);
             propose.reset();
           }}
-          className="rounded border border-border px-3 py-1 text-xs text-fg hover:bg-surface-alt"
+          className={xsBorderButtonClass}
         >
           Cancel
         </button>
@@ -65,7 +66,7 @@ export function CommentComposer({ itemId, onStaged }: Props) {
               },
             )
           }
-          className="rounded bg-accent px-3 py-1 text-xs font-semibold text-accent-fg hover:bg-accent/90 disabled:opacity-50"
+          className={xsAccentButtonClass}
         >
           {propose.isPending ? "Staging…" : "Stage comment"}
         </button>

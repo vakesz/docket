@@ -14,6 +14,7 @@ from docket.api.deps import (
     get_provider,
     get_runtime_optional,
     require_not_read_only,
+    require_pending_proposal,
 )
 from docket.api.runtime import RuntimeState
 from docket.api.schemas import (
@@ -217,9 +218,7 @@ def confirm_item_create(
     store: ProposalStore = Depends(get_proposals),
     provider_key: str = Depends(get_active_provider_key),
 ) -> MutationConfirmedDTO:
-    pending = store.pop(proposal_id)
-    if pending is None or not isinstance(pending.proposal, ItemCreate):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown proposal '{proposal_id}'")
+    pending = require_pending_proposal(store, proposal_id, consume=True, expected=ItemCreate)
     try:
         result = mutation_service.confirm(
             conn, provider, pending.proposal, provider_key=provider_key
@@ -245,9 +244,7 @@ def reject_item_create(
     proposal_id: str,
     store: ProposalStore = Depends(get_proposals),
 ) -> None:
-    popped = store.pop(proposal_id)
-    if popped is None or not isinstance(popped.proposal, ItemCreate):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown proposal '{proposal_id}'")
+    require_pending_proposal(store, proposal_id, consume=True, expected=ItemCreate)
 
 
 __all__ = ["get_item_or_fetch", "router"]

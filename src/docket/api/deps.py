@@ -21,9 +21,10 @@ from pydantic import BaseModel
 from docket.agent.llm_client import LlmClient
 from docket.agent.loop import AgentLoop
 from docket.api.runtime import RuntimeState
-from docket.config.models import Config
+from docket.config.models import Config, ProjectEntry
 from docket.config.paths import Paths
-from docket.core.services.proposal_store import ProposalStore
+from docket.core.mutation import Proposal
+from docket.core.services.proposal_store import PendingProposal, ProposalStore
 from docket.core.services.question_store import QuestionStore
 from docket.providers.base import WorkItemProvider
 
@@ -147,10 +148,16 @@ def get_active_provider_key(request: Request) -> str:
     return runtime.provider_key if runtime is not None else ""
 
 
-def require_project(config: Config, project_id: str) -> None:
-    """Raise HTTP 404 if `project_id` is not registered in the active config."""
-    if project_id not in config.projects:
+def require_project(config: Config, project_id: str) -> ProjectEntry:
+    """Return the registered project entry or raise HTTP 404.
+
+    Most callers use this purely as a guard and ignore the return; the
+    return value is there so endpoints that also need the entry don't have
+    to look it up a second time."""
+    entry = config.projects.get(project_id)
+    if entry is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown project '{project_id}'")
+    return entry
 
 
 def get_config(request: Request) -> Config:
@@ -183,6 +190,25 @@ def require_by_id[T](
     return entry
 
 
+def require_pending_proposal(
+    store: ProposalStore,
+    proposal_id: str,
+    *,
+    consume: bool = False,
+    expected: type[Proposal] | None = None,
+) -> PendingProposal:
+    """Look up a pending proposal or raise HTTP 404.
+
+    `consume=True` removes it from the store (confirm/reject); the default
+    just peeks (get). `expected` enforces an isinstance gate so the
+    `ItemCreate` proposals route doesn't accidentally consume a per-item
+    mutation proposal that happens to share an id namespace."""
+    pending = store.pop(proposal_id) if consume else store.get(proposal_id)
+    if pending is None or (expected is not None and not isinstance(pending.proposal, expected)):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown proposal '{proposal_id}'")
+    return pending
+
+
 def require_patch_not_empty(payload: BaseModel, *, label: str) -> None:
     """Raise HTTP 400 if every field on a PATCH payload is None.
 
@@ -211,5 +237,6 @@ __all__ = [
     "require_llm",
     "require_not_read_only",
     "require_patch_not_empty",
+    "require_pending_proposal",
     "require_project",
 ]

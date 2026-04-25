@@ -11,7 +11,14 @@ import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from docket.api.deps import get_config, get_conn, get_paths, get_runtime, require_not_read_only
+from docket.api.deps import (
+    get_config,
+    get_conn,
+    get_paths,
+    get_runtime,
+    require_not_read_only,
+    require_project,
+)
 from docket.api.runtime import RuntimeState, rebuild_agent
 from docket.api.schemas import ProjectDTO, ProjectUpdateRequest
 from docket.config.models import Config
@@ -68,9 +75,7 @@ def get_project(
     config: Config = Depends(get_config),
     runtime: RuntimeState = Depends(get_runtime),
 ) -> ProjectDTO:
-    entry = config.projects.get(project_id)
-    if entry is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown project '{project_id}'")
+    entry = require_project(config, project_id)
     return ProjectDTO.from_core(project_id, entry, active_id=runtime.project_id)
 
 
@@ -88,9 +93,7 @@ def update_project(
     runtime: RuntimeState = Depends(get_runtime),
 ) -> ProjectDTO:
     """Rename / re-describe / archive a project. Persists to `config.toml`."""
-    entry = config.projects.get(project_id)
-    if entry is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown project '{project_id}'")
+    entry = require_project(config, project_id)
     if payload.name is not None or payload.description is not None:
         project_service.upsert(
             config,
@@ -123,9 +126,7 @@ def activate_project(
     config: Config = Depends(get_config),
     runtime: RuntimeState = Depends(get_runtime),
 ) -> ProjectDTO:
-    entry = config.projects.get(project_id)
-    if entry is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown project '{project_id}'")
+    entry = require_project(config, project_id)
     if entry.provider_key not in runtime.providers:
         raise HTTPException(
             status.HTTP_409_CONFLICT,

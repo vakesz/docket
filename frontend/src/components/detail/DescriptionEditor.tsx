@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { DTO } from "~/api/client";
 import { useProposeDescription } from "~/api/hooks";
 import { MarkdownEditor } from "~/components/common/MarkdownEditor";
+import { xsAccentButtonClass, xsBorderButtonClass } from "~/lib/formClasses";
 
 interface Props {
   itemId: string;
@@ -21,11 +22,7 @@ export function DescriptionEditor({ itemId, initial, onStaged, onClose }: Props)
         <MarkdownEditor value={value} onChange={setValue} height="240px" />
       </div>
       <div className="flex justify-end gap-2">
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded border border-border px-3 py-1 text-xs text-fg hover:bg-surface-alt"
-        >
+        <button type="button" onClick={onClose} className={xsBorderButtonClass}>
           Cancel
         </button>
         <button
@@ -42,7 +39,7 @@ export function DescriptionEditor({ itemId, initial, onStaged, onClose }: Props)
               },
             )
           }
-          className="rounded bg-accent px-3 py-1 text-xs font-semibold text-accent-fg hover:bg-accent/90 disabled:opacity-50"
+          className={xsAccentButtonClass}
         >
           {propose.isPending ? "Staging…" : "Stage edit"}
         </button>

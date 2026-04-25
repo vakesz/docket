@@ -4,6 +4,7 @@ import { useStageSuggestion, useStatus, useSuggestion } from "~/api/hooks";
 import { useChatPaneController } from "~/components/chat/ChatPaneContext";
 import { cn } from "~/lib/cn";
 import { formatIntent } from "~/lib/format";
+import { microCapsButtonClass, xsAccentButtonClass } from "~/lib/formClasses";
 import { Markdown } from "./Markdown";
 
 interface Props {
@@ -54,10 +55,7 @@ export function SuggestBlock({ itemId, onStaged }: Props) {
           type="button"
           disabled={getSuggestion.isPending}
           onClick={() => getSuggestion.mutate(itemId, { onSuccess: (s) => setSuggestion(s) })}
-          className={cn(
-            "ml-auto rounded border border-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider",
-            "text-fg-muted hover:bg-surface-alt",
-          )}
+          className={cn("ml-auto", microCapsButtonClass)}
         >
           {getSuggestion.isPending ? "Thinking…" : suggestion ? "Re-run" : "Suggest"}
         </button>
@@ -120,7 +118,7 @@ export function SuggestBlock({ itemId, onStaged }: Props) {
                   },
                 )
               }
-              className="rounded bg-accent px-3 py-1 text-xs font-semibold text-accent-fg hover:bg-accent/90 disabled:opacity-50"
+              className={xsAccentButtonClass}
             >
               {stage.isPending ? "Staging…" : "Stage proposal(s)"}
             </button>

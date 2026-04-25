@@ -1,4 +1,4 @@
-import { useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import type { DTO } from "~/api/client";
 import { useComments, useItem, useLinked, useRefreshItem } from "~/api/hooks";
@@ -6,8 +6,10 @@ import { useChatPaneController } from "~/components/chat/ChatPaneContext";
 import { FreshnessStamp, useStaleThreshold } from "~/components/items/ItemFreshness";
 import { StatePill } from "~/components/items/ItemsList";
 import { ProposalCard } from "~/components/mutations/ProposalCard";
+import { useLocalProposals } from "~/components/mutations/useLocalProposals";
 import { cn } from "~/lib/cn";
 import { displayTag, formatKind, formatRelative } from "~/lib/format";
+import { microCapsButtonClass } from "~/lib/formClasses";
 import { issueLinkContextFromUrl } from "~/lib/issueLinks";
 import { CommentComposer } from "./CommentComposer";
 import { DescriptionEditor } from "./DescriptionEditor";
@@ -28,12 +30,12 @@ export function ItemDetail({ itemId }: Props) {
   const chatController = useChatPaneController();
   const staleThresholdDays = useStaleThreshold();
   const [editing, setEditing] = useState(false);
-  const [proposals, setProposals] = useState<DTO["ProposalDTO"][]>([]);
-
-  const pushProposal = (p: DTO["ProposalDTO"]) =>
-    setProposals((prev) => [...prev.filter((x) => x.id !== p.id), p]);
-  const pushProposals = (list: DTO["ProposalDTO"][]) => setProposals((prev) => [...prev, ...list]);
-  const dismissProposal = (id: string) => setProposals((prev) => prev.filter((p) => p.id !== id));
+  const {
+    proposals,
+    push: pushProposal,
+    pushMany: pushProposals,
+    dismiss: dismissProposal,
+  } = useLocalProposals();
 
   if (item.isPending) {
     return <CenterText text="Loading…" />;
@@ -182,7 +184,7 @@ export function ItemDetail({ itemId }: Props) {
             <button
               type="button"
               onClick={() => setEditing(true)}
-              className="ml-auto rounded border border-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:bg-surface-alt"
+              className={cn("ml-auto", microCapsButtonClass)}
             >
               Edit
             </button>
@@ -211,15 +213,10 @@ export function ItemDetail({ itemId }: Props) {
 }
 
 function ParentLink({ id }: { id: string }) {
-  const navigate = useNavigate();
   return (
-    <button
-      type="button"
-      onClick={() => navigate({ to: "/items/$itemId", params: { itemId: id } })}
-      className="text-accent hover:underline"
-    >
+    <Link to="/items/$itemId" params={{ itemId: id }} className="text-accent hover:underline">
       Parent: {id}
-    </button>
+    </Link>
   );
 }
 
@@ -261,7 +258,6 @@ function CommentsSection({
 
 function LinkedSection({ itemId }: { itemId: string }) {
   const linked = useLinked(itemId);
-  const navigate = useNavigate();
   if (!linked.data?.length) return null;
   return (
     <section className="flex flex-col gap-2 border-t border-border p-4">
@@ -269,9 +265,9 @@ function LinkedSection({ itemId }: { itemId: string }) {
       <ul className="flex flex-col divide-y divide-border">
         {linked.data.map((lk) => (
           <li key={lk.id}>
-            <button
-              type="button"
-              onClick={() => navigate({ to: "/items/$itemId", params: { itemId: lk.id } })}
+            <Link
+              to="/items/$itemId"
+              params={{ itemId: lk.id }}
               className="flex w-full items-center gap-2 py-1.5 text-left text-sm hover:text-accent"
             >
               <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
@@ -280,7 +276,7 @@ function LinkedSection({ itemId }: { itemId: string }) {
               <StatePill state={lk.state} />
               <span className="truncate">{lk.title}</span>
               <span className="ml-auto font-mono text-[10px] text-fg-faint">#{lk.id}</span>
-            </button>
+            </Link>
           </li>
         ))}
       </ul>

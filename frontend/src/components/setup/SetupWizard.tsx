@@ -10,6 +10,7 @@ import {
 import { HelpText, TextInput } from "~/components/common/FormInputs";
 import { Label } from "~/components/common/Label";
 import { cn } from "~/lib/cn";
+import { setupCardClass, xsBorderButtonClass } from "~/lib/formClasses";
 
 type Step = "welcome" | "provider" | "llm" | "review";
 
@@ -117,7 +118,7 @@ function Arrow() {
 
 function WelcomeStep({ onNext }: { onNext: () => void }) {
   return (
-    <div className="flex flex-col gap-4 rounded border border-border bg-surface p-6 text-sm text-fg">
+    <div className={setupCardClass}>
       <p>
         Docket is ready to configure. We'll connect a work-item provider (GitHub, Azure DevOps, or a
         demo stub), optionally wire an Azure OpenAI deployment for chat, and then write your{" "}
@@ -166,7 +167,7 @@ function ProviderStep({
   }, [selected, draft.config]);
 
   return (
-    <div className="flex flex-col gap-4 rounded border border-border bg-surface p-6 text-sm text-fg">
+    <div className={setupCardClass}>
       <section className="flex flex-col gap-2">
         <Label>Provider type</Label>
         {loading ? (
@@ -235,7 +236,7 @@ function ProviderStep({
             type="button"
             disabled={!fieldsValid || test.isPending}
             onClick={() => test.mutate({ type: selected.id, config: draft.config })}
-            className="rounded border border-border px-3 py-1 text-xs text-fg hover:bg-surface-alt"
+            className={xsBorderButtonClass}
           >
             {test.isPending ? "Testing…" : "Test connection"}
           </button>
@@ -278,7 +279,7 @@ function LlmStep({
   const canTest = !!draft.endpoint.trim() && !!draft.api_key.trim() && !!draft.deployment.trim();
 
   return (
-    <div className="flex flex-col gap-4 rounded border border-border bg-surface p-6 text-sm text-fg">
+    <div className={setupCardClass}>
       <label className="flex items-center gap-2 text-xs">
         <input
           type="checkbox"
@@ -335,7 +336,7 @@ function LlmStep({
                   api_version: draft.api_version,
                 })
               }
-              className="rounded border border-border px-3 py-1 text-xs text-fg hover:bg-surface-alt"
+              className={xsBorderButtonClass}
             >
               {test.isPending ? "Testing…" : "Test LLM"}
             </button>
@@ -423,7 +424,7 @@ function ReviewStep({
   }
 
   return (
-    <div className="flex flex-col gap-4 rounded border border-border bg-surface p-6 text-sm text-fg">
+    <div className={setupCardClass}>
       <section className="rounded border border-border p-3">
         <div className="mb-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
           Provider
