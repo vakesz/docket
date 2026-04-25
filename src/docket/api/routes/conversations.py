@@ -40,7 +40,7 @@ from docket.api.schemas import (
     QuestionOptionDTO,
     SendMessageRequest,
 )
-from docket.core.question import Question, QuestionAnswer, serialize_question
+from docket.core.question import Question, QuestionAnswer
 from docket.core.services import conversation_service
 from docket.core.services.conversation_service import TurnResult
 from docket.core.services.proposal_store import ProposalStore
@@ -66,22 +66,21 @@ def _message_dto(m: ChatMessage) -> ChatRoleDTO:
 
 
 def _question_dto(q: Question) -> QuestionDTO:
-    payload = serialize_question(q)
     return QuestionDTO(
-        id=payload["id"],
-        tool_call_id=payload["tool_call_id"],
+        id=q.id,
+        tool_call_id=q.tool_call_id,
         questions=[
             QuestionItemDTO(
-                question=item["question"],
-                header=item["header"],
-                multi_select=item["multi_select"],
-                allow_other=item["allow_other"],
+                question=item.question,
+                header=item.header,
+                multi_select=item.multi_select,
+                allow_other=item.allow_other,
                 options=[
-                    QuestionOptionDTO(label=o["label"], description=o["description"])
-                    for o in item["options"]
+                    QuestionOptionDTO(label=o.label, description=o.description)
+                    for o in item.options
                 ],
             )
-            for item in payload["questions"]
+            for item in q.questions
         ],
     )
 
@@ -242,15 +241,14 @@ async def answer_question(
 
 def _make_callbacks(
     *,
-    loop: asyncio.AbstractEventLoop,
-    queue: asyncio.Queue[ServerSentEvent | None],
+    put: Callable[[ServerSentEvent | None], None],
     store: ProposalStore,
     questions: QuestionStore,
 ) -> tuple[
     Callable[[StreamDelta], None],
     Callable[[ChatMessage], None],
 ]:
-    """Build delta/message callbacks that push SSE events onto `queue`.
+    """Build delta/message callbacks that push SSE events through `put`.
 
     Tracks proposal/question ids seen at start so re-runs only emit *new*
     ones — the stores are process-global and may already hold entries from
@@ -258,17 +256,12 @@ def _make_callbacks(
     known_proposal_ids = {p.proposal.id for p in store.list()}
     known_question_ids = {q.id for q in questions.list()}
 
-    def _put_threadsafe(event: ServerSentEvent | None) -> None:
-        # Callbacks fire inside the worker thread; the queue is bound to the
-        # request's event loop, so hop threads for every enqueue.
-        asyncio.run_coroutine_threadsafe(queue.put(event), loop)
-
     def on_delta(delta: StreamDelta) -> None:
         if delta.text:
-            _put_threadsafe(ServerSentEvent(event="delta", data=json.dumps({"text": delta.text})))
+            put(ServerSentEvent(event="delta", data=json.dumps({"text": delta.text})))
 
     def on_message(msg: ChatMessage) -> None:
-        _put_threadsafe(
+        put(
             ServerSentEvent(
                 event="message",
                 data=json.dumps(_message_dto(msg).model_dump(mode="json")),
@@ -279,7 +272,7 @@ def _make_callbacks(
             if pending.proposal.id in known_proposal_ids:
                 continue
             known_proposal_ids.add(pending.proposal.id)
-            _put_threadsafe(
+            put(
                 ServerSentEvent(
                     event="proposal",
                     data=json.dumps(
@@ -292,7 +285,7 @@ def _make_callbacks(
             if q.id in known_question_ids:
                 continue
             known_question_ids.add(q.id)
-            _put_threadsafe(
+            put(
                 ServerSentEvent(
                     event="question",
                     data=json.dumps(_question_dto(q).model_dump(mode="json")),
@@ -326,27 +319,28 @@ async def _run_sse_pump(
     unowned queue and get GC'd with the request task."""
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue[ServerSentEvent | None] = asyncio.Queue()
-    on_delta, on_message = _make_callbacks(loop=loop, queue=queue, store=store, questions=questions)
 
-    def _put_threadsafe(event: ServerSentEvent | None) -> None:
+    def put(event: ServerSentEvent | None) -> None:
+        # Callbacks fire inside the worker thread; the queue is bound to the
+        # request's event loop, so hop threads for every enqueue.
         asyncio.run_coroutine_threadsafe(queue.put(event), loop)
+
+    on_delta, on_message = _make_callbacks(put=put, store=store, questions=questions)
 
     def run_worker() -> None:
         try:
             result = work(on_delta, on_message)
-            _put_threadsafe(
-                ServerSentEvent(event="done", data=json.dumps({"usage": asdict(result.usage)}))
-            )
+            put(ServerSentEvent(event="done", data=json.dumps({"usage": asdict(result.usage)})))
         except Exception as e:
             log.exception(error_msg)
-            _put_threadsafe(
+            put(
                 ServerSentEvent(
                     event="error",
                     data=json.dumps({"detail": f"{type(e).__name__}: {e}"}),
                 )
             )
         finally:
-            _put_threadsafe(None)  # sentinel: stream closed
+            put(None)  # sentinel: stream closed
 
     Thread(target=run_worker, daemon=True, name=worker_name).start()
 

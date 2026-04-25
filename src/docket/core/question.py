@@ -14,7 +14,6 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import dataclass, field
-from typing import Any
 
 
 def _new_id() -> str:
@@ -57,24 +56,6 @@ class QuestionAnswer:
 
     selected: tuple[str, ...] = ()
     other_text: str | None = None
-
-
-def serialize_question(question: Question) -> dict[str, Any]:
-    """Wire shape for SSE / API responses."""
-    return {
-        "id": question.id,
-        "tool_call_id": question.tool_call_id,
-        "questions": [
-            {
-                "question": q.question,
-                "header": q.header,
-                "multi_select": q.multi_select,
-                "allow_other": q.allow_other,
-                "options": [{"label": o.label, "description": o.description} for o in q.options],
-            }
-            for q in question.questions
-        ],
-    }
 
 
 def serialize_answers(question: Question, answers: tuple[QuestionAnswer, ...]) -> str:
