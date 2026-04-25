@@ -16,12 +16,13 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 
 from docket.core.model import Source
-from docket.storage._time import now_iso
+from docket.storage._time import now_utc
 from docket.storage.db import transaction
 from docket.storage.repos import project_repo
+from docket.storage.repos._patch import build_set_clause
 from docket.storage.repos._tags import clean_tags, clean_title, parse_tags
 
 
@@ -77,7 +78,7 @@ def create(
 ) -> Source:
     """Insert a new source row. Raises `KeyError` if the project is unknown."""
     project_repo.require_project(conn, project_id)
-    now = datetime.now(UTC)
+    now = now_utc()
     source_id = str(uuid.uuid4())
     tags_clean = clean_tags(tags)
     with transaction(conn):
@@ -126,30 +127,24 @@ def update(
     existing = get(conn, source_id)
     if existing is None:
         return None
-    fields: list[str] = []
-    params: list[object] = []
+    fields: list[tuple[str, object]] = []
     if title is not None:
-        fields.append("title = ?")
-        params.append(clean_title(title))
+        fields.append(("title", clean_title(title)))
     if body_md is not None:
-        fields.append("body_md = ?")
-        params.append(body_md)
+        fields.append(("body_md", body_md))
     if kind is not None:
-        fields.append("kind = ?")
-        params.append(kind.strip())
+        fields.append(("kind", kind.strip()))
     if uri is not None:
-        fields.append("uri = ?")
-        params.append(uri.strip())
+        fields.append(("uri", uri.strip()))
     if tags is not None:
-        fields.append("tags_json = ?")
-        params.append(json.dumps(clean_tags(tags)))
-    if not fields:
+        fields.append(("tags_json", json.dumps(clean_tags(tags))))
+    clause = build_set_clause(fields)
+    if clause is None:
         return existing
-    fields.append("updated_at = ?")
-    params.append(now_iso())
+    set_sql, params = clause
     params.append(source_id)
     with transaction(conn):
-        conn.execute(f"UPDATE sources SET {', '.join(fields)} WHERE id = ?", params)
+        conn.execute(f"UPDATE sources SET {set_sql} WHERE id = ?", params)
     return get(conn, source_id)
 
 

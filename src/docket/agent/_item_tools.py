@@ -11,6 +11,7 @@ import re
 import sqlite3
 from typing import Any
 
+from docket.agent._helpers import arg_error, provider_error, required_str
 from docket.agent.tools import ToolRegistry
 from docket.core.model import Item, ItemKind
 from docket.providers.base import WorkItemProvider
@@ -64,6 +65,56 @@ def _extract_links(text: str | None) -> list[str]:
     return list(seen.keys())
 
 
+def _load_comments(
+    conn: sqlite3.Connection,
+    provider: WorkItemProvider,
+    item_id: str,
+    *,
+    provider_key: str,
+) -> tuple[list[dict[str, Any]] | None, str | None]:
+    """Cache-first comment fetch. Returns (payload, error) — exactly one is None."""
+    comments = comment_repo.list_comments(conn, item_id, provider_key=provider_key)
+    if not comments:
+        try:
+            comments = provider.get_comments(item_id)
+        except Exception as e:
+            return None, f"provider lookup failed: {e}"
+    return [_comment_payload(c) for c in comments], None
+
+
+def _load_linked(
+    provider: WorkItemProvider, item_id: str
+) -> tuple[list[dict[str, Any]] | None, str | None]:
+    """Provider-only linked-items fetch. Returns (payload, error)."""
+    try:
+        linked = provider.get_linked(item_id)
+    except Exception as e:
+        return None, f"provider lookup failed: {e}"
+    return [_item_summary(i) for i in linked], None
+
+
+def _parse_include(args: dict[str, Any]) -> tuple[set[str] | None, str | None]:
+    """Validate the `include` array against `_VALID_INCLUDE`.
+
+    Returns (set, None) on success or (None, error_msg) — the model gets a
+    deterministic error for any token outside the allowed set."""
+    raw = args.get("include") or []
+    if not isinstance(raw, list):
+        return None, "include must be an array of strings"
+    out: set[str] = set()
+    for value in raw:
+        if not isinstance(value, str):
+            continue
+        token = value.strip().lower()
+        if not token:
+            continue
+        if token not in _VALID_INCLUDE:
+            allowed = ", ".join(sorted(_VALID_INCLUDE))
+            return None, f"include must be one of: {allowed}"
+        out.add(token)
+    return out, None
+
+
 def register_item_tools(
     registry: ToolRegistry,
     *,
@@ -71,45 +122,20 @@ def register_item_tools(
     provider: WorkItemProvider,
     provider_key: str = "",
 ) -> None:
-    def _load_comments(id_: str) -> tuple[list[dict[str, Any]] | None, str | None]:
-        comments = comment_repo.list_comments(conn, id_, provider_key=provider_key)
-        if not comments:
-            try:
-                comments = provider.get_comments(id_)
-            except Exception as e:
-                return None, f"provider lookup failed: {e}"
-        return [_comment_payload(c) for c in comments], None
-
-    def _load_linked(id_: str) -> tuple[list[dict[str, Any]] | None, str | None]:
-        try:
-            linked = provider.get_linked(id_)
-        except Exception as e:
-            return None, f"provider lookup failed: {e}"
-        return [_item_summary(i) for i in linked], None
-
     def get_item(args: dict[str, Any]) -> str:
-        id_ = str(args.get("id", "")).strip()
-        if not id_:
-            return json.dumps({"error": "id is required"})
-        include_raw = args.get("include") or []
-        if not isinstance(include_raw, list):
-            return json.dumps({"error": "include must be an array of strings"})
-        include: set[str] = set()
-        for value in include_raw:
-            if not isinstance(value, str):
-                continue
-            token = value.strip().lower()
-            if token:
-                if token not in _VALID_INCLUDE:
-                    allowed = ", ".join(sorted(_VALID_INCLUDE))
-                    return json.dumps({"error": f"include must be one of: {allowed}"})
-                include.add(token)
+        try:
+            id_ = required_str(args, "id")
+        except ValueError as e:
+            return arg_error(str(e))
+        include, include_err = _parse_include(args)
+        if include is None:
+            return arg_error(include_err or "invalid include")
         item = item_repo.get_item(conn, id_, provider_key=provider_key)
         if item is None:
             try:
                 item = provider.get_item(id_)
             except Exception as e:
-                return json.dumps({"error": f"provider lookup failed: {e}"})
+                return provider_error(e)
             if provider_key:
                 item.provider_key = provider_key
             # Cache on first hit so downstream tools and UI reads reuse it.
@@ -118,13 +144,13 @@ def register_item_tools(
         payload["description_md"] = item.description_md
         payload["links"] = _extract_links(item.description_md)
         if "comments" in include:
-            comments_payload, err = _load_comments(id_)
+            comments_payload, err = _load_comments(conn, provider, id_, provider_key=provider_key)
             if err is not None:
                 payload["comments_error"] = err
             else:
                 payload["comments"] = comments_payload
         if "linked" in include:
-            linked_payload, err = _load_linked(id_)
+            linked_payload, err = _load_linked(provider, id_)
             if err is not None:
                 payload["linked_error"] = err
             else:
@@ -132,28 +158,31 @@ def register_item_tools(
         return json.dumps(payload)
 
     def get_comments(args: dict[str, Any]) -> str:
-        id_ = str(args.get("id", "")).strip()
-        if not id_:
-            return json.dumps({"error": "id is required"})
-        payload, err = _load_comments(id_)
+        try:
+            id_ = required_str(args, "id")
+        except ValueError as e:
+            return arg_error(str(e))
+        payload, err = _load_comments(conn, provider, id_, provider_key=provider_key)
         if err is not None:
-            return json.dumps({"error": err})
+            return arg_error(err)
         return json.dumps(payload)
 
     def get_linked(args: dict[str, Any]) -> str:
-        id_ = str(args.get("id", "")).strip()
-        if not id_:
-            return json.dumps({"error": "id is required"})
-        payload, err = _load_linked(id_)
+        try:
+            id_ = required_str(args, "id")
+        except ValueError as e:
+            return arg_error(str(e))
+        payload, err = _load_linked(provider, id_)
         if err is not None:
-            return json.dumps({"error": err})
+            return arg_error(err)
         return json.dumps(payload)
 
     def search_items(args: dict[str, Any]) -> str:
-        query = str(args.get("query", "")).strip().lower()
+        try:
+            query = required_str(args, "query").lower()
+        except ValueError as e:
+            return arg_error(str(e))
         limit = int(args.get("limit", 20) or 20)
-        if not query:
-            return json.dumps({"error": "query is required"})
         kind_raw = args.get("kind")
         kind: ItemKind | None = None
         if isinstance(kind_raw, str) and kind_raw.strip():
@@ -161,7 +190,7 @@ def register_item_tools(
                 kind = ItemKind(kind_raw.strip().lower())
             except ValueError:
                 allowed = ", ".join(k.value for k in ItemKind)
-                return json.dumps({"error": f"kind must be one of: {allowed}"})
+                return arg_error(f"kind must be one of: {allowed}")
         cached = item_repo.list_items(conn, provider_key=provider_key)
         matches = [
             i
@@ -264,4 +293,4 @@ def register_item_tools(
     )
 
 
-__all__ = ["_extract_links", "_item_summary", "register_item_tools"]
+__all__ = ["register_item_tools"]

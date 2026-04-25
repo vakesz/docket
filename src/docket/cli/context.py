@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 from dataclasses import dataclass, field
+from types import TracebackType
 
 from docket.agent.prompt import configure_prompt_loader
 from docket.config import (
@@ -89,6 +90,17 @@ class Context:
 
     def close(self) -> None:
         self.conn.close()
+
+    def __enter__(self) -> Context:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        self.close()
 
 
 def prepare() -> Context:

@@ -30,10 +30,6 @@ from docket.agent.tools import ToolRegistry
 from docket.storage.repos import source_repo
 
 
-def _summary(entry: Any) -> dict[str, Any]:
-    return entry_summary(entry, kind=entry.kind, uri=entry.uri)
-
-
 def register_source_readonly_tools(
     registry: ToolRegistry,
     *,
@@ -52,7 +48,7 @@ def register_source_readonly_tools(
         kind_raw = args.get("kind")
         kind = str(kind_raw).strip() if isinstance(kind_raw, str) else None
         entries = source_repo.list_for_project(conn, project_id, kind=kind or None, limit=limit)
-        return json.dumps([_summary(e) for e in entries])
+        return json.dumps([entry_summary(e, kind=e.kind, uri=e.uri) for e in entries])
 
     def read_source(args: dict[str, Any]) -> str:
         try:
@@ -64,7 +60,7 @@ def register_source_readonly_tools(
             return arg_error(f"source '{source_id}' not found")
         return json.dumps(
             {
-                **_summary(entry),
+                **entry_summary(entry, kind=entry.kind, uri=entry.uri),
                 "body_md": entry.body_md,
             }
         )
@@ -83,7 +79,7 @@ def register_source_readonly_tools(
         return json.dumps(
             [
                 {
-                    **_summary(e),
+                    **entry_summary(e, kind=e.kind, uri=e.uri),
                     "body_md": e.body_md,
                 }
                 for e in entries

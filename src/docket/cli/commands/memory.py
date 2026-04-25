@@ -37,8 +37,7 @@ def memory_list(
     limit: int = typer.Option(50, "--limit", min=1, max=500, help="Max entries to show."),
 ) -> None:
     """List memory entries for the active project (most recent first)."""
-    ctx = prepare_or_wizard()
-    try:
+    with prepare_or_wizard() as ctx:
         # Ensure the project row exists so the command works on a fresh DB
         # before any memory has been written.
         project = ctx.active_project()
@@ -64,8 +63,6 @@ def memory_list(
                 format_updated(entry.updated_at),
             )
         console.print(table)
-    finally:
-        ctx.close()
 
 
 @memory_app.command("show")
@@ -73,8 +70,7 @@ def memory_show(
     memory_id: str = typer.Argument(..., help="Memory id (full or 8-char prefix)."),
 ) -> None:
     """Show one memory entry in full."""
-    ctx = prepare_or_wizard()
-    try:
+    with prepare_or_wizard() as ctx:
         entry = _resolve(ctx, memory_id)
         meta = (
             f"[bold cyan]{entry.title}[/bold cyan]\n"
@@ -85,8 +81,6 @@ def memory_show(
         )
         console.print(Panel.fit(meta, border_style="cyan"))
         console.print(Markdown(entry.body_md or "*(empty)*"))
-    finally:
-        ctx.close()
 
 
 @memory_app.command("add")
@@ -99,8 +93,7 @@ def memory_add(
     tags: str | None = typer.Option(None, "--tags", help="Comma-separated tags."),
 ) -> None:
     """Add a new memory entry to the active project (source=user)."""
-    ctx = prepare_or_wizard()
-    try:
+    with prepare_or_wizard() as ctx:
         project = ctx.active_project()
         body_md = read_body(body, from_file)
         entry = memory_repo.create(
@@ -115,8 +108,6 @@ def memory_add(
             f"[green]Added[/green] memory [cyan]{entry.title}[/cyan] "
             f"[dim]({entry.id[:8]})[/dim] to [cyan]{project.name}[/cyan]."
         )
-    finally:
-        ctx.close()
 
 
 @memory_app.command("edit")
@@ -132,8 +123,7 @@ def memory_edit(
     ),
 ) -> None:
     """Edit an existing memory entry. Pass any of --title, --body, --tags."""
-    ctx = prepare_or_wizard()
-    try:
+    with prepare_or_wizard() as ctx:
         existing = _resolve(ctx, memory_id)
         body_md: str | None = (
             read_body(body, from_file) if body is not None or from_file is not None else None
@@ -155,8 +145,6 @@ def memory_edit(
             f"[green]Updated[/green] memory [cyan]{updated.title}[/cyan] "
             f"[dim]({updated.id[:8]})[/dim]."
         )
-    finally:
-        ctx.close()
 
 
 @memory_app.command("rm")
@@ -165,8 +153,7 @@ def memory_rm(
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt."),
 ) -> None:
     """Remove a memory entry."""
-    ctx = prepare_or_wizard()
-    try:
+    with prepare_or_wizard() as ctx:
         existing = _resolve(ctx, memory_id)
         if not yes:
             confirmed = typer.confirm(
@@ -180,8 +167,6 @@ def memory_rm(
             console.print(f"[red]Memory entry vanished:[/red] {existing.id}")
             raise typer.Exit(1)
         console.print(f"[yellow]Removed[/yellow] memory [dim]({existing.id[:8]})[/dim].")
-    finally:
-        ctx.close()
 
 
 @memory_app.command("search")
@@ -190,8 +175,7 @@ def memory_search(
     limit: int = typer.Option(20, "--limit", min=1, max=100),
 ) -> None:
     """Search the active project's memory (FTS5, best-match first)."""
-    ctx = prepare_or_wizard()
-    try:
+    with prepare_or_wizard() as ctx:
         project = ctx.active_project()
         rows = memory_repo.search(ctx.conn, project.id, query, limit=limit)
         if not rows:
@@ -210,8 +194,6 @@ def memory_search(
                 format_updated(entry.updated_at),
             )
         console.print(table)
-    finally:
-        ctx.close()
 
 
 def _resolve(ctx: Context, memory_id: str) -> MemoryEntry:

@@ -5,6 +5,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
+from docket.cli.commands._utils import DryRun
 from docket.cli.confirm import apply_mutation
 from docket.cli.context import prepare_or_wizard
 from docket.cli.guard import abort_if_read_only
@@ -18,7 +19,7 @@ def patch_command(
     from_file: Path = typer.Option(
         ..., "--from-file", help="Path to Markdown file with the new description."
     ),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Show diff, do not write."),
+    dry_run: DryRun = False,
 ) -> None:
     """Replace a work item's description with the contents of a Markdown file."""
     abort_if_read_only(console)
@@ -28,8 +29,7 @@ def patch_command(
         console.print(f"[red]Cannot read {from_file}: {exc}[/red]")
         raise typer.Exit(2) from exc
 
-    ctx = prepare_or_wizard()
-    try:
+    with prepare_or_wizard() as ctx:
         proposal = mutation_service.propose_description_patch(
             ctx.conn, id, new_md, provider_key=ctx.active_provider
         )
@@ -42,5 +42,3 @@ def patch_command(
             on_success=lambda _r: f"[green]✓ {id} description updated[/green]",
             provider_key=ctx.active_provider,
         )
-    finally:
-        ctx.close()

@@ -21,6 +21,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
+from docket.cli.tui._status_helpers import update_status_bar
 from docket.cli.tui.widgets.chat_pane import ChatPane
 from docket.cli.tui.widgets.item_detail import ItemDetail
 from docket.cli.tui.widgets.status_bar import StatusBar
@@ -63,8 +64,7 @@ class BackgroundTasksMixin(_AppBase):
         startup (once `on_mount` resolves the interval) and after each tick
         so the countdown stays roughly accurate without its own repaint."""
         target = datetime.now(UTC) + timedelta(seconds=interval)
-        with contextlib.suppress(Exception):
-            self.query_one(StatusBar).next_sync_at = target
+        update_status_bar(self, next_sync_at=target)
 
     def _tick_background_sync(self) -> None:
         """Kick off an incremental sync in the background.
@@ -186,8 +186,7 @@ class BackgroundTasksMixin(_AppBase):
             self.query_one(StatusBar).set_last_sync_now()
 
     def _set_offline(self, offline: bool) -> None:
-        with contextlib.suppress(Exception):
-            self.query_one(StatusBar).offline = offline
+        update_status_bar(self, offline=offline)
 
 
 __all__ = ["BackgroundTasksMixin"]

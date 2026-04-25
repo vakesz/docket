@@ -9,6 +9,12 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from docket.agent._helpers import (
+    arg_error,
+    provider_error,
+    provider_unsupported,
+    required_str,
+)
 from docket.agent.tools import ToolRegistry
 from docket.providers.base import WorkItemProvider
 
@@ -65,15 +71,16 @@ def register_commit_tools(registry: ToolRegistry, *, provider: WorkItemProvider)
     if callable(get_commit_fn):
 
         def get_commit(args: dict[str, Any]) -> str:
-            ref = str(args.get("ref", "")).strip()
-            if not ref:
-                return json.dumps({"error": "ref is required"})
+            try:
+                ref = required_str(args, "ref")
+            except ValueError as e:
+                return arg_error(str(e))
             try:
                 detail = get_commit_fn(ref)
             except NotImplementedError:
-                return json.dumps({"error": "provider does not support commit fetch"})
+                return provider_unsupported("commit fetch")
             except Exception as e:
-                return json.dumps({"error": f"provider lookup failed: {e}"})
+                return provider_error(e)
             return json.dumps(_commit_payload(detail))
 
         registry.register(
@@ -101,15 +108,16 @@ def register_commit_tools(registry: ToolRegistry, *, provider: WorkItemProvider)
     if callable(get_commit_diff_fn):
 
         def get_diff(args: dict[str, Any]) -> str:
-            ref = str(args.get("ref", "")).strip()
-            if not ref:
-                return json.dumps({"error": "ref is required"})
+            try:
+                ref = required_str(args, "ref")
+            except ValueError as e:
+                return arg_error(str(e))
             try:
                 diff = get_commit_diff_fn(ref)
             except NotImplementedError:
-                return json.dumps({"error": "provider does not support commit diff fetch"})
+                return provider_unsupported("commit diff fetch")
             except Exception as e:
-                return json.dumps({"error": f"provider lookup failed: {e}"})
+                return provider_error(e)
             return json.dumps({"ref": ref, "diff": diff})
 
         registry.register(
@@ -135,15 +143,16 @@ def register_commit_tools(registry: ToolRegistry, *, provider: WorkItemProvider)
     if callable(get_ci):
 
         def get_ci_status(args: dict[str, Any]) -> str:
-            ref = str(args.get("ref", "")).strip()
-            if not ref:
-                return json.dumps({"error": "ref is required"})
+            try:
+                ref = required_str(args, "ref")
+            except ValueError as e:
+                return arg_error(str(e))
             try:
                 status = get_ci(ref)
             except NotImplementedError:
-                return json.dumps({"error": "provider does not support CI status fetch"})
+                return provider_unsupported("CI status fetch")
             except Exception as e:
-                return json.dumps({"error": f"provider lookup failed: {e}"})
+                return provider_error(e)
             return json.dumps(_ci_status_payload(status))
 
         registry.register(

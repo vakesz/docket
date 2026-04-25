@@ -38,10 +38,6 @@ from docket.core.services.proposal_store import ProposalStore
 from docket.storage.repos import memory_repo
 
 
-def _summary(entry: Any) -> dict[str, Any]:
-    return entry_summary(entry, source=entry.source)
-
-
 def register_memory_readonly_tools(
     registry: ToolRegistry,
     *,
@@ -58,7 +54,7 @@ def register_memory_readonly_tools(
             args.get("limit", DEFAULT_LIST_LIMIT), DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT
         )
         entries = memory_repo.list_for_project(conn, project_id, limit=limit)
-        return json.dumps([_summary(e) for e in entries])
+        return json.dumps([entry_summary(e, source=e.source) for e in entries])
 
     def recall_memory(args: dict[str, Any]) -> str:
         try:
@@ -72,7 +68,7 @@ def register_memory_readonly_tools(
         return json.dumps(
             [
                 {
-                    **_summary(e),
+                    **entry_summary(e, source=e.source),
                     "body_md": e.body_md,
                 }
                 for e in entries

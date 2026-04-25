@@ -5,6 +5,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
+from docket.cli.commands._utils import DryRun
 from docket.cli.confirm import apply_mutation
 from docket.cli.context import prepare_or_wizard
 from docket.cli.guard import abort_if_read_only
@@ -25,7 +26,7 @@ def new_command(
     parent_id: str | None = typer.Option(None, "--parent", help="Parent work item ID."),
     assignee: str | None = typer.Option(None, "--assignee", help="Assignee (email)."),
     tags: str | None = typer.Option(None, "--tags", help="Comma-separated tags."),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Show preview, do not create."),
+    dry_run: DryRun = False,
 ) -> None:
     """Create a new work item."""
     abort_if_read_only(console)
@@ -42,8 +43,7 @@ def new_command(
         tags=[t.strip() for t in tags.split(",")] if tags else [],
     )
 
-    ctx = prepare_or_wizard()
-    try:
+    with prepare_or_wizard() as ctx:
         proposal = ItemCreate(item_kind=ik, fields=fields)
         apply_mutation(
             ctx.conn,
@@ -54,5 +54,3 @@ def new_command(
             on_success=lambda r: f"[green]✓ created[/green] {r.item.id}  {r.item.title}",  # type: ignore[union-attr]
             provider_key=ctx.active_provider,
         )
-    finally:
-        ctx.close()

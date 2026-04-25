@@ -52,6 +52,22 @@ def arg_error(msg: str) -> str:
     return json.dumps({"error": msg})
 
 
+def provider_error(exc: BaseException) -> str:
+    """Render a provider lookup failure for tool callers.
+
+    Wording is shared across read tools so the model sees the same shape no
+    matter which provider call blew up."""
+    return arg_error(f"provider lookup failed: {exc}")
+
+
+def provider_unsupported(operation: str) -> str:
+    """Render a `NotImplementedError` from a provider as a structured error.
+
+    The model gets a stable phrase ("provider does not support …") so it can
+    branch on capability without parsing implementation-specific messages."""
+    return arg_error(f"provider does not support {operation}")
+
+
 def entry_summary(entry: Any, **extras: Any) -> dict[str, Any]:
     """Shared summary shape for agent list/search tools over memory/source entries.
 
@@ -75,6 +91,8 @@ __all__ = [
     "arg_error",
     "clamp_limit",
     "entry_summary",
+    "provider_error",
+    "provider_unsupported",
     "required_str",
     "str_list",
 ]

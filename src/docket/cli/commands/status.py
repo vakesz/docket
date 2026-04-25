@@ -32,8 +32,7 @@ def status_command(
     ),
 ) -> None:
     """Print a health snapshot of the active install (paths, cache, sync, MCP)."""
-    ctx = prepare_or_wizard()
-    try:
+    with prepare_or_wizard() as ctx:
         snapshot = status_service.collect(
             conn=ctx.conn,
             config=ctx.config,
@@ -42,8 +41,6 @@ def status_command(
             include_recent_events=verbose,
         )
         _render(snapshot, verbose=verbose)
-    finally:
-        ctx.close()
 
 
 def _render(snap: StatusSnapshot, *, verbose: bool = False) -> None:

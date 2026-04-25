@@ -75,7 +75,7 @@ def _refresh_runtime(runtime: RuntimeState, project_id: str, request: Request) -
     project = runtime.config.projects.get(project_id)
     servers = dict(project.mcp) if project is not None else {}
     runtime.mcp_manager.bind_project(project_id, servers)
-    rebuild_agent(request, runtime)
+    rebuild_agent(request.app, runtime)
 
 
 def _tool_dto(server_name: str, tool: Any) -> MCPToolDTO:

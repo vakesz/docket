@@ -267,31 +267,33 @@ def _next_sibling_key(type_id: str, taken: set[str]) -> str:
 
 
 def _step_provider_auth(state: WizardState) -> None:
-    if state.type_id == "azure_devops":
-        _azure_devops_step_auth(state)
-    elif state.type_id == "github":
-        _github_step_auth(state)
-    elif state.type_id == "github_stub":
-        console.print("[dim]No auth needed — github_stub runs entirely in-memory.[/dim]")
-    else:
-        console.print(
-            f"[dim]No built-in auth step for '{state.type_id}'. "
-            "The provider factory will surface auth errors on first sync.[/dim]"
-        )
+    match state.type_id:
+        case "azure_devops":
+            _azure_devops_step_auth(state)
+        case "github":
+            _github_step_auth(state)
+        case "github_stub":
+            console.print("[dim]No auth needed — github_stub runs entirely in-memory.[/dim]")
+        case _:
+            console.print(
+                f"[dim]No built-in auth step for '{state.type_id}'. "
+                "The provider factory will surface auth errors on first sync.[/dim]"
+            )
 
 
 # ---- step 3: connection (per-provider) --------------------------------------
 
 
 def _step_provider_connection(state: WizardState) -> None:
-    if state.type_id == "azure_devops":
-        _azure_devops_step_connection(state)
-    elif state.type_id == "github":
-        _github_step_connection(state)
-    elif state.type_id == "github_stub":
-        _github_stub_step_connection(state)
-    else:
-        _generic_step_connection(state)
+    match state.type_id:
+        case "azure_devops":
+            _azure_devops_step_connection(state)
+        case "github":
+            _github_step_connection(state)
+        case "github_stub":
+            _github_stub_step_connection(state)
+        case _:
+            _generic_step_connection(state)
 
 
 def _generic_step_connection(state: WizardState) -> None:
@@ -379,12 +381,13 @@ def _suggest_display_name(state: WizardState) -> str:
 
 
 def _step_provider_scope(state: WizardState) -> None:
-    if state.type_id == "azure_devops":
-        _azure_devops_step_scope(state)
-    elif state.type_id in ("github", "github_stub"):
-        _github_step_scope(state)
-    else:
-        state.scope = ScopeFilter()
+    match state.type_id:
+        case "azure_devops":
+            _azure_devops_step_scope(state)
+        case "github" | "github_stub":
+            _github_step_scope(state)
+        case _:
+            state.scope = ScopeFilter()
 
 
 # ---- step 5: telemetry ------------------------------------------------------

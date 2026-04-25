@@ -9,6 +9,13 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from docket.agent._helpers import (
+    arg_error,
+    provider_error,
+    provider_unsupported,
+    required_str,
+    str_list,
+)
 from docket.agent.tools import ToolRegistry
 from docket.providers.base import WorkItemProvider
 
@@ -65,19 +72,17 @@ def register_pr_tools(registry: ToolRegistry, *, provider: WorkItemProvider) -> 
     if callable(find_prs):
 
         def find_related_prs(args: dict[str, Any]) -> str:
-            id_ = str(args.get("id", "")).strip()
-            if not id_:
-                return json.dumps({"error": "id is required"})
-            kws_raw = args.get("title_keywords") or []
-            if not isinstance(kws_raw, list):
-                return json.dumps({"error": "title_keywords must be an array of strings"})
-            kws = [str(k) for k in kws_raw if isinstance(k, (str, int, float))]
+            try:
+                id_ = required_str(args, "id")
+                kws = str_list(args, "title_keywords")
+            except ValueError as e:
+                return arg_error(str(e))
             try:
                 matches = find_prs(id_, kws)
             except NotImplementedError:
-                return json.dumps({"error": "provider does not support PR discovery"})
+                return provider_unsupported("PR discovery")
             except Exception as e:
-                return json.dumps({"error": f"provider lookup failed: {e}"})
+                return provider_error(e)
             return json.dumps(
                 [
                     {
@@ -118,15 +123,16 @@ def register_pr_tools(registry: ToolRegistry, *, provider: WorkItemProvider) -> 
     if callable(get_pr):
 
         def get_pull_request(args: dict[str, Any]) -> str:
-            pr_id = str(args.get("id", "")).strip()
-            if not pr_id:
-                return json.dumps({"error": "id is required"})
+            try:
+                pr_id = required_str(args, "id")
+            except ValueError as e:
+                return arg_error(str(e))
             try:
                 detail = get_pr(pr_id)
             except NotImplementedError:
-                return json.dumps({"error": "provider does not support PR detail fetch"})
+                return provider_unsupported("PR detail fetch")
             except Exception as e:
-                return json.dumps({"error": f"provider lookup failed: {e}"})
+                return provider_error(e)
             return json.dumps(_pull_request_payload(detail))
 
         registry.register(
@@ -156,15 +162,16 @@ def register_pr_tools(registry: ToolRegistry, *, provider: WorkItemProvider) -> 
     if callable(get_pr_diff):
 
         def get_pull_request_diff(args: dict[str, Any]) -> str:
-            pr_id = str(args.get("id", "")).strip()
-            if not pr_id:
-                return json.dumps({"error": "id is required"})
+            try:
+                pr_id = required_str(args, "id")
+            except ValueError as e:
+                return arg_error(str(e))
             try:
                 diff = get_pr_diff(pr_id)
             except NotImplementedError:
-                return json.dumps({"error": "provider does not support PR diff fetch"})
+                return provider_unsupported("PR diff fetch")
             except Exception as e:
-                return json.dumps({"error": f"provider lookup failed: {e}"})
+                return provider_error(e)
             return json.dumps({"id": pr_id, "diff": diff})
 
         registry.register(

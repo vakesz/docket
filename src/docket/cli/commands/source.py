@@ -39,8 +39,7 @@ def source_list(
     limit: int = typer.Option(50, "--limit", min=1, max=500, help="Max entries to show."),
 ) -> None:
     """List source documents for the active project (most recent first)."""
-    ctx = prepare_or_wizard()
-    try:
+    with prepare_or_wizard() as ctx:
         project = ctx.active_project()
         rows = source_repo.list_for_project(ctx.conn, project.id, kind=kind, limit=limit)
         if not rows:
@@ -64,8 +63,6 @@ def source_list(
                 format_updated(entry.updated_at),
             )
         console.print(table)
-    finally:
-        ctx.close()
 
 
 @source_app.command("show")
@@ -73,8 +70,7 @@ def source_show(
     source_id: str = typer.Argument(..., help="Source id (full or 8-char prefix)."),
 ) -> None:
     """Show one source document in full."""
-    ctx = prepare_or_wizard()
-    try:
+    with prepare_or_wizard() as ctx:
         entry = _resolve(ctx, source_id)
         meta = (
             f"[bold cyan]{entry.title}[/bold cyan]\n"
@@ -86,8 +82,6 @@ def source_show(
         )
         console.print(Panel.fit(meta, border_style="cyan"))
         console.print(Markdown(entry.body_md or "*(empty)*"))
-    finally:
-        ctx.close()
 
 
 @source_app.command("add")
@@ -102,8 +96,7 @@ def source_add(
     tags: str | None = typer.Option(None, "--tags", help="Comma-separated tags."),
 ) -> None:
     """Add a new source document to the active project."""
-    ctx = prepare_or_wizard()
-    try:
+    with prepare_or_wizard() as ctx:
         project = ctx.active_project()
         body_md = read_body(body, from_file)
         entry = source_repo.create(
@@ -119,8 +112,6 @@ def source_add(
             f"[green]Added[/green] source [cyan]{entry.title}[/cyan] "
             f"[dim]({entry.id[:8]})[/dim] to [cyan]{project.name}[/cyan]."
         )
-    finally:
-        ctx.close()
 
 
 @source_app.command("edit")
@@ -138,8 +129,7 @@ def source_edit(
     ),
 ) -> None:
     """Edit an existing source document. Pass any of --title, --body, --kind, --uri, --tags."""
-    ctx = prepare_or_wizard()
-    try:
+    with prepare_or_wizard() as ctx:
         existing = _resolve(ctx, source_id)
         body_md: str | None = (
             read_body(body, from_file) if body is not None or from_file is not None else None
@@ -165,8 +155,6 @@ def source_edit(
             f"[green]Updated[/green] source [cyan]{updated.title}[/cyan] "
             f"[dim]({updated.id[:8]})[/dim]."
         )
-    finally:
-        ctx.close()
 
 
 @source_app.command("rm")
@@ -175,8 +163,7 @@ def source_rm(
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt."),
 ) -> None:
     """Remove a source document."""
-    ctx = prepare_or_wizard()
-    try:
+    with prepare_or_wizard() as ctx:
         existing = _resolve(ctx, source_id)
         if not yes:
             confirmed = typer.confirm(
@@ -190,8 +177,6 @@ def source_rm(
             console.print(f"[red]Source vanished:[/red] {existing.id}")
             raise typer.Exit(1)
         console.print(f"[yellow]Removed[/yellow] source [dim]({existing.id[:8]})[/dim].")
-    finally:
-        ctx.close()
 
 
 @source_app.command("search")
@@ -201,8 +186,7 @@ def source_search(
     limit: int = typer.Option(20, "--limit", min=1, max=100),
 ) -> None:
     """Search the active project's sources (FTS5, best-match first)."""
-    ctx = prepare_or_wizard()
-    try:
+    with prepare_or_wizard() as ctx:
         project = ctx.active_project()
         rows = source_repo.search(ctx.conn, project.id, query, kind=kind, limit=limit)
         if not rows:
@@ -223,8 +207,6 @@ def source_search(
                 format_updated(entry.updated_at),
             )
         console.print(table)
-    finally:
-        ctx.close()
 
 
 def _resolve(ctx: Context, source_id: str) -> Source:

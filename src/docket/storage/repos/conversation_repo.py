@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import UTC, datetime
+from datetime import datetime
 from uuid import uuid4
 
 from docket.core.model import Conversation
-from docket.storage._time import now_iso
+from docket.storage._time import now_iso, now_utc
 from docket.storage.item_keys import item_id_from_storage_key, item_storage_key
 
 
@@ -25,7 +25,7 @@ def create(conn: sqlite3.Connection, item_id: str, *, provider_key: str = "") ->
     convo = Conversation(
         id=str(uuid4()),
         item_id=item_id,
-        started_at=datetime.now(UTC),
+        started_at=now_utc(),
     )
     conn.execute(
         """

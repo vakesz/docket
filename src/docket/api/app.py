@@ -13,9 +13,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
 
-from docket.agent.factory import build_agent
 from docket.agent.llm_client import LlmClient
 from docket.agent.mcp import MCPManager
+from docket.api.agent_rebuild import rebuild_agent
 from docket.api.auth import require_bearer
 from docket.api.routes import conversations as conversations_routes
 from docket.api.routes import items as items_routes
@@ -104,6 +104,7 @@ def create_app(
     app.state.bearer_token = bearer_token
     app.state.proposals = proposals if proposals is not None else ProposalStore()
     app.state.llm = llm
+    app.state.active_item = active_item
     app.state.compaction_threshold_tokens = compaction_threshold_tokens
     app.state.read_only = read_only
     app.state.paths = paths
@@ -125,20 +126,7 @@ def create_app(
         mcp_manager.bind_project(runtime.project_id, servers)
     app.state.mcp_manager = mcp_manager
 
-    if llm is not None:
-        app.state.agent = build_agent(
-            llm=llm,
-            conn=conn,
-            provider=provider,
-            store=app.state.proposals,
-            active_item=active_item or (lambda: None),
-            read_only=read_only,
-            provider_key=runtime.provider_key if runtime is not None else "",
-            project_id=runtime.project_id if runtime is not None else "",
-            mcp_manager=mcp_manager,
-        )
-    else:
-        app.state.agent = None
+    rebuild_agent(app, runtime)
 
     # Sub-routers keyed off `/items/{item_id:path}/…` must be registered
     # before the catch-all item routes, otherwise the `:path` converter

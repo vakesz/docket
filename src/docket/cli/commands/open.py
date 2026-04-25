@@ -63,8 +63,7 @@ def run_open_tui(
     # comes first, same outcome.
     effective_read_only = read_only or get_read_only()
 
-    ctx = prepare_or_wizard()
-    try:
+    with prepare_or_wizard() as ctx:
         provider_key = provider or ctx.active_provider
         if provider_key and provider_key not in ctx.providers:
             console.print(
@@ -109,5 +108,3 @@ def run_open_tui(
             config=ctx.config,
         )
         DocketApp(tui_ctx).run()
-    finally:
-        ctx.close()

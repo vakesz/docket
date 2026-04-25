@@ -11,9 +11,10 @@ excluded (see `storage/schema.py` for why we don't FK)."""
 from __future__ import annotations
 
 import sqlite3
-from datetime import UTC, datetime
+from datetime import datetime
 
 from docket.core.model import Item
+from docket.storage._time import now_utc
 from docket.storage.item_keys import (
     item_id_from_storage_key,
     item_storage_key,
@@ -30,7 +31,7 @@ def pin(
     at: datetime | None = None,
 ) -> None:
     """Pin an item. Idempotent — re-pinning refreshes `pinned_at`."""
-    when = (at or datetime.now(UTC)).isoformat()
+    when = (at or now_utc()).isoformat()
     conn.execute(
         """
         INSERT INTO watchlist (id, pinned_at) VALUES (?, ?)

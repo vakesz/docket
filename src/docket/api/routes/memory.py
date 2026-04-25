@@ -20,6 +20,7 @@ from docket.api.deps import (
     get_conn,
     require_by_id,
     require_not_read_only,
+    require_patch_not_empty,
     require_project,
 )
 from docket.api.schemas import (
@@ -125,11 +126,7 @@ def update_memory(
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> MemoryDTO:
     require_by_id(memory_repo.get, conn, memory_id, label="memory entry")
-    if payload.title is None and payload.body_md is None and payload.tags is None:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            "At least one of title, body_md, tags must be set.",
-        )
+    require_patch_not_empty(payload, label="memory")
     updated = memory_repo.update(
         conn,
         memory_id,

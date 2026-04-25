@@ -53,8 +53,7 @@ def _split_env(raw: list[str] | None) -> dict[str, str]:
 @mcp_app.command("list")
 def mcp_list() -> None:
     """List MCP servers configured for the active project."""
-    ctx = prepare_or_wizard()
-    try:
+    with prepare_or_wizard() as ctx:
         project = ctx.active_project()
         servers = mcp_service.list_servers(ctx.config, project.id)
         if not servers:
@@ -80,8 +79,6 @@ def mcp_list() -> None:
                 f"{entry.startup_timeout_seconds:.1f}s",
             )
         console.print(table)
-    finally:
-        ctx.close()
 
 
 @mcp_app.command("add")
@@ -98,8 +95,7 @@ def mcp_add(
     ),
 ) -> None:
     """Add a new MCP server entry to the active project."""
-    ctx = prepare_or_wizard()
-    try:
+    with prepare_or_wizard() as ctx:
         project = ctx.active_project()
         try:
             mcp_service.add_server(
@@ -126,8 +122,6 @@ def mcp_add(
             f"[green]Added[/green] MCP server [cyan]{name}[/cyan] to "
             f"[cyan]{project.name}[/cyan]. [dim]Restart `docket serve`/the TUI to load it.[/dim]"
         )
-    finally:
-        ctx.close()
 
 
 @mcp_app.command("presets")
@@ -178,8 +172,7 @@ def mcp_add_preset(
         UnknownPresetError,
     )
 
-    ctx = prepare_or_wizard()
-    try:
+    with prepare_or_wizard() as ctx:
         project = ctx.active_project()
         try:
             server_name, _ = mcp_service.add_server_from_preset(
@@ -215,8 +208,6 @@ def mcp_add_preset(
             f"[cyan]{server_name}[/cyan] on [cyan]{project.name}[/cyan]. "
             "[dim]Restart `docket serve`/the TUI to load it.[/dim]"
         )
-    finally:
-        ctx.close()
 
 
 @mcp_app.command("rm")
@@ -225,8 +216,7 @@ def mcp_rm(
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt."),
 ) -> None:
     """Remove an MCP server entry from the active project."""
-    ctx = prepare_or_wizard()
-    try:
+    with prepare_or_wizard() as ctx:
         project = ctx.active_project()
         try:
             mcp_service.get_server(ctx.config, project.id, name)
@@ -244,8 +234,6 @@ def mcp_rm(
                 raise typer.Exit(1)
         mcp_service.remove_server(ctx.config, ctx.paths, project.id, name)
         console.print(f"[yellow]Removed[/yellow] MCP server [cyan]{name}[/cyan].")
-    finally:
-        ctx.close()
 
 
 @mcp_app.command("enable")
@@ -265,8 +253,7 @@ def mcp_disable(
 
 
 def _set_enabled(name: str, enabled: bool) -> None:
-    ctx = prepare_or_wizard()
-    try:
+    with prepare_or_wizard() as ctx:
         project = ctx.active_project()
         try:
             mcp_service.update_server(ctx.config, ctx.paths, project.id, name, enabled=enabled)
@@ -280,8 +267,6 @@ def _set_enabled(name: str, enabled: bool) -> None:
             raise typer.Exit(1) from exc
         verb = "[green]Enabled[/green]" if enabled else "[yellow]Disabled[/yellow]"
         console.print(f"{verb} MCP server [cyan]{name}[/cyan] on [cyan]{project.name}[/cyan].")
-    finally:
-        ctx.close()
 
 
 @mcp_app.command("test")
@@ -293,8 +278,7 @@ def mcp_test(
     Spawns the configured command, completes the handshake, prints the
     discovered tool catalog, and tears the subprocess back down. Useful
     for verifying a fresh `add` before the running app reloads."""
-    ctx = prepare_or_wizard()
-    try:
+    with prepare_or_wizard() as ctx:
         project = ctx.active_project()
         try:
             entry = mcp_service.get_server(ctx.config, project.id, name)
@@ -311,8 +295,6 @@ def mcp_test(
         if not entry.command:
             console.print(f"[red]Server '{name}' has no `command` configured.[/red]")
             raise typer.Exit(1)
-    finally:
-        ctx.close()
 
     client = MCPClient(name, entry)
     try:

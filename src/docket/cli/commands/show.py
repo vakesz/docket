@@ -13,8 +13,7 @@ console = Console()
 
 def show_command(id: str = typer.Argument(..., help="Work item ID.")) -> None:
     """Show a single item's detail from the local cache."""
-    ctx = prepare_or_wizard()
-    try:
+    with prepare_or_wizard() as ctx:
         item = item_repo.get_item(ctx.conn, id, provider_key=ctx.active_provider or None)
         if item is None:
             console.print(f"[red]No cached item with id={id}.[/red] Try `docket sync`.")
@@ -35,5 +34,3 @@ def show_command(id: str = typer.Argument(..., help="Work item ID.")) -> None:
             for c in comments:
                 console.print(f"[dim]{c.created_at.isoformat()}  {c.author}[/dim]")
                 console.print(Markdown(c.body_md))
-    finally:
-        ctx.close()

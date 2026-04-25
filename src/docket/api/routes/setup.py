@@ -23,12 +23,15 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import ValidationError
 
 from docket.agent.prompt_templates import scaffold as scaffold_prompts
+from docket.api._provider_setup import (
+    provider_type_dtos,
+    test_provider_draft,
+)
 from docket.api.auth import require_setup_token
 from docket.api.deps import get_paths
 from docket.api.schemas import (
     SetupCompleteDTO,
     SetupCompleteRequest,
-    SetupProviderFieldDTO,
     SetupProviderTypeDTO,
     SetupStatusDTO,
     SetupTestLlmRequest,
@@ -51,7 +54,6 @@ from docket.providers import registry
 from docket.providers.base import ProviderError
 from docket.providers.registry import UnknownProviderError
 from docket.providers.registry import build as build_provider
-from docket.providers.registry import specs as provider_specs
 from docket.storage import init_db
 
 router = APIRouter(prefix="/setup", tags=["setup"])
@@ -81,25 +83,7 @@ def setup_status(paths: Paths = Depends(get_paths)) -> SetupStatusDTO:
     dependencies=[Depends(require_setup_token)],
 )
 def provider_types() -> list[SetupProviderTypeDTO]:
-    return [
-        SetupProviderTypeDTO(
-            id=spec.type_id,
-            display=spec.display_name,
-            requires_cli=list(spec.requires_cli),
-            fields=[
-                SetupProviderFieldDTO(
-                    key=f.key,
-                    label=f.label,
-                    kind=f.kind,
-                    required=f.required,
-                    placeholder=f.placeholder,
-                    help=f.help,
-                )
-                for f in spec.setup_fields
-            ],
-        )
-        for spec in provider_specs()
-    ]
+    return provider_type_dtos()
 
 
 @router.post(
@@ -108,19 +92,7 @@ def provider_types() -> list[SetupProviderTypeDTO]:
     dependencies=[Depends(require_setup_token)],
 )
 def test_provider(req: SetupTestProviderRequest) -> SetupTestResultDTO:
-    try:
-        provider = build_provider(req.type, dict(req.config), display_name=req.type)
-    except UnknownProviderError as e:
-        return SetupTestResultDTO(ok=False, error=str(e))
-    except (ValueError, ValidationError) as e:
-        return SetupTestResultDTO(ok=False, error=str(e))
-    try:
-        provider.health_check()
-    except ProviderError as e:
-        return SetupTestResultDTO(ok=False, error=str(e))
-    except Exception as e:
-        return SetupTestResultDTO(ok=False, error=f"{type(e).__name__}: {e}")
-    return SetupTestResultDTO(ok=True)
+    return test_provider_draft(req.type, dict(req.config))
 
 
 @router.post(

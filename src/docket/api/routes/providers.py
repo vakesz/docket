@@ -68,7 +68,7 @@ def set_active_provider(
     # The agent's tool closures captured the previous provider + provider_key
     # at create_app time. Rebuild so tool calls hit the new backend; otherwise
     # chat in the same session keeps reasoning over the old provider's items.
-    rebuild_agent(request, runtime)
+    rebuild_agent(request.app, runtime)
     return _to_dto(runtime, runtime.provider_key)
 
 

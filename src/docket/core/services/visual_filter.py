@@ -12,10 +12,13 @@ identity degrade `@me` to "no filter" rather than hiding everything.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from docket.core.model import Item, ScopeFilters
 from docket.providers.base import WorkItemProvider
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -53,6 +56,12 @@ def resolve(filters: ScopeFilters, provider: WorkItemProvider | None) -> Resolve
             try:
                 resolved = resolver()
             except Exception:
+                # Provider plugins are arbitrary code; we can't enumerate
+                # the failure modes. Log so this isn't a silent fallback.
+                log.exception(
+                    "provider %s failed to resolve current_user_identity",
+                    type(provider).__name__,
+                )
                 resolved = None
             if isinstance(resolved, str) and resolved:
                 assignee = resolved

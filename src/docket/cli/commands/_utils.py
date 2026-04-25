@@ -5,10 +5,17 @@ from __future__ import annotations
 import sys
 from collections.abc import Callable
 from datetime import datetime
-from typing import Protocol
+from typing import Annotated, Protocol
 
 import typer
 from rich.console import Console
+
+#: Shared `--dry-run` flag for every mutation command. Spelling and help text
+#: stay consistent so transition / patch / new behave identically.
+DryRun = Annotated[
+    bool,
+    typer.Option("--dry-run", help="Show diff, do not write."),
+]
 
 
 def split_tags(raw: str | None) -> list[str]:

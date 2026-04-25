@@ -22,6 +22,7 @@ from docket.api.deps import (
     get_conn,
     require_by_id,
     require_not_read_only,
+    require_patch_not_empty,
     require_project,
 )
 from docket.api.schemas import (
@@ -126,17 +127,7 @@ def update_source(
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> SourceDTO:
     require_by_id(source_repo.get, conn, source_id, label="source")
-    if (
-        payload.title is None
-        and payload.body_md is None
-        and payload.kind is None
-        and payload.uri is None
-        and payload.tags is None
-    ):
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            "At least one of title, body_md, kind, uri, tags must be set.",
-        )
+    require_patch_not_empty(payload, label="source")
     updated = source_repo.update(
         conn,
         source_id,

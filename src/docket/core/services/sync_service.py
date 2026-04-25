@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import UTC, datetime
 
 from docket.core.model import ScopeFilters, SyncSummary
 from docket.providers.base import WorkItemProvider
 from docket.storage import transaction
+from docket.storage._time import now_utc
 from docket.storage.repos import item_repo, sync_repo
 
 
@@ -46,7 +46,7 @@ def refresh(
     with transaction(conn):
         upserted = item_repo.upsert_items(conn, items)
         archived = item_repo.mark_archived(conn, archived_ids, provider_key=provider_key)
-        new_watermark = max_seen or datetime.now(UTC)
+        new_watermark = max_seen or now_utc()
         sync_repo.set_watermark(conn, provider_key, new_watermark)
 
     return SyncSummary(upserted=upserted, archived=archived, watermark=max_seen)

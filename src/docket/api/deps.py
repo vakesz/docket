@@ -16,6 +16,7 @@ from collections.abc import Callable
 from typing import cast
 
 from fastapi import HTTPException, Request, status
+from pydantic import BaseModel
 
 from docket.agent.llm_client import LlmClient
 from docket.agent.loop import AgentLoop
@@ -180,6 +181,19 @@ def require_by_id[T](
     return entry
 
 
+def require_patch_not_empty(payload: BaseModel, *, label: str) -> None:
+    """Raise HTTP 400 if every field on a PATCH payload is None.
+
+    PATCH endpoints accept all-optional models so a partial update can be
+    expressed with one or two fields, but submitting an empty patch is
+    almost always a bug — better to surface it than silently no-op."""
+    if all(v is None for v in payload.model_dump().values()):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"At least one {label} field must be set.",
+        )
+
+
 __all__ = [
     "get_active_provider_key",
     "get_config",
@@ -193,5 +207,6 @@ __all__ = [
     "require_by_id",
     "require_llm",
     "require_not_read_only",
+    "require_patch_not_empty",
     "require_project",
 ]

@@ -21,8 +21,7 @@ def sync_command(
 
     Sync always pulls everything the provider exposes; the `--scope` /
     view picker is a post-cache visual filter."""
-    ctx = prepare_or_wizard()
-    try:
+    with prepare_or_wizard() as ctx:
         provider_key = provider or ctx.active_provider
         if provider_key and provider_key != ctx.active_provider:
             ctx.active_provider = provider_key
@@ -33,5 +32,3 @@ def sync_command(
             f"[green]✓[/green] synced {summary.upserted} item(s), "
             f"archived {summary.archived}, watermark → {summary.watermark}"
         )
-    finally:
-        ctx.close()

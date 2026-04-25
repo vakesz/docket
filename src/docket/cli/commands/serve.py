@@ -83,7 +83,7 @@ def serve_command(
         uvicorn.run(app, host=bind, port=listen_port, log_level=_resolve_log_level())
         return
 
-    try:
+    with ctx:
         if not ctx.config.http.enabled:
             console.print(
                 "[yellow]HTTP surface is disabled[/yellow]: set http.enabled=true in config.toml "
@@ -129,5 +129,3 @@ def serve_command(
             f"(bearer required; chat {'disabled' if llm is None else 'enabled'}; {mode})"
         )
         uvicorn.run(app, host=bind, port=listen_port, log_level=_resolve_log_level())
-    finally:
-        ctx.close()

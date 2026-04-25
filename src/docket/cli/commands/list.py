@@ -19,8 +19,7 @@ def list_command(
     show_archived: bool = typer.Option(False, "--archived", help="Include archived items."),
 ) -> None:
     """List items from the local cache."""
-    ctx = prepare_or_wizard()
-    try:
+    with prepare_or_wizard() as ctx:
         kind_filter = ItemKind(kind) if kind else None
         resolved = visual_filter.resolve(ctx.scope_filters(), ctx.provider)
         items = item_repo.list_items(
@@ -40,5 +39,3 @@ def list_command(
         for it in items:
             table.add_row(it.id, it.kind.value, it.state.value, it.assignee or "—", it.title)
         console.print(table)
-    finally:
-        ctx.close()

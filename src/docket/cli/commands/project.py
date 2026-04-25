@@ -30,8 +30,7 @@ def project_list(
     show_archived: bool = typer.Option(False, "--archived", help="Include archived projects."),
 ) -> None:
     """List configured projects from config.toml."""
-    ctx = prepare_or_wizard()
-    try:
+    with prepare_or_wizard() as ctx:
         active_id = ctx.project_id
         rows = project_repo.list_all(ctx.conn, include_archived=show_archived)
         table = Table(title=f"Projects ({len(rows)})")
@@ -53,8 +52,6 @@ def project_list(
             "[dim]Tip:[/dim] switch projects by switching provider: "
             "`docket setup` or the TUI provider picker (Ctrl+P)."
         )
-    finally:
-        ctx.close()
 
 
 @project_app.command("show")
@@ -64,8 +61,7 @@ def project_show(
     ),
 ) -> None:
     """Show one project's metadata."""
-    ctx = prepare_or_wizard()
-    try:
+    with prepare_or_wizard() as ctx:
         provider_key = provider or ctx.active_provider
         project = project_repo.get(ctx.conn, project_id_for(provider_key))
         if project is None:
@@ -80,8 +76,6 @@ def project_show(
         console.print(f"[dim]description:[/dim] {project.description or '—'}")
         if project.archived_at:
             console.print(f"[red]archived at:[/red] {project.archived_at.isoformat()}")
-    finally:
-        ctx.close()
 
 
 @project_app.command("rename")
@@ -92,8 +86,7 @@ def project_rename(
     ),
 ) -> None:
     """Rename the project for `provider`. Persists to config.toml."""
-    ctx = prepare_or_wizard()
-    try:
+    with prepare_or_wizard() as ctx:
         provider_key = provider or ctx.active_provider
         project = project_service.upsert(
             ctx.config,
@@ -106,8 +99,6 @@ def project_rename(
             f"[green]Renamed[/green] {project.id} → [cyan]{project.name}[/cyan] "
             "(saved to config.toml)."
         )
-    finally:
-        ctx.close()
 
 
 @project_app.command("describe")
@@ -118,8 +109,7 @@ def project_describe(
     ),
 ) -> None:
     """Set the description on the project for `provider`."""
-    ctx = prepare_or_wizard()
-    try:
+    with prepare_or_wizard() as ctx:
         provider_key = provider or ctx.active_provider
         project = project_service.upsert(
             ctx.config,
@@ -132,8 +122,6 @@ def project_describe(
             f"[green]Updated[/green] description for [cyan]{project.name}[/cyan] "
             "(saved to config.toml)."
         )
-    finally:
-        ctx.close()
 
 
 @project_app.command("archive")
@@ -143,14 +131,11 @@ def project_archive(
     ),
 ) -> None:
     """Mark a project as archived (hidden from default lists)."""
-    ctx = prepare_or_wizard()
-    try:
+    with prepare_or_wizard() as ctx:
         provider_key = provider or ctx.active_provider
         project_id = project_id_for(provider_key)
         project_service.archive(ctx.config, ctx.paths, ctx.conn, project_id)
         console.print(f"[yellow]Archived[/yellow] {project_id}.")
-    finally:
-        ctx.close()
 
 
 @project_app.command("unarchive")
@@ -158,14 +143,11 @@ def project_unarchive(
     provider: str | None = typer.Option(None, "--provider", help="Provider key."),
 ) -> None:
     """Restore an archived project."""
-    ctx = prepare_or_wizard()
-    try:
+    with prepare_or_wizard() as ctx:
         provider_key = provider or ctx.active_provider
         project_id = project_id_for(provider_key)
         project_service.unarchive(ctx.config, ctx.paths, ctx.conn, project_id)
         console.print(f"[green]Unarchived[/green] {project_id}.")
-    finally:
-        ctx.close()
 
 
 __all__ = ["project_app"]

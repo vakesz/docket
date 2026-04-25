@@ -23,12 +23,13 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 
 from docket.core.model import MemoryEntry
-from docket.storage._time import now_iso
+from docket.storage._time import now_iso, now_utc
 from docket.storage.db import transaction
 from docket.storage.repos import project_repo
+from docket.storage.repos._patch import build_set_clause
 from docket.storage.repos._tags import clean_tags, clean_title, parse_tags
 
 
@@ -76,7 +77,7 @@ def create(
 
     Raises `KeyError` if the project is unknown."""
     project_repo.require_project(conn, project_id)
-    now = datetime.now(UTC)
+    now = now_utc()
     memory_id = str(uuid.uuid4())
     tags_clean = clean_tags(tags)
     with transaction(conn):
@@ -122,25 +123,21 @@ def update(
     existing = get(conn, memory_id)
     if existing is None:
         return None
-    fields: list[str] = []
-    params: list[object] = []
+    fields: list[tuple[str, object]] = []
     if title is not None:
-        fields.append("title = ?")
-        params.append(clean_title(title))
+        fields.append(("title", clean_title(title)))
     if body_md is not None:
-        fields.append("body_md = ?")
-        params.append(body_md)
+        fields.append(("body_md", body_md))
     if tags is not None:
-        fields.append("tags_json = ?")
-        params.append(json.dumps(clean_tags(tags)))
-    if not fields:
+        fields.append(("tags_json", json.dumps(clean_tags(tags))))
+    clause = build_set_clause(fields)
+    if clause is None:
         return existing
-    fields.append("updated_at = ?")
-    params.append(now_iso())
+    set_sql, params = clause
     params.append(memory_id)
     with transaction(conn):
         row = conn.execute(
-            f"UPDATE memory SET {', '.join(fields)} WHERE id = ? RETURNING *", params
+            f"UPDATE memory SET {set_sql} WHERE id = ? RETURNING *", params
         ).fetchone()
         bump_revision(conn, existing.project_id)
     return _row_to_entry(row) if row else None

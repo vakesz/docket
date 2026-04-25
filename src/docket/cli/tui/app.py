@@ -15,6 +15,7 @@ from docket.agent.factory import build_agent
 from docket.agent.loop import AgentLoop
 from docket.agent.tools import ToolRegistry
 from docket.agent.types import ChatMessage, StreamDelta
+from docket.cli.tui._status_helpers import update_status_bar
 from docket.cli.tui.background_tasks import BackgroundTasksMixin
 from docket.cli.tui.config_actions import ConfigMixin
 from docket.cli.tui.errors import humanize as humanize_error
@@ -223,21 +224,20 @@ class DocketApp(
         Dynamic segments (last sync, offline, thinking, pending, cost,
         read-only) are updated elsewhere — here we just put the right initial
         values up so the bar doesn't render with em-dashes on first paint."""
-        try:
-            bar = self.query_one(StatusBar)
-        except Exception:
-            return
         provider = self.tui_ctx.provider
         display = getattr(provider, "display_name", None) or type(provider).__name__
-        bar.provider_name = str(display)
-        bar.scope_label = self.tui_ctx.scope_key
-        bar.active_view = self.tui_ctx.scope_key
-        bar.project_name = self._resolve_project_name()
-        bar.read_only = self.tui_ctx.read_only
-        bar.pending_count = len(self._proposals)
-        bar.tooltip = (
-            "Session status: project, provider, active view, sync health, "
-            "chat activity, pending proposals, cost, and read-only mode."
+        update_status_bar(
+            self,
+            provider_name=str(display),
+            scope_label=self.tui_ctx.scope_key,
+            active_view=self.tui_ctx.scope_key,
+            project_name=self._resolve_project_name(),
+            read_only=self.tui_ctx.read_only,
+            pending_count=len(self._proposals),
+            tooltip=(
+                "Session status: project, provider, active view, sync health, "
+                "chat activity, pending proposals, cost, and read-only mode."
+            ),
         )
 
     def _refresh_pending_count(self) -> None:
@@ -245,8 +245,7 @@ class DocketApp(
 
         Called after every mutation of `self._proposals` so the visible count
         matches reality without polling."""
-        with contextlib.suppress(Exception):
-            self.query_one(StatusBar).pending_count = len(self._proposals)
+        update_status_bar(self, pending_count=len(self._proposals))
 
     def _set_thinking(self, value: bool) -> None:
         """Toggle the in-pane "thinking…" indicator next to the chat prompt.
@@ -481,8 +480,7 @@ class DocketApp(
     def _reset_cost_display(self) -> None:
         """Zero the status-bar conversation-cost counter. Called on item
         switch and new-thread — each chat thread gets its own running total."""
-        with contextlib.suppress(Exception):
-            self.query_one(StatusBar).cost_cents = 0
+        update_status_bar(self, cost_cents=0)
 
     def on_turn_finished(self, event: TurnFinished) -> None:
         """Roll the per-turn cost into the status bar's cumulative counter
@@ -629,10 +627,7 @@ class DocketApp(
             return
         self.tui_ctx.scope_key = name
         self.tui_ctx.scope = entry.scopes[name].to_core()
-        with contextlib.suppress(Exception):
-            bar = self.query_one(StatusBar)
-            bar.scope_label = name
-            bar.active_view = name
+        update_status_bar(self, scope_label=name, active_view=name)
         self._reload_tree()
         self.notify(f"Switched to view '{name}'.", severity="information")
 
@@ -680,12 +675,13 @@ class DocketApp(
             self.query_one(ItemDetail).show(None, [])
         with contextlib.suppress(Exception):
             self.query_one(ChatPane).bind_item(None)
-        with contextlib.suppress(Exception):
-            bar = self.query_one(StatusBar)
-            bar.provider_name = entry.display_name
-            bar.scope_label = scope_name
-            bar.active_view = scope_name
-            bar.project_name = self._resolve_project_name()
+        update_status_bar(
+            self,
+            provider_name=entry.display_name,
+            scope_label=scope_name,
+            active_view=scope_name,
+            project_name=self._resolve_project_name(),
+        )
         stale = self._resolved_stale_threshold()
         with contextlib.suppress(Exception):
             self.query_one(ItemTree).stale_threshold_days = stale

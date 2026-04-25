@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import re
 import sqlite3
-from datetime import UTC, datetime
+from datetime import datetime
 
 from docket.core.model import Project, project_id_for
-from docket.storage._time import now_iso
+from docket.storage._time import now_iso, now_utc
+from docket.storage.repos._patch import build_set_clause
 
 _SLUG_BAD = re.compile(r"[^a-z0-9]+")
 
@@ -56,7 +57,7 @@ def ensure(
     row = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
     if row is not None:
         return _row_to_project(row)
-    now = datetime.now(UTC)
+    now = now_utc()
     final_name = (name or _default_name(provider_key)).strip() or "default"
     conn.execute(
         """
@@ -108,18 +109,17 @@ def update(
     name: str | None = None,
     description: str | None = None,
 ) -> Project | None:
-    fields: list[str] = []
-    params: list[str] = []
+    fields: list[tuple[str, object]] = []
     if name is not None:
-        fields.append("name = ?")
-        params.append(name.strip() or "default")
+        fields.append(("name", name.strip() or "default"))
     if description is not None:
-        fields.append("description = ?")
-        params.append(description.strip())
-    if not fields:
+        fields.append(("description", description.strip()))
+    clause = build_set_clause(fields, touch_updated_at=False)
+    if clause is None:
         return get(conn, project_id)
+    set_sql, params = clause
     params.append(project_id)
-    conn.execute(f"UPDATE projects SET {', '.join(fields)} WHERE id = ?", params)
+    conn.execute(f"UPDATE projects SET {set_sql} WHERE id = ?", params)
     return get(conn, project_id)
 
 

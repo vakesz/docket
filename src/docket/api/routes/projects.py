@@ -139,7 +139,7 @@ def activate_project(
         )
     runtime.switch_provider(entry.provider_key)
     # Active project changed → memory/sources tools captured the previous one.
-    rebuild_agent(request, runtime)
+    rebuild_agent(request.app, runtime)
     return ProjectDTO.from_core(project_id, entry, active_id=project_id_for(entry.provider_key))
 
 
