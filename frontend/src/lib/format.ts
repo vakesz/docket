@@ -1,7 +1,3 @@
-/**
- * Display-only formatters. Keep these dumb — no locale negotiation, no i18n.
- */
-
 export function formatRelative(isoOrNull: string | null | undefined): string {
   if (!isoOrNull) return "—";
   const then = new Date(isoOrNull).getTime();

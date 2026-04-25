@@ -52,7 +52,13 @@ import {
   useUpdateProvider,
 } from "~/api/hooks";
 import type { components } from "~/api/schema";
-import { NumberInput, TextInput } from "~/components/common/FormInputs";
+import {
+  HelpText,
+  NumberInput,
+  Select,
+  StatusPill,
+  TextInput,
+} from "~/components/common/FormInputs";
 import { Label } from "~/components/common/Label";
 import { Modal } from "~/components/common/Modal";
 import { Notice } from "~/components/common/Notice";
@@ -62,7 +68,7 @@ import { ThemePicker } from "~/components/shell/ThemePicker";
 import { ToolDisplayPicker } from "~/components/shell/ToolDisplayPicker";
 import { docketCodeMirrorTheme } from "~/lib/cmTheme";
 import { cn } from "~/lib/cn";
-import { fieldClass, outlineButtonClass, primaryButtonClass } from "~/lib/formClasses";
+import { outlineButtonClass, primaryButtonClass } from "~/lib/formClasses";
 
 type PromptSummary = components["schemas"]["PromptSummaryDTO"];
 
@@ -1682,68 +1688,6 @@ function FormField({
   );
 }
 
-function HelpText({ children }: { children: ReactNode }) {
-  return <span className="text-xs leading-5 text-fg-muted">{children}</span>;
-}
-
-function Select({
-  value,
-  options,
-  onChange,
-  allowCustom,
-  placeholder,
-}: {
-  value: string;
-  options: { value: string; label: string }[];
-  onChange: (v: string) => void;
-  allowCustom?: boolean;
-  placeholder?: string;
-}) {
-  const knownValues = new Set(options.map((o) => o.value));
-  const isCustom = allowCustom && value !== "" && !knownValues.has(value);
-  const [customMode, setCustomMode] = useState(isCustom);
-
-  if (allowCustom && customMode) {
-    return (
-      <div className="flex w-full gap-2">
-        <TextInput value={value} onChange={onChange} placeholder={placeholder} />
-        <button
-          type="button"
-          onClick={() => {
-            setCustomMode(false);
-            onChange(options[0]?.value ?? "");
-          }}
-          className="rounded-xl border border-border px-3 text-xs text-fg-muted hover:bg-surface-alt"
-        >
-          Preset
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex w-full gap-2">
-      <select value={value} onChange={(e) => onChange(e.target.value)} className={fieldClass}>
-        {value === "" && <option value="">{placeholder ?? "— choose —"}</option>}
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
-      {allowCustom && (
-        <button
-          type="button"
-          onClick={() => setCustomMode(true)}
-          className="rounded-xl border border-border px-3 text-xs text-fg-muted hover:bg-surface-alt"
-        >
-          Custom
-        </button>
-      )}
-    </div>
-  );
-}
-
 function NumberMapEditor({
   label,
   help,
@@ -1869,18 +1813,6 @@ function NumberMapEditor({
       </div>
     </div>
   );
-}
-
-function StatusPill({ tone, label }: { tone: "ok" | "warn" | "error" | "muted"; label: string }) {
-  const cls =
-    tone === "ok"
-      ? "bg-success-bg text-success-fg"
-      : tone === "warn"
-        ? "bg-warning-bg text-warning-fg"
-        : tone === "error"
-          ? "bg-danger-bg text-danger-fg"
-          : "bg-surface-alt text-fg-muted";
-  return <span className={cn("rounded-full px-2.5 py-1 text-xs font-medium", cls)}>{label}</span>;
 }
 
 function PageState({

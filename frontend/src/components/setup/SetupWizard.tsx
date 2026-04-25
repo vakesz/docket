@@ -7,6 +7,7 @@ import {
   useTestLlm,
   useTestProvider,
 } from "~/api/hooks";
+import { HelpText, TextInput } from "~/components/common/FormInputs";
 import { Label } from "~/components/common/Label";
 import { cn } from "~/lib/cn";
 
@@ -467,30 +468,4 @@ function ReloadTimer() {
     return () => window.clearTimeout(id);
   }, []);
   return <div className="font-mono text-[11px] text-fg-muted">Reloading in ~6 seconds…</div>;
-}
-
-function HelpText({ children }: { children: React.ReactNode }) {
-  return <span className="text-xs text-fg-muted">{children}</span>;
-}
-
-function TextInput({
-  value,
-  onChange,
-  type = "text",
-  placeholder,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  type?: string;
-  placeholder?: string;
-}) {
-  return (
-    <input
-      type={type}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      className="w-full rounded border border-border bg-bg px-2 py-1 text-sm text-fg focus:border-accent focus:outline-none"
-    />
-  );
 }

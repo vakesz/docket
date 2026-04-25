@@ -20,7 +20,7 @@
     "@fontsource-variable/inter": "~5.2.8",
     "@fontsource/jetbrains-mono": "~5.2.8",
     "@tanstack/react-form": "~1.29.1",
-    "@tanstack/react-query": "~5.100.3",
+    "@tanstack/react-query": "~5.100.4",
     "@tanstack/react-router": "~1.168.24",
     "@tanstack/react-start": "~1.167.48",
     "@tanstack/react-virtual": "~3.13.24",
@@ -49,7 +49,6 @@
     "openapi-typescript": "~7.13.0",
     "tailwindcss": "~4.2.4",
     "typescript": "~6.0.3",
-    "vite": "~8.0.10",
-    "vite-tsconfig-paths": "~6.1.1"
+    "vite": "~8.0.10"
   }
 }

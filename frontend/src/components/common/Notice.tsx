@@ -2,12 +2,6 @@ import { CheckCircle2, CircleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "~/lib/cn";
 
-/**
- * Single-tone callout box used for inline error / warning / success
- * messages. Replaces four near-identical local copies that previously
- * lived inside settings, NewItemModal, McpServerForm, and
- * McpPresetPickerModal.
- */
 export function Notice({
   title,
   children,

@@ -9,12 +9,12 @@ import {
   useTestMcpServerDraft,
   useUpdateMcpServer,
 } from "~/api/hooks";
-import { NumberInput, TextInput } from "~/components/common/FormInputs";
+import { NumberInput, Select, StatusPill, TextInput } from "~/components/common/FormInputs";
 import { Notice } from "~/components/common/Notice";
 import { Toggle } from "~/components/common/Toggle";
 import { type McpServerDraft, serializeDraft } from "~/components/mcp/mcpServerDraft";
 import { cn } from "~/lib/cn";
-import { fieldClass, outlineButtonClass, primaryButtonClass } from "~/lib/formClasses";
+import { outlineButtonClass, primaryButtonClass } from "~/lib/formClasses";
 
 // Server names act as dict keys in `config.toml` under `[projects.<id>.mcp.<name>]`;
 // the backend also enforces the same shape (`tui_parity.validate_mcp_server_name`).
@@ -480,34 +480,4 @@ function FormField({
 
 function FieldError({ children }: { children: React.ReactNode }) {
   return <span className="text-xs text-danger-fg">{children}</span>;
-}
-
-function Select({
-  value,
-  options,
-  onChange,
-}: {
-  value: string;
-  options: { value: string; label: string }[];
-  onChange: (v: string) => void;
-}) {
-  return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} className={fieldClass}>
-      {options.map((opt) => (
-        <option key={opt.value} value={opt.value}>
-          {opt.label}
-        </option>
-      ))}
-    </select>
-  );
-}
-
-function StatusPill({ tone, label }: { tone: "ok" | "warn" | "muted"; label: string }) {
-  const cls =
-    tone === "ok"
-      ? "bg-success-bg text-success-fg"
-      : tone === "warn"
-        ? "bg-warning-bg text-warning-fg"
-        : "bg-surface-alt text-fg-muted";
-  return <span className={cn("rounded-full px-2.5 py-1 text-xs font-medium", cls)}>{label}</span>;
 }

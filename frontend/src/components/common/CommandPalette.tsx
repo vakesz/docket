@@ -1,9 +1,10 @@
 import { useNavigate } from "@tanstack/react-router";
 import { Command } from "cmdk";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { useItems, useManualSync, usePinned } from "~/api/hooks";
 import { formatKind } from "~/lib/format";
+import { useEscapeKey } from "~/lib/hooks";
 import { shortcut } from "~/lib/platform";
 
 export function CommandPalette() {
@@ -15,17 +16,15 @@ export function CommandPalette() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const mod = e.ctrlKey || e.metaKey;
-      if (mod && e.key.toLowerCase() === "k") {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setOpen((v) => !v);
-      } else if (e.key === "Escape") {
-        setOpen(false);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+  useEscapeKey(useCallback(() => setOpen(false), []));
 
   if (!open) return null;
 

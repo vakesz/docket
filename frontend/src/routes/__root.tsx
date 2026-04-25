@@ -50,6 +50,7 @@ const THEME_BOOTSTRAP = `(() => {
 })();`;
 
 export const Route = createRootRouteWithContext<RouterContext>()({
+  ssr: true,
   head: () => ({
     meta: [
       { charSet: "utf-8" },
