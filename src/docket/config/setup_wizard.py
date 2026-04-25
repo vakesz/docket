@@ -13,7 +13,12 @@ scope, telemetry, http, llm, prompts, sync, default.
 Auto-discovery: each provider's onboarding uses its CLI session (az/gh) to
 populate numbered pickers so users rarely have to type values they could
 click. Any discovery failure transparently falls back to free-form prompts
-— helpful for restricted networks."""
+— helpful for restricted networks.
+
+Provider-specific onboarding lives in a small registry: each built-in
+provider declares a `ProviderWizard` with optional `auth`, `connection`, and
+`scope` callables. Unknown / third-party providers fall through to the
+spec-driven generic connection step and a no-op scope."""
 
 from __future__ import annotations
 
@@ -69,6 +74,47 @@ from docket.config.setup_wizard_github import (
 from docket.core.services import sync_service
 from docket.providers import registry
 from docket.storage import init_db
+
+
+@dataclass(frozen=True)
+class ProviderWizard:
+    """Per-provider onboarding hooks.
+
+    Any of `auth`, `connection`, `scope` may be `None`; the orchestrator
+    falls through to a sensible default in that case (a short "no auth
+    needed" message for auth, spec-driven prompts for connection, and an
+    empty `ScopeFilter` for scope)."""
+
+    auth: Callable[[WizardState], None] | None = None
+    connection: Callable[[WizardState], None] | None = None
+    scope: Callable[[WizardState], None] | None = None
+
+
+def _github_stub_step_auth(state: WizardState) -> None:
+    console.print("[dim]No auth needed — github_stub runs entirely in-memory.[/dim]")
+
+
+# Built-in provider onboarding hooks. Third-party providers either register
+# their own entry here at import time or fall through to the generic spec-
+# driven connection step + empty scope.
+_WIZARDS: dict[str, ProviderWizard] = {
+    "azure_devops": ProviderWizard(
+        auth=_azure_devops_step_auth,
+        connection=_azure_devops_step_connection,
+        scope=_azure_devops_step_scope,
+    ),
+    "github": ProviderWizard(
+        auth=_github_step_auth,
+        connection=_github_step_connection,
+        scope=_github_step_scope,
+    ),
+    "github_stub": ProviderWizard(
+        auth=_github_stub_step_auth,
+        connection=_github_stub_step_connection,
+        scope=_github_step_scope,
+    ),
+}
+
 
 STEP_NAMES: tuple[str, ...] = (
     "provider",
@@ -267,33 +313,25 @@ def _next_sibling_key(type_id: str, taken: set[str]) -> str:
 
 
 def _step_provider_auth(state: WizardState) -> None:
-    match state.type_id:
-        case "azure_devops":
-            _azure_devops_step_auth(state)
-        case "github":
-            _github_step_auth(state)
-        case "github_stub":
-            console.print("[dim]No auth needed — github_stub runs entirely in-memory.[/dim]")
-        case _:
-            console.print(
-                f"[dim]No built-in auth step for '{state.type_id}'. "
-                "The provider factory will surface auth errors on first sync.[/dim]"
-            )
+    wiz = _WIZARDS.get(state.type_id)
+    if wiz and wiz.auth is not None:
+        wiz.auth(state)
+        return
+    console.print(
+        f"[dim]No built-in auth step for '{state.type_id}'. "
+        "The provider factory will surface auth errors on first sync.[/dim]"
+    )
 
 
 # ---- step 3: connection (per-provider) --------------------------------------
 
 
 def _step_provider_connection(state: WizardState) -> None:
-    match state.type_id:
-        case "azure_devops":
-            _azure_devops_step_connection(state)
-        case "github":
-            _github_step_connection(state)
-        case "github_stub":
-            _github_stub_step_connection(state)
-        case _:
-            _generic_step_connection(state)
+    wiz = _WIZARDS.get(state.type_id)
+    if wiz and wiz.connection is not None:
+        wiz.connection(state)
+        return
+    _generic_step_connection(state)
 
 
 def _generic_step_connection(state: WizardState) -> None:
@@ -381,13 +419,11 @@ def _suggest_display_name(state: WizardState) -> str:
 
 
 def _step_provider_scope(state: WizardState) -> None:
-    match state.type_id:
-        case "azure_devops":
-            _azure_devops_step_scope(state)
-        case "github" | "github_stub":
-            _github_step_scope(state)
-        case _:
-            state.scope = ScopeFilter()
+    wiz = _WIZARDS.get(state.type_id)
+    if wiz and wiz.scope is not None:
+        wiz.scope(state)
+        return
+    state.scope = ScopeFilter()
 
 
 # ---- step 5: telemetry ------------------------------------------------------
