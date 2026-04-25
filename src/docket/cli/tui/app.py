@@ -27,7 +27,11 @@ from docket.cli.tui.config_actions import ConfigMixin
 from docket.cli.tui.errors import humanize as humanize_error
 from docket.cli.tui.errors import retry_hint
 from docket.cli.tui.item_selection import ItemSelectionMixin
-from docket.cli.tui.pane_layout import PaneLayoutMixin
+from docket.cli.tui.pane_layout import (
+    cycle_pane_focus,
+    resize_focused_pane,
+    toggle_fullscreen,
+)
 from docket.cli.tui.panes import FullscreenToggle, Pane
 from docket.cli.tui.review_flow import ReviewFlowMixin
 from docket.cli.tui.suggestion_flow import SuggestionFlowMixin
@@ -84,7 +88,6 @@ def _docket_commands_provider() -> type[Provider]:
 
 
 class DocketApp(
-    PaneLayoutMixin,
     ItemSelectionMixin,
     ConfigMixin,
     ReviewFlowMixin,
@@ -565,6 +568,25 @@ class DocketApp(
 
     def action_show_help(self) -> None:
         self.push_screen(HelpModal())
+
+    # --- pane layout delegates -------------------------------------------------
+    # Textual binds key sequences to action names by attribute lookup on the
+    # App, so the action_* methods must live on DocketApp itself. The mechanics
+    # are in `pane_layout`.
+    def action_focus_next_pane(self) -> None:
+        cycle_pane_focus(self, 1)
+
+    def action_focus_prev_pane(self) -> None:
+        cycle_pane_focus(self, -1)
+
+    def action_toggle_fullscreen(self) -> None:
+        toggle_fullscreen(self)
+
+    def action_shrink_pane(self) -> None:
+        resize_focused_pane(self, -5)
+
+    def action_grow_pane(self) -> None:
+        resize_focused_pane(self, +5)
 
     def action_new_thread(self) -> None:
         if self._selected_item_id is None:

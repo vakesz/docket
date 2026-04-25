@@ -73,6 +73,11 @@ class FullscreenToggle(Static):
 
     def on_click(self) -> None:
         from docket.cli.tui.app import DocketApp
+        from docket.cli.tui.pane_layout import (
+            clear_pane_width_override,
+            restore_pane_widths,
+            sync_fullscreen_icons,
+        )
 
         pane: Widget | None = self.parent if isinstance(self.parent, Widget) else None
         while pane is not None and not isinstance(pane, Pane):
@@ -84,13 +89,13 @@ class FullscreenToggle(Static):
         if screen.maximized is not None:
             screen.minimize()
             if isinstance(app, DocketApp):
-                app.restore_pane_widths()
+                restore_pane_widths(app)
         else:
             if isinstance(app, DocketApp):
-                app.clear_pane_width_override(pane)
+                clear_pane_width_override(pane)
             screen.maximize(pane)
         if isinstance(app, DocketApp):
-            app.sync_fullscreen_icons()
+            sync_fullscreen_icons(app)
 
 
 __all__ = ["FullscreenToggle", "Pane"]

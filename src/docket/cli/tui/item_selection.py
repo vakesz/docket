@@ -14,11 +14,12 @@ from __future__ import annotations
 
 import logging
 import webbrowser
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from textual import events
 from textual.widgets import Input
 
+from docket.cli.tui.pane_layout import defocus_chat_prompt
 from docket.cli.tui.tui_context import TuiContext
 from docket.cli.tui.view_resolver import (
     resolve_grouping,
@@ -42,6 +43,8 @@ from docket.storage.repos import (
 
 if TYPE_CHECKING:
     from textual.app import App
+
+    from docket.cli.tui.app import DocketApp
 
     _AppBase = App[None]
 else:
@@ -69,8 +72,6 @@ class ItemSelectionMixin(_AppBase):
         def _active_view_filter(self) -> visual_filter.ResolvedFilter: ...
         def _reset_cost_display(self) -> None: ...
         def _hydrate_pending_question(self, item_id: str) -> Question | None: ...
-        # Sibling mixin (PaneLayoutMixin).
-        def _defocus_chat_prompt(self) -> bool: ...
 
     # ---- public accessors -------------------------------------------------
 
@@ -229,7 +230,7 @@ class ItemSelectionMixin(_AppBase):
     def on_key(self, event: events.Key) -> None:
         filter_input = self.query_one("#filter", Input)
         tree = self.query_one(ItemTree)
-        if event.key == "escape" and self._defocus_chat_prompt():
+        if event.key == "escape" and defocus_chat_prompt(cast("DocketApp", self)):
             event.stop()
             event.prevent_default()
             return
