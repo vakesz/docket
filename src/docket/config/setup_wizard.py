@@ -58,6 +58,8 @@ from docket.providers.azure_devops import AzureDevOpsProvider, discover
 from docket.providers.azure_devops.auth import ensure_logged_in
 from docket.providers.azure_devops.discover import DiscoveryError
 from docket.providers.base import ProviderError
+from docket.providers.github.auth import ensure_logged_in as gh_ensure_logged_in
+from docket.providers.github.auth import signed_in_email as gh_signed_in_email
 from docket.storage import init_db
 
 
@@ -277,13 +279,6 @@ def _azure_devops_step_auth(state: WizardState) -> None:
 
 
 def _github_step_auth(state: WizardState) -> None:
-    from docket.providers.github.auth import (
-        ensure_logged_in as gh_ensure_logged_in,
-    )
-    from docket.providers.github.auth import (
-        signed_in_email as gh_signed_in_email,
-    )
-
     step_auth_with_retry(gh_ensure_logged_in, service_label="GitHub CLI")
     state.signed_in_email = gh_signed_in_email()
 

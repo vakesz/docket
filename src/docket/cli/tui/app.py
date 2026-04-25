@@ -37,6 +37,7 @@ from docket.cli.tui.pane_layout import (
     resize_focused_pane,
     toggle_fullscreen,
 )
+from docket.cli.tui.review_flow import _open_next_pending as _open_next_pending_impl
 from docket.cli.tui.review_flow import review_pending
 from docket.cli.tui.suggestion_flow import suggest_next
 from docket.cli.tui.widgets.chat_pane import (
@@ -53,7 +54,7 @@ from docket.cli.tui.widgets.memory_pane import MemoryPane
 from docket.cli.tui.widgets.new_item_modal import NewItemModal
 from docket.cli.tui.widgets.source_pane import SourcePane
 from docket.cli.tui.widgets.status_bar import StatusBar
-from docket.config.models import Config, ProviderEntry
+from docket.config.models import Config, ProviderEntry, ScopeFilter
 from docket.config.paths import Paths
 from docket.core.model import (
     ItemKind,
@@ -73,6 +74,7 @@ from docket.core.services import (
 from docket.core.services.proposal_store import PendingProposal, ProposalStore
 from docket.core.services.question_store import QuestionStore
 from docket.providers.base import GroupingStrategy, WorkItemProvider
+from docket.storage.repos import conversation_repo
 
 log = logging.getLogger(__name__)
 
@@ -358,9 +360,7 @@ class DocketApp(App[None]):
     def _open_next_pending(self) -> None:
         # Delegate kept on DocketApp because the worker callbacks below reach
         # for it via `self.call_from_thread(self._open_next_pending)`.
-        from docket.cli.tui.review_flow import _open_next_pending
-
-        _open_next_pending(self)
+        _open_next_pending_impl(self)
 
     # --- suggestion-flow delegate ----------------------------------------------
     def action_suggest_next(self) -> None:
@@ -747,8 +747,6 @@ class DocketApp(App[None]):
 
         Called on `new thread` and item switch so a stale closure can't fire
         an answer back into a conversation the user already moved past."""
-        from docket.storage.repos import conversation_repo
-
         try:
             convo = conversation_repo.get_active_for_item(
                 self.tui_ctx.conn,
@@ -764,8 +762,6 @@ class DocketApp(App[None]):
 
     def _hydrate_pending_question(self, item_id: str) -> Question | None:
         """Look up a staged question for this item's active conversation, if any."""
-        from docket.storage.repos import conversation_repo
-
         try:
             convo = conversation_repo.get_active_for_item(
                 self.tui_ctx.conn,
@@ -962,8 +958,6 @@ class DocketApp(App[None]):
         if sf is None:
             # No scopes at all on this provider — use a wide-open one so the
             # UI at least renders. The user can add a scope from settings.
-            from docket.config.models import ScopeFilter
-
             sf = ScopeFilter(assignee="")
             scope_name = "default"
         self.tui_ctx.scope_key = scope_name
