@@ -1,9 +1,10 @@
 """Single gate for all provider mutations.
 
 Flow:
-    proposal = mutation_service.propose_transition(ctx, "42", TransitionIntent.CLOSE_DONE)
-    render_diff(proposal)                             # show to user
-    result = mutation_service.confirm(ctx, proposal)  # executes via provider
+    item = mutation_service.require_cached_item(conn, "42")
+    proposal = StateChange(item=item, intent=TransitionIntent.CLOSE_DONE)
+    render_diff(proposal)                                       # show to user
+    result = mutation_service.confirm(conn, provider, proposal)  # executes via provider
 
 Dry-run short-circuits before any provider call. Successful writes refresh the
 local cache so subsequent reads match the remote state.
@@ -17,7 +18,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from docket.core.model import Comment, Item, MemoryEntry, TransitionIntent
+from docket.core.model import Comment, Item, MemoryEntry
 from docket.core.mutation import (
     AttachmentUpload,
     CommentAdd,
@@ -48,56 +49,40 @@ class MutationResult:
     memory_deleted_id: str | None = None  # set for memory_delete
 
 
-def propose_transition(
+def require_cached_item(
     conn: sqlite3.Connection,
     item_id: str,
-    intent: TransitionIntent,
     *,
     provider_key: str = "",
     provider: WorkItemProvider | None = None,
-) -> StateChange:
-    item = _require_cached(conn, item_id, provider_key=provider_key, provider=provider)
-    return StateChange(item=item, intent=intent)
+) -> Item:
+    """Fetch the cached `Item` for `item_id`, or raise `KeyError`.
 
+    Item proposals (`StateChange`, `DescriptionPatch`, `AttachmentUpload`,
+    `CommentAdd`) all need a fully-hydrated `Item` so the diff renderer can
+    show before/after state. Callers go: `item = require_cached_item(...)`,
+    then build the proposal dataclass directly.
 
-def propose_description_patch(
-    conn: sqlite3.Connection,
-    item_id: str,
-    new_md: str,
-    *,
-    provider_key: str = "",
-    provider: WorkItemProvider | None = None,
-) -> DescriptionPatch:
-    item = _require_cached(conn, item_id, provider_key=provider_key, provider=provider)
-    return DescriptionPatch(item=item, new_md=new_md)
-
-
-def propose_attachment(
-    conn: sqlite3.Connection,
-    item_id: str,
-    filename: str,
-    content: bytes,
-    content_type: str = "text/markdown; charset=utf-8",
-    *,
-    provider_key: str = "",
-    provider: WorkItemProvider | None = None,
-) -> AttachmentUpload:
-    item = _require_cached(conn, item_id, provider_key=provider_key, provider=provider)
-    return AttachmentUpload(
-        item=item, filename=filename, content=content, content_type=content_type
+    Parents and cross-scope items may legitimately miss the cache. When a
+    `provider` is given, fall back to a live fetch and cache the result so
+    subsequent calls hit the fast path."""
+    item = item_repo.get_item(conn, item_id, provider_key=provider_key)
+    if item is not None:
+        return item
+    if provider is not None:
+        try:
+            fetched = provider.get_item(item_id)
+        except Exception as e:
+            raise KeyError(
+                f"no cached item with id={item_id} and provider lookup failed: {e}"
+            ) from e
+        if provider_key:
+            fetched.provider_key = provider_key
+        item_repo.upsert_item(conn, fetched)
+        return fetched
+    raise KeyError(
+        f"no cached item with id={item_id}; run `docket sync` or open it first to load context"
     )
-
-
-def propose_comment(
-    conn: sqlite3.Connection,
-    item_id: str,
-    body_md: str,
-    *,
-    provider_key: str = "",
-    provider: WorkItemProvider | None = None,
-) -> CommentAdd:
-    item = _require_cached(conn, item_id, provider_key=provider_key, provider=provider)
-    return CommentAdd(item=item, body_md=body_md)
 
 
 def propose_memory_write(
@@ -304,35 +289,6 @@ def _execute(
 
         case _:
             raise TypeError(f"unknown proposal type: {type(proposal)!r}")
-
-
-def _require_cached(
-    conn: sqlite3.Connection,
-    item_id: str,
-    *,
-    provider_key: str = "",
-    provider: WorkItemProvider | None = None,
-) -> Item:
-    item = item_repo.get_item(conn, item_id, provider_key=provider_key)
-    if item is not None:
-        return item
-    # Parents and cross-scope items may legitimately miss the cache. When a
-    # provider is available, fall back to a live fetch and cache the result so
-    # subsequent calls hit the fast path.
-    if provider is not None:
-        try:
-            fetched = provider.get_item(item_id)
-        except Exception as e:
-            raise KeyError(
-                f"no cached item with id={item_id} and provider lookup failed: {e}"
-            ) from e
-        if provider_key:
-            fetched.provider_key = provider_key
-        item_repo.upsert_item(conn, fetched)
-        return fetched
-    raise KeyError(
-        f"no cached item with id={item_id}; run `docket sync` or open it first to load context"
-    )
 
 
 def _refresh_cache(conn: sqlite3.Connection, item: Item, provider_key: str) -> None:

@@ -13,15 +13,13 @@ what should otherwise be identical tickets.
 
 Hot-reload: the system template and per-kind guidance can be overridden by
 dropping `system_base.md` or `kind_<kind>.md` into `<config_dir>/prompts/`.
-The loader reads file mtimes each call, so edits are picked up on the next
-agent turn without restarting the app. Cache invalidation is keyed on
-(path, mtime_ns); re-reads only happen when a file actually changed.
+The loader reads from disk each call, so edits are picked up on the next
+agent turn without restarting the app.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from threading import Lock
 
 from docket.agent import prompt_templates
 from docket.agent.types import ChatMessage
@@ -40,15 +38,10 @@ class PromptLoader:
 
     def __init__(self, prompts_dir: Path | None = None) -> None:
         self._prompts_dir = prompts_dir
-        self._cache: dict[str, tuple[int, str]] = {}  # filename -> (mtime_ns, text)
-        self._lock = Lock()
 
     def configure(self, prompts_dir: Path | None) -> None:
-        """Point the loader at a new directory. Clears the cache so subsequent
-        reads re-check the filesystem from scratch."""
-        with self._lock:
-            self._prompts_dir = prompts_dir
-            self._cache.clear()
+        """Point the loader at a new directory."""
+        self._prompts_dir = prompts_dir
 
     def system_base(self) -> str:
         template = prompt_templates.get_template("system_base")
@@ -66,18 +59,8 @@ class PromptLoader:
             return default
         path = self._prompts_dir / filename
         if not path.exists():
-            with self._lock:
-                self._cache.pop(filename, None)
             return default
-        mtime_ns = path.stat().st_mtime_ns
-        with self._lock:
-            cached = self._cache.get(filename)
-            if cached is not None and cached[0] == mtime_ns:
-                return cached[1]
-        text = path.read_text(encoding="utf-8")
-        with self._lock:
-            self._cache[filename] = (mtime_ns, text)
-        return text
+        return path.read_text(encoding="utf-8")
 
 
 _loader = PromptLoader()

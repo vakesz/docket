@@ -18,7 +18,6 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from docket.agent.mcp import MCPClient
-from docket.api.agent_rebuild import rebuild_agent
 from docket.api.auth import require_bearer
 from docket.api.deps import (
     get_config,
@@ -27,7 +26,7 @@ from docket.api.deps import (
     require_not_read_only,
     require_project,
 )
-from docket.api.runtime import RuntimeState
+from docket.api.runtime import RuntimeState, rebuild_agent
 from docket.api.schemas import (
     MCPPresetApplyRequest,
     MCPPresetDTO,

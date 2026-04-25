@@ -53,7 +53,7 @@ from docket.core.model import (
     TransitionIntent,
     project_id_for,
 )
-from docket.core.mutation import ItemCreate, Proposal
+from docket.core.mutation import ItemCreate, Proposal, StateChange
 from docket.core.question import Question, QuestionAnswer
 from docket.core.services import (
     conversation_service,
@@ -734,15 +734,15 @@ class DocketApp(
             self.notify(f"Unknown transition intent: {intent_value}", severity="error")
             return
         try:
-            proposal = mutation_service.propose_transition(
+            item = mutation_service.require_cached_item(
                 self.tui_ctx.conn,
                 self._selected_item_id,
-                intent,
                 provider_key=self.tui_ctx.provider_key,
             )
         except KeyError as e:
             self.notify(humanize_error(e, action="Stage transition"), severity="error")
             return
+        proposal = StateChange(item=item, intent=intent)
         self._proposals.add(proposal, source="palette")
         self._refresh_pending_count()
         self._open_next_pending()

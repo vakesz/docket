@@ -22,6 +22,7 @@ from docket.core.model import (
     ScopeFilters,
     TransitionIntent,
 )
+from docket.core.mutation import StateChange
 from docket.core.services import mutation_service, sync_service
 from docket.providers.base import WorkItemProvider
 from docket.providers.github_stub import GitHubStubProvider
@@ -152,7 +153,8 @@ def test_mutation_pipeline_works_against_stub(tmp_path: Path) -> None:
     provider = GitHubStubProvider(issues=[issue])
     item_repo.upsert_item(conn, issue)
 
-    proposal = mutation_service.propose_transition(conn, issue.id, TransitionIntent.CLOSE_DONE)
+    item = mutation_service.require_cached_item(conn, issue.id)
+    proposal = StateChange(item=item, intent=TransitionIntent.CLOSE_DONE)
     result = mutation_service.confirm(conn, provider, proposal)
     assert result.item is not None and result.item.state == ItemState.RESOLVED
     # Cache was refreshed transparently.

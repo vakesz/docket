@@ -26,6 +26,7 @@ from docket.cli.tui.widgets.chat_pane import ChatPane
 from docket.cli.tui.widgets.diff_modal import DiffModal
 from docket.cli.tui.widgets.item_tree import ItemTree
 from docket.core.model import ItemState, ScopeFilters, TransitionIntent
+from docket.core.mutation import StateChange
 from docket.core.services import mutation_service
 from docket.storage import init_db
 from docket.storage.repos import item_repo
@@ -68,8 +69,14 @@ def batch_env(tmp_path: Path, make_item: MakeItem):
 def _stage_two_transitions(app: DocketApp, conn) -> tuple[str, str]:
     """Hand-stage two transition proposals bypassing the agent, so the
     batch-UX tests don't depend on agent-loop scripting."""
-    p1 = mutation_service.propose_transition(conn, "S-1", TransitionIntent.START_WORK)
-    p2 = mutation_service.propose_transition(conn, "S-2", TransitionIntent.START_WORK)
+    p1 = StateChange(
+        item=mutation_service.require_cached_item(conn, "S-1"),
+        intent=TransitionIntent.START_WORK,
+    )
+    p2 = StateChange(
+        item=mutation_service.require_cached_item(conn, "S-2"),
+        intent=TransitionIntent.START_WORK,
+    )
     app.stage_proposal(p1, source="agent")
     app.stage_proposal(p2, source="agent")
     return p1.id, p2.id
@@ -94,7 +101,10 @@ async def test_single_proposal_still_uses_diff_modal(batch_env) -> None:
     ctx, _, _ = batch_env
     app = DocketApp(ctx)
     async with app.run_test() as pilot:
-        p = mutation_service.propose_transition(ctx.conn, "S-1", TransitionIntent.START_WORK)
+        p = StateChange(
+            item=mutation_service.require_cached_item(ctx.conn, "S-1"),
+            intent=TransitionIntent.START_WORK,
+        )
         app.stage_proposal(p, source="agent")
         await app.run_action("review_pending")
         await pilot.pause()

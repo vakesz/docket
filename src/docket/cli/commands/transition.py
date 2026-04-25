@@ -8,6 +8,7 @@ from docket.cli.confirm import apply_mutation
 from docket.cli.context import prepare_or_wizard
 from docket.cli.guard import abort_if_read_only
 from docket.core.model import TransitionIntent
+from docket.core.mutation import StateChange
 from docket.core.services import mutation_service
 
 console = Console()
@@ -29,9 +30,8 @@ def transition_command(
         raise typer.Exit(2) from e
 
     with prepare_or_wizard() as ctx:
-        proposal = mutation_service.propose_transition(
-            ctx.conn, id, ti, provider_key=ctx.active_provider
-        )
+        item = mutation_service.require_cached_item(ctx.conn, id, provider_key=ctx.active_provider)
+        proposal = StateChange(item=item, intent=ti)
         apply_mutation(
             ctx.conn,
             ctx.provider,

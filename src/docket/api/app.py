@@ -15,7 +15,6 @@ from fastapi import Depends, FastAPI
 
 from docket.agent.llm_client import LlmClient
 from docket.agent.mcp import MCPManager
-from docket.api.agent_rebuild import rebuild_agent
 from docket.api.auth import require_bearer
 from docket.api.routes import conversations as conversations_routes
 from docket.api.routes import items as items_routes
@@ -33,7 +32,7 @@ from docket.api.routes import source as source_routes
 from docket.api.routes import status as status_routes
 from docket.api.routes import suggestions as suggestions_routes
 from docket.api.routes import sync as sync_routes
-from docket.api.runtime import RuntimeState
+from docket.api.runtime import RuntimeState, rebuild_agent
 from docket.api.schemas import HealthDTO
 from docket.config.models import Config
 from docket.config.paths import Paths
@@ -167,4 +166,38 @@ def create_app(
     return app
 
 
-__all__ = ["create_app"]
+def create_bootstrap_app(*, paths: Paths, setup_token: str) -> FastAPI:
+    """Minimal FastAPI used when `config.toml` is missing.
+
+    Only `/health` and `/setup/*` are exposed, gated by `DOCKET_SETUP_TOKEN`.
+    The frontend can poll `GET /setup/status` (auth-free) to detect this mode
+    and run its built-in wizard. On `POST /setup/complete` the backend writes
+    config and signals itself to exit so the supervisor restarts it in normal
+    mode."""
+    if not setup_token:
+        raise ValueError(
+            "Bootstrap mode requires DOCKET_SETUP_TOKEN — set it before starting the server."
+        )
+
+    app = FastAPI(
+        title="Docket (setup)",
+        version="0.1.0",
+        description="First-time setup surface. Only /health and /setup/* are exposed.",
+    )
+    app.state.paths = paths
+    app.state.setup_token = setup_token
+    # Deliberately absent: conn, provider, proposals, runtime, bearer_token.
+    # Any route that depends on those will 503 — which is the right signal for
+    # a frontend that reached bootstrap by mistake.
+    app.state.bearer_token = ""
+
+    app.include_router(setup_routes.router)
+
+    @app.get("/health", response_model=HealthDTO, tags=["health"])
+    def health() -> HealthDTO:
+        return HealthDTO()
+
+    return app
+
+
+__all__ = ["create_app", "create_bootstrap_app"]

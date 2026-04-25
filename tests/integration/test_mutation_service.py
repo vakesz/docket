@@ -7,7 +7,14 @@ import pytest
 
 from docket.core import Item, ItemKind, ItemState, TransitionIntent
 from docket.core.model import CreateFields
-from docket.core.mutation import ItemCreate, render_diff
+from docket.core.mutation import (
+    AttachmentUpload,
+    CommentAdd,
+    DescriptionPatch,
+    ItemCreate,
+    StateChange,
+    render_diff,
+)
 from docket.core.services import mutation_service, sync_service
 from docket.storage import init_db
 from docket.storage.repos import item_repo
@@ -31,15 +38,16 @@ def _seed(tmp_path: Path) -> tuple:
     return conn, prov
 
 
-def test_propose_transition_requires_cached_item(tmp_path: Path) -> None:
+def test_require_cached_item_raises_for_unknown_id(tmp_path: Path) -> None:
     conn = init_db(tmp_path / "m.db")
     with pytest.raises(KeyError):
-        mutation_service.propose_transition(conn, "nope", TransitionIntent.START_WORK)
+        mutation_service.require_cached_item(conn, "nope")
 
 
 def test_dry_run_does_not_call_provider(tmp_path: Path) -> None:
     conn, prov = _seed(tmp_path)
-    proposal = mutation_service.propose_transition(conn, "42", TransitionIntent.START_WORK)
+    item = mutation_service.require_cached_item(conn, "42")
+    proposal = StateChange(item=item, intent=TransitionIntent.START_WORK)
     before = prov.items[0].state
     result = mutation_service.confirm(conn, prov, proposal, dry_run=True)
     assert result.dry_run is True
@@ -48,7 +56,8 @@ def test_dry_run_does_not_call_provider(tmp_path: Path) -> None:
 
 def test_transition_updates_provider_and_cache(tmp_path: Path) -> None:
     conn, prov = _seed(tmp_path)
-    proposal = mutation_service.propose_transition(conn, "42", TransitionIntent.CLOSE_DONE)
+    item = mutation_service.require_cached_item(conn, "42")
+    proposal = StateChange(item=item, intent=TransitionIntent.CLOSE_DONE)
     result = mutation_service.confirm(conn, prov, proposal)
     assert result.item is not None
     assert result.item.state is ItemState.CLOSED
@@ -59,7 +68,8 @@ def test_transition_updates_provider_and_cache(tmp_path: Path) -> None:
 
 def test_description_patch_updates_cache(tmp_path: Path) -> None:
     conn, prov = _seed(tmp_path)
-    proposal = mutation_service.propose_description_patch(conn, "42", "# New\nbody")
+    item = mutation_service.require_cached_item(conn, "42")
+    proposal = DescriptionPatch(item=item, new_md="# New\nbody")
     # diff preview is rendered
     assert "# Old" in render_diff(proposal) or "# New" in render_diff(proposal)
     mutation_service.confirm(conn, prov, proposal)
@@ -69,7 +79,8 @@ def test_description_patch_updates_cache(tmp_path: Path) -> None:
 
 def test_attachment_upload_records_attachment_and_returns_url(tmp_path: Path) -> None:
     conn, prov = _seed(tmp_path)
-    proposal = mutation_service.propose_attachment(conn, "42", "convo-001.md", b"hi")
+    item = mutation_service.require_cached_item(conn, "42")
+    proposal = AttachmentUpload(item=item, filename="convo-001.md", content=b"hi")
     result = mutation_service.confirm(conn, prov, proposal)
     assert result.attachment_url == "https://fake/attachments/convo-001.md"
     rows = conn.execute("SELECT filename, remote_url FROM attachments").fetchall()
@@ -88,17 +99,12 @@ def test_create_item_upserts_into_cache(tmp_path: Path) -> None:
     assert cached and cached.title == "New bug"
 
 
-def test_propose_comment_requires_cached_item(tmp_path: Path) -> None:
-    conn = init_db(tmp_path / "m.db")
-    with pytest.raises(KeyError):
-        mutation_service.propose_comment(conn, "missing", "hello")
-
-
 def test_comment_add_writes_to_provider_and_refreshes_cache(tmp_path: Path) -> None:
     from docket.storage.repos import comment_repo
 
     conn, prov = _seed(tmp_path)
-    proposal = mutation_service.propose_comment(conn, "42", "Looks good to me.")
+    item = mutation_service.require_cached_item(conn, "42")
+    proposal = CommentAdd(item=item, body_md="Looks good to me.")
     diff = render_diff(proposal)
     assert "Looks good" in diff
     result = mutation_service.confirm(conn, prov, proposal)
@@ -113,7 +119,8 @@ def test_comment_add_writes_to_provider_and_refreshes_cache(tmp_path: Path) -> N
 
 def test_comment_add_dry_run_does_not_call_provider(tmp_path: Path) -> None:
     conn, prov = _seed(tmp_path)
-    proposal = mutation_service.propose_comment(conn, "42", "no-op")
+    item = mutation_service.require_cached_item(conn, "42")
+    proposal = CommentAdd(item=item, body_md="no-op")
     result = mutation_service.confirm(conn, prov, proposal, dry_run=True)
     assert result.dry_run is True
     assert result.comment is None

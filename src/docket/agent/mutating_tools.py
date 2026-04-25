@@ -22,7 +22,14 @@ from docket.agent._helpers import arg_error, required_str, str_list
 from docket.agent.tools import ToolRegistry
 from docket.agent.transcript import filename_for, next_version, render_markdown
 from docket.core.model import CreateFields, ItemKind, TransitionIntent
-from docket.core.mutation import ItemCreate, pending_payload
+from docket.core.mutation import (
+    AttachmentUpload,
+    CommentAdd,
+    DescriptionPatch,
+    ItemCreate,
+    StateChange,
+    pending_payload,
+)
 from docket.core.redaction import redact_secrets
 from docket.core.services import mutation_service
 from docket.core.services.proposal_store import ProposalStore
@@ -80,11 +87,12 @@ def register_mutating_tools(
             allowed = [i.value for i in TransitionIntent]
             return json.dumps({"error": f"unknown intent '{intent_raw}'", "allowed": allowed})
         try:
-            proposal = mutation_service.propose_transition(
-                conn, item_id, intent, provider_key=provider_key, provider=provider
+            item = mutation_service.require_cached_item(
+                conn, item_id, provider_key=provider_key, provider=provider
             )
         except KeyError as e:
             return arg_error(str(e))
+        proposal = StateChange(item=item, intent=intent)
         store.add(proposal)
         return pending_payload(proposal)
 
@@ -97,11 +105,12 @@ def register_mutating_tools(
         if not isinstance(new_md, str):
             return arg_error("new_description_md is required")
         try:
-            proposal = mutation_service.propose_description_patch(
-                conn, item_id, new_md, provider_key=provider_key, provider=provider
+            item = mutation_service.require_cached_item(
+                conn, item_id, provider_key=provider_key, provider=provider
             )
         except KeyError as e:
             return arg_error(str(e))
+        proposal = DescriptionPatch(item=item, new_md=new_md)
         store.add(proposal)
         return pending_payload(proposal)
 
@@ -141,11 +150,12 @@ def register_mutating_tools(
         if not isinstance(body_md, str) or not body_md.strip():
             return arg_error("non-empty body_md is required")
         try:
-            proposal = mutation_service.propose_comment(
-                conn, item_id, body_md, provider_key=provider_key, provider=provider
+            item = mutation_service.require_cached_item(
+                conn, item_id, provider_key=provider_key, provider=provider
             )
         except KeyError as e:
             return arg_error(str(e))
+        proposal = CommentAdd(item=item, body_md=body_md)
         store.add(proposal)
         return pending_payload(proposal)
 
@@ -159,15 +169,12 @@ def register_mutating_tools(
         messages = message_repo.list_for_conversation(conn, convo.id)
         if not messages:
             return arg_error("conversation is empty")
-        item = item_repo.get_item(conn, item_id, provider_key=provider_key)
-        if item is None:
-            try:
-                item = provider.get_item(item_id)
-            except Exception as e:
-                return arg_error(f"unknown item {item_id}: {e}")
-            if provider_key:
-                item.provider_key = provider_key
-            item_repo.upsert_item(conn, item)
+        try:
+            item = mutation_service.require_cached_item(
+                conn, item_id, provider_key=provider_key, provider=provider
+            )
+        except KeyError as e:
+            return arg_error(str(e))
         version = next_version(conn, item_id, provider_key=provider_key)
         filename = filename_for(version)
         md = render_markdown(
@@ -179,18 +186,12 @@ def register_mutating_tools(
         # Strip recognizable secrets before the bytes leave the machine — the
         # transcript is about to be uploaded to the provider as an attachment.
         md = redact_secrets(md)
-        try:
-            proposal = mutation_service.propose_attachment(
-                conn,
-                item_id,
-                filename=filename,
-                content=md.encode("utf-8"),
-                content_type="text/markdown; charset=utf-8",
-                provider_key=provider_key,
-                provider=provider,
-            )
-        except KeyError as e:
-            return arg_error(str(e))
+        proposal = AttachmentUpload(
+            item=item,
+            filename=filename,
+            content=md.encode("utf-8"),
+            content_type="text/markdown; charset=utf-8",
+        )
         store.add(proposal)
         return pending_payload(proposal)
 

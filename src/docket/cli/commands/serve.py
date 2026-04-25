@@ -47,8 +47,7 @@ def serve_command(
     import uvicorn
 
     from docket.agent.llm_client import LlmClient
-    from docket.api.app import create_app
-    from docket.api.bootstrap_app import create_bootstrap_app
+    from docket.api.app import create_app, create_bootstrap_app
     from docket.api.runtime import RuntimeState
 
     effective_read_only = read_only or get_read_only()

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -28,13 +27,6 @@ def _item(kind: ItemKind = ItemKind.STORY) -> Item:
         parent_id=None,
         updated_at=datetime.now(UTC),
     )
-
-
-def _bump_mtime(path: Path) -> None:
-    """Ensure the mtime strictly advances so mtime-keyed caches see a change,
-    even on filesystems with low-resolution timestamps."""
-    stat = path.stat()
-    os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
 
 
 def test_unconfigured_loader_returns_defaults() -> None:
@@ -66,21 +58,7 @@ def test_hot_reload_picks_up_edits(tmp_path: Path) -> None:
     assert loader.system_base() == "version 1"
 
     path.write_text("version 2", encoding="utf-8")
-    _bump_mtime(path)
     assert loader.system_base() == "version 2"
-
-
-def test_unchanged_file_uses_cache(tmp_path: Path) -> None:
-    """No extra stat should read the file body twice. We prove it indirectly:
-    writing to the cache slot via _cache survives a second call when mtime
-    hasn't moved."""
-    path = tmp_path / "system_base.md"
-    path.write_text("canon", encoding="utf-8")
-    loader = PromptLoader(prompts_dir=tmp_path)
-    assert loader.system_base() == "canon"
-    # Mutate the cache directly to prove the second call doesn't re-read.
-    loader._cache["system_base.md"] = (path.stat().st_mtime_ns, "cached only")
-    assert loader.system_base() == "cached only"
 
 
 def test_deleting_override_returns_to_default(tmp_path: Path) -> None:
@@ -92,7 +70,7 @@ def test_deleting_override_returns_to_default(tmp_path: Path) -> None:
     assert loader.system_base() == DEFAULT_SYSTEM_BASE
 
 
-def test_configure_clears_cache(tmp_path: Path) -> None:
+def test_configure_repoints_loader(tmp_path: Path) -> None:
     first = tmp_path / "a"
     first.mkdir()
     (first / "system_base.md").write_text("A", encoding="utf-8")

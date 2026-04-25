@@ -32,7 +32,13 @@ from docket.api.schemas import (
     ProposeDescriptionRequest,
     ProposeTransitionRequest,
 )
-from docket.core.mutation import Proposal
+from docket.core.mutation import (
+    AttachmentUpload,
+    CommentAdd,
+    DescriptionPatch,
+    Proposal,
+    StateChange,
+)
 from docket.core.services import mutation_service
 from docket.core.services.proposal_store import ProposalStore
 from docket.providers.base import WorkItemProvider
@@ -66,8 +72,9 @@ def propose_transition(
 ) -> ProposalDTO:
     return _stage(
         store,
-        lambda: mutation_service.propose_transition(
-            conn, item_id, payload.intent, provider_key=provider_key
+        lambda: StateChange(
+            item=mutation_service.require_cached_item(conn, item_id, provider_key=provider_key),
+            intent=payload.intent,
         ),
     )
 
@@ -82,8 +89,9 @@ def propose_description(
 ) -> ProposalDTO:
     return _stage(
         store,
-        lambda: mutation_service.propose_description_patch(
-            conn, item_id, payload.new_description_md, provider_key=provider_key
+        lambda: DescriptionPatch(
+            item=mutation_service.require_cached_item(conn, item_id, provider_key=provider_key),
+            new_md=payload.new_description_md,
         ),
     )
 
@@ -102,13 +110,11 @@ def propose_attachment(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Invalid base64 content: {e}") from e
     return _stage(
         store,
-        lambda: mutation_service.propose_attachment(
-            conn,
-            item_id,
+        lambda: AttachmentUpload(
+            item=mutation_service.require_cached_item(conn, item_id, provider_key=provider_key),
             filename=payload.filename,
             content=content,
             content_type=payload.content_type,
-            provider_key=provider_key,
         ),
     )
 
@@ -125,8 +131,9 @@ def propose_comment(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Comment body cannot be empty")
     return _stage(
         store,
-        lambda: mutation_service.propose_comment(
-            conn, item_id, payload.body_md, provider_key=provider_key
+        lambda: CommentAdd(
+            item=mutation_service.require_cached_item(conn, item_id, provider_key=provider_key),
+            body_md=payload.body_md,
         ),
     )
 

@@ -110,15 +110,12 @@ def stage_suggestion(
 ) -> StagedSuggestion:
     """Turn an accepted Suggestion into ready-to-confirm proposals. The caller
     is responsible for pushing them into the ProposalStore."""
-    state_change = mutation_service.propose_transition(
-        conn, suggestion.item_id, suggestion.intent, provider_key=provider_key
-    )
+    item = mutation_service.require_cached_item(conn, suggestion.item_id, provider_key=provider_key)
+    state_change = StateChange(item=item, intent=suggestion.intent)
     desc_patch: DescriptionPatch | None = None
     patch_text = suggestion.description_patch_md.strip()
     if patch_text:
-        desc_patch = mutation_service.propose_description_patch(
-            conn, suggestion.item_id, patch_text, provider_key=provider_key
-        )
+        desc_patch = DescriptionPatch(item=item, new_md=patch_text)
     return StagedSuggestion(state_change=state_change, description_patch=desc_patch)
 
 
