@@ -192,14 +192,16 @@ def create_app(
 def create_bootstrap_app(*, paths: Paths, setup_token: str) -> FastAPI:
     """Minimal FastAPI used when `config.toml` is missing.
 
-    Only `/health` and `/setup/*` are exposed, gated by `DOCKET_SETUP_TOKEN`.
-    The frontend can poll `GET /api/setup/status` (auth-free) to detect this mode
-    and run its built-in wizard. On `POST /setup/complete` the backend writes
-    config and signals itself to exit so the supervisor restarts it in normal
-    mode."""
+    Only `/health` and `/setup/*` are exposed, gated by the bootstrap bearer
+    token (which `docket serve` mints into a stub `config.toml` on first run
+    and prints once). The frontend can poll `GET /api/setup/status` (auth-free)
+    to detect this mode and run its built-in wizard. On `POST /setup/complete`
+    the backend writes config and signals itself to exit so the supervisor
+    restarts it in normal mode."""
     if not setup_token:
         raise ValueError(
-            "Bootstrap mode requires DOCKET_SETUP_TOKEN — set it before starting the server."
+            "Bootstrap mode requires a bearer token — `docket serve` should mint "
+            "one into config.toml before invoking this factory."
         )
 
     app = FastAPI(

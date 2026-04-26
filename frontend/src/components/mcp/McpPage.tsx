@@ -3,14 +3,13 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { DTO } from "~/api/client";
 import { useActiveProject, useMcpServers, useStatus } from "~/api/hooks";
+import { ListPlaceholder } from "~/components/common/ListPlaceholder";
 import { cn } from "~/lib/cn";
+import { sidebarActionClass } from "~/lib/formClasses";
 
 import { McpPresetPickerModal } from "./McpPresetPickerModal";
 import { McpServerForm } from "./McpServerForm";
 import { blankDraft, draftFromServer, type McpServerDraft } from "./mcpServerDraft";
-
-const sidebarActionClass =
-  "inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm font-medium text-fg hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-40";
 
 /**
  * MCP page: left column lists the active project's configured servers,
@@ -141,13 +140,11 @@ export function McpPage() {
 
           <nav className="min-h-0 flex-1 overflow-auto px-2 pb-3">
             {servers.isPending ? (
-              <p className="px-3 py-6 text-center text-xs text-fg-muted">Loading servers…</p>
+              <ListPlaceholder>Loading servers…</ListPlaceholder>
             ) : servers.error ? (
-              <p className="px-3 py-6 text-center text-xs text-danger">{servers.error.message}</p>
+              <ListPlaceholder tone="error">{servers.error.message}</ListPlaceholder>
             ) : entries.length === 0 ? (
-              <p className="px-3 py-6 text-center text-xs text-fg-muted">
-                No MCP servers configured for this project.
-              </p>
+              <ListPlaceholder>No MCP servers configured for this project.</ListPlaceholder>
             ) : (
               <ul className="flex flex-col gap-0.5">
                 {entries.map((entry) => (

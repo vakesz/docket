@@ -17,7 +17,7 @@ dependencies = [
     "typer>=0.12",
     "pydantic>=2.7",
     "pydantic-settings>=2.4",
-    "python-dotenv>=1.0",
+    "keyring>=25",
     "httpx>=0.27",
     "tomli-w>=1.0",
     "rich>=13.7",
@@ -95,6 +95,7 @@ ignore = ["E501"]
 "src/docket/api/**" = ["B008"]
 # Typer idiom: `typer.Argument(...)` / `typer.Option(...)` belong in argument defaults.
 "src/docket/cli/commands/**" = ["B008"]
+"src/docket/cli/app.py" = ["B008"]
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-markers"

@@ -1,3 +1,4 @@
+import { FormField } from "~/components/common/FormField";
 import { NumberInput, Select } from "~/components/common/FormInputs";
 import { Toggle } from "~/components/common/Toggle";
 import { ThemePicker } from "~/components/shell/ThemePicker";
@@ -5,7 +6,6 @@ import { ToolDisplayPicker } from "~/components/shell/ToolDisplayPicker";
 
 import { ITEM_KINDS, THEME_OPTIONS } from "../_constants";
 import { getBoolean, getNumberValue, getString } from "../_helpers";
-import { FormField } from "../_shared";
 import type { ConfigMap } from "../_types";
 
 export function UiForm({

@@ -1,11 +1,12 @@
 import { RefreshCw } from "lucide-react";
 
+import { FormField } from "~/components/common/FormField";
 import { NumberInput } from "~/components/common/FormInputs";
 import { Label } from "~/components/common/Label";
 import { cn } from "~/lib/cn";
 
 import { asRecord, getNumberValue } from "../_helpers";
-import { FormField, NumberMapEditor } from "../_shared";
+import { NumberMapEditor } from "../_shared";
 import type { ConfigMap } from "../_types";
 
 export function SyncForm({

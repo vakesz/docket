@@ -21,6 +21,7 @@ from docket.api.deps import (
     get_config,
     get_conn,
     require_not_read_only,
+    require_owned,
     require_patch_not_empty,
     require_project,
 )
@@ -31,18 +32,9 @@ from docket.api.schemas import (
     MemoryUpdateRequest,
 )
 from docket.config.models import Config
-from docket.core.model import MemoryEntry
 from docket.storage.repos import memory_repo
 
 router = APIRouter(tags=["memory"])
-
-
-def _require_in_project(conn: sqlite3.Connection, project_id: str, memory_id: str) -> MemoryEntry:
-    """Fetch a memory entry and ensure it lives in `project_id` or 404."""
-    entry = memory_repo.get(conn, memory_id)
-    if entry is None or entry.project_id != project_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown memory entry '{memory_id}'")
-    return entry
 
 
 @router.get(
@@ -120,7 +112,9 @@ def get_memory(
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> MemoryDTO:
     require_project(config, project_id)
-    return MemoryDTO.from_core(_require_in_project(conn, project_id, memory_id))
+    return MemoryDTO.from_core(
+        require_owned(conn, project_id, memory_id, fetch=memory_repo.get, label="memory entry")
+    )
 
 
 @router.patch(
@@ -136,7 +130,7 @@ def update_memory(
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> MemoryDTO:
     require_project(config, project_id)
-    _require_in_project(conn, project_id, memory_id)
+    require_owned(conn, project_id, memory_id, fetch=memory_repo.get, label="memory entry")
     require_patch_not_empty(payload, label="memory")
     updated = memory_repo.update(
         conn,
@@ -164,7 +158,7 @@ def delete_memory(
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> None:
     require_project(config, project_id)
-    _require_in_project(conn, project_id, memory_id)
+    require_owned(conn, project_id, memory_id, fetch=memory_repo.get, label="memory entry")
     memory_repo.delete(conn, memory_id)
 
 

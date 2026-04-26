@@ -84,9 +84,11 @@ Docket ships with a React web client in `frontend/` that consumes the FastAPI su
 
 ```bash
 make install   # uv sync + bun install (one-time)
-make env       # mint a DOCKET_API_TOKEN into .env (one-time, dev only)
-make serve     # build the SPA and run the backend serving it (single process, single origin at 127.0.0.1:8765)
+make serve     # build the SPA and run the backend (mints a fresh bootstrap token if config.toml is missing)
+make token     # print the bearer token from the workspace config.toml (for the frontend / API clients)
 ```
+
+The first `make serve` writes a stub `config.toml` under `./.docket-dev/` (the dev `WORKSPACE`) and prints a one-time bootstrap bearer. Run the wizard from the web UI or `make token` to see it again.
 
 - **Iterating on the SPA:** re-run `make frontend-build` (or `make serve`) and refresh the browser. Vite emits straight into `src/docket/frontend_dist/`; there is no separate frontend dev server. The bearer is injected into `index.html` at request time as `window.__DOCKET_TOKEN__` and never leaves the local box.
 - **Wheel (`make wheel`):** builds the SPA into the same path, then runs `uv build --wheel`, producing one installable artifact with the SPA bundled inside.
@@ -111,27 +113,21 @@ To add Jira, Linear, or anything else: implement the `WorkItemProvider` Protocol
 
 ## Configuration
 
-Docket stores everything under XDG paths resolved by `platformdirs`. `XDG_CONFIG_HOME` / `XDG_STATE_HOME` / `XDG_CACHE_HOME` overrides are honored everywhere — including macOS — which is how `.env.example`'s `.docket-dev/` redirect keeps dev state out of `~/Library`.
+Docket stores everything under XDG paths resolved by `platformdirs`. `XDG_CONFIG_HOME` / `XDG_STATE_HOME` / `XDG_CACHE_HOME` overrides are honored everywhere — including macOS — which is how the top-level `--workspace=./.docket-dev` flag (used by every `make` target) keeps dev state out of `~/Library`.
 
-Key files: `config.toml` (providers, scopes, projects, LLM, HTTP token, UI prefs), `.env` (optional secrets like `AZURE_OPENAI_API_KEY`), `prompts/` (`system_base.md` + `kind_<kind>.md`, hot-reloaded), `docket.db` (SQLite cache), `logs/docket.log` (rotating JSON, 1 MB × 3).
+Key files: `config.toml` (providers, scopes, projects, LLM endpoint, HTTP token, runtime knobs, UI prefs), `prompts/` (`system_base.md` + `kind_<kind>.md`, hot-reloaded), `docket.db` (SQLite cache), `logs/docket.log` (rotating JSON, 1 MB × 3). The Azure OpenAI **API key** lives in the OS keyring (macOS Keychain / Windows Credential Manager / Secret Service); only a non-secret hint persists in `config.toml` (`[llm.key_hint]`) so the UI can show a `sk-a…b1c2 · 32 chars · updated 2d ago` preview before you rotate.
 
 The setup wizard writes `config.toml` atomically after every step; partial runs resume via `docket setup --step=<name>` (`provider`, `auth`, `connection`, `label`, `scope`, `telemetry`, `http`, `llm`, `prompts`, `sync`, `default`).
 
-### Environment variables
+There is no `.env` file — `config.toml` is the single source of truth for non-secret config, and the keyring is the single source of truth for secrets. The only environment knobs are:
 
 | Variable | Effect |
 | --- | --- |
-| `DOCKET_READ_ONLY=1` | Disable every mutation path (agent, CLI, TUI, HTTP) |
-| `DOCKET_LOG_LEVEL` | Uvicorn log level for `docket serve` (default `info`) |
-| `AZURE_OPENAI_ENDPOINT` / `AZURE_OPENAI_DEPLOYMENT` | Override `[llm]` from `config.toml` at runtime |
-| `AZURE_OPENAI_API_KEY` / `AZURE_OPENAI_API_VERSION` | Azure OpenAI client config; key has no `config.toml` home and stays in `.env` |
-| `GITHUB_TOKEN` | Fallback for the GitHub provider when `gh auth token` isn't available |
-| `DOCKET_PRICE_INPUT_PER_1M` / `DOCKET_PRICE_OUTPUT_PER_1M` | Per-1M-token pricing for the chat ledger; omit to hide the $ in the status bar |
-| `DOCKET_API_TOKEN` | Bearer used by the frontend dev/prod server and CI; wins over `[http] token`. Empty after setup is fine. |
-| `DOCKET_SETUP_TOKEN` | Bearer for bootstrap-mode `/setup/*` (when `config.toml` is missing). `make env` mirrors `DOCKET_API_TOKEN` here. |
-| `DOCKET_API_URL` | Frontend → backend URL when the backend isn't on the default `127.0.0.1:8765` |
+| `XDG_CONFIG_HOME` / `XDG_STATE_HOME` / `XDG_CACHE_HOME` | Override platform defaults. The `--workspace=DIR` CLI flag sets these for you under `DIR/{config,state,cache}/`. |
+| `DOCKET_API_URL` | Frontend dev: backend URL when not on the default `127.0.0.1:8765`. |
+| `DOCKET_API_TOKEN` | Frontend dev: bearer override for CI / bootstrap. After setup, leave unset and `vite` reads `[http].token` from `config.toml`. |
 
-`.env` lookup order: repo-local `.env` (walking up from CWD) → user-level `.env` under the docket config dir.
+Runtime knobs that used to be env vars now live in `config.toml`: `runtime.read_only` (also overridable via `--read-only` on `docket open` / `docket serve`) and `telemetry.uvicorn_log_level` (also overridable via `docket serve --log-level=<level>`).
 
 ---
 

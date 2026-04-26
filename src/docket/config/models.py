@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
@@ -103,9 +104,28 @@ def build_provider_entry(
     )
 
 
+class KeyHintConfig(BaseModel):
+    """Non-secret preview of the API key stored in the OS keyring.
+
+    Lets the frontend render `sk-abcd…WXYZ · 84 chars · updated 3d ago` so
+    the user can identify which key is configured before overwriting it,
+    without ever returning the key itself. The hint is rotated whenever the
+    key is set or cleared."""
+
+    configured: bool = False
+    prefix: str = ""
+    suffix: str = ""
+    length: int = 0
+    updated_at: datetime | None = None
+
+
 class LlmConfig(BaseModel):
     """LLM connection + runtime behavior. The concrete client today targets
-    Azure OpenAI; `endpoint`/`deployment` identify that deployment."""
+    Azure OpenAI; `endpoint`/`deployment` identify that deployment.
+
+    The API key itself lives in the OS keyring (see `docket.config.secrets`),
+    not in this model. `key_hint` is a non-secret preview persisted here so
+    the UI can identify which key is loaded without unlocking the keyring."""
 
     endpoint: HttpUrl | None = None
     deployment: str = "gpt-5"
@@ -116,6 +136,7 @@ class LlmConfig(BaseModel):
     # Cached input bills off the input rate after subtracting cached_tokens_in.
     price_input_per_1m: float | None = None
     price_output_per_1m: float | None = None
+    key_hint: KeyHintConfig = Field(default_factory=KeyHintConfig)
 
 
 class HttpConfig(BaseModel):
@@ -131,10 +152,30 @@ class TelemetryConfig(BaseModel):
     `enabled=True` (the default) routes every stdlib + structlog call through a
     rotating JSON file under `paths.log_dir`. `level` defaults to `DEBUG` so the
     on-disk log captures as much context as possible for the small group of
-    operators reviewing it. Lower it to `INFO` if log volume becomes a problem."""
+    operators reviewing it. Lower it to `INFO` if log volume becomes a problem.
+
+    `uvicorn_log_level` controls the access/error log level uvicorn prints to
+    stdout when `docket serve` runs — separate from `level` because uvicorn
+    has its own categorical scale and operators often want it quieter than
+    structlog. Defaults to `info`; CLI `--log-level` overrides at runtime."""
 
     enabled: bool = True
     level: TelemetryLevel = TelemetryLevel.DEBUG
+    uvicorn_log_level: str = Field(
+        default="info",
+        pattern="^(critical|error|warning|info|debug|trace)$",
+    )
+
+
+class RuntimeConfig(BaseModel):
+    """Persistent runtime switches.
+
+    `read_only` makes the install demo-safe by stripping every mutation
+    entry point. CLI `--read-only` ORs into this, so the most restrictive
+    of (config value, flag) wins. Persisting it here replaces the previous
+    `DOCKET_READ_ONLY` env var."""
+
+    read_only: bool = False
 
 
 class UiConfig(BaseModel):
@@ -231,6 +272,7 @@ class Config(BaseModel):
     llm: LlmConfig = Field(default_factory=LlmConfig)
     http: HttpConfig = Field(default_factory=HttpConfig)
     telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
+    runtime: RuntimeConfig = Field(default_factory=RuntimeConfig)
     ui: UiConfig = Field(default_factory=UiConfig)
     sync: SyncConfig = Field(default_factory=SyncConfig)
     stale: StaleConfig = Field(default_factory=StaleConfig)

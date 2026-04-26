@@ -96,6 +96,17 @@ export function useRotateLlmKey() {
   });
 }
 
+export function useRemoveLlmKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.delete<DTO["SettingsLlmKeyDTO"]>("/settings/llm-key"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.settings() });
+      qc.invalidateQueries({ queryKey: qk.status() });
+    },
+  });
+}
+
 export function useRegenerateHttpToken() {
   const qc = useQueryClient();
   return useMutation({

@@ -1,4 +1,4 @@
-import { Plus, Save } from "lucide-react";
+import { Plus, Save, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import type { DTO } from "~/api/client";
@@ -8,14 +8,20 @@ import {
   useTestSettingsProvider,
   useUpdateProvider,
 } from "~/api/hooks";
+import { FormField } from "~/components/common/FormField";
 import { Select, TextInput } from "~/components/common/FormInputs";
 import { Modal } from "~/components/common/Modal";
 import { Notice } from "~/components/common/Notice";
 import { Toggle } from "~/components/common/Toggle";
-import { primaryButtonClass } from "~/lib/formClasses";
+import {
+  dangerTextClass,
+  iconCloseButtonClass,
+  outlineButtonClass,
+  primaryButtonClass,
+} from "~/lib/formClasses";
+
 import { readOnlyFieldClass } from "./_constants";
 import { asRecord, getString } from "./_helpers";
-import { FormField } from "./_shared";
 
 type ProviderTypeDTO = DTO["SetupProviderTypeDTO"];
 type ProviderFieldDTO = DTO["SetupProviderFieldDTO"];
@@ -172,9 +178,11 @@ export function ProviderModal(props: ProviderModalProps) {
         <button
           type="button"
           onClick={onClose}
-          className="rounded-xl border border-border px-2 py-1 text-xs text-fg-muted hover:bg-surface-alt"
+          className={iconCloseButtonClass}
+          title="Close (Esc)"
+          aria-label="Close"
         >
-          Close
+          <X className="h-4 w-4" />
         </button>
       </div>
 
@@ -227,7 +235,7 @@ export function ProviderModal(props: ProviderModalProps) {
             </FormField>
 
             {!isEdit && keyInvalid && key.trim() && (
-              <p className="text-xs text-danger">
+              <p className={dangerTextClass}>
                 Provider '{key}' already exists. Pick a different key.
               </p>
             )}
@@ -287,7 +295,7 @@ export function ProviderModal(props: ProviderModalProps) {
           type="button"
           onClick={runTest}
           disabled={!spec || missingRequired || testMutation.isPending}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-sm font-medium text-fg hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-40"
+          className={outlineButtonClass}
         >
           {testMutation.isPending ? "Testing…" : "Test connection"}
         </button>

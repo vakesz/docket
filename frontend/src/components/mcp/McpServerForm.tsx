@@ -8,12 +8,13 @@ import {
   useTestMcpServer,
   useUpdateMcpServer,
 } from "~/api/hooks";
+import { FieldError, FormField } from "~/components/common/FormField";
 import { NumberInput, Select, StatusPill, TextInput } from "~/components/common/FormInputs";
 import { Notice } from "~/components/common/Notice";
 import { Toggle } from "~/components/common/Toggle";
 import { draftsEqual, type McpServerDraft, serializeDraft } from "~/components/mcp/mcpServerDraft";
 import { cn } from "~/lib/cn";
-import { outlineButtonClass, primaryButtonClass } from "~/lib/formClasses";
+import { dangerButtonClass, outlineButtonClass, primaryButtonClass } from "~/lib/formClasses";
 
 // Server names act as dict keys in `config.toml` under `[projects.<id>.mcp.<name>]`;
 // the backend also enforces the same shape (`tui_parity.validate_mcp_server_name`).
@@ -347,7 +348,7 @@ export function McpServerForm({
                 type="button"
                 onClick={() => void onDelete()}
                 disabled={readOnly || deleting}
-                className="inline-flex items-center gap-2 rounded-xl border border-danger/40 bg-danger-bg/40 px-3 py-2 text-sm font-medium text-danger-fg hover:bg-danger-bg disabled:cursor-not-allowed disabled:opacity-40"
+                className={dangerButtonClass}
               >
                 <Trash2 className="h-4 w-4" />
                 {deleting ? "Deleting…" : "Delete"}
@@ -510,30 +511,4 @@ function PairEditor({
       </button>
     </div>
   );
-}
-
-// ---------- Primitives (kept local to this module) -------------------------
-
-function FormField({
-  label,
-  help,
-  children,
-}: {
-  label: string;
-  help?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-2">
-      <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-fg-muted">
-        {label}
-      </span>
-      {children}
-      {help && <span className="text-xs leading-5 text-fg-muted">{help}</span>}
-    </div>
-  );
-}
-
-function FieldError({ children }: { children: React.ReactNode }) {
-  return <span className="text-xs text-danger-fg">{children}</span>;
 }

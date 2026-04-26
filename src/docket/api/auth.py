@@ -70,7 +70,7 @@ require_bearer = _make_token_gate("bearer_token")
 require_setup_token = _make_token_gate(
     "setup_token",
     "bearer_token",
-    missing_detail="Setup surface requires either DOCKET_SETUP_TOKEN or a configured bearer token.",
+    missing_detail="Setup surface requires a bootstrap bearer token from config.toml.",
 )
 
 

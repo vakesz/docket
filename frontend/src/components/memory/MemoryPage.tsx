@@ -10,11 +10,18 @@ import {
   useStatus,
   useUpdateMemory,
 } from "~/api/hooks";
+import { FieldError, FormField } from "~/components/common/FormField";
 import { StatusPill, TextInput } from "~/components/common/FormInputs";
+import { ListPlaceholder } from "~/components/common/ListPlaceholder";
 import { MarkdownEditor } from "~/components/common/MarkdownEditor";
 import { Notice } from "~/components/common/Notice";
 import { cn } from "~/lib/cn";
-import { outlineButtonClass, primaryButtonClass } from "~/lib/formClasses";
+import {
+  dangerButtonClass,
+  outlineButtonClass,
+  primaryButtonClass,
+  sidebarActionClass,
+} from "~/lib/formClasses";
 
 import {
   blankDraft,
@@ -24,9 +31,6 @@ import {
   serializeCreate,
   serializeUpdate,
 } from "./memoryDraft";
-
-const sidebarActionClass =
-  "inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm font-medium text-fg hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-40";
 
 /**
  * Memory page: left column lists the active project's memory entries, right
@@ -136,11 +140,11 @@ export function MemoryPage() {
 
           <nav className="min-h-0 flex-1 overflow-auto px-2 pb-3">
             {list.isPending ? (
-              <p className="px-3 py-6 text-center text-xs text-fg-muted">Loading entries…</p>
+              <ListPlaceholder>Loading entries…</ListPlaceholder>
             ) : list.error ? (
-              <p className="px-3 py-6 text-center text-xs text-danger">{list.error.message}</p>
+              <ListPlaceholder tone="error">{list.error.message}</ListPlaceholder>
             ) : entries.length === 0 ? (
-              <p className="px-3 py-6 text-center text-xs text-fg-muted">No memory entries yet.</p>
+              <ListPlaceholder>No memory entries yet.</ListPlaceholder>
             ) : (
               <ul className="flex flex-col gap-0.5">
                 {entries.map((entry) => (
@@ -418,7 +422,7 @@ function MemoryEntryForm({
                 type="button"
                 onClick={() => void onDelete()}
                 disabled={readOnly || deleting}
-                className="inline-flex items-center gap-2 rounded-xl border border-danger/40 bg-danger-bg/40 px-3 py-2 text-sm font-medium text-danger-fg hover:bg-danger-bg disabled:cursor-not-allowed disabled:opacity-40"
+                className={dangerButtonClass}
               >
                 <Trash2 className="h-4 w-4" />
                 {deleting ? "Deleting…" : "Delete"}
@@ -439,28 +443,4 @@ function MemoryEntryForm({
       </div>
     </div>
   );
-}
-
-function FormField({
-  label,
-  help,
-  children,
-}: {
-  label: string;
-  help?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-2">
-      <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-fg-muted">
-        {label}
-      </span>
-      {children}
-      {help && <span className="text-xs leading-5 text-fg-muted">{help}</span>}
-    </div>
-  );
-}
-
-function FieldError({ children }: { children: React.ReactNode }) {
-  return <span className="text-xs text-danger-fg">{children}</span>;
 }

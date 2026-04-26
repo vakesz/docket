@@ -25,5 +25,5 @@ def test_parse_bare_resource_url() -> None:
 
 
 def test_parse_rejects_non_url() -> None:
-    with pytest.raises(ValueError, match="AZURE_OPENAI_ENDPOINT"):
+    with pytest.raises(ValueError, match=r"llm\.endpoint"):
         _parse_azure_endpoint("not-a-url")

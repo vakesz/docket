@@ -5,7 +5,6 @@ import typer
 from docket._console import console
 from docket.cli.commands._llm import build_llm_client
 from docket.cli.context import prepare_or_wizard
-from docket.config.env import get_read_only
 from docket.core.model import ItemKind
 
 
@@ -56,11 +55,11 @@ def run_open_tui(
     from docket.agent.llm_client import LlmClient
     from docket.cli.tui.app import DocketApp, TuiContext
 
-    # Either the flag or DOCKET_READ_ONLY=1 enables the mode — whichever
-    # comes first, same outcome.
-    effective_read_only = read_only or get_read_only()
-
     with prepare_or_wizard() as ctx:
+        # Either the CLI flag or runtime.read_only in config.toml enables
+        # the mode — whichever is set, same outcome.
+        effective_read_only = read_only or ctx.config.runtime.read_only
+
         provider_key = provider or ctx.active_provider
         if provider_key and provider_key not in ctx.providers:
             console.print(

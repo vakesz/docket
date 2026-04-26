@@ -23,6 +23,7 @@ from docket.api.deps import (
     get_config,
     get_conn,
     require_not_read_only,
+    require_owned,
     require_patch_not_empty,
     require_project,
 )
@@ -33,18 +34,9 @@ from docket.api.schemas import (
     SourceUpdateRequest,
 )
 from docket.config.models import Config
-from docket.core.model import Source
 from docket.storage.repos import source_repo
 
 router = APIRouter(tags=["sources"])
-
-
-def _require_in_project(conn: sqlite3.Connection, project_id: str, source_id: str) -> Source:
-    """Fetch a source and ensure it lives in `project_id` or 404."""
-    entry = source_repo.get(conn, source_id)
-    if entry is None or entry.project_id != project_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown source '{source_id}'")
-    return entry
 
 
 @router.get(
@@ -125,7 +117,9 @@ def get_source(
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> SourceDTO:
     require_project(config, project_id)
-    return SourceDTO.from_core(_require_in_project(conn, project_id, source_id))
+    return SourceDTO.from_core(
+        require_owned(conn, project_id, source_id, fetch=source_repo.get, label="source")
+    )
 
 
 @router.patch(
@@ -141,7 +135,7 @@ def update_source(
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> SourceDTO:
     require_project(config, project_id)
-    _require_in_project(conn, project_id, source_id)
+    require_owned(conn, project_id, source_id, fetch=source_repo.get, label="source")
     require_patch_not_empty(payload, label="source")
     updated = source_repo.update(
         conn,
@@ -171,7 +165,7 @@ def delete_source(
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> None:
     require_project(config, project_id)
-    _require_in_project(conn, project_id, source_id)
+    require_owned(conn, project_id, source_id, fetch=source_repo.get, label="source")
     source_repo.delete(conn, source_id)
 
 

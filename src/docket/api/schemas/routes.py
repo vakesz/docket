@@ -139,15 +139,23 @@ class SettingsUpdatedDTO(BaseModel):
 class SettingsLlmKeyRequest(BaseModel):
     """Rotate the LLM API key.
 
-    Persists to the XDG-managed `.env` file so `docket serve` picks it up on
-    next start. Leaving `api_key` empty clears the entry (chat 503s until
-    re-set). Triggers a rebind of the live LLM client when possible so the
-    change takes effect without restart."""
+    Stores the key in the OS keyring (macOS Keychain / Windows Credential
+    Manager / freedesktop Secret Service) and writes a non-secret hint into
+    `[llm.key_hint]` in `config.toml` so the UI can render a preview. Leaving
+    `api_key` empty here is rejected — use `DELETE /api/settings/llm-key`
+    to clear. The live LLM client still holds the previous key; the response
+    sets `requires_restart=True` whenever the value actually changed."""
 
     api_key: str
 
 
 class SettingsLlmKeyDTO(BaseModel):
+    """Response for set/clear of the LLM API key.
+
+    `configured` reflects whether a key is currently stored. The hint comes
+    along on `GET /api/settings` via `config.llm.key_hint`, so we don't
+    duplicate it here — clients merge the updated config separately."""
+
     ok: bool
     configured: bool
     requires_restart: bool = False

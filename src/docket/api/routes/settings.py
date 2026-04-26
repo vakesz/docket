@@ -14,7 +14,6 @@ re-entering bootstrap mode.
 
 from __future__ import annotations
 
-import os
 import secrets
 from typing import Any
 
@@ -27,7 +26,6 @@ from docket.api._provider_setup import (
     test_provider_draft,
 )
 from docket.api.deps import get_paths, get_runtime, require_not_read_only
-from docket.api.routes.setup import _write_env_key
 from docket.api.runtime import RuntimeState
 from docket.api.schemas import (
     SettingsDTO,
@@ -43,8 +41,13 @@ from docket.api.schemas import (
     SetupTestResultDTO,
 )
 from docket.config.loader import save_config
-from docket.config.models import ScopeFilter
+from docket.config.models import KeyHintConfig, ScopeFilter
 from docket.config.paths import Paths
+from docket.config.secrets import (
+    clear_llm_api_key,
+    keyring_available,
+    set_llm_api_key,
+)
 from docket.core.services import settings_service
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -92,26 +95,84 @@ def patch_settings(
 def rotate_llm_key(
     payload: SettingsLlmKeyRequest,
     paths: Paths = Depends(get_paths),
+    runtime: RuntimeState = Depends(get_runtime),
 ) -> SettingsLlmKeyDTO:
-    """Set / clear AZURE_OPENAI_API_KEY in the XDG `.env` file.
+    """Store / clear the LLM API key in the OS keyring.
 
-    Also updates the current process's `os.environ` so components that read
-    `get_llm_api_key()` at call time see the new value. The live `LlmClient`
-    still holds the old key in its SDK config — fully rebinding chat requires
-    a restart, which we signal via `requires_restart=True` when the key
-    actually changed."""
+    The non-secret hint (`{prefix, suffix, length, updated_at}`) is also
+    written into `[llm.key_hint]` in `config.toml` so the frontend can show
+    the user which key is loaded without ever returning the secret. The live
+    `LlmClient` still holds the old key in its SDK config — fully rebinding
+    chat requires a restart, which we signal via `requires_restart=True`."""
     key = payload.api_key.strip()
-    previous = os.environ.get("AZURE_OPENAI_API_KEY", "")
-    _write_env_key(paths, key)
+    previous_configured = runtime.config.llm.key_hint.configured
+
     if key:
-        os.environ["AZURE_OPENAI_API_KEY"] = key
+        ok, err = keyring_available()
+        if not ok:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"OS keyring unavailable: {err or 'no backend detected'}",
+            )
+        try:
+            hint = set_llm_api_key(key)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"failed to write API key to keyring: {e}",
+            ) from e
     else:
-        os.environ.pop("AZURE_OPENAI_API_KEY", None)
-    changed = (key or "") != (previous or "")
+        clear_llm_api_key()
+        hint = KeyHintConfig()
+
+    def _persist(cfg: dict[str, Any]) -> None:
+        cfg.setdefault("llm", {})["key_hint"] = hint.model_dump(mode="json")
+
+    persist_config_change(
+        runtime,
+        paths,
+        _persist,
+        on_error="Failed to persist key hint",
+        error_status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+    )
+    changed = bool(key) != previous_configured or bool(key)
     return SettingsLlmKeyDTO(
         ok=True,
         configured=bool(key),
         requires_restart=changed,
+    )
+
+
+@router.delete(
+    "/llm-key",
+    response_model=SettingsLlmKeyDTO,
+    dependencies=[Depends(require_not_read_only)],
+)
+def remove_llm_key(
+    paths: Paths = Depends(get_paths),
+    runtime: RuntimeState = Depends(get_runtime),
+) -> SettingsLlmKeyDTO:
+    """Remove the LLM API key from the keyring and clear the hint.
+
+    Idempotent: clearing an already-empty key still succeeds and reports
+    `requires_restart=False` (nothing to rebind)."""
+    was_configured = runtime.config.llm.key_hint.configured
+    clear_llm_api_key()
+
+    def _persist(cfg: dict[str, Any]) -> None:
+        cfg.setdefault("llm", {})["key_hint"] = KeyHintConfig().model_dump(mode="json")
+
+    persist_config_change(
+        runtime,
+        paths,
+        _persist,
+        on_error="Failed to clear key hint",
+        error_status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+    )
+    return SettingsLlmKeyDTO(
+        ok=True,
+        configured=False,
+        requires_restart=was_configured,
     )
 
 

@@ -1,7 +1,8 @@
+import { FormField } from "~/components/common/FormField";
 import { NumberInput } from "~/components/common/FormInputs";
 
 import { asRecord, getNumberValue } from "../_helpers";
-import { FormField, NumberMapEditor } from "../_shared";
+import { NumberMapEditor } from "../_shared";
 import type { ConfigMap } from "../_types";
 
 export function StaleForm({

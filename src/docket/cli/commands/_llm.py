@@ -3,12 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from docket._console import console
-from docket.config.env import (
-    get_llm_api_key,
-    get_llm_api_version,
-    get_llm_deployment,
-    get_llm_endpoint,
-)
+from docket.config.secrets import get_llm_api_key
 
 if TYPE_CHECKING:
     from docket.agent.llm_client import AzureOpenAIClient
@@ -16,25 +11,23 @@ if TYPE_CHECKING:
 
 
 def build_llm_client(llm_cfg: LlmConfig) -> AzureOpenAIClient | None:
-    """Build the LLM client. `.env` wins over config.toml so users can keep all
-    LLM settings in one place alongside the API key."""
+    """Build the LLM client.
+
+    The API key comes from the OS keyring; everything else comes from
+    `config.toml`'s `[llm]` block. If either the key or the endpoint is
+    missing, chat is disabled and the user is pointed at the setup wizard."""
     api_key = get_llm_api_key()
-    endpoint = get_llm_endpoint() or (str(llm_cfg.endpoint) if llm_cfg.endpoint else None)
-    deployment = get_llm_deployment() or llm_cfg.deployment
-    api_version = get_llm_api_version()
+    endpoint = str(llm_cfg.endpoint) if llm_cfg.endpoint else None
+    deployment = llm_cfg.deployment
     if not api_key or not endpoint:
-        missing = [
-            label
-            for label, value in (
-                ("AZURE_OPENAI_API_KEY", api_key),
-                ("AZURE_OPENAI_ENDPOINT", endpoint),
-            )
-            if not value
-        ]
+        missing = []
+        if not api_key:
+            missing.append("API key (run `docket setup --step=llm`)")
+        if not endpoint:
+            missing.append("[llm].endpoint in config.toml")
         console.print(
-            f"[yellow]Chat disabled[/yellow]: set {', '.join(missing)} in "
-            "your .env (repo-local or ~/.config/docket/.env), or run `docket setup` "
-            "to persist the endpoint into config.toml."
+            f"[yellow]Chat disabled[/yellow]: missing {', '.join(missing)}. "
+            "Run `docket setup` to configure."
         )
         return None
     from docket.agent.llm_client import AzureOpenAIClient
@@ -43,5 +36,5 @@ def build_llm_client(llm_cfg: LlmConfig) -> AzureOpenAIClient | None:
         endpoint=endpoint,
         api_key=api_key,
         deployment=deployment,
-        api_version=api_version,
+        api_version=None,
     )

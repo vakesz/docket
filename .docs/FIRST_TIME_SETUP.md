@@ -81,7 +81,7 @@ The top-level wizard:
 3. Runs the shared host steps:
    - **telemetry** — keep the rotating JSON log on (default), pick a level
    - **http** — enable the FastAPI surface and mint a bearer token (consumed by the web UI and any external clients)
-   - **llm** — Azure OpenAI endpoint + deployment, persisted to `config.toml`; the API key still lives in `.env`
+   - **llm** — Azure OpenAI endpoint + deployment, persisted to `config.toml`. The API key is stored in the OS keyring (macOS Keychain / Windows Credential Manager / freedesktop Secret Service); only a non-secret hint (`[llm.key_hint]` — first/last 4 characters, length, updated_at) lands in `config.toml` so the UI can preview it before you rotate.
    - **prompts** — scaffold `system_base.md` + `kind_<kind>.md`
    - **sync** — first full sync from the active provider
    - **default** — pin this provider as the active one if it's the first or you opt in
@@ -168,21 +168,22 @@ The wizard will ask for a `default_repo` (any `owner/name` string works — it's
 
 ## Wire up the LLM (Azure OpenAI)
 
-The wizard's `llm` step writes the **endpoint** and **deployment** into `config.toml` under `[llm]`. The **API key** has no `config.toml` home and stays in `.env`. At runtime the env vars below override `config.toml`, so you can keep all four LLM values in `.env` if you prefer.
+The wizard's `llm` step writes the **endpoint** and **deployment** into `config.toml` under `[llm]`. The **API key** is stored in the OS keyring; nothing secret ever touches disk in plaintext.
 
-| Variable | Purpose |
+| Field | Where it lives |
 | --- | --- |
-| `AZURE_OPENAI_ENDPOINT` | Deployment base URL (`https://<resource>.openai.azure.com/`) |
-| `AZURE_OPENAI_DEPLOYMENT` | Deployment name (the GPT-5 / equivalent model) |
-| `AZURE_OPENAI_API_KEY` | API key (`.env` only) |
-| `AZURE_OPENAI_API_VERSION` | Optional; defaults to the latest published version |
+| Endpoint (`https://<resource>.openai.azure.com/…`) | `config.toml` → `[llm].endpoint` |
+| Deployment name (the GPT-5 / equivalent model) | `config.toml` → `[llm].deployment` |
+| API version (optional; defaults to the latest published) | `config.toml` → `[llm].api_version` |
+| API key | OS keyring under service `docket`, account `azure_openai_api_key` |
+| Non-secret key hint (`prefix`, `suffix`, `length`, `updated_at`) | `config.toml` → `[llm.key_hint]` (UI preview only) |
 
-`.env` resolution order (first hit wins):
+The keyring backend is platform-native: macOS Keychain, Windows Credential Manager, or freedesktop Secret Service on Linux. If no backend is available, the wizard's `llm` step refuses to continue with a clear error. There is no env-var override — the only way to set or rotate the key is through the wizard, the Settings UI, or `POST /api/settings/llm-key`.
 
-1. Repo-local `.env` (walking up from CWD)
-2. User-level `.env` under the docket config dir (`~/Library/Application Support/docket/.env` on macOS, `~/.config/docket/.env` on Linux)
+To rotate or remove the key later:
 
-Both are gitignored.
+- **Settings UI** (`,` in the TUI / web Settings → LLM): the form shows a `prefix…suffix · N chars · updated 2d ago` badge for the currently-stored key. Use the **Rotate** button to overwrite, **Remove** to clear.
+- **HTTP**: `POST /api/settings/llm-key` (body `{"api_key": "…"}`) and `DELETE /api/settings/llm-key`. Both return `requires_restart: true` so the live `LlmClient` is rebuilt on the next boot.
 
 You can skip the LLM entirely. The TUI launches without chat; `docket open --no-chat` (or `docket serve --no-chat`) silences the warning if you want it quiet. `/conversation` HTTP endpoints return 503 until an endpoint is configured.
 
@@ -204,30 +205,32 @@ uv run docket serve         # listens on http://127.0.0.1:8765, bearer required
 
 `docket serve` refuses to start when `[http] enabled = false` or `[http] token` is empty — re-run `docket setup --step=http` to fix either.
 
-`--read-only` and `--no-chat` apply to `serve` the same way they do to `open`. `DOCKET_LOG_LEVEL` (`critical` … `debug` / `trace`) controls uvicorn's verbosity.
+`--read-only` and `--no-chat` apply to `serve` the same way they do to `open`. Both flags also have a config home: `runtime.read_only = true` and `telemetry.uvicorn_log_level = "debug"` (or `critical` … `debug` / `trace`) survive across launches without re-passing the flag. `docket serve --log-level=…` overrides for one run.
 
 ### Bootstrap mode
 
-Before `config.toml` exists, `docket serve` falls through to a tiny FastAPI exposing only `/health` and `/setup/*`, gated by `DOCKET_SETUP_TOKEN`. If you don't set it, one is generated and printed for the session — useful for driving the web UI through the wizard end-to-end.
+Before `config.toml` exists, `docket serve` falls through to a tiny FastAPI exposing only `/health` and `/setup/*`. The first invocation mints a fresh bearer token, writes a stub `config.toml` containing only `[http].token`, and prints the token once. Reach the wizard via the web UI (the printed token unlocks `/setup/*`), or recover the token later with `docket admin print-token`.
 
 ### Web UI
 
 ```bash
 make install         # uv sync + bun install (one-time)
-make env             # mint a fresh DOCKET_API_TOKEN into .env (one-time, dev only)
-make serve           # build the SPA and run the backend serving it
+make serve           # build the SPA and run the backend serving it (mints a bootstrap token if config.toml is missing)
+make token           # print the bearer token from the workspace config.toml
 ```
 
 `make serve` runs `bun run build` (vite emits the static SPA into `src/docket/frontend_dist/`) and then starts the backend at `127.0.0.1:8765` — one process, one origin, no separate frontend server. The bearer token is injected into `index.html` at request time as `window.__DOCKET_TOKEN__` and re-attached to every API call from the browser. The token only ever lives on the local box — same trust model as the wheel install.
+
+All `make` targets pass `--workspace=./.docket-dev` to `docket`, which redirects `XDG_CONFIG_HOME/STATE_HOME/CACHE_HOME/DATA_HOME` under that directory so dev state never lands in `~/Library/Application Support/docket/` or `~/.config/docket/`. `make clean-workspace` deletes the dev sandbox.
 
 To iterate on the SPA, re-run `make frontend-build` and refresh the browser. There is no HMR loop; trade-off for the single-origin, single-process model.
 
 `resolve-backend-config.ts` reads the token in this order:
 
-1. `DOCKET_API_TOKEN` from the process env / repo-root `.env`
+1. `DOCKET_API_TOKEN` from the process env (CI / container override)
 2. `[http] token` in `config.toml`
 
-So once setup has written `config.toml`, you can clear `DOCKET_API_TOKEN` from `.env` and both stacks still agree on the same token. Override `DOCKET_API_URL` only when the backend isn't on `127.0.0.1:8765`.
+There is no `.env` walking — once setup has written `config.toml`, vite picks the token straight from there. Override `DOCKET_API_URL` only when the backend isn't on `127.0.0.1:8765`.
 
 Production: `make serve` (or `make wheel` for the installable artifact). Both run `bun run build`, which emits the static SPA directly into `src/docket/frontend_dist/`; the backend then serves it from there.
 
@@ -262,12 +265,12 @@ Third-party providers can ship as separate pip packages via the `docket.provider
 
 ## Files Docket creates
 
-Resolved via `platformdirs` → XDG on Linux, Application Support on macOS, `%APPDATA%` on Windows. Every entry point honors `XDG_CONFIG_HOME` / `XDG_STATE_HOME` / `XDG_CACHE_HOME` overrides on every platform — that's how the `.docket-dev/` redirect in `.env.example` keeps dev state out of your Library.
+Resolved via `platformdirs` → XDG on Linux, Application Support on macOS, `%APPDATA%` on Windows. Every entry point honors `XDG_CONFIG_HOME` / `XDG_STATE_HOME` / `XDG_CACHE_HOME` overrides on every platform — that's how the `--workspace=./.docket-dev` flag (used by every `make` target) keeps dev state out of your Library.
 
 | Path (macOS shown) | Purpose |
 | --- | --- |
-| `~/Library/Application Support/docket/config.toml` | Providers, scopes, projects, LLM settings, HTTP token, UI preferences |
-| `~/Library/Application Support/docket/.env` | Azure OpenAI key + optional provider secrets |
+| `~/Library/Application Support/docket/config.toml` | Providers, scopes, projects, LLM settings (incl. `[llm.key_hint]` preview), HTTP token, runtime flags, UI preferences |
+| OS keyring entry `docket / azure_openai_api_key` | Azure OpenAI key (managed via the wizard, the Settings UI, or `POST /api/settings/llm-key`) |
 | `~/Library/Application Support/docket/prompts/system_base.md` | System prompt, editable from the app |
 | `~/Library/Application Support/docket/prompts/kind_<kind>.md` | Per-kind prompt (one per `ItemKind`) |
 | `~/Library/Application Support/docket/docket.db` | SQLite cache (items, comments, conversations, messages, watchlist, memory, sources, FTS5) |
@@ -302,27 +305,29 @@ Re-run `docket setup --step=auth` (or `--step=connection` if you only need to re
 
 - Confirm `gh auth status` — the CLI must be signed in as the account you want to triage under.
 - Check `gh api user --jq .login` — if this errors, your token lacks `read:user` scope. Run `gh auth refresh -s read:user,read:org,repo`.
-- If you only want public repos, any `GITHUB_TOKEN` with `public_repo` scope works — set it in `.env` and skip the `gh` step.
+- If you only want public repos, any GitHub token with `public_repo` scope works — install `gh` and `gh auth login --with-token` to seed the session, then re-run setup.
 
-### "Chat disabled: set AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT …"
+### "Chat disabled: LLM is not configured"
 
 The TUI / API didn't find Azure OpenAI credentials. Either:
 
-- Run `docket setup --step=llm` to persist the endpoint + deployment into `config.toml` and add `AZURE_OPENAI_API_KEY` to your `.env`, or
-- Set `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT`, and `AZURE_OPENAI_API_KEY` in `.env` directly (env vars override `config.toml`), or
+- Run `docket setup --step=llm` to persist the endpoint + deployment into `config.toml` and store the API key in the OS keyring, or
+- From the Settings UI's LLM section, paste the key into the **API key** field and click **Save**, or
 - Launch with `docket open --no-chat` / `docket serve --no-chat` to silence the warning entirely.
+
+If the wizard's `llm` step rejects the key with a keyring error, your platform doesn't have a usable backend (e.g. headless Linux without `gnome-keyring` / `kwallet`). Install one before continuing — Docket has no plaintext fallback by design.
 
 ### `docket serve` exits with "HTTP surface is disabled" or "No bearer token configured"
 
-The `[http]` section in `config.toml` either has `enabled = false` or `token = ""`. Re-run `docket setup --step=http` — it generates a fresh `secrets.token_urlsafe(32)` and writes it back. Or set `DOCKET_API_TOKEN` in `.env` and re-run the step (the wizard will mirror it into `config.toml`).
+The `[http]` section in `config.toml` either has `enabled = false` or `token = ""`. Re-run `docket setup --step=http` — it generates a fresh `secrets.token_urlsafe(32)` and writes it back. If `config.toml` is missing entirely, `docket serve` mints a bootstrap token automatically and prints it once; recover it later with `docket admin print-token`.
 
 ### Web UI loads but every `/api/*` request 401s
 
-Either `DOCKET_API_TOKEN` (in `.env`) and `[http] token` (in `config.toml`) disagree, or both are empty. `make env` mints a fresh token into `.env`; the wizard mirrors `DOCKET_API_TOKEN` from the env into `config.toml` if it's set when you run `docket setup --step=http`. After they agree, re-run `make serve` so the new token is injected into the served `index.html`.
+The `[http] token` in `config.toml` is empty or has drifted from what the SPA fetched. Run `make token` (or `docket admin print-token`) to inspect the current token and re-run `make serve` so the value is injected into the served `index.html`. The frontend dev server reads the token from `config.toml` directly; there is no `.env` indirection to keep in sync.
 
 ### "Read-only mode — mutations disabled"
 
-Either you passed `--read-only` or `DOCKET_READ_ONLY=1` is set in your environment. Unset it and relaunch. The status bar shows a `READ-ONLY` badge while the flag is active so this shouldn't sneak up on you.
+Either you passed `--read-only` on the command line or `runtime.read_only = true` in `config.toml`. Toggle the config entry from the Settings UI (or edit it manually) and relaunch. The status bar shows a `READ-ONLY` badge while the flag is active so this shouldn't sneak up on you.
 
 ### The tree is empty after sync
 

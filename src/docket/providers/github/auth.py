@@ -13,7 +13,7 @@ import shutil
 import subprocess
 from functools import lru_cache
 
-from docket.config.env import external_tool_env
+from docket.config.paths import external_tool_env
 from docket.providers.base import ProviderAuthError
 
 

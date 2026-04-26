@@ -1,9 +1,9 @@
+import { FormField } from "~/components/common/FormField";
 import { Select } from "~/components/common/FormInputs";
 import { Toggle } from "~/components/common/Toggle";
 
 import { LOG_LEVELS } from "../_constants";
 import { getBoolean, getString } from "../_helpers";
-import { FormField } from "../_shared";
 import type { ConfigMap } from "../_types";
 
 export function TelemetryForm({

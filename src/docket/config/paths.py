@@ -9,6 +9,34 @@ from platformdirs import PlatformDirs
 APP_NAME = "docket"
 _dirs = PlatformDirs(appname=APP_NAME, appauthor=False, roaming=False)
 
+# Snapshot the user's real shell XDG values at import time, before the
+# top-level `--workspace` flag has had a chance to overwrite them. Subprocess
+# helpers (`gh`, `az`, editors) consume this so workspace redirection stays
+# scoped to docket and doesn't break unrelated tools that share the same env
+# vars.
+_XDG_VARS = ("XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME")
+_pre_workspace_xdg: dict[str, str | None] = {key: os.environ.get(key) for key in _XDG_VARS}
+
+
+def snapshot_pre_workspace_xdg() -> None:
+    """Re-take the XDG snapshot. Called by the `--workspace` Typer callback
+    *before* it rewrites `os.environ`, so external tools see the original
+    shell-exported values regardless of the import order at startup."""
+    for key in _XDG_VARS:
+        _pre_workspace_xdg[key] = os.environ.get(key)
+
+
+def external_tool_env() -> dict[str, str]:
+    """Env for subprocesses that resolve their own config from XDG_* (gh, az,
+    editors). Restores the pre-workspace XDG values on top of `os.environ`."""
+    env = os.environ.copy()
+    for key, original in _pre_workspace_xdg.items():
+        if original is None:
+            env.pop(key, None)
+        else:
+            env[key] = original
+    return env
+
 
 def _xdg_or(env_var: str, fallback: Path) -> Path:
     override = os.environ.get(env_var)
@@ -26,10 +54,6 @@ class Paths:
     @property
     def config_file(self) -> Path:
         return self.config_dir / "config.toml"
-
-    @property
-    def env_file(self) -> Path:
-        return self.config_dir / ".env"
 
     @property
     def prompts_dir(self) -> Path:
@@ -53,11 +77,11 @@ class Paths:
 
 
 def resolve_paths() -> Paths:
-    # Seed repo-local `.env` into os.environ before reading XDG_* so the
-    # override always takes effect, regardless of entry point. Idempotent.
-    from docket.config.env import load_project_env
+    """Resolve XDG paths from `os.environ` and platform defaults.
 
-    load_project_env()
+    `XDG_*` overrides are read straight from the process environment — the
+    only consumer that sets them is the top-level `--workspace` Typer
+    callback (or the user's actual shell)."""
     return Paths(
         config_dir=_xdg_or("XDG_CONFIG_HOME", Path(_dirs.user_config_dir)),
         state_dir=_xdg_or("XDG_STATE_HOME", Path(_dirs.user_state_dir)),

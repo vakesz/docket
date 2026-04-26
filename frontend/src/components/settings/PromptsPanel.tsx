@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DTO } from "~/api/client";
 import { usePrompt, usePrompts, usePutPrompt, useResetPrompt } from "~/api/hooks";
 import { StatusPill } from "~/components/common/FormInputs";
+import { ListPlaceholder } from "~/components/common/ListPlaceholder";
 import { MarkdownEditor } from "~/components/common/MarkdownEditor";
 import { Notice } from "~/components/common/Notice";
 import { cn } from "~/lib/cn";
@@ -106,7 +107,7 @@ export function PromptsPanel() {
                 className={cn(
                   "rounded-lg px-2 py-1 text-xs font-medium transition-colors",
                   filter === f.value
-                    ? "bg-surface text-fg shadow-sm-alt"
+                    ? "bg-surface text-fg shadow-sm"
                     : "text-fg-muted hover:text-fg-faint",
                 )}
               >
@@ -118,9 +119,7 @@ export function PromptsPanel() {
 
         <nav className="min-h-0 flex-1 overflow-auto px-2 pb-3">
           {filtered.length === 0 ? (
-            <p className="px-3 py-6 text-center text-xs text-fg-muted">
-              No prompts match this filter.
-            </p>
+            <ListPlaceholder>No prompts match this filter.</ListPlaceholder>
           ) : (
             <ul className="flex flex-col gap-0.5">
               {filtered.map((p) => (

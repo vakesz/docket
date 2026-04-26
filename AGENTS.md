@@ -56,12 +56,15 @@ Cross-tree shortcuts (`Makefile`):
 
 ```bash
 make install        # uv sync + bun install
-make env             # mint a DOCKET_API_TOKEN into .env (dev only)
 make frontend-build  # build the SPA (vite emits straight into src/docket/frontend_dist/)
-make serve           # build the SPA, then run the backend serving it (one origin)
+make serve           # build the SPA, then run the backend (mints a bootstrap token into config.toml on first run)
+make token           # print the bearer token from the workspace config.toml
 make wheel           # build a single-artifact wheel with the SPA bundled inside
 make check           # lint + typecheck + test across both trees
+make clean-workspace # delete ./.docket-dev (dev workspace) — wipes config, db, logs
 ```
+
+All `make` targets run docket against `WORKSPACE=./.docket-dev` via the top-level `docket --workspace=DIR` flag. That flag rewrites `XDG_CONFIG_HOME/STATE_HOME/CACHE_HOME/DATA_HOME` to point under `DIR/{config,state,cache,data}/` *before* the path snapshot in `src/docket/config/paths.py:_pre_workspace_xdg` is captured, so external tools (`gh`, `az`) still see the user's real shell exports. Override with `make serve WORKSPACE=/tmp/foo` to point at any other directory.
 
 ## Non-Negotiable Rules
 
@@ -185,7 +188,8 @@ Aspirational direction (consistent with current refactors, not a hard rule):
 
 ### Test fixtures and conventions
 
-- **`tmp_xdg`** (`tests/conftest.py`) sandboxes XDG paths under a temp root. Use it whenever a test touches config, prompts, logs, or the SQLite cache. It also suppresses `load_project_env()` so the repo's own `.env` (which redirects XDG into `.docket-dev/`) doesn't clobber the monkeypatched paths.
+- **`tmp_xdg`** (`tests/conftest.py`) sandboxes XDG paths under a temp root. Use it whenever a test touches config, prompts, logs, or the SQLite cache.
+- **`_in_memory_keyring`** (autouse, `tests/conftest.py`) installs a per-test in-memory `keyring` backend so `set_llm_api_key(...)` never touches the developer's real macOS Keychain / Linux Secret Service. Architecturally this works because only `docket.config.secrets` imports `keyring` — enforced by `tests/unit/test_import_boundary.py:test_keyring_only_imported_by_secrets_module`.
 - **Prompt-loader tests** reset module-level loader state before and after each case so prompt overrides don't leak across the suite (`tests/integration/test_prompt_loader.py`).
 - **Bootstrap setup tests** stub the self-restart hook so `/setup/complete` can be exercised without killing the test process (`tests/integration/test_api_setup.py`).
 - **TUI tests** mount `DocketApp` with a fake provider via `app.run_test()` and drive behavior with `pilot.press(...)`. No CSS or private-widget assertions. See `tests/pilot/test_tui_pilot.py`, `tests/pilot/test_diff_modal_pilot.py`.

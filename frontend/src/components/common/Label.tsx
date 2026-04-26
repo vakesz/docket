@@ -1,8 +1,11 @@
 import type { ReactNode } from "react";
 
+import { cn } from "~/lib/cn";
+import { metaLabelClass } from "~/lib/formClasses";
+
 export function Label({ children, required }: { children: ReactNode; required?: boolean }) {
   return (
-    <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-fg-muted">
+    <span className={cn(metaLabelClass)}>
       {children}
       {required && <span className="ml-1 text-danger">*</span>}
     </span>

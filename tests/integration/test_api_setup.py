@@ -3,7 +3,8 @@
 Two modes are covered:
 
 - **bootstrap app** (no config.toml yet): only `/health` and `/setup/*` are
-  mounted, auth uses `DOCKET_SETUP_TOKEN`.
+  mounted, auth uses the bootstrap `[http].token` minted on first `docket
+  serve`.
 - **full app** with setup routes mounted alongside normal endpoints, so an
   operator can re-run setup after config exists.
 
@@ -62,7 +63,7 @@ def _no_restart(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_bootstrap_app_requires_setup_token(tmp_path: Path) -> None:
     paths = _mk_paths(tmp_path)
-    with pytest.raises(ValueError, match="DOCKET_SETUP_TOKEN"):
+    with pytest.raises(ValueError, match="bearer token"):
         create_bootstrap_app(paths=paths, setup_token="")
 
 
@@ -256,7 +257,7 @@ def test_bootstrap_complete_rejects_empty_providers(tmp_path: Path) -> None:
     assert r.status_code == 422
 
 
-def test_bootstrap_complete_llm_persists_api_key_to_env_file(
+def test_bootstrap_complete_llm_persists_api_key_to_keyring(
     tmp_path: Path,
 ) -> None:
     paths = _mk_paths(tmp_path)
@@ -279,14 +280,23 @@ def test_bootstrap_complete_llm_persists_api_key_to_env_file(
     }
     r = client.post("/api/setup/complete", headers=SETUP_AUTH, json=payload)
     assert r.status_code == 200, r.text
-    env_path = paths.env_file
-    assert env_path.exists()
-    assert "AZURE_OPENAI_API_KEY=sk-test-1234567890" in env_path.read_text()
-    # The config.toml stores the llm endpoint + deployment but NOT the api key.
+
+    # The key is stored in the OS keyring (in-memory backend during tests),
+    # never in config.toml.
+    from docket.config.secrets import get_llm_api_key
+
+    assert get_llm_api_key() == "sk-test-1234567890"
+
     with paths.config_file.open("rb") as f:
         raw = tomllib.load(f)
     assert raw["llm"]["deployment"] == "gpt-5-mini"
     assert "api_key" not in raw["llm"]
+    # The non-secret hint should land in [llm.key_hint] for the UI preview.
+    hint = raw["llm"]["key_hint"]
+    assert hint["configured"] is True
+    assert hint["length"] == len("sk-test-1234567890")
+    assert hint["prefix"] == "sk-t"
+    assert hint["suffix"] == "7890"
 
 
 # ---- full app (setup router also mounted alongside normal routes) -----------

@@ -17,6 +17,7 @@ import {
   pickInitialKind,
   resolveSupportedKinds,
 } from "~/components/items/newItemHelpers";
+import { iconCloseButtonClass } from "~/lib/formClasses";
 
 import { NewItemForm } from "./NewItemForm";
 import { ProposalConfirmFooter } from "./ProposalConfirmFooter";
@@ -136,8 +137,9 @@ export function NewItemModal({ defaultKind, onClose, onCreated }: Props) {
         <button
           type="button"
           onClick={onClose}
-          className="rounded-xl p-1.5 text-fg-muted hover:bg-surface-alt"
+          className={iconCloseButtonClass}
           title="Close (Esc)"
+          aria-label="Close"
         >
           <X className="h-4 w-4" />
         </button>

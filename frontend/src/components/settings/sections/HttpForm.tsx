@@ -2,11 +2,12 @@ import { RefreshCw } from "lucide-react";
 import { useState } from "react";
 
 import { useRegenerateHttpToken } from "~/api/hooks";
+import { FormField } from "~/components/common/FormField";
 import { NumberInput, TextInput } from "~/components/common/FormInputs";
 import { Toggle } from "~/components/common/Toggle";
+import { outlineButtonClass } from "~/lib/formClasses";
 
 import { getBoolean, getNumberValue, getString, setOrUnset } from "../_helpers";
-import { FormField } from "../_shared";
 import type { ConfigMap } from "../_types";
 
 export function HttpForm({
@@ -89,7 +90,7 @@ function HttpTokenRegenButton() {
         type="button"
         onClick={trigger}
         disabled={regen.isPending}
-        className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-sm font-medium text-fg hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-40"
+        className={outlineButtonClass}
       >
         <RefreshCw className="h-4 w-4" />
         {regen.isPending ? "…" : "Regenerate"}

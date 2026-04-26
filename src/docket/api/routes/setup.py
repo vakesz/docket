@@ -2,16 +2,16 @@
 
 Mounted on both the full `create_app` and the bootstrap app spun up when
 `config.toml` doesn't exist yet. In bootstrap mode only `/setup/*` and
-`/health` are exposed, gated by `DOCKET_SETUP_TOKEN`. Once setup completes
-the server writes config and exits so the user can re-run `docket serve`
-with real wiring.
+`/health` are exposed, gated by the bootstrap bearer token (`docket serve`
+mints one into `[http].token` on first run and prints it). Once setup
+completes the server writes config and exits so the user can re-run
+`docket serve` with real wiring.
 
 `GET /setup/status` is the one endpoint that stays auth-free — the frontend
 needs to probe which mode it's in before it knows which token to send."""
 
 from __future__ import annotations
 
-import contextlib
 import os
 import secrets
 import signal
@@ -45,6 +45,7 @@ from docket.config.models import (
     compose_setup_config,
 )
 from docket.config.paths import Paths
+from docket.config.secrets import keyring_available, set_llm_api_key
 from docket.core.services import sync_service
 from docket.providers.base import ProviderError, WorkItemProvider
 from docket.storage import init_db
@@ -187,9 +188,27 @@ def setup_complete(
 
     paths.ensure()
     scaffold_prompts(paths.prompts_dir)
-    save_config(paths, cfg)
+
+    # Persist the API key + hint *before* save_config so the saved file
+    # already carries the freshly-rotated `[llm.key_hint]`. Failure to
+    # reach the OS keyring is a 503 — the user will retry from the wizard.
     if req.llm is not None and req.llm.api_key:
-        _write_env_key(paths, req.llm.api_key)
+        ok, err = keyring_available()
+        if not ok:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"OS keyring unavailable: {err or 'no backend detected'}",
+            )
+        try:
+            hint = set_llm_api_key(req.llm.api_key)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"failed to write API key to keyring: {e}",
+            ) from e
+        cfg = cfg.model_copy(update={"llm": cfg.llm.model_copy(update={"key_hint": hint})})
+
+    save_config(paths, cfg)
 
     initial_sync: SyncSummaryDTO | None = None
     if req.run_initial_sync:
@@ -219,24 +238,6 @@ def setup_complete(
         restart_required=True,
         initial_sync=initial_sync,
     )
-
-
-def _write_env_key(paths: Paths, api_key: str) -> None:
-    """Persist AZURE_OPENAI_API_KEY into XDG config .env so `docket serve` picks it up.
-
-    Passing an empty string removes the entry. The runtime value is NOT
-    rewritten by this function — callers can update `os.environ` directly if
-    they want the change to take effect without restart."""
-    env_path = paths.env_file
-    lines: list[str] = []
-    if env_path.exists():
-        lines = env_path.read_text(encoding="utf-8").splitlines()
-        lines = [ln for ln in lines if not ln.strip().startswith("AZURE_OPENAI_API_KEY=")]
-    if api_key:
-        lines.append(f"AZURE_OPENAI_API_KEY={api_key}")
-    env_path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
-    with contextlib.suppress(OSError):
-        os.chmod(env_path, 0o600)
 
 
 def _schedule_restart() -> None:

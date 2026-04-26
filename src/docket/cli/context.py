@@ -16,7 +16,6 @@ from docket.config import (
     ProviderEntry,
     ScopeFilter,
     load_config,
-    load_env,
     resolve_paths,
 )
 from docket.core.model import Project, ScopeFilters, project_id_for
@@ -104,14 +103,13 @@ class Context:
 
 
 def prepare() -> Context:
-    """Full bootstrap: resolve paths, load .env, load config, init DB, build all providers.
+    """Full bootstrap: resolve paths, load config, init DB, build all providers.
 
     Raises ConfigMissingError if no config.toml is present — callers should catch and
     dispatch to the setup wizard instead of failing.
     """
     paths = resolve_paths()
     paths.ensure()
-    load_env(paths)
     # Bring up logging immediately at the verbose default so anything that
     # raises during config load is captured. Once the config is in hand we
     # re-init with the user-resolved telemetry setting (no-op if unchanged).

@@ -3,7 +3,12 @@ import type { DTO } from "~/api/client";
 import { useProposeComment } from "~/api/hooks";
 import { MarkdownEditor } from "~/components/common/MarkdownEditor";
 import { cn } from "~/lib/cn";
-import { metaLabelClass, xsAccentButtonClass, xsBorderButtonClass } from "~/lib/formClasses";
+import {
+  dangerTextClass,
+  metaLabelClass,
+  xsAccentButtonClass,
+  xsBorderButtonClass,
+} from "~/lib/formClasses";
 
 interface Props {
   itemId: string;
@@ -42,7 +47,7 @@ export function CommentComposer({ itemId, onStaged }: Props) {
           placeholder="Write a comment in markdown…"
         />
       </div>
-      {propose.error && <p className="text-xs text-danger">{propose.error.message}</p>}
+      {propose.error && <p className={dangerTextClass}>{propose.error.message}</p>}
       <div className="flex justify-end gap-2">
         <button
           type="button"

@@ -8,6 +8,7 @@ import {
   useStartThread,
   useStatus,
 } from "~/api/hooks";
+import { Notice } from "~/components/common/Notice";
 import { Markdown } from "~/components/detail/Markdown";
 import { ProposalCard } from "~/components/mutations/ProposalCard";
 import { useLocalProposals } from "~/components/mutations/useLocalProposals";
@@ -170,9 +171,9 @@ export function ChatPane({ itemId }: { itemId: string }) {
               />
             )}
             {error && (
-              <div className="mt-2 rounded border border-danger bg-danger-bg p-2 text-xs text-danger-fg">
+              <Notice tone="error" title="Chat error" className="mt-2">
                 {error}
-              </div>
+              </Notice>
             )}
           </>
         )}

@@ -15,7 +15,7 @@ import json
 import subprocess
 from dataclasses import dataclass
 
-from docket.config.env import external_tool_env
+from docket.config.paths import external_tool_env
 from docket.providers.base import ProviderError
 from docket.providers.github.auth import _gh_path
 

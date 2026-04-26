@@ -20,10 +20,10 @@ def transition_command(
     dry_run: DryRun = False,
 ) -> None:
     """Move a work item to a new state using a named intent."""
-    abort_if_read_only(console)
     ti = enum_from_arg(intent, TransitionIntent, "intent")
 
     with prepare_or_wizard() as ctx:
+        abort_if_read_only(console, ctx.config)
         item = mutation_service.require_cached_item(ctx.conn, id, provider_key=ctx.active_provider)
         proposal = StateChange(item=item, intent=ti)
         apply_mutation(
@@ -32,6 +32,6 @@ def transition_command(
             proposal,
             confirm_title=f"Transition {id} ({ti.value})",
             dry_run=dry_run,
-            on_success=lambda r: f"[green]✓ {id} → {r.item.state.value}[/green]",  # type: ignore[union-attr]
+            on_success=lambda r: f"[green]✓ {id} → {r.require_item().state.value}[/green]",
             provider_key=ctx.active_provider,
         )

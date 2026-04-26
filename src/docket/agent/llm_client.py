@@ -77,8 +77,8 @@ class AzureOpenAIClient:
         resolved_deployment = deployment or deployment_from_url
         if not resolved_deployment:
             raise ValueError(
-                "Azure OpenAI deployment is required — set AZURE_OPENAI_DEPLOYMENT or "
-                "use a full deployment URL for AZURE_OPENAI_ENDPOINT."
+                "Azure OpenAI deployment is required — set llm.deployment in "
+                "config.toml or use a full deployment URL for llm.endpoint."
             )
         self._deployment = resolved_deployment
         self._client = AzureOpenAI(
@@ -125,7 +125,7 @@ def _parse_azure_endpoint(endpoint: str) -> tuple[str, str | None, str | None]:
     the SDK double-path the request and produce a 404."""
     parsed = urlparse(endpoint.strip())
     if not parsed.scheme or not parsed.netloc:
-        raise ValueError(f"AZURE_OPENAI_ENDPOINT is not a valid URL: {endpoint!r}")
+        raise ValueError(f"llm.endpoint is not a valid URL: {endpoint!r}")
     base = f"{parsed.scheme}://{parsed.netloc}"
     match = _DEPLOYMENT_PATH_RE.search(parsed.path or "")
     deployment = match.group("name") if match else None

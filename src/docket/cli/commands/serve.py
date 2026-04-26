@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import secrets
 
 import typer
@@ -9,17 +8,12 @@ from docket._console import console
 from docket.cli.commands._llm import build_llm_client
 from docket.cli.context import prepare
 from docket.config import ConfigMissingError
-from docket.config.env import get_read_only, get_setup_token
+from docket.config.loader import save_config
+from docket.config.models import Config, HttpConfig
 from docket.config.paths import resolve_paths
 from docket.telemetry import init_logging
 
 _VALID_LOG_LEVELS = {"critical", "error", "warning", "info", "debug", "trace"}
-
-
-def _resolve_log_level() -> str:
-    """Uvicorn log level from `DOCKET_LOG_LEVEL` env, defaulting to info."""
-    raw = (os.environ.get("DOCKET_LOG_LEVEL") or "info").strip().lower()
-    return raw if raw in _VALID_LOG_LEVELS else "info"
 
 
 def serve_command(
@@ -33,23 +27,32 @@ def serve_command(
     read_only: bool = typer.Option(
         False,
         "--read-only",
-        help="Disable every mutation endpoint — reads and chat stay available.",
+        help="Disable every mutation endpoint (in addition to runtime.read_only in config.toml).",
+    ),
+    log_level: str | None = typer.Option(
+        None,
+        "--log-level",
+        help="Uvicorn log level for this run; overrides telemetry.uvicorn_log_level.",
     ),
 ) -> None:
     """Run the HTTP surface (FastAPI + SSE) on the configured port.
 
     When `config.toml` is missing, falls through to bootstrap mode: a tiny
-    FastAPI exposing only `/health` and `/setup/*`, gated by
-    `DOCKET_SETUP_TOKEN`, so the frontend wizard can write config and trigger
-    a restart."""
+    FastAPI exposing only `/health` and `/setup/*`. The bootstrap path mints
+    a fresh `[http].token` into a stub `config.toml` and prints it once so
+    the operator can paste it into the wizard."""
     import uvicorn
 
     from docket.agent.llm_client import LlmClient
     from docket.api.app import create_app, create_bootstrap_app
     from docket.api.runtime import RuntimeState
 
-    effective_read_only = read_only or get_read_only()
-    setup_token = get_setup_token()
+    if log_level and log_level.lower() not in _VALID_LOG_LEVELS:
+        console.print(
+            f"[red]Invalid --log-level '{log_level}'[/red]: choose from "
+            f"{', '.join(sorted(_VALID_LOG_LEVELS))}."
+        )
+        raise typer.Exit(code=2)
 
     try:
         ctx = prepare()
@@ -60,24 +63,25 @@ def serve_command(
         # raised while finishing setup is captured for operators.
         init_logging(paths)
 
-        if not setup_token:
-            setup_token = secrets.token_urlsafe(32)
-            console.print("[yellow]No config.toml found — starting setup surface.[/yellow]")
-            console.print(
-                "[yellow]DOCKET_SETUP_TOKEN was not set; generated one for this session:[/yellow]"
-            )
-            console.print(f"  [cyan]{setup_token}[/cyan]")
-        else:
-            console.print("[yellow]No config.toml found — starting setup surface[/yellow]")
+        # Mint a token, write a stub config.toml, and print the token once.
+        # The wizard will rewrite the rest of config.toml later; until then,
+        # `[http].token` is the only field that exists.
+        bootstrap_token = secrets.token_urlsafe(32)
+        stub = Config(http=HttpConfig(enabled=True, token=bootstrap_token))
+        save_config(paths, stub)
+        console.print("[yellow]No config.toml found — starting setup surface.[/yellow]")
+        console.print("[yellow]Generated bootstrap bearer token (save this):[/yellow]")
+        console.print(f"  [cyan]{bootstrap_token}[/cyan]")
 
         bind = host or "127.0.0.1"
         listen_port = port or 8765
-        app = create_bootstrap_app(paths=paths, setup_token=setup_token)
+        bootstrap_log_level = (log_level or "info").lower()
+        app = create_bootstrap_app(paths=paths, setup_token=bootstrap_token)
         console.print(
             f"[green]docket serve (bootstrap)[/green] listening on http://{bind}:{listen_port} "
             f"— POST /setup/complete to finish setup"
         )
-        uvicorn.run(app, host=bind, port=listen_port, log_level=_resolve_log_level())
+        uvicorn.run(app, host=bind, port=listen_port, log_level=bootstrap_log_level)
         return
 
     with ctx:
@@ -92,6 +96,9 @@ def serve_command(
                 "[red]No bearer token configured[/red]. Re-run `docket setup` to generate one."
             )
             raise typer.Exit(code=1)
+
+        effective_read_only = read_only or ctx.config.runtime.read_only
+        effective_log_level = (log_level or ctx.config.telemetry.uvicorn_log_level).lower()
 
         bind = host or ctx.config.http.bind
         listen_port = port or ctx.config.http.port
@@ -117,7 +124,7 @@ def serve_command(
             read_only=effective_read_only,
             paths=ctx.paths,
             runtime=runtime,
-            setup_token=setup_token,
+            setup_token=ctx.config.http.token,
             config=ctx.config,
         )
         mode = "read-only" if effective_read_only else "read-write"
@@ -130,4 +137,4 @@ def serve_command(
             f"(bearer required; chat {'disabled' if llm is None else 'enabled'}; {mode})"
         )
         console.print(f"[dim]frontend bundle: {bundle}[/dim]")
-        uvicorn.run(app, host=bind, port=listen_port, log_level=_resolve_log_level())
+        uvicorn.run(app, host=bind, port=listen_port, log_level=effective_log_level)

@@ -48,6 +48,16 @@ class MutationResult:
     memory: MemoryEntry | None = None  # set for memory_write
     memory_deleted_id: str | None = None  # set for memory_delete
 
+    def require_item(self) -> Item:
+        """Return `self.item` for mutations that always produce one (transition,
+        description patch, comment add, item create). Raises if accidentally
+        used on an attachment or memory result so the bug surfaces loudly."""
+        if self.item is None:
+            raise RuntimeError(
+                f"Mutation {self.proposal_id} produced no item — wrong proposal type?"
+            )
+        return self.item
+
 
 def require_cached_item(
     conn: sqlite3.Connection,

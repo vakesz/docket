@@ -1,71 +1,70 @@
 """CLI-side coverage for read-only mode.
 
-The mutation commands (`transition`, `new`, `patch`) abort before touching
-the DB or provider when `DOCKET_READ_ONLY` is set. We test the command
-bodies directly rather than through a Typer `CliRunner` because the guard
-is the very first statement — we don't need `prepare_or_wizard()` to run
-to verify the exit.
+The mutation commands (`transition`, `new`, `patch`) abort once the context
+is opened if `runtime.read_only` is true in config.toml. We test the helper
+directly plus the end-to-end happy/refused paths via a fake `prepare_or_wizard`
+context.
 
-`serve` plumbs the flag into `create_app`; that path is already covered by
-`tests/test_api_read_only.py`, so here we just check `get_read_only()`
-honors the expected env tokens."""
+`serve` plumbs the flag and config into `create_app`; that path is already
+covered by `tests/integration/test_api_read_only.py`, so here we focus on
+the CLI guard."""
 
 from __future__ import annotations
 
+import contextlib
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 import typer
 from rich.console import Console
 
-from docket.cli.commands.new import new_command
-from docket.cli.commands.patch import patch_command
-from docket.cli.commands.transition import transition_command
+from docket.cli.commands import new as new_cmd
+from docket.cli.commands import patch as patch_cmd
+from docket.cli.commands import transition as transition_cmd
 from docket.cli.guard import abort_if_read_only
-from docket.config.env import get_read_only
+from docket.config.models import Config, RuntimeConfig
 
 
-def test_get_read_only_accepts_truthy_tokens(monkeypatch: pytest.MonkeyPatch) -> None:
-    for raw in ("1", "true", "TRUE", "yes", "ON"):
-        monkeypatch.setenv("DOCKET_READ_ONLY", raw)
-        assert get_read_only() is True
+def _make_config(read_only: bool) -> Config:
+    return Config(runtime=RuntimeConfig(read_only=read_only))
 
 
-def test_get_read_only_rejects_other_values(monkeypatch: pytest.MonkeyPatch) -> None:
-    for raw in ("0", "false", "no", "off", "", "maybe"):
-        monkeypatch.setenv("DOCKET_READ_ONLY", raw)
-        assert get_read_only() is False
-
-
-def test_abort_helper_raises_exit(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("DOCKET_READ_ONLY", "1")
+def test_abort_helper_raises_exit_when_config_read_only() -> None:
     with pytest.raises(typer.Exit) as exc:
-        abort_if_read_only(Console())
+        abort_if_read_only(Console(), _make_config(read_only=True))
     assert exc.value.exit_code == 3
 
 
-def test_abort_helper_noop_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("DOCKET_READ_ONLY", raising=False)
-    abort_if_read_only(Console())  # no raise
+def test_abort_helper_noop_when_config_not_read_only() -> None:
+    abort_if_read_only(Console(), _make_config(read_only=False))
 
 
-def test_transition_command_exits_before_touching_prepare(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("DOCKET_READ_ONLY", "1")
-    # If the guard didn't fire, prepare_or_wizard would run and we'd blow
-    # up on missing config — typer.Exit(3) proves the abort ran first.
+class _StubCtx:
+    """Stands in for the `prepare_or_wizard()` context manager — only the
+    fields the guard reads are populated."""
+
+    def __init__(self, read_only: bool) -> None:
+        self.config = _make_config(read_only)
+
+
+@contextlib.contextmanager
+def _stub_ctx(read_only: bool) -> Iterator[_StubCtx]:
+    yield _StubCtx(read_only)
+
+
+def test_transition_command_exits_under_read_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(transition_cmd, "prepare_or_wizard", lambda: _stub_ctx(read_only=True))
     with pytest.raises(typer.Exit) as exc:
-        transition_command(id="S-1", intent="start_work", dry_run=False)
+        transition_cmd.transition_command(id="S-1", intent="start_work", dry_run=False)
     assert exc.value.exit_code == 3
 
 
-def test_new_command_exits_before_touching_prepare(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("DOCKET_READ_ONLY", "1")
+def test_new_command_exits_under_read_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(new_cmd, "prepare_or_wizard", lambda: _stub_ctx(read_only=True))
     with pytest.raises(typer.Exit) as exc:
-        new_command(
+        new_cmd.new_command(
             kind="task",
             title="Nope",
             description_file=None,
@@ -77,14 +76,32 @@ def test_new_command_exits_before_touching_prepare(
     assert exc.value.exit_code == 3
 
 
-def test_patch_command_exits_before_touching_prepare(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
+def test_patch_command_exits_under_read_only(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setenv("DOCKET_READ_ONLY", "1")
-    # Pick a path that does exist — the guard fires before the file check.
+    monkeypatch.setattr(patch_cmd, "prepare_or_wizard", lambda: _stub_ctx(read_only=True))
     md = tmp_path / "body.md"
     md.write_text("new body")
     with pytest.raises(typer.Exit) as exc:
-        patch_command(id="S-1", from_file=md, dry_run=False)
+        patch_cmd.patch_command(id="S-1", from_file=md, dry_run=False)
     assert exc.value.exit_code == 3
+
+
+def test_patch_command_reads_file_before_opening_context(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A missing file should still surface a clean Exit(2) before the guard
+    fires — the guard is now inside the `with` block, but the file IO is not."""
+    captured: dict[str, Any] = {}
+
+    @contextlib.contextmanager
+    def _never_called() -> Iterator[_StubCtx]:
+        captured["entered"] = True
+        yield _StubCtx(read_only=False)
+
+    monkeypatch.setattr(patch_cmd, "prepare_or_wizard", _never_called)
+    missing = tmp_path / "does-not-exist.md"
+    with pytest.raises(typer.Exit) as exc:
+        patch_cmd.patch_command(id="S-1", from_file=missing, dry_run=False)
+    assert exc.value.exit_code == 2
+    assert "entered" not in captured

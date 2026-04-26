@@ -64,3 +64,42 @@ def test_sentinel_concrete_providers_present() -> None:
     silently reduce to an empty scan again."""
     assert "azure_devops" in CONCRETE_PROVIDER_PACKAGES
     assert "github" in CONCRETE_PROVIDER_PACKAGES
+
+
+_KEYRING_IMPORT_RE = re.compile(r"^\s*(?:from|import)\s+keyring\b")
+_DOTENV_IMPORT_RE = re.compile(r"^\s*(?:from|import)\s+dotenv\b")
+
+
+def test_keyring_only_imported_by_secrets_module() -> None:
+    """`keyring` is the OS-keychain bridge; everything else goes through
+    `docket.config.secrets`. This guards against a surface or service growing
+    a direct dependency on the keyring backend, which would bypass the
+    `KeyHintConfig` accounting and make the secret store invisible to tests."""
+    expected = SRC / "config" / "secrets.py"
+    bad: list[str] = []
+    for f in SRC.rglob("*.py"):
+        if f == expected:
+            continue
+        for lineno, line in enumerate(f.read_text(encoding="utf-8").splitlines(), start=1):
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+            if _KEYRING_IMPORT_RE.match(line):
+                bad.append(f"{f}:{lineno}: {stripped}")
+    assert not bad, "`keyring` may only be imported by docket/config/secrets.py:\n" + "\n".join(bad)
+
+
+def test_no_module_imports_dotenv() -> None:
+    """`.env` support was removed — `config.toml` is the single source of
+    truth for non-secret config, the keyring is the source of truth for
+    secrets, and the `--workspace` flag is the dev sandboxing escape hatch.
+    A stray `from dotenv import …` is a regression."""
+    bad: list[str] = []
+    for f in SRC.rglob("*.py"):
+        for lineno, line in enumerate(f.read_text(encoding="utf-8").splitlines(), start=1):
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+            if _DOTENV_IMPORT_RE.match(line):
+                bad.append(f"{f}:{lineno}: {stripped}")
+    assert not bad, "`dotenv` was dropped — remove these imports:\n" + "\n".join(bad)

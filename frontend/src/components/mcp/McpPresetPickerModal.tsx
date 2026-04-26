@@ -11,6 +11,7 @@ import { cn } from "~/lib/cn";
 import {
   fieldClass,
   fieldMonoClass,
+  iconCloseButtonClass,
   outlineButtonClass,
   primaryButtonClass,
 } from "~/lib/formClasses";
@@ -103,8 +104,9 @@ export function McpPresetPickerModal({
         <button
           type="button"
           onClick={onClose}
-          className="rounded-xl p-1.5 text-fg-muted hover:bg-surface-alt"
-          title="Close"
+          className={iconCloseButtonClass}
+          title="Close (Esc)"
+          aria-label="Close"
         >
           <X className="h-4 w-4" />
         </button>

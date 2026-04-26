@@ -27,7 +27,6 @@ def new_command(
     dry_run: DryRun = False,
 ) -> None:
     """Create a new work item."""
-    abort_if_read_only(console)
     ik = enum_from_arg(kind, ItemKind, "kind")
     fields = CreateFields(
         title=title,
@@ -38,6 +37,7 @@ def new_command(
     )
 
     with prepare_or_wizard() as ctx:
+        abort_if_read_only(console, ctx.config)
         proposal = ItemCreate(item_kind=ik, fields=fields)
         apply_mutation(
             ctx.conn,
@@ -45,6 +45,8 @@ def new_command(
             proposal,
             confirm_title=f"Create {ik.value}",
             dry_run=dry_run,
-            on_success=lambda r: f"[green]✓ created[/green] {r.item.id}  {r.item.title}",  # type: ignore[union-attr]
+            on_success=lambda r: (
+                f"[green]✓ created[/green] {r.require_item().id}  {r.require_item().title}"
+            ),
             provider_key=ctx.active_provider,
         )

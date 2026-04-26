@@ -1,13 +1,5 @@
 import { CircleAlert, Plus, Settings2, Trash2 } from "lucide-react";
-import {
-  type ComponentType,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type ComponentType, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { HelpText, NumberInput, TextInput } from "~/components/common/FormInputs";
 import { Label } from "~/components/common/Label";
@@ -43,24 +35,6 @@ export function ModeButton({
       <Icon className="h-3.5 w-3.5" />
       {label}
     </button>
-  );
-}
-
-export function FormField({
-  label,
-  help,
-  children,
-}: {
-  label: string;
-  help?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-2">
-      <Label>{label}</Label>
-      {children}
-      {help && <HelpText>{help}</HelpText>}
-    </div>
   );
 }
 

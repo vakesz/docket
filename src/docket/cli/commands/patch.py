@@ -21,7 +21,6 @@ def patch_command(
     dry_run: DryRun = False,
 ) -> None:
     """Replace a work item's description with the contents of a Markdown file."""
-    abort_if_read_only(console)
     try:
         new_md = from_file.read_text(encoding="utf-8")
     except OSError as exc:
@@ -29,6 +28,7 @@ def patch_command(
         raise typer.Exit(2) from exc
 
     with prepare_or_wizard() as ctx:
+        abort_if_read_only(console, ctx.config)
         item = mutation_service.require_cached_item(ctx.conn, id, provider_key=ctx.active_provider)
         proposal = DescriptionPatch(item=item, new_md=new_md)
         apply_mutation(

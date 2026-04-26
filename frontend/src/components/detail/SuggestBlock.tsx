@@ -4,7 +4,7 @@ import { useStageSuggestion, useStatus, useSuggestion } from "~/api/hooks";
 import { useChatPaneController } from "~/components/chat/ChatPaneContext";
 import { cn } from "~/lib/cn";
 import { formatIntent } from "~/lib/format";
-import { microCapsButtonClass, xsAccentButtonClass } from "~/lib/formClasses";
+import { dangerTextClass, microCapsButtonClass, xsAccentButtonClass } from "~/lib/formClasses";
 import { Markdown } from "./Markdown";
 
 interface Props {
@@ -61,9 +61,7 @@ export function SuggestBlock({ itemId, onStaged }: Props) {
         </button>
       </div>
 
-      {getSuggestion.error && (
-        <div className="text-xs text-danger">{getSuggestion.error.message}</div>
-      )}
+      {getSuggestion.error && <div className={dangerTextClass}>{getSuggestion.error.message}</div>}
 
       {suggestion && (
         <div className="flex flex-col gap-2 text-sm">
@@ -80,7 +78,7 @@ export function SuggestBlock({ itemId, onStaged }: Props) {
               ))}
             </ul>
           )}
-          {stage.error && <div className="text-xs text-danger">{stage.error.message}</div>}
+          {stage.error && <div className={dangerTextClass}>{stage.error.message}</div>}
           <div className="flex justify-end gap-2">
             <button
               type="button"

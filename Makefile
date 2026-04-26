@@ -2,12 +2,17 @@
 #
 # Run `make` or `make help` to see available targets. Everything delegates to
 # `uv` or `bun` so the underlying tools stay discoverable.
+#
+# Backend targets run docket against a local workspace (./.docket-dev by
+# default) so iteration never touches your real ~/.config/docket. Override
+# with `make serve WORKSPACE=/tmp/docket-test` to point at any other dir.
 
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
 FRONTEND := frontend
-ENV_FILE := .env
+WORKSPACE ?= ./.docket-dev
+DOCKET := uv run docket --workspace=$(WORKSPACE)
 
 ## ---------- host (no containers) ----------
 
@@ -22,7 +27,11 @@ frontend-build: ## build the SPA (vite emits straight into src/docket/frontend_d
 
 .PHONY: serve
 serve: frontend-build ## build the SPA, then run the backend at http://127.0.0.1:8765
-	uv run docket serve
+	$(DOCKET) serve
+
+.PHONY: token
+token: ## print the bearer token from the workspace config.toml (mint one via `make serve` if missing)
+	$(DOCKET) admin print-token
 
 .PHONY: wheel
 wheel: frontend-build ## build a single-artifact wheel with the SPA bundled inside
@@ -62,14 +71,9 @@ clean: ## remove local caches and the SPA build output
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +
 	rm -rf .mypy_cache .pytest_cache .ruff_cache
 
-.PHONY: env
-env: ## create .env from .env.example if missing, with a fresh token
-	@if [ -f $(ENV_FILE) ]; then echo "$(ENV_FILE) already exists"; exit 0; fi
-	@cp .env.example $(ENV_FILE)
-	@token=$$(openssl rand -hex 32); \
-	  sed -i.bak "s|^DOCKET_API_TOKEN=.*|DOCKET_API_TOKEN=$$token|" $(ENV_FILE) && \
-	  rm $(ENV_FILE).bak
-	@echo "wrote $(ENV_FILE) with a fresh DOCKET_API_TOKEN"
+.PHONY: clean-workspace
+clean-workspace: ## delete the dev workspace ($(WORKSPACE)) — wipes config, db, logs
+	rm -rf $(WORKSPACE)
 
 .PHONY: help
 help: ## list available targets

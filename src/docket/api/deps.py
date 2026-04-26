@@ -12,7 +12,8 @@ routes."""
 from __future__ import annotations
 
 import sqlite3
-from typing import cast
+from collections.abc import Callable
+from typing import Protocol, cast
 
 from fastapi import HTTPException, Request, status
 from pydantic import BaseModel
@@ -172,6 +173,29 @@ def get_config(request: Request) -> Config:
     )
 
 
+class _ProjectScoped(Protocol):
+    project_id: str
+
+
+def require_owned[T: _ProjectScoped](
+    conn: sqlite3.Connection,
+    project_id: str,
+    entry_id: str,
+    *,
+    fetch: Callable[[sqlite3.Connection, str], T | None],
+    label: str,
+) -> T:
+    """Fetch a project-scoped entry by id and ensure it lives in `project_id`.
+
+    Raises HTTP 404 either when the row is missing or when it belongs to a
+    different project — knowing an id from one project must never let a
+    request scoped to another peek at or mutate it."""
+    entry = fetch(conn, entry_id)
+    if entry is None or entry.project_id != project_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown {label} '{entry_id}'")
+    return entry
+
+
 def require_pending_proposal(
     store: ProposalStore,
     proposal_id: str,
@@ -217,6 +241,7 @@ __all__ = [
     "require_agent",
     "require_llm",
     "require_not_read_only",
+    "require_owned",
     "require_patch_not_empty",
     "require_pending_proposal",
     "require_project",

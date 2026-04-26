@@ -1,4 +1,5 @@
 import type { DTO } from "~/api/client";
+import { Notice } from "~/components/common/Notice";
 import { formatState } from "~/lib/format";
 
 export function DuplicateSearchPanel({
@@ -13,8 +14,7 @@ export function DuplicateSearchPanel({
   }
   if (duplicates.length === 0) return null;
   return (
-    <div className="rounded-xl border border-warning bg-warning-bg/40 px-3 py-2 text-xs text-warning-fg">
-      <div className="mb-1 font-semibold">Possible duplicates ({duplicates.length})</div>
+    <Notice tone="warning" title={`Possible duplicates (${duplicates.length})`}>
       <ul className="flex flex-col gap-0.5 font-mono text-[11px]">
         {duplicates.map((it) => (
           <li key={it.id} className="truncate">
@@ -30,6 +30,6 @@ export function DuplicateSearchPanel({
           </li>
         ))}
       </ul>
-    </div>
+    </Notice>
   );
 }

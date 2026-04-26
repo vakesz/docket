@@ -22,7 +22,6 @@ spec-driven generic connection step and a no-op scope."""
 
 from __future__ import annotations
 
-import os
 import secrets
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -33,16 +32,22 @@ from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 
 from docket.agent.prompt import scaffold as scaffold_prompts
-from docket.config.env import get_price_input_per_1m, get_price_output_per_1m
 from docket.config.loader import load_config, save_config
 from docket.config.models import (
     Config,
+    KeyHintConfig,
     ScopeFilter,
     TelemetryLevel,
     build_provider_entry,
     compose_setup_config,
 )
 from docket.config.paths import Paths, resolve_paths
+from docket.config.secrets import (
+    get_llm_api_key,
+    keyring_available,
+    make_hint,
+    set_llm_api_key,
+)
 from docket.config.setup_utils import (
     build_label_suggestion,
     console,
@@ -93,6 +98,17 @@ STEP_NAMES: tuple[str, ...] = (
 )
 
 
+# Per-1M-token Azure Foundry list prices for known deployments. The wizard uses
+# these as price-prompt defaults when the user keeps the suggested deployment
+# name and hasn't already set explicit prices in config.toml. Update when
+# Microsoft publishes new rates (https://azure.microsoft.com/pricing/details/ai-foundry-models/).
+KNOWN_MODEL_PRICES: dict[str, tuple[float, float]] = {
+    "gpt-5": (1.25, 10.0),
+    "gpt-5-mini": (0.25, 2.0),
+    "gpt-5-nano": (0.05, 0.4),
+}
+
+
 @dataclass
 class WizardState:
     paths: Paths
@@ -114,6 +130,10 @@ class WizardState:
     llm_deployment: str = "gpt-5"
     llm_price_input_per_1m: float | None = None
     llm_price_output_per_1m: float | None = None
+    # Captured by the `llm` step and consumed by `_build_config_from_state`
+    # to update `[llm.key_hint]` in config.toml. The key itself goes straight
+    # to the OS keyring at the moment it's prompted; only the hint stays here.
+    llm_key_hint: KeyHintConfig | None = None
     # Discovered hints (used to pre-populate assignee pickers).
     signed_in_email: str | None = None
     # gh host picked during the GitHub connection step. Feeds the label
@@ -664,17 +684,10 @@ def _step_http_surface(state: WizardState) -> None:
     if not state.http_enabled:
         console.print("[dim]Skipped — `docket serve` will refuse to start until re-enabled.[/dim]")
         return
-    env_token = os.environ.get("DOCKET_API_TOKEN", "").strip()
     if state.http_token and not Confirm.ask(
         "An HTTP token is already configured — generate a new one?", default=False
     ):
         console.print("[dim]Keeping the existing token.[/dim]")
-    elif env_token:
-        state.http_token = env_token
-        console.print(
-            "[green]✓ using DOCKET_API_TOKEN from environment[/green] "
-            "[dim](mirrored into config.toml under http.token — keeps the frontend proxy in sync)[/dim]"
-        )
     else:
         state.http_token = secrets.token_urlsafe(32)
         console.print(
@@ -688,24 +701,21 @@ def _step_http_surface(state: WizardState) -> None:
 
 
 def _step_llm(state: WizardState) -> None:
-    """Capture Azure OpenAI endpoint + deployment for config.toml's `[llm]`.
+    """Capture Azure OpenAI endpoint + deployment for config.toml's `[llm]`,
+    and the API key into the OS keyring.
 
-    The API key has no config.toml home and stays in `.env`; we surface its
-    presence so the user knows whether chat will actually start after setup.
-    Leaving the endpoint blank disables chat — `/conversation` endpoints will
-    return 503 until a value is set (via this step or `AZURE_OPENAI_ENDPOINT`
-    in `.env`, which overrides config.toml at runtime)."""
-    env_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT", "").strip()
-    env_deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT", "").strip()
+    Leaving the endpoint blank disables chat — `/conversation` endpoints
+    return 503 until a value is set. The API key never lives in
+    `config.toml`; we store it in the OS keyring (Keychain / Credential
+    Manager / Secret Service) and write a non-secret hint into
+    `[llm.key_hint]` so the UI can show the user which key is loaded."""
     console.print(
         "Chat / suggestions use an Azure OpenAI deployment. Endpoint + deployment "
-        "persist to config.toml; the API key stays in .env (no config.toml home). "
+        "persist to config.toml; the API key is stored in your OS keyring. "
         "Leave the endpoint blank to disable chat."
     )
 
-    endpoint_default = state.llm_endpoint or env_endpoint
-    if env_endpoint and not state.llm_endpoint:
-        console.print("[dim]Pre-filled from AZURE_OPENAI_ENDPOINT.[/dim]")
+    endpoint_default = state.llm_endpoint
     while True:
         raw = Prompt.ask(
             "Azure OpenAI endpoint URL (blank to disable chat)",
@@ -723,39 +733,80 @@ def _step_llm(state: WizardState) -> None:
         state.llm_endpoint = raw
         break
 
-    deployment_default = state.llm_deployment or env_deployment or "gpt-5"
+    deployment_default = state.llm_deployment or "gpt-5"
     state.llm_deployment = (
         Prompt.ask("Deployment name", default=deployment_default).strip() or deployment_default
     )
 
+    known = KNOWN_MODEL_PRICES.get(state.llm_deployment.lower())
+    price_input_default = state.llm_price_input_per_1m
+    price_output_default = state.llm_price_output_per_1m
+    if known is not None:
+        if price_input_default is None:
+            price_input_default = known[0]
+        if price_output_default is None:
+            price_output_default = known[1]
+        console.print(
+            f"[dim]Using Azure Foundry list prices for {state.llm_deployment}: "
+            f"${known[0]} in / ${known[1]} out per 1M tokens. Override below if your "
+            f"contract differs.[/dim]"
+        )
+
     state.llm_price_input_per_1m = _ask_price(
         "Input price per 1M tokens (USD, blank to skip cost display)",
-        current=state.llm_price_input_per_1m,
-        env_default=get_price_input_per_1m(),
+        current=price_input_default,
     )
     state.llm_price_output_per_1m = _ask_price(
         "Output price per 1M tokens (USD, blank to skip cost display)",
-        current=state.llm_price_output_per_1m,
-        env_default=get_price_output_per_1m(),
+        current=price_output_default,
     )
 
-    if os.environ.get("AZURE_OPENAI_API_KEY", "").strip():
-        console.print("[green]✓ AZURE_OPENAI_API_KEY detected in the environment.[/green]")
-    else:
+    _step_llm_key(state)
+
+
+def _step_llm_key(state: WizardState) -> None:
+    """Sub-step of `_step_llm`: prompt for the API key + write to keyring."""
+    ok, err = keyring_available()
+    if not ok:
         console.print(
-            "[yellow]Heads up[/yellow]: AZURE_OPENAI_API_KEY is not set. "
-            "Add it to your .env before `docket serve` to enable chat."
+            f"[red]OS keyring is unavailable[/red]: {err or 'no backend detected'}.\n"
+            "Install a keyring backend (`gnome-keyring` / `kwallet` on Linux, "
+            "Keychain on macOS, Credential Manager on Windows) and re-run "
+            "`docket setup --step=llm` to set the API key."
         )
+        return
+
+    existing = get_llm_api_key()
+    if existing:
+        existing_hint = make_hint(existing)
+        preview = (
+            f"{existing_hint.prefix}…{existing_hint.suffix}"
+            if existing_hint.prefix
+            else f"{existing_hint.length} chars"
+        )
+        console.print(f"[green]✓ existing API key in keyring[/green] [dim]({preview})[/dim]")
+        if not Confirm.ask("Replace the stored API key?", default=False):
+            state.llm_key_hint = existing_hint
+            return
+
+    raw = Prompt.ask("Azure OpenAI API key (input hidden)", password=True).strip()
+    if not raw:
+        console.print("[dim]Skipped — chat will 503 until a key is set.[/dim]")
+        return
+    try:
+        hint = set_llm_api_key(raw)
+    except Exception as e:  # pragma: no cover — defensive against locked keychain
+        console.print(f"[red]Failed to write to keyring[/red]: {e}")
+        return
+    state.llm_key_hint = hint
+    console.print("[green]✓ API key stored in OS keyring.[/green]")
 
 
-def _ask_price(prompt: str, *, current: float | None, env_default: float | None) -> float | None:
-    """Prompt for an optional float, prefilled from current → env → blank.
+def _ask_price(prompt: str, *, current: float | None) -> float | None:
+    """Prompt for an optional float, prefilled from `current` (existing config).
 
     Returns None when the user clears the field (literal "none"/"" reply)."""
-    default_value = current if current is not None else env_default
-    default_str = f"{default_value}" if default_value is not None else ""
-    if env_default is not None and current is None:
-        console.print(f"[dim]Pre-filled from env ({env_default}).[/dim]")
+    default_str = f"{current}" if current is not None else ""
     while True:
         raw = Prompt.ask(prompt, default=default_str).strip().lower()
         if raw == "" or raw == "none":
@@ -851,7 +902,7 @@ def _build_config_from_state(state: WizardState) -> Config:
     active_provider = state.existing.active_provider
     if state.make_active or not active_provider:
         active_provider = state.provider_key
-    return compose_setup_config(
+    composed = compose_setup_config(
         state.existing,
         providers=providers,
         active_provider=active_provider,
@@ -866,3 +917,10 @@ def _build_config_from_state(state: WizardState) -> Config:
         price_input_per_1m=state.llm_price_input_per_1m,
         price_output_per_1m=state.llm_price_output_per_1m,
     )
+    # Carry the hint forward only when the wizard actually touched the key
+    # this run; otherwise preserve whatever was already in `state.existing`.
+    if state.llm_key_hint is not None:
+        composed = composed.model_copy(
+            update={"llm": composed.llm.model_copy(update={"key_hint": state.llm_key_hint})}
+        )
+    return composed

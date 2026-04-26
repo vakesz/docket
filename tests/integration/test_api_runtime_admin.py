@@ -352,6 +352,58 @@ def test_patch_settings_read_only_403(ro_client: TestClient) -> None:
     assert r.status_code == 403
 
 
+# -- LLM key rotation -------------------------------------------------------
+
+
+def test_post_llm_key_writes_to_keyring_and_persists_hint(client: TestClient, env) -> None:
+    from docket.config.secrets import get_llm_api_key
+
+    r = client.post(
+        "/api/settings/llm-key",
+        headers=AUTH,
+        json={"api_key": "sk-rotation-key-abcdef-1234567890"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body == {"ok": True, "configured": True, "requires_restart": True}
+
+    assert get_llm_api_key() == "sk-rotation-key-abcdef-1234567890"
+
+    # Hint persisted into config.toml so the UI can read it from /api/settings.
+    settings_r = client.get("/api/settings", headers=AUTH)
+    hint = settings_r.json()["config"]["llm"]["key_hint"]
+    assert hint["configured"] is True
+    assert hint["prefix"] == "sk-r"
+    assert hint["suffix"] == "7890"
+    assert hint["length"] == len("sk-rotation-key-abcdef-1234567890")
+
+
+def test_delete_llm_key_clears_keyring_and_hint(client: TestClient, env) -> None:
+    from docket.config.secrets import get_llm_api_key, set_llm_api_key
+
+    set_llm_api_key("sk-prepopulated-key-12345-XYZ0")
+
+    r = client.delete("/api/settings/llm-key", headers=AUTH)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ok"] is True
+    assert body["configured"] is False
+
+    assert get_llm_api_key() is None
+    settings_r = client.get("/api/settings", headers=AUTH)
+    hint = settings_r.json()["config"]["llm"]["key_hint"]
+    assert hint["configured"] is False
+    assert hint["prefix"] == ""
+    assert hint["length"] == 0
+
+
+def test_llm_key_rotation_read_only_403(ro_client: TestClient) -> None:
+    r = ro_client.post("/api/settings/llm-key", headers=AUTH, json={"api_key": "sk-x"})
+    assert r.status_code == 403
+    r = ro_client.delete("/api/settings/llm-key", headers=AUTH)
+    assert r.status_code == 403
+
+
 # -- provider edit -----------------------------------------------------------
 
 

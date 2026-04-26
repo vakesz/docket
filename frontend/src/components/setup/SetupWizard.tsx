@@ -9,8 +9,15 @@ import {
 } from "~/api/hooks";
 import { HelpText, TextInput } from "~/components/common/FormInputs";
 import { Label } from "~/components/common/Label";
+import { Notice } from "~/components/common/Notice";
 import { cn } from "~/lib/cn";
-import { metaLabelClass, setupCardClass, xsBorderButtonClass } from "~/lib/formClasses";
+import {
+  dangerTextClass,
+  metaLabelClass,
+  primaryButtonClass,
+  setupCardClass,
+  xsBorderButtonClass,
+} from "~/lib/formClasses";
 
 type Step = "welcome" | "provider" | "llm" | "review";
 
@@ -28,7 +35,22 @@ interface LlmDraft {
   api_version: string;
   price_input_per_1m: string;
   price_output_per_1m: string;
+  // Tracks whether the user has hand-edited prices. Until they do, switching
+  // deployments auto-refills with the known Azure Foundry list price.
+  prices_dirty: boolean;
   skip: boolean;
+}
+
+// Azure Foundry list prices per 1M tokens for known deployments. Mirrors
+// `KNOWN_MODEL_PRICES` in src/docket/config/setup_wizard.py.
+const KNOWN_MODEL_PRICES: Record<string, { input: string; output: string }> = {
+  "gpt-5": { input: "1.25", output: "10.00" },
+  "gpt-5-mini": { input: "0.25", output: "2.00" },
+  "gpt-5-nano": { input: "0.05", output: "0.40" },
+};
+
+function defaultPricesFor(deployment: string): { input: string; output: string } | null {
+  return KNOWN_MODEL_PRICES[deployment.trim().toLowerCase()] ?? null;
 }
 
 export function SetupWizard() {
@@ -42,14 +64,18 @@ export function SetupWizard() {
     display_name: "Default",
     config: {},
   });
-  const [llm, setLlm] = useState<LlmDraft>({
-    endpoint: "",
-    api_key: "",
-    deployment: "gpt-5",
-    api_version: "2025-01-01-preview",
-    price_input_per_1m: "",
-    price_output_per_1m: "",
-    skip: false,
+  const [llm, setLlm] = useState<LlmDraft>(() => {
+    const defaults = defaultPricesFor("gpt-5");
+    return {
+      endpoint: "",
+      api_key: "",
+      deployment: "gpt-5",
+      api_version: "2025-01-01-preview",
+      price_input_per_1m: defaults?.input ?? "",
+      price_output_per_1m: defaults?.output ?? "",
+      prices_dirty: false,
+      skip: false,
+    };
   });
 
   return (
@@ -133,11 +159,7 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
         after.
       </p>
       <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={onNext}
-          className="rounded bg-accent px-4 py-1.5 text-sm font-semibold text-accent-fg hover:bg-accent/90"
-        >
+        <button type="button" onClick={onNext} className={primaryButtonClass}>
           Start
         </button>
       </div>
@@ -184,7 +206,7 @@ function ProviderStep({
                 key={t.id}
                 onClick={() => setDraft((d) => ({ ...d, type: t.id, config: {} }))}
                 className={cn(
-                  "rounded border p-3 text-left",
+                  "rounded-xl border p-3 text-left",
                   draft.type === t.id
                     ? "border-accent bg-accent/5"
                     : "border-border hover:border-fg-faint",
@@ -246,7 +268,7 @@ function ProviderStep({
           </button>
           {test.data?.ok && <span className="text-xs text-success">OK</span>}
           {test.data?.ok === false && (
-            <span className="text-xs text-danger">{test.data.error ?? "Failed"}</span>
+            <span className={dangerTextClass}>{test.data.error ?? "Failed"}</span>
           )}
         </section>
       )}
@@ -259,7 +281,7 @@ function ProviderStep({
           type="button"
           disabled={!selected || !fieldsValid}
           onClick={onNext}
-          className="rounded bg-accent px-4 py-1.5 text-sm font-semibold text-accent-fg hover:bg-accent/90 disabled:opacity-50"
+          className={primaryButtonClass}
         >
           Next
         </button>
@@ -317,7 +339,19 @@ function LlmStep({
               <Label>Deployment</Label>
               <TextInput
                 value={draft.deployment}
-                onChange={(v) => setDraft((d) => ({ ...d, deployment: v }))}
+                onChange={(v) =>
+                  setDraft((d) => {
+                    const next: LlmDraft = { ...d, deployment: v };
+                    // Auto-refill prices for known deployments until the user
+                    // edits a price field — then we leave their values alone.
+                    if (!d.prices_dirty) {
+                      const defaults = defaultPricesFor(v);
+                      next.price_input_per_1m = defaults?.input ?? "";
+                      next.price_output_per_1m = defaults?.output ?? "";
+                    }
+                    return next;
+                  })
+                }
               />
             </div>
             <div className="flex flex-col gap-2">
@@ -333,7 +367,9 @@ function LlmStep({
               <Label>Input price per 1M tokens (USD)</Label>
               <TextInput
                 value={draft.price_input_per_1m}
-                onChange={(v) => setDraft((d) => ({ ...d, price_input_per_1m: v }))}
+                onChange={(v) =>
+                  setDraft((d) => ({ ...d, price_input_per_1m: v, prices_dirty: true }))
+                }
                 placeholder="e.g. 1.25"
               />
             </div>
@@ -341,12 +377,18 @@ function LlmStep({
               <Label>Output price per 1M tokens (USD)</Label>
               <TextInput
                 value={draft.price_output_per_1m}
-                onChange={(v) => setDraft((d) => ({ ...d, price_output_per_1m: v }))}
+                onChange={(v) =>
+                  setDraft((d) => ({ ...d, price_output_per_1m: v, prices_dirty: true }))
+                }
                 placeholder="e.g. 10.00"
               />
             </div>
           </section>
-          <HelpText>Leave both blank to skip cost display in the chat ledger.</HelpText>
+          <HelpText>
+            {defaultPricesFor(draft.deployment)
+              ? "Prefilled with Azure Foundry list prices for this deployment — override if your contract differs, or clear both to hide cost in the ledger."
+              : "Leave both blank to skip cost display in the chat ledger."}
+          </HelpText>
           <section className="flex items-center gap-2 border-t border-border pt-3">
             <button
               type="button"
@@ -365,7 +407,7 @@ function LlmStep({
             </button>
             {test.data?.ok && <span className="text-xs text-success">OK</span>}
             {test.data?.ok === false && (
-              <span className="text-xs text-danger">{test.data.error ?? "Failed"}</span>
+              <span className={dangerTextClass}>{test.data.error ?? "Failed"}</span>
             )}
           </section>
         </>
@@ -375,11 +417,7 @@ function LlmStep({
         <button type="button" onClick={onBack} className="text-xs text-fg-muted hover:text-fg">
           ← Back
         </button>
-        <button
-          type="button"
-          onClick={onNext}
-          className="rounded bg-accent px-4 py-1.5 text-sm font-semibold text-accent-fg hover:bg-accent/90"
-        >
+        <button type="button" onClick={onNext} className={primaryButtonClass}>
           Next
         </button>
       </div>
@@ -437,44 +475,43 @@ function ReviewStep({
 
   if (complete.data) {
     return (
-      <div className="flex flex-col gap-3 rounded border border-success bg-success-bg p-6 text-sm text-success-fg">
-        <div className="font-semibold">Configuration written.</div>
-        <div className="font-mono text-[11px]">{complete.data.config_path}</div>
-        {complete.data.initial_sync && (
-          <div className="font-mono text-[11px]">
-            Initial sync: upserted {complete.data.initial_sync.upserted}, archived{" "}
-            {complete.data.initial_sync.archived}
-          </div>
-        )}
-        <p>
-          The backend is restarting. This page will reload in a few seconds — if it doesn't, refresh
-          manually.
-        </p>
-        <ReloadTimer />
-      </div>
+      <Notice tone="ok" title="Configuration written">
+        <div className="flex flex-col gap-2">
+          <div className="font-mono text-[11px]">{complete.data.config_path}</div>
+          {complete.data.initial_sync && (
+            <div className="font-mono text-[11px]">
+              Initial sync: upserted {complete.data.initial_sync.upserted}, archived{" "}
+              {complete.data.initial_sync.archived}
+            </div>
+          )}
+          <p>
+            The backend is restarting. This page will reload in a few seconds — if it doesn't,
+            refresh manually.
+          </p>
+          <ReloadTimer />
+        </div>
+      </Notice>
     );
   }
 
   return (
     <div className={setupCardClass}>
-      <section className="rounded border border-border p-3">
-        <div className="mb-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">
-          Provider
-        </div>
+      <section className="rounded-xl border border-border p-3">
+        <div className={cn("mb-1", metaLabelClass)}>Provider</div>
         <div>
           {provider.display_name}{" "}
           <span className="font-mono text-[10px] text-fg-muted">({provider.type})</span>
         </div>
       </section>
-      <section className="rounded border border-border p-3">
-        <div className="mb-1 font-mono text-[11px] uppercase tracking-wider text-fg-muted">LLM</div>
+      <section className="rounded-xl border border-border p-3">
+        <div className={cn("mb-1", metaLabelClass)}>LLM</div>
         <div>{llm.skip ? "Disabled" : `${llm.deployment} @ ${llm.endpoint}`}</div>
       </section>
 
       {complete.error && (
-        <div className="rounded border border-danger bg-danger-bg p-3 text-xs text-danger-fg">
+        <Notice tone="error" title="Setup failed">
           {complete.error.message}
-        </div>
+        </Notice>
       )}
 
       <div className="flex justify-between">
@@ -485,7 +522,7 @@ function ReviewStep({
           type="button"
           disabled={complete.isPending}
           onClick={submit}
-          className="rounded bg-accent px-4 py-1.5 text-sm font-semibold text-accent-fg hover:bg-accent/90 disabled:opacity-50"
+          className={primaryButtonClass}
         >
           {complete.isPending ? "Writing config…" : "Finish setup"}
         </button>
