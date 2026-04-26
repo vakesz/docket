@@ -1,16 +1,17 @@
-"""Per-axis view-time matcher for Azure DevOps cached items.
+"""Per-axis view-time helpers for Azure DevOps cached items.
 
-The visual filter calls this once per `(item, axis_key, value)` tuple while
-narrowing the cached list. We look only at `Item.provider_raw["fields"]` —
-the raw WIQL response — so this stays a pure function over the cache.
+Two callbacks live here, both pure functions over `Item.provider_raw`
+so `core/` stays provider-agnostic — the registry wires them onto
+`ProviderSpec.axis_matcher` / `axis_extract`:
 
-Axes mirror the columns ADO surfaces in `_DEFAULT_FIELDS` (see
-`provider.py`):
-- `area_path` / `iteration_path` behave like WIQL's `UNDER` operator: a
-  stored path of `A\\B\\C` matches a filter of `A` or `A\\B`.
-- `team` is not a first-class WIQL clause; we approximate by checking
-  `System.NodeName` and `System.TeamProject`. Items missing the field
-  fall through to "no match" rather than silently passing.
+- `axis_matcher(item, axis_key, expected)` — returns True iff the item
+  belongs in the narrowed set for that axis value. `area_path` /
+  `iteration_path` use UNDER semantics (a stored `A\\B\\C` matches
+  filters of `A` or `A\\B`); `team` checks `System.NodeName` /
+  `System.TeamProject`.
+- `axis_extract(item, axis_key)` — returns the canonical value the item
+  carries for that axis, or None if absent. The visual filter calls this
+  to populate the chip popovers (top-N values + counts).
 """
 
 from __future__ import annotations
@@ -28,6 +29,33 @@ def axis_matcher(item: Item, axis_key: str, expected: str) -> bool:
     if axis_key == "team":
         return _matches_team(item, expected)
     return False
+
+
+def axis_extract(item: Item, axis_key: str) -> str | None:
+    """Return the canonical value `item` carries for `axis_key`, or None.
+
+    Unknown axes return None so the facet popover shows nothing rather
+    than mistakenly populating with the wrong field."""
+    raw = item.provider_raw.get("fields") if item.provider_raw else None
+    if not isinstance(raw, dict):
+        return None
+    if axis_key == "area_path":
+        value = raw.get("System.AreaPath")
+        return value if isinstance(value, str) and value else None
+    if axis_key == "iteration_path":
+        value = raw.get("System.IterationPath")
+        return value if isinstance(value, str) and value else None
+    if axis_key == "team":
+        # `team` axis matches either NodeName or TeamProject. Prefer the
+        # more specific NodeName; fall back to TeamProject. Selection
+        # popovers then show actual team values rather than just the
+        # project root.
+        node = raw.get("System.NodeName")
+        if isinstance(node, str) and node:
+            return node
+        team = raw.get("System.TeamProject")
+        return team if isinstance(team, str) and team else None
+    return None
 
 
 def _matches_path(item: Item, field: str, expected: str) -> bool:
@@ -51,4 +79,4 @@ def _matches_team(item: Item, expected: str) -> bool:
     return isinstance(team_project, str) and team_project == expected
 
 
-__all__ = ["axis_matcher"]
+__all__ = ["axis_extract", "axis_matcher"]

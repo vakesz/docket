@@ -11,10 +11,10 @@ import {
   usePin,
   usePinned,
   useProviders,
-  useScopes,
   useSetActiveProvider,
-  useSetActiveScope,
+  useSetActiveView,
   useUnpin,
+  useViews,
 } from "~/api/hooks";
 import { NewItemModal } from "~/components/items/NewItemModal";
 import { cn } from "~/lib/cn";
@@ -82,7 +82,8 @@ export function CommandPalette() {
   const items = useItems();
   const pinned = usePinned();
   const providers = useProviders();
-  const scopes = useScopes();
+  const activeProviderKey = providers.data?.find((p) => p.active)?.key ?? null;
+  const views = useViews(activeProviderKey);
   const item = useItem(itemId);
   const isPinned = useIsPinned(itemId);
 
@@ -90,7 +91,7 @@ export function CommandPalette() {
   const pin = usePin();
   const unpin = useUnpin();
   const setActiveProvider = useSetActiveProvider();
-  const setActiveScope = useSetActiveScope();
+  const setActiveView = useSetActiveView(activeProviderKey ?? "");
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -220,7 +221,7 @@ export function CommandPalette() {
         label: pinnedNow ? "Unpin item" : "Pin item",
         description: pinnedNow
           ? "Remove this item from the pinned list."
-          : "Pin this item so it survives scope and provider switches.",
+          : "Pin this item so it survives view and provider switches.",
         group: "Item",
         keywords: itemId,
         run: () => {
@@ -232,7 +233,6 @@ export function CommandPalette() {
     }
 
     const providerList = providers.data ?? [];
-    const activeProviderKey = providerList.find((p) => p.active)?.key;
     for (const p of providerList) {
       if (p.key === activeProviderKey) continue;
       list.push({
@@ -248,18 +248,18 @@ export function CommandPalette() {
       });
     }
 
-    const scopeList = scopes.data ?? [];
-    const activeScope = scopeList.find((s) => s.active)?.name;
-    if (scopeList.length > 1) {
-      for (const s of scopeList) {
-        if (s.name === activeScope) continue;
+    const viewList = views.data ?? [];
+    const activeViewName = viewList.find((v) => v.active)?.name;
+    if (viewList.length > 1) {
+      for (const v of viewList) {
+        if (v.name === activeViewName) continue;
         list.push({
-          id: `switch-scope-${s.name}`,
-          label: `Switch view → ${s.name}`,
-          description: `Load the '${s.name}' saved view.`,
+          id: `switch-view-${v.name}`,
+          label: `Switch view → ${v.name}`,
+          description: `Load the '${v.name}' saved view.`,
           group: "Actions",
           run: () => {
-            setActiveScope.mutate({ name: s.name });
+            setActiveView.mutate({ name: v.name });
             close();
           },
         });
@@ -276,9 +276,10 @@ export function CommandPalette() {
     navigate,
     pin,
     providers.data,
-    scopes.data,
+    activeProviderKey,
+    views.data,
     setActiveProvider,
-    setActiveScope,
+    setActiveView,
     sync,
     unpin,
   ]);

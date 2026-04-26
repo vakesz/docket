@@ -30,7 +30,7 @@ def tui_setup(tmp_path: Path, make_item: MakeItem):
     for it in items:
         item_repo.upsert_item(conn, it)
     provider = FakeProvider(items=items)
-    ctx = TuiContext(conn=conn, provider=provider, scope=ScopeFilters(), scope_key="default")
+    ctx = TuiContext(conn=conn, provider=provider, scope=ScopeFilters())
     yield ctx
     conn.close()
 

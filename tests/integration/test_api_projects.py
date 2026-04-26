@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from docket.api import create_app
 from docket.api.runtime import RuntimeState
-from docket.config import Config, ProviderEntry, ScopeFilter, save_config
+from docket.config import Config, ProviderEntry, SavedView, save_config
 from docket.config.paths import resolve_paths
 from docket.core.model import project_id_for
 from docket.core.services.proposal_store import ProposalStore
@@ -34,8 +34,8 @@ def client(tmp_xdg: Path, make_item: MakeItem) -> TestClient:
                 type="github_stub",
                 display_name="Stub",
                 config={},
-                scopes={"default": ScopeFilter()},
-                active_scope="default",
+                views={"default": SavedView()},
+                active_view="default",
             )
         },
         active_provider="main",
@@ -47,7 +47,6 @@ def client(tmp_xdg: Path, make_item: MakeItem) -> TestClient:
         config=config,
         providers={"main": provider},
         provider_key="main",
-        scope_key="default",
     )
     app = create_app(
         conn=conn,

@@ -1,9 +1,9 @@
 """First-time setup hooks for the Azure DevOps provider.
 
 Owns the `az login` retry loop, the org/project pickers (with manual
-fallback), and the team/area/iteration scope picker. Importing this module
-registers the callbacks with `config.setup_hooks`; the wizard dispatches
-to them when the user picks `azure_devops` as the provider type.
+fallback), and the team/area/iteration default-view picker. Importing this
+module registers the callbacks with `config.setup_hooks`; the wizard
+dispatches to them when the user picks `azure_devops` as the provider type.
 
 Kept separate from `provider.py` so the actual `WorkItemProvider`
 implementation doesn't drag Rich + the Confirm/Prompt UX surface into every
@@ -33,7 +33,6 @@ from docket.providers.azure_devops.provider import AzureDevOpsProvider
 from docket.providers.base import ProviderError
 
 if TYPE_CHECKING:
-    from docket.config.models import ScopeFilter
     from docket.config.setup_wizard import WizardState
 
 
@@ -65,51 +64,64 @@ def step_connection(state: WizardState) -> None:
         return
 
 
-def step_scope(state: WizardState) -> None:
-    from docket.config.models import ScopeFilter
+def step_view(state: WizardState) -> None:
+    """Seed the default saved view's assignee + axes for Azure DevOps.
+
+    Sync is full-project; this just picks the chip-bar starting point so
+    the user lands on a usable subset on first open. Multiple values per
+    axis are supported in-app via the chip bar — the wizard captures one
+    initial value to keep the prompt short."""
+    from docket.config.models import SavedView
 
     org = str(state.provider_config.get("organization", ""))
     project = str(state.provider_config.get("project", ""))
     console.print(
-        "Scope filters limit which work items get cached locally. "
-        "Leave any axis as 'any' to include everything."
+        "Saved views narrow what the items pane shows. "
+        "Leave any axis as 'any' to start unfiltered — you can adjust "
+        "from the chip bar at any time."
     )
     while True:
         team = _pick_optional(
             "Team",
             fetch=lambda: discover.list_teams(org, project),
-            current=state.scope.axes.get("team", ""),
+            current=_first(state.view.axes.get("team", [])),
         )
         area = _pick_optional(
             "Area path",
             fetch=lambda: discover.list_area_paths(org, project),
-            current=state.scope.axes.get("area_path", ""),
+            current=_first(state.view.axes.get("area_path", [])),
         )
         iteration = _pick_optional(
             "Iteration path",
             fetch=lambda: discover.list_iteration_paths(org, project),
-            current=state.scope.axes.get("iteration_path", ""),
+            current=_first(state.view.axes.get("iteration_path", [])),
         )
         assignee = pick_assignee(
             signed_in_email=state.signed_in_email,
-            current_assignee=state.scope.assignee,
+            current_assignee=_first(state.view.assignees),
         )
-        axes = {
-            k: v
+        axes: dict[str, list[str]] = {
+            k: [v]
             for k, v in (("team", team), ("area_path", area), ("iteration_path", iteration))
             if v
         }
-        scope = ScopeFilter(assignee=assignee, axes=axes)
+        assignees = [assignee] if assignee else []
+        view = SavedView(assignees=assignees, axes=axes)
 
-        count = _count_items(org, project, scope)
-        if count is None:
-            console.print("[yellow]Could not count items — proceeding with this scope.[/yellow]")
-        else:
-            console.print(f"[cyan]→ {count} item(s) match this scope[/cyan]")
-
-        if Confirm.ask("Use this scope?", default=True):
-            state.scope = scope
+        if Confirm.ask("Use this default view?", default=True):
+            state.view = view
             return
+
+
+def _first(values: list[str]) -> str:
+    """Return the first non-empty entry of `values`, or ''.
+
+    The wizard captures one initial value per axis even though the runtime
+    model is multi-select; the chip bar handles adding more after first
+    launch. This collapses an existing multi-select view down to its
+    leading entry so re-running the wizard doesn't surprise the user with
+    silently-dropped values."""
+    return values[0] if values else ""
 
 
 def _pick_org(state: WizardState) -> str:
@@ -201,15 +213,6 @@ def _pick_optional(
             return options[idx]
 
 
-def _count_items(org: str, project: str, scope: ScopeFilter) -> int | None:
-    try:
-        provider = AzureDevOpsProvider(organization_url=org, project=project)
-        items = list(provider.list_changes_since(None, scope.to_core()))
-        return len(items)
-    except ProviderError:
-        return None
-
-
 def discover_step(stage: str, payload: Mapping[str, str]) -> list[DiscoveryItem]:
     """Stage-driven discovery for the SPA wizard's pickers.
 
@@ -253,10 +256,10 @@ def register() -> None:
         WizardHooks(
             auth=step_auth,
             connection=step_connection,
-            scope=step_scope,
+            view=step_view,
             discover=discover_step,
         ),
     )
 
 
-__all__ = ["discover_step", "register", "step_auth", "step_connection", "step_scope"]
+__all__ = ["discover_step", "register", "step_auth", "step_connection", "step_view"]

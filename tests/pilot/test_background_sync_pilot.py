@@ -14,7 +14,7 @@ import pytest
 from docket.cli.tui.app import DocketApp, TuiContext
 from docket.cli.tui.widgets.item_tree import ItemTree
 from docket.cli.tui.widgets.status_bar import StatusBar, _format_countdown
-from docket.config.models import Config, ProviderEntry, ScopeFilter
+from docket.config.models import Config, ProviderEntry, SavedView
 from docket.core.model import ScopeFilters
 from docket.storage import init_db
 from docket.storage.repos import item_repo
@@ -25,20 +25,17 @@ from tests.pilot.conftest import find_label
 
 def _single_provider_cfg(
     *,
-    scopes: dict[str, ScopeFilter],
-    active_scope: str = "default",
+    views: dict[str, SavedView],
+    active_view: str = "default",
     key: str = "azure_devops",
 ) -> Config:
-    """Build a Config whose single provider entry carries the given scopes.
-
-    Centralized so each test reads as one specific scenario without repeating
-    the ProviderEntry boilerplate."""
+    """Build a Config whose single provider entry carries the given saved views."""
     entry = ProviderEntry(
         type="azure_devops",
         display_name="Azure DevOps",
         config={"organization": "https://dev.azure.com/o", "project": "p"},
-        scopes=scopes,
-        active_scope=active_scope,
+        views=views,
+        active_view=active_view,
     )
     return Config(providers={key: entry}, active_provider=key)
 
@@ -58,7 +55,6 @@ def stale_ctx(tmp_path: Path, make_item: MakeItem):
         conn=conn,
         provider=provider,
         scope=ScopeFilters(),
-        scope_key="default",
         stale_threshold_days=7,
     )
     conn.close()
@@ -92,7 +88,6 @@ async def test_stale_marker_disabled_when_threshold_zero(
         conn=conn,
         provider=FakeProvider(items=[old]),
         scope=ScopeFilters(),
-        scope_key="default",
         stale_threshold_days=0,
     )
     app = DocketApp(ctx)
@@ -121,7 +116,6 @@ async def test_stale_per_provider_override(tmp_path: Path, make_item: MakeItem) 
         conn=conn,
         provider=provider,
         scope=ScopeFilters(),
-        scope_key="default",
         stale_threshold_days=30,
         stale_threshold_by_provider={"FakeProvider": 7},
     )
@@ -143,15 +137,15 @@ async def test_status_bar_shows_active_view_and_next_sync(
     item = make_item(title="A story", description_md="")
     item_repo.upsert_item(conn, item)
     cfg = _single_provider_cfg(
-        scopes={"default": ScopeFilter(), "my-team": ScopeFilter(axes={"team": "Team A"})},
-        active_scope="my-team",
+        views={"default": SavedView(), "my-team": SavedView(axes={"team": ["Team A"]})},
+        active_view="my-team",
     )
     ctx = TuiContext(
         conn=conn,
         provider=FakeProvider(items=[item]),
         provider_key="azure_devops",
-        scope=ScopeFilters(axes={"team": "Team A"}),
-        scope_key="my-team",
+        scope=ScopeFilters(axes={"team": ("Team A",)}),
+        view_key="my-team",
         background_sync_interval_seconds=300.0,
         config=cfg,
     )
@@ -176,9 +170,9 @@ async def test_switch_view_reloads_tree_with_new_scope(tmp_path: Path, make_item
     item = make_item(title="A story", description_md="")
     item_repo.upsert_item(conn, item)
     cfg = _single_provider_cfg(
-        scopes={
-            "default": ScopeFilter(),
-            "blocked": ScopeFilter(axes={"area_path": "Blocked"}),
+        views={
+            "default": SavedView(),
+            "blocked": SavedView(axes={"area_path": ["Blocked"]}),
         },
     )
     ctx = TuiContext(
@@ -186,7 +180,6 @@ async def test_switch_view_reloads_tree_with_new_scope(tmp_path: Path, make_item
         provider=FakeProvider(items=[item]),
         provider_key="azure_devops",
         scope=ScopeFilters(),
-        scope_key="default",
         config=cfg,
     )
     app = DocketApp(ctx)
@@ -195,8 +188,8 @@ async def test_switch_view_reloads_tree_with_new_scope(tmp_path: Path, make_item
             await pilot.pause()
             await app.run_action("switch_view('blocked')")
             await pilot.pause()
-            assert ctx.scope_key == "blocked"
-            assert ctx.scope.axes["area_path"] == "Blocked"
+            assert ctx.view_key == "blocked"
+            assert ctx.scope.axes["area_path"] == ("Blocked",)
             bar = app.query_one(StatusBar)
             assert bar.scope_label == "blocked"
             assert bar.active_view == "blocked"
@@ -206,13 +199,12 @@ async def test_switch_view_reloads_tree_with_new_scope(tmp_path: Path, make_item
 
 async def test_switch_view_rejects_unknown_name(tmp_path: Path) -> None:
     conn = init_db(tmp_path / "docket.db")
-    cfg = _single_provider_cfg(scopes={"default": ScopeFilter()})
+    cfg = _single_provider_cfg(views={"default": SavedView()})
     ctx = TuiContext(
         conn=conn,
         provider=FakeProvider(items=[]),
         provider_key="azure_devops",
         scope=ScopeFilters(),
-        scope_key="default",
         config=cfg,
     )
     app = DocketApp(ctx)
@@ -222,7 +214,7 @@ async def test_switch_view_rejects_unknown_name(tmp_path: Path) -> None:
             await app.run_action("switch_view('nope')")
             await pilot.pause()
             # Scope unchanged on unknown name.
-            assert ctx.scope_key == "default"
+            assert ctx.view_key == "default"
     finally:
         conn.close()
 
@@ -234,10 +226,10 @@ async def test_palette_exposes_switch_view_entries(tmp_path: Path) -> None:
 
     conn = init_db(tmp_path / "docket.db")
     cfg = _single_provider_cfg(
-        scopes={
-            "default": ScopeFilter(),
-            "blocked": ScopeFilter(),
-            "my-team": ScopeFilter(),
+        views={
+            "default": SavedView(),
+            "blocked": SavedView(),
+            "my-team": SavedView(),
         },
     )
     ctx = TuiContext(
@@ -245,7 +237,6 @@ async def test_palette_exposes_switch_view_entries(tmp_path: Path) -> None:
         provider=FakeProvider(items=[]),
         provider_key="azure_devops",
         scope=ScopeFilters(),
-        scope_key="default",
         config=cfg,
     )
     app = DocketApp(ctx)
@@ -269,7 +260,6 @@ def test_provider_floor_clamps_background_sync(tmp_path: Path) -> None:
         conn=conn,
         provider=FakeProvider(items=[]),
         scope=ScopeFilters(),
-        scope_key="default",
         background_sync_interval_seconds=60.0,
         background_sync_min_interval_by_provider={"FakeProvider": 900.0},
     )
@@ -287,7 +277,6 @@ def test_disabled_sync_stays_disabled_despite_floor(tmp_path: Path) -> None:
         conn=conn,
         provider=FakeProvider(items=[]),
         scope=ScopeFilters(),
-        scope_key="default",
         background_sync_interval_seconds=0.0,
         background_sync_min_interval_by_provider={"FakeProvider": 900.0},
     )

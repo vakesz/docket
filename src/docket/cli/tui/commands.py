@@ -235,11 +235,11 @@ class DocketCommands(Provider):
                 callback=app.action_open_in_browser,
             ),
             Command(
-                id="toggle-done-visibility",
-                label="Toggle done visibility",
-                description="Show or hide resolved and closed items in the backlog.",
+                id="cycle-state-bucket",
+                label="Cycle state bucket",
+                description="Cycle the active view between open / closed / all items.",
                 example="c",
-                callback=app.action_toggle_done_visibility,
+                callback=app.action_cycle_state_bucket,
             ),
             Command(
                 id="open-memory",
@@ -289,7 +289,7 @@ class DocketCommands(Provider):
                     )
                 )
 
-        # Saved views: one "Switch view → <name>" per scope on the active
+        # Saved views: one "Switch view → <name>" per saved view on the active
         # provider, minus the currently active one. Only surfaces when there's
         # somewhere to go.
         config = getattr(app.tui_ctx, "config", None)
@@ -297,9 +297,9 @@ class DocketCommands(Provider):
             active_key = app.tui_ctx.provider_key
             entry = config.providers.get(active_key) if active_key else None
             if entry is not None:
-                active_scope = app.tui_ctx.scope_key
-                for name in sorted(entry.scopes):
-                    if name == active_scope:
+                active_view = app.tui_ctx.view_key
+                for name in sorted(entry.views):
+                    if name == active_view:
                         continue
                     commands.append(
                         Command(

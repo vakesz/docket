@@ -98,9 +98,9 @@ export function ProvidersForm({
               const entry = asRecord(providers[k]) ?? {};
               const type = getString(entry, "type") ?? "unknown";
               const display = getString(entry, "display_name") ?? k;
-              const activeScope = getString(entry, "active_scope") ?? "default";
-              const scopes = asRecord(entry.scopes);
-              const scopeCount = scopes ? Object.keys(scopes).length : 0;
+              const activeView = getString(entry, "active_view") ?? "default";
+              const views = asRecord(entry.views);
+              const viewCount = views ? Object.keys(views).length : 0;
               const isActive = k === active;
               const isRuntimeActive = k === initialActive;
               return (
@@ -156,9 +156,9 @@ export function ProvidersForm({
                     {k} · {type}
                   </div>
                   <div className="mt-1 text-xs text-fg-muted">
-                    {scopeCount === 1
-                      ? `1 scope: “${activeScope}”`
-                      : `${scopeCount} scopes · selected: “${activeScope}”`}
+                    {viewCount === 1
+                      ? `1 view: “${activeView}”`
+                      : `${viewCount} views · selected: “${activeView}”`}
                   </div>
                 </div>
               );

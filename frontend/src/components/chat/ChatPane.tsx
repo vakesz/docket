@@ -38,6 +38,12 @@ export function ChatPane({ itemId }: { itemId: string }) {
   const [pendingQuestion, setPendingQuestion] = useState<DTO["QuestionDTO"] | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
+  // Tracks whether the user is "stuck to the bottom". Flips to false the moment
+  // they scroll up; flips back to true when they reach the bottom again. Stored
+  // as a ref so the scroll listener and the autoscroll effect can cooperate
+  // without re-rendering on every scroll event.
+  const stickToBottomRef = useRef(true);
+  const autoscrollFrameRef = useRef<number | null>(null);
 
   const { messages, streaming, error, send, answer, reset } = useChatStream({
     itemId,
@@ -64,13 +70,52 @@ export function ChatPane({ itemId }: { itemId: string }) {
     return reset;
   }, [itemId, reset, resetProposals]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll on every new chunk / history refresh.
+  // Auto-scroll only when the user is already near the bottom. A `scroll`
+  // listener flips `stickToBottomRef` based on distance-from-bottom, so a
+  // user who has scrolled up to read earlier messages isn't yanked back when
+  // a new chunk lands. The ResizeObserver below drives the actual scroll.
   useEffect(() => {
-    scrollRef.current?.scrollTo({
-      top: scrollRef.current.scrollHeight,
-      behavior: "smooth",
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+      stickToBottomRef.current = distance < 64;
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+    };
+  }, []);
+
+  // Coalesce auto-scrolls into a single rAF tick. During streaming the
+  // SSE feed produces many message updates per second; calling scrollTo
+  // smoothly per chunk causes the in-flight animation to cancel and
+  // restart against an ever-growing scrollHeight, which reads as flicker.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: deps are the trigger — the effect re-runs whenever the scrollable content can have grown, but doesn't read them inside.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (!stickToBottomRef.current) return;
+    if (autoscrollFrameRef.current !== null) return;
+    autoscrollFrameRef.current = requestAnimationFrame(() => {
+      autoscrollFrameRef.current = null;
+      const node = scrollRef.current;
+      if (!node) return;
+      if (!stickToBottomRef.current) return;
+      // Instant during streaming so rapid chunk arrivals don't fight a
+      // smooth animation; smooth otherwise (history first paint, item switch).
+      node.scrollTo({
+        top: node.scrollHeight,
+        behavior: streaming ? "auto" : "smooth",
+      });
     });
-  }, [messages, history.data]);
+    return () => {
+      if (autoscrollFrameRef.current !== null) {
+        cancelAnimationFrame(autoscrollFrameRef.current);
+        autoscrollFrameRef.current = null;
+      }
+    };
+  }, [messages, history.data, proposals.length, pendingQuestion, streaming]);
 
   // Drain any seeded draft from the chat controller (e.g. "Refine in chat" on
   // a suggestion). Only seed when this pane is the active receiver — opening
@@ -126,7 +171,7 @@ export function ChatPane({ itemId }: { itemId: string }) {
         </button>
       </header>
 
-      <div ref={scrollRef} className="flex-1 overflow-auto px-3 py-3">
+      <div ref={scrollRef} className="relative flex-1 overflow-auto px-3 py-3">
         {disabled ? (
           <CenterMessage text="Chat is disabled — configure Azure OpenAI in Settings." />
         ) : (
@@ -134,7 +179,7 @@ export function ChatPane({ itemId }: { itemId: string }) {
             {history.data?.messages.map((m, i) => (
               <PersistedMessage
                 // biome-ignore lint/suspicious/noArrayIndexKey: persisted conversation history is append-only and indexed by position — the index is a stable identity here.
-                key={`h-${m.role}-${i}-${m.content.length}`}
+                key={`h-${m.role}-${i}`}
                 message={m}
                 issueLinks={issueLinks}
                 toolDisplayMode={toolDisplayMode}
@@ -148,32 +193,47 @@ export function ChatPane({ itemId }: { itemId: string }) {
                 toolDisplayMode={toolDisplayMode}
               />
             ))}
-            {proposals.length > 0 && (
-              <div className="mt-3 flex flex-col gap-2">
-                {proposals.map((p) => (
-                  <ProposalCard key={p.id} proposal={p} onResolved={() => dismissProposal(p.id)} />
-                ))}
-              </div>
-            )}
-            {pendingQuestion && (
-              <QuestionCard
-                question={pendingQuestion}
-                disabled={streaming}
-                onSubmit={(answers) => {
-                  const id = pendingQuestion.id;
-                  // Drop the card now so it doesn't sit pinned at the bottom
-                  // while the resume turn streams tool calls above it. A new
-                  // ask_user during the resume re-sets pendingQuestion via the
-                  // SSE `question` event with a fresh id.
-                  setPendingQuestion(null);
-                  void answer(id, answers);
-                }}
-              />
-            )}
             {error && (
               <Notice tone="error" title="Chat error" className="mt-2">
                 {error}
               </Notice>
+            )}
+            {(proposals.length > 0 || pendingQuestion) && (
+              // Sticky footer inside the scroll container so streaming chunks
+              // can't shove the action card off-screen while the user is
+              // reading the diff. Sits above the input form, scrolls with
+              // content only when there's not enough room.
+              <div className="sticky bottom-0 -mx-3 mt-3 border-t border-border bg-bg/95 px-3 pb-1 pt-2 backdrop-blur-sm">
+                {proposals.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    {proposals.map((p) => (
+                      <ProposalCard
+                        key={p.id}
+                        proposal={p}
+                        onResolved={() => dismissProposal(p.id)}
+                      />
+                    ))}
+                  </div>
+                )}
+                {pendingQuestion && (
+                  <div className={proposals.length > 0 ? "mt-2" : undefined}>
+                    <QuestionCard
+                      question={pendingQuestion}
+                      disabled={streaming}
+                      onSubmit={(answers) => {
+                        const id = pendingQuestion.id;
+                        // Drop the card now so it doesn't sit pinned at the
+                        // bottom while the resume turn streams tool calls
+                        // above it. A new ask_user during the resume re-sets
+                        // pendingQuestion via the SSE `question` event with a
+                        // fresh id.
+                        setPendingQuestion(null);
+                        void answer(id, answers);
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
             )}
           </>
         )}

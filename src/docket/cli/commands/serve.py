@@ -151,12 +151,10 @@ def serve_command(
         if not no_chat:
             llm = build_llm_client(ctx.config.llm)
 
-        scope_key = ctx.scope_key_for()
         runtime = RuntimeState(
             config=ctx.config,
             providers=ctx.providers,
             provider_key=ctx.active_provider,
-            scope_key=scope_key,
         )
 
         app = create_app(

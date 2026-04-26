@@ -9,8 +9,8 @@ from docket.core.model import ItemKind
 
 
 def open_command(
-    scope: str | None = typer.Option(
-        None, "--scope", help="Named scope to browse (defaults to active scope)."
+    view: str | None = typer.Option(
+        None, "--view", help="Named saved view to load (defaults to active view)."
     ),
     no_chat: bool = typer.Option(
         False, "--no-chat", help="Skip LLM wiring; useful when the LLM endpoint is unreachable."
@@ -34,7 +34,7 @@ def open_command(
     direct `open_command(...)` calls receive the `typer.OptionInfo`
     objects as defaults, which are truthy and stringify to `<typer.models.OptionInfo ...>`."""
     run_open_tui(
-        scope=scope,
+        view=view,
         no_chat=no_chat,
         read_only=read_only,
         provider=provider,
@@ -43,7 +43,7 @@ def open_command(
 
 def run_open_tui(
     *,
-    scope: str | None,
+    view: str | None,
     no_chat: bool,
     read_only: bool,
     provider: str | None,
@@ -73,8 +73,8 @@ def run_open_tui(
 
         ctx.active_provider = provider_key
         entry = ctx.provider_entry(provider_key)
-        scope_key = scope or entry.active_scope
-        filters = ctx.scope_filters(scope_key, provider=provider_key)
+        view_key = view or entry.active_view
+        filters = ctx.view_filters(view_key, provider=provider_key)
 
         llm: LlmClient | None = None
         if not no_chat:
@@ -86,7 +86,7 @@ def run_open_tui(
             providers=dict(ctx.providers),
             provider_key=provider_key,
             scope=filters,
-            scope_key=scope_key,
+            view_key=view_key or "default",
             llm=llm,
             compaction_threshold_tokens=ctx.config.llm.compaction_threshold_tokens,
             external_watch_interval_seconds=ctx.config.llm.external_watch_interval_seconds,
@@ -99,7 +99,6 @@ def run_open_tui(
             stale_threshold_by_provider=dict(ctx.config.stale.threshold_days_by_provider),
             default_new_item_kind=ItemKind(ctx.config.ui.default_new_item_kind),
             show_acceptance_criteria=ctx.config.ui.show_acceptance_criteria,
-            hide_done=ctx.config.ui.hide_done,
             paths=ctx.paths,
             config=ctx.config,
         )

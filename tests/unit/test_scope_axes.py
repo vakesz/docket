@@ -1,12 +1,10 @@
-"""Phase 5 exit-criterion: prove the wizard has no built-in blessed axes.
+"""Prove the visual filter has no built-in blessed axes.
 
 Registering a third-party provider with axes nobody on the team has heard of
 (`squad`, `business_unit`) should:
 
 1. Surface those axes via `provider_type_dtos()` — the SPA's data source.
 2. Apply the provider's `axis_matcher` when filtering a cached `Item` list.
-3. Round-trip them through the `/setup/probe-scope` HTTP endpoint with the
-   axes shape the SPA actually sends (`{"axes": {...}}`).
 
 If any built-in code still hardcodes `team`/`area_path`/`iteration_path` we'd
 either (a) silently drop the new axes or (b) blow up with an unknown-key
@@ -19,11 +17,8 @@ from datetime import datetime
 from typing import Any
 
 import pytest
-from fastapi.testclient import TestClient
 
 from docket.api._provider_setup import provider_type_dtos
-from docket.api.app import create_bootstrap_app
-from docket.config.paths import Paths, resolve_paths
 from docket.core.model import (
     Comment,
     CreateFields,
@@ -36,8 +31,6 @@ from docket.core.model import (
 from docket.core.services import visual_filter
 from docket.providers import registry
 from docket.providers.base import ProviderSpec, ScopeAxis, SetupField
-
-SETUP_TOKEN = "setup-token"
 
 
 class _FakeWidgetProvider:
@@ -55,9 +48,7 @@ class _FakeWidgetProvider:
     def health_check(self) -> None:
         return None
 
-    def list_changes_since(
-        self, watermark: datetime | None, filters: ScopeFilters
-    ) -> Iterable[Item]:
+    def list_changes_since(self, watermark: datetime | None) -> Iterable[Item]:
         return []
 
     def get_item(self, id: str) -> Item:
@@ -151,47 +142,14 @@ def test_visual_filter_uses_third_party_axis_matcher(widget_spec_registered):
     other_squad = _make_item({"squad": "growth", "business_unit": "core"})
     other_bu = _make_item({"squad": "platform", "business_unit": "growth"})
 
-    filters = ScopeFilters(assignee="", axes={"squad": "platform"})
+    filters = ScopeFilters(axes={"squad": ("platform",)})
     resolved = visual_filter.resolve(filters, provider=None, spec=widget_spec_registered)
     assert resolved.is_active
     out = visual_filter.apply_to_items([matching, other_squad, other_bu], resolved)
     assert [it.provider_raw["fields"]["squad"] for it in out] == ["platform", "platform"]
 
     # Two-axis intersection — both must match for an item to survive.
-    both = ScopeFilters(assignee="", axes={"squad": "platform", "business_unit": "core"})
+    both = ScopeFilters(axes={"squad": ("platform",), "business_unit": ("core",)})
     resolved_both = visual_filter.resolve(both, provider=None, spec=widget_spec_registered)
     out_both = visual_filter.apply_to_items([matching, other_squad, other_bu], resolved_both)
     assert out_both == [matching]
-
-
-def test_probe_scope_round_trips_third_party_axes(
-    tmp_path, widget_spec_registered, monkeypatch: pytest.MonkeyPatch
-):
-    """`/setup/probe-scope` must accept the SPA's wire shape (`{"axes": {...}}`)
-    for an arbitrary provider, validating the ScopeFilter without complaining
-    about unknown keys."""
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
-    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
-    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
-
-    paths: Paths = resolve_paths()
-    paths.ensure()
-    app = create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN)
-    client = TestClient(app)
-
-    r = client.post(
-        "/api/setup/probe-scope",
-        headers={"Authorization": f"Bearer {SETUP_TOKEN}"},
-        json={
-            "type": "fake_widget",
-            "config": {"endpoint": "https://widgets.example"},
-            "scope": {"assignee": "@me", "axes": {"squad": "platform"}},
-        },
-    )
-    assert r.status_code == 200, r.text
-    body = r.json()
-    # The fake provider's `list_changes_since` returns []; the route reports
-    # `count=0` rather than `None` — proving the scope validated cleanly.
-    assert body["count"] == 0
-    assert body.get("error") in (None, "")

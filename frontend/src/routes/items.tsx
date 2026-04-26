@@ -4,7 +4,7 @@ import { ChatPane } from "~/components/chat/ChatPane";
 import { ChatPaneProvider, useChatPaneController } from "~/components/chat/ChatPaneContext";
 import { ItemsList } from "~/components/items/ItemsList";
 import { ItemsShellLayout } from "~/components/shell/ItemsShellLayout";
-import { ScopeSwitcher } from "~/components/shell/ScopeSwitcher";
+import { ViewBar } from "~/components/shell/ViewBar";
 
 export const Route = createFileRoute("/items")({
   component: ItemsShell,
@@ -28,7 +28,7 @@ function ItemsShellInner() {
 
   const left = (
     <div className="flex h-full flex-col">
-      <ScopeSwitcher />
+      <ViewBar />
       <div className="flex-1 overflow-hidden">
         <ItemsList selectedId={selectedId} />
       </div>

@@ -5,9 +5,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from types import MappingProxyType
-from typing import Any
+from typing import Any, Literal
 
-_EMPTY_AXES: Mapping[str, str] = MappingProxyType({})
+_EMPTY_AXES: Mapping[str, tuple[str, ...]] = MappingProxyType({})
 
 
 class ItemKind(StrEnum):
@@ -37,27 +37,56 @@ class TransitionIntent(StrEnum):
     REOPEN = "reopen"
 
 
+StateBucketLiteral = Literal["open", "closed", "all"]
+"""Re-exported for code that needs the bucket type without importing the
+state_buckets module (which has a runtime dependency on `ItemState`)."""
+
+
+@dataclass(frozen=True)
+class SavedView:
+    """A persisted, named view configuration for one provider.
+
+    Every dimension is a *visual* filter (post-cache) rather than a
+    sync-time narrowing — sync always pulls everything the credentials see,
+    and the visual-filter layer in `core/services/visual_filter.py` decides
+    what to render. Multiple values per facet are first-class: a view can
+    have multiple selected assignees, multiple selected teams, etc.
+
+    `assignees` matches against `Item.assignee` with OR semantics. The
+    sentinel `"@me"` resolves to the provider's `current_user_identity`
+    at view-time; providers without a known identity collapse `@me` to
+    "no narrowing" rather than hiding everything (see `visual_filter`).
+
+    `axes` carries provider-defined narrowing values — keyed by
+    `ProviderSpec.scope_axes[*].key` and matched via the spec's
+    `axis_matcher` callback. Each value is a tuple so multi-select is
+    expressed natively. An empty tuple means the axis is unconstrained.
+
+    `state_bucket` toggles between the open/closed/all groupings defined
+    in `core.state_buckets`. Defaults to `"open"` — done items are still
+    cached, just hidden from the default view."""
+
+    assignees: tuple[str, ...] = ()
+    axes: Mapping[str, tuple[str, ...]] = _EMPTY_AXES
+    state_bucket: StateBucketLiteral = "open"
+
+
 @dataclass(frozen=True)
 class ScopeFilters:
-    """Visual filter applied to cached items — *not* to provider queries.
+    """Runtime view-time filter values, merged from a `SavedView` plus any
+    session-only chip-bar overrides.
 
-    Sync always pulls every item a provider exposes (so child items of
-    something assigned to the user are still in the cache). These fields
-    narrow the view at render time: the TUI list, CLI `list`, and HTTP
-    `/items` apply them post-cache.
+    This is the dataclass the visual-filter layer consumes. It carries
+    only what's actually selected — `axes` excludes empty axes, and the
+    state bucket carries through verbatim.
 
-    `assignee` is always available: empty string means "any", `"@me"` is
-    resolved against the provider's `current_user_identity`, and any other
-    value is matched literally against the cached `Item.assignee` column.
+    Sync never sees this. The provider boundary uses `list_changes_since`
+    with no scope argument; everything in the cache is then filtered
+    here at render time."""
 
-    `axes` carries provider-defined narrowing values — Azure DevOps
-    declares `team`, `area_path`, `iteration_path`; GitHub declares none.
-    Keys absent (or values empty) mean the axis is unconstrained. The
-    matcher implementation lives on the provider's `ProviderSpec.axis_matcher`
-    so `core/` stays provider-agnostic."""
-
-    assignee: str = ""
-    axes: Mapping[str, str] = _EMPTY_AXES
+    assignees: tuple[str, ...] = ()
+    axes: Mapping[str, tuple[str, ...]] = _EMPTY_AXES
+    state_bucket: StateBucketLiteral = "open"
 
 
 @dataclass(frozen=True)

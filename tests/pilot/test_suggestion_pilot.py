@@ -40,7 +40,6 @@ def pilot_env(tmp_path: Path, make_item: MakeItem):
         conn=conn,
         provider=provider,
         scope=ScopeFilters(),
-        scope_key="default",
         llm=client,
         external_watch_interval_seconds=0.0,  # keep the pilot deterministic
     )

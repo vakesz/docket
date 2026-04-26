@@ -3,7 +3,7 @@
 The stub has no auth and a single config field (`default_repo`); this
 module exists so the wizard's per-provider dispatch finds a hook for the
 stub instead of falling through to the generic spec-driven path. Reuses
-the github provider's assignee-only scope step."""
+the github provider's assignee-only default-view step."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from rich.prompt import Prompt
 from docket._console import console
 from docket.config.setup_hooks import DiscoveryItem, WizardHooks
 from docket.config.setup_hooks import register as register_hooks
-from docket.providers.github.setup import step_scope as github_step_scope
+from docket.providers.github.setup import step_view as github_step_view
 
 if TYPE_CHECKING:
     from docket.config.setup_wizard import WizardState
@@ -48,7 +48,7 @@ def register() -> None:
         WizardHooks(
             auth=step_auth,
             connection=step_connection,
-            scope=github_step_scope,
+            view=github_step_view,
             discover=discover_step,
         ),
     )

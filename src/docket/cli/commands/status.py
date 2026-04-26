@@ -41,7 +41,7 @@ def status_command(
     with prepare_or_wizard() as ctx:
         active_provider = ctx.active_provider or ""
         provider_entry = ctx.config.providers.get(active_provider) if active_provider else None
-        scope_key = provider_entry.active_scope if provider_entry else "—"
+        view_key = provider_entry.active_view if provider_entry else "—"
         resolved_provider = active_provider or "—"
 
         project = (
@@ -67,7 +67,7 @@ def status_command(
             "Provider",
             f"{resolved_provider}" + (f"  [dim]({display})[/dim]" if display else ""),
         )
-        overview.add_row("View", scope_key)
+        overview.add_row("View", view_key)
         console.print(overview)
         console.print()
 

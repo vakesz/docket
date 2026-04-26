@@ -17,7 +17,7 @@ from docket.config import (
     MCPServerEntry,
     ProjectEntry,
     ProviderEntry,
-    ScopeFilter,
+    SavedView,
     save_config,
 )
 from docket.config.paths import resolve_paths
@@ -46,8 +46,8 @@ def client(tmp_xdg: Path) -> Iterator[TestClient]:
                 type="github_stub",
                 display_name="Stub",
                 config={},
-                scopes={"default": ScopeFilter()},
-                active_scope="default",
+                views={"default": SavedView()},
+                active_view="default",
             )
         },
         active_provider="main",
@@ -65,7 +65,6 @@ def client(tmp_xdg: Path) -> Iterator[TestClient]:
         config=config,
         providers={"main": provider},
         provider_key="main",
-        scope_key="default",
     )
     app = create_app(
         conn=conn,
@@ -320,8 +319,8 @@ def test_runtime_endpoint_inactive_project_reports_empty_fleet(
         type="github_stub",
         display_name="Secondary",
         config={},
-        scopes={"default": ScopeFilter()},
-        active_scope="default",
+        views={"default": SavedView()},
+        active_view="default",
     )
     other_pid = project_id_for("secondary")
     cfg.projects[other_pid] = ProjectEntry(provider_key="secondary", name="Other")
@@ -410,8 +409,8 @@ def test_inactive_project_writes_persist_but_do_not_rebind(
         type="github_stub",
         display_name="Secondary",
         config={},
-        scopes={"default": ScopeFilter()},
-        active_scope="default",
+        views={"default": SavedView()},
+        active_view="default",
     )
     other_pid = project_id_for("secondary")
     cfg.projects[other_pid] = ProjectEntry(provider_key="secondary", name="Other")

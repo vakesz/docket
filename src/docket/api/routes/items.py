@@ -20,6 +20,8 @@ from docket.api.runtime import RuntimeState
 from docket.api.schemas import (
     CommentDTO,
     CreateItemRequest,
+    FacetDTO,
+    FacetOptionDTO,
     ItemDTO,
     MutationConfirmedDTO,
     ProposalDTO,
@@ -28,6 +30,7 @@ from docket.core.model import Item, ItemKind, ItemState
 from docket.core.mutation import ItemCreate
 from docket.core.services import mutation_service, visual_filter
 from docket.core.services.proposal_store import ProposalStore
+from docket.core.services.visual_filter import Facet
 from docket.providers import registry
 from docket.providers.base import WorkItemProvider
 from docket.storage.repos import comment_repo, item_repo, search_repo
@@ -77,18 +80,14 @@ def list_items(
     parent_id: str | None = Query(None),
     apply_view: bool = Query(
         True,
-        description="Apply the active saved view as a post-cache filter. "
-        "Set false to see every cached item regardless of view.",
+        description="Apply the active saved view + session overrides as a "
+        "post-cache filter. Set false to see every cached item regardless "
+        "of view.",
     ),
     provider: WorkItemProvider = Depends(get_provider),
     provider_key: str = Depends(get_active_provider_key),
     runtime: RuntimeState | None = Depends(get_runtime_optional),
 ) -> list[ItemDTO]:
-    if apply_view and runtime is not None:
-        spec = registry.spec(runtime.config.providers[runtime.provider_key].type)
-        resolved = visual_filter.resolve(runtime.scope, provider, spec)
-    else:
-        resolved = visual_filter.ResolvedFilter()
     items = item_repo.list_items(
         conn,
         kind=kind,
@@ -97,10 +96,61 @@ def list_items(
         parent_id=parent_id,
         include_archived=include_archived,
         provider_key=provider_key,
-        assignee=resolved.assignee,
     )
-    items = visual_filter.apply_to_items(items, resolved)
+    if apply_view and runtime is not None:
+        spec = registry.spec(runtime.config.providers[runtime.provider_key].type)
+        resolved = visual_filter.resolve(runtime.scope, provider, spec)
+        # An explicit `?state=` overrides the view's state bucket — the
+        # caller is asking for those states specifically.
+        if state:
+            from dataclasses import replace as dc_replace
+
+            resolved = dc_replace(resolved, state_bucket="all")
+        items = visual_filter.apply_to_items(items, resolved)
     return [ItemDTO.from_core(i) for i in items]
+
+
+@router.get("/facets", response_model=list[FacetDTO])
+def list_facets(
+    include_archived: bool = Query(False, alias="archived"),
+    conn: sqlite3.Connection = Depends(get_conn),
+    provider_key: str = Depends(get_active_provider_key),
+    runtime: RuntimeState | None = Depends(get_runtime_optional),
+) -> list[FacetDTO]:
+    """Top-N values + counts per chip on the view bar.
+
+    Computed off the unfiltered cache (the `?archived=` flag aside) so a
+    chip's options stay stable when the user picks one. Per-facet caps
+    come from `ProjectViewConfig` and hidden facets are skipped — the
+    SPA renders whatever this returns, in order."""
+    items = item_repo.list_items(
+        conn,
+        include_archived=include_archived,
+        provider_key=provider_key,
+    )
+    spec = None
+    project_view = None
+    if runtime is not None:
+        spec = registry.spec(runtime.config.providers[runtime.provider_key].type)
+        project = runtime.config.projects.get(runtime.project_id)
+        if project is not None:
+            project_view = project.view
+    if project_view is None:
+        from docket.config.models import ProjectViewConfig
+
+        project_view = ProjectViewConfig()
+    facets: list[Facet] = visual_filter.compute_facets(
+        items, spec=spec, project_view=project_view
+    )
+    return [
+        FacetDTO(
+            key=f.key,
+            label=f.label,
+            options=[FacetOptionDTO(value=o.value, count=o.count) for o in f.options],
+            total_options=f.total_options,
+        )
+        for f in facets
+    ]
 
 
 @router.get("/search", response_model=list[ItemDTO])

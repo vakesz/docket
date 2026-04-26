@@ -91,7 +91,7 @@ def test_list_items_applies_active_view_assignee_filter(env: ApiEnv, make_item: 
         provider_key="main",
     )
     item_repo.upsert_item(env.conn, other)
-    env.runtime.scope_key = "mine"
+    env.runtime.switch_view("mine")
     client = build_client(env)
     resp = client.get("/api/items", headers=AUTH_HEADERS)
     assert resp.status_code == 200
@@ -111,7 +111,7 @@ def test_list_items_can_disable_active_view_filter(env: ApiEnv, make_item: MakeI
         provider_key="main",
     )
     item_repo.upsert_item(env.conn, other)
-    env.runtime.scope_key = "mine"
+    env.runtime.switch_view("mine")
     client = build_client(env)
     resp = client.get("/api/items?apply_view=false", headers=AUTH_HEADERS)
     assert resp.status_code == 200

@@ -142,7 +142,7 @@ def test_built_in_label_templates_match_legacy_outputs() -> None:
 
 @pytest.mark.parametrize("type_id", BUILT_IN_TYPE_IDS)
 def test_built_in_provider_has_registered_wizard_hooks(type_id: str) -> None:
-    """Every built-in provider must own auth + connection + scope hooks.
+    """Every built-in provider must own auth + connection + view hooks.
 
     The wizard dispatches by hook lookup (`setup_hooks.get(type_id)`); a
     missing entry would silently degrade to the "no built-in step" stub
@@ -152,7 +152,7 @@ def test_built_in_provider_has_registered_wizard_hooks(type_id: str) -> None:
     assert hooks is not None, f"{type_id!r} not registered in setup_hooks"
     assert hooks.auth is not None, f"{type_id!r} missing wizard auth step"
     assert hooks.connection is not None, f"{type_id!r} missing wizard connection step"
-    assert hooks.scope is not None, f"{type_id!r} missing wizard scope step"
+    assert hooks.view is not None, f"{type_id!r} missing wizard view step"
 
 
 def test_setup_hooks_registry_lists_all_built_ins() -> None:

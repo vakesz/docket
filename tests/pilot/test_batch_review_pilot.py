@@ -58,7 +58,6 @@ def batch_env(tmp_path: Path, make_item: MakeItem):
         conn=conn,
         provider=provider,
         scope=ScopeFilters(),
-        scope_key="default",
         llm=client,
     )
     yield ctx, client, provider

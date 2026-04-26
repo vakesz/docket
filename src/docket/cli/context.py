@@ -14,7 +14,7 @@ from docket.config import (
     ConfigMissingError,
     Paths,
     ProviderEntry,
-    ScopeFilter,
+    SavedView,
     load_config,
     resolve_paths,
 )
@@ -50,32 +50,32 @@ class Context:
             raise KeyError(f"unknown provider '{key}' (known: {sorted(self.config.providers)})")
         return self.config.providers[key]
 
-    def scope_filter(self, name: str | None = None, *, provider: str | None = None) -> ScopeFilter:
+    def saved_view(self, name: str | None = None, *, provider: str | None = None) -> SavedView:
         entry = self.provider_entry(provider)
-        key = name or entry.active_scope
-        if key not in entry.scopes:
+        key = name or entry.active_view
+        if key not in entry.views:
             raise KeyError(
-                f"unknown scope '{key}' in provider '{provider or self.active_provider}' "
-                f"(known: {sorted(entry.scopes)})"
+                f"unknown view '{key}' in provider '{provider or self.active_provider}' "
+                f"(known: {sorted(entry.views)})"
             )
-        return entry.scopes[key]
+        return entry.views[key]
 
-    def scope_filters(
+    def view_filters(
         self, name: str | None = None, *, provider: str | None = None
     ) -> ScopeFilters:
-        return self.scope_filter(name, provider=provider).to_core()
+        return self.saved_view(name, provider=provider).to_core()
 
-    def scope_key_for(self, provider: str | None = None) -> str:
-        return self.provider_entry(provider).active_scope
+    def view_key_for(self, provider: str | None = None) -> str:
+        return self.provider_entry(provider).active_view
 
     @property
     def project_id(self) -> str:
         """Derived id for the currently-active project (= provider key).
 
         Stable across renames; safe to use as a foreign key for memory,
-        sources, sub-agents, and any future per-project state. Scopes
-        don't split project identity — they're visual filters over the
-        same cached set."""
+        sources, sub-agents, and any future per-project state. Saved
+        views don't split project identity — they're visual filters over
+        the same cached set."""
         return project_id_for(self.active_provider)
 
     def active_project(self) -> Project:
@@ -148,8 +148,8 @@ def prepare() -> Context:
         active_provider=active,
     )
     # Mirror config.projects -> SQLite so memory/sources/sub-agents have a
-    # valid FK target. Lazily seed an entry for the active (provider, scope)
-    # if the user has not declared one explicitly yet.
+    # valid FK target. Lazily seed an entry for the active provider if the
+    # user has not declared one explicitly yet.
     project_service.mirror_into_db(config, conn)
     if active and active in config.providers:
         project_service.activate(

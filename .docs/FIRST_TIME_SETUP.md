@@ -4,7 +4,7 @@ A friendly walkthrough from a clean clone to a working Docket install, covering 
 
 There are two front doors to the wizard — pick whichever fits how you work:
 
-- **Web wizard** (`make serve` → browser at `http://127.0.0.1:8765`) — recommended for a first run on a development checkout. Same questions as the CLI, with click-to-select pickers for orgs/projects/repos and a live "→ N items match" scope preview.
+- **Web wizard** (`make serve` → browser at `http://127.0.0.1:8765`) — recommended for a first run on a development checkout. Same questions as the CLI, with click-to-select pickers for orgs/projects/repos and a default-view picker over the provider's scope axes.
 - **CLI wizard** (`docket setup`) — works over SSH, no browser needed.
 
 Both write the same `config.toml`. Either one is safe to re-run.
@@ -87,8 +87,8 @@ The first invocation writes a stub `./.docket-dev/config.toml` containing only t
 The browser flow mirrors the CLI step-for-step:
 
 1. **CLI status** — probes `gh` and `az` sessions on your local box. Each tool gets a card showing presence + sign-in state + identity. If something's missing or signed out, the card prints the install / `gh auth login` / `az login` command; fix it in another terminal and click **Refresh**.
-2. **Provider** — combined pick + connection + label step. The picker only surfaces provider types whose `requires_cli` is satisfied (so e.g. Azure DevOps is hidden until `az` is signed in). For ADO the wizard offers an org / project picker driven by `/api/setup/azure-devops/discover` (with manual fallback when discovery fails); for GitHub it offers a repo / org-repo picker driven by `/api/setup/github/discover`. The display-name field auto-suggests via `/api/setup/suggest-label` until you start typing.
-3. **Scope** — provider-specific filters with a **Preview match count** button that calls `/api/setup/probe-scope` and shows the same "→ N item(s) match this scope" preview the CLI prints.
+2. **Provider** — combined pick + connection + label step. The picker only surfaces provider types whose `requires_cli` is satisfied (so e.g. Azure DevOps is hidden until `az` is signed in). For both ADO and GitHub the wizard offers stage-driven pickers (orgs/projects/teams/areas/iterations for ADO; hosts/repos/orgs for GitHub) driven by the generic `/api/setup/providers/{type_id}/discover` endpoint, with manual fallback when discovery fails. The display-name field auto-suggests via `/api/setup/suggest-label` until you start typing.
+3. **Default view** — pick the saved view that the TUI / SPA loads on launch. Each provider's scope axes (team/area/iteration for ADO, assignee for GitHub) become optional chip groups; the state-bucket selector chooses the default cycle position (open / closed / all).
 4. **LLM** — Azure OpenAI endpoint, deployment, API version, optional cost-tracking prices (auto-filled for known deployments). The API key is round-tripped through a password field; on `Complete` the backend writes it to the OS keyring (Keychain / Credential Manager / Secret Service / kwallet). If no keyring backend is reachable, the page surfaces the same error the CLI raises and refuses to proceed.
 5. **Settings** — telemetry on/off + log level, HTTP bind/port, "run initial sync" toggle.
 6. **Review → Complete** — submits to `/api/setup/complete`, which writes `config.toml`, scaffolds prompt templates, and signals the server to exit so you can re-run `make serve` against the real config.
@@ -105,12 +105,12 @@ The wizard is idempotent — re-running it overwrites only the fields you confir
 uv run docket --workspace=./.docket-dev setup --step=llm     # only re-run the LLM step
 ```
 
-Step names, in order: `provider` · `auth` · `connection` · `label` · `scope` · `telemetry` · `http` · `llm` · `prompts` · `sync` · `default`. The `label` step prompts for the human-readable display name shown in the TUI/web provider switcher.
+Step names, in order: `provider` · `auth` · `connection` · `label` · `view` · `telemetry` · `http` · `llm` · `prompts` · `sync` · `default`. The `label` step prompts for the human-readable display name shown in the TUI/web provider switcher.
 
 The top-level wizard:
 
 1. Discovers providers already in `config.toml` and lets you reconfigure or add more.
-2. Walks the per-provider auth + connection + scope flow for the selected backend.
+2. Walks the per-provider auth + connection + default-view flow for the selected backend.
 3. Runs the shared host steps:
    - **telemetry** — keep the rotating JSON log on (default), pick a level
    - **http** — enable the FastAPI surface and mint a bearer token (consumed by the web UI and any external clients)
@@ -138,13 +138,13 @@ The wizard shells out to `az` for token acquisition — it won't prompt you for 
 
 1. **Organization URL** — `https://dev.azure.com/<org>`. Auto-discovered from your `az` session when possible; falls back to free-form prompt.
 2. **Project name** — picker from the org's projects, or free-form when discovery is blocked.
-3. **Scope filter** — defaults to "any" on team / area path / iteration path / assignee. Each axis is optional and shows a count of matching items before you confirm.
+3. **Default view** — pick the saved view that loads on launch. Team / area path / iteration path / assignee each become optional chip groups; the state-bucket selector picks the default cycle position (open / closed / all).
 
 #### What it does under the hood
 
-- Saves `providers.<key>.config = { organization, project }` and a `default` scope to `config.toml`.
+- Saves `providers.<key>.config = { organization, project }` and a `default` saved view to `config.toml`.
 - Probes the project with `health_check()` before continuing.
-- Counts items matching the selected scope so an over-narrow filter is obvious.
+- The view filters items post-cache; sync always pulls the full project so widening the view later is instant.
 
 #### Notes
 
@@ -168,7 +168,7 @@ Docket reads `gh auth token` at startup and falls back to the `GITHUB_TOKEN` env
 
 1. **Repo picker** — Docket scans `/user/repos` for repos you own or collaborate on, plus every org you're a member of via `/orgs/{org}/repos` (this is deliberate — `/users/{login}/repos` would miss private repos you have access to). Pick one from the list.
 2. If nothing comes back (no `gh`, no orgs, no accessible repos), the wizard drops to a manual `owner/name` prompt.
-3. **Scope filter** — GitHub's query params only honor `assignee`, so team / area / iteration options are hidden. `@me` expands to the authenticated user; pick `any` for everything in the repo.
+3. **Default view** — GitHub's scope axes only include `assignee` (team / area / iteration are ADO-only). `@me` expands to the authenticated user at view time; leave it empty for everything in the repo.
 
 #### What GitHub setup does under the hood
 
@@ -224,7 +224,7 @@ You can skip the LLM entirely. The TUI launches without chat; `docket open --no-
 
 Docket scaffolds `system_base.md` and `kind_<kind>.md` under `prompts/`. Edit them at any time — the loader keeps an mtime cache, so saved changes take effect on the next turn without restarting the app. The in-app Prompt Library (`p`) opens an editor backed by the same files.
 
-The prompt prefix `[system + kind template] → [ticket snapshot] → ---` is byte-stable on purpose so Azure OpenAI prompt caching hits on every follow-up turn. Don't interpolate timestamps or scope into the prefix; those go after the `---` divider.
+The prompt prefix `[system + kind template] → [ticket snapshot] → ---` is byte-stable on purpose so Azure OpenAI prompt caching hits on every follow-up turn. Don't interpolate timestamps or view labels into the prefix; those go after the `---` divider.
 
 ---
 
@@ -290,7 +290,7 @@ uv run docket setup provider add personal-gh --type github --active
 uv run docket setup provider remove personal-gh
 ```
 
-Inside the TUI, the command palette (`Ctrl+P`) has a **Switch provider** entry — the tree, scope, status bar, MCP fleet, and agent tool registry all rebind to the new active provider without restarting.
+Inside the TUI, the command palette (`Ctrl+P`) has a **Switch provider** entry — the tree, active view, status bar, MCP fleet, and agent tool registry all rebind to the new active provider without restarting.
 
 Third-party providers can ship as separate pip packages via the `docket.providers` entry-point group. The Protocol contract and cross-cutting test expectations are documented in the [README's "Providers" section](../README.md#providers).
 
@@ -302,7 +302,7 @@ Resolved via `platformdirs` → XDG on Linux, Application Support on macOS, `%AP
 
 | Path (macOS shown) | Purpose |
 | --- | --- |
-| `~/Library/Application Support/docket/config.toml` | Providers, scopes, projects, LLM settings (incl. `[llm.key_hint]` preview), HTTP token, runtime flags, UI preferences |
+| `~/Library/Application Support/docket/config.toml` | Providers, saved views, projects, LLM settings (incl. `[llm.key_hint]` preview), HTTP token, runtime flags, UI preferences |
 | OS keyring entry `docket / azure_openai_api_key` | Azure OpenAI key (managed via the wizard, the Settings UI, or `POST /api/settings/llm-key`) |
 | `~/Library/Application Support/docket/prompts/system_base.md` | System prompt, editable from the app |
 | `~/Library/Application Support/docket/prompts/kind_<kind>.md` | Per-kind prompt (one per `ItemKind`) |
@@ -365,7 +365,7 @@ Either you passed `--read-only` on the command line or `runtime.read_only = true
 ### The tree is empty after sync
 
 - `docket sync` to force a pull, or `docket sync --full` to ignore the watermark.
-- Confirm your scope filter returns anything with the provider's native UI. Use the in-app settings (`,`) to widen the scope, or re-run `docket setup --step=scope`.
+- Confirm the project's native UI lists the items you expect. Saved views are post-cache visual filters — narrow the chip bar to "All" or hit **Clear** in the SPA / TUI to drop session overrides, or re-run `docket setup --step=view` to widen the persisted default.
 - Check the log file (`docket status` shows the path) for provider errors.
 
 ### The TUI feels cramped

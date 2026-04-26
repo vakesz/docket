@@ -143,7 +143,7 @@ export function ProviderModal(props: ProviderModalProps) {
         type: spec.id,
         display_name: displayName.trim() || key.trim(),
         config: fieldValues,
-        scope: {},
+        view: {},
         make_active: makeActive,
       },
       { onSuccess: () => onSaved(key.trim()) },

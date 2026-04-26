@@ -38,7 +38,6 @@ def ro_ctx(tmp_path: Path, make_item: MakeItem):
         conn=conn,
         provider=provider,
         scope=ScopeFilters(),
-        scope_key="default",
         llm=FakeLlmClient(),
         read_only=True,
     )
@@ -102,7 +101,6 @@ async def test_writable_ctx_allows_new_item(tmp_path: Path, make_item: MakeItem)
         conn=conn,
         provider=provider,
         scope=ScopeFilters(),
-        scope_key="default",
         llm=FakeLlmClient(),
         read_only=False,
     )

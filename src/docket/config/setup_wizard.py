@@ -1,14 +1,14 @@
 """First-launch setup wizard.
 
 The wizard walks the user through picking a provider type, running that
-provider's auth/connection/scope onboarding, filling in the shared host
+provider's auth/connection/view onboarding, filling in the shared host
 surfaces (telemetry, HTTP), scaffolding prompts, and running a first sync.
 Output shape: each backend is an entry under `providers`, with
 `active_provider` pointing at whichever one should open by default.
 
 `--step=<name>` jumps directly to a step and writes config atomically on
 completion. Step names are provider-agnostic: provider, auth, connection,
-scope, telemetry, http, llm, prompts, sync, default.
+view, telemetry, http, llm, prompts, sync, default.
 
 Auto-discovery: each provider's onboarding uses its CLI session (az/gh) to
 populate numbered pickers so users rarely have to type values they could
@@ -17,9 +17,9 @@ click. Any discovery failure transparently falls back to free-form prompts
 
 Provider-specific onboarding lives behind `config.setup_hooks`: each
 provider package's `setup.py` registers a `WizardHooks` entry with optional
-`auth`, `connection`, and `scope` callables. Unknown / third-party
+`auth`, `connection`, and `view` callables. Unknown / third-party
 providers fall through to the spec-driven generic connection step and an
-empty scope."""
+empty default view."""
 
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ from docket.config.loader import load_config, save_config
 from docket.config.models import (
     Config,
     KeyHintConfig,
-    ScopeFilter,
+    SavedView,
     TelemetryLevel,
     build_provider_entry,
     compose_setup_config,
@@ -66,7 +66,7 @@ STEP_NAMES: tuple[str, ...] = (
     "auth",
     "connection",
     "label",
-    "scope",
+    "view",
     "telemetry",
     "http",
     "llm",
@@ -96,7 +96,7 @@ class WizardState:
     provider_key: str = ""
     display_name: str = ""
     provider_config: dict[str, Any] = field(default_factory=dict)
-    scope: ScopeFilter = field(default_factory=ScopeFilter)
+    view: SavedView = field(default_factory=SavedView)
     # Shared host surfaces. Inherited from existing config if present.
     telemetry_enabled: bool = True
     telemetry_level: TelemetryLevel = TelemetryLevel.DEBUG
@@ -140,7 +140,7 @@ def run_wizard(start_at: str | None = None) -> None:
         ("auth", _step_provider_auth),
         ("connection", _step_provider_connection),
         ("label", _step_pick_label),
-        ("scope", _step_provider_scope),
+        ("view", _step_provider_view),
         ("telemetry", _step_telemetry),
         ("http", _step_http_surface),
         ("llm", _step_llm),
@@ -208,8 +208,8 @@ def _load_existing_state(paths: Paths) -> WizardState:
         state.type_id = entry.type
         state.display_name = entry.display_name
         state.provider_config = dict(entry.config)
-        state.scope = entry.scopes.get(entry.active_scope) or entry.scopes.get(
-            "default", ScopeFilter()
+        state.view = entry.views.get(entry.active_view) or entry.views.get(
+            "default", SavedView()
         )
     return state
 
@@ -236,7 +236,7 @@ def _step_pick_provider(state: WizardState) -> None:
     if spec.type_id not in existing_keys:
         state.provider_key = spec.type_id
         state.provider_config = {}
-        state.scope = ScopeFilter()
+        state.view = SavedView()
         return
 
     default_key = next_sibling_key(spec.type_id, existing_keys)
@@ -253,13 +253,13 @@ def _step_pick_provider(state: WizardState) -> None:
             default=False,
         ):
             raise SystemExit(1)
-        # Carry display_name / scope forward so unchanged values survive.
+        # Carry display_name / view forward so unchanged values survive.
         state.display_name = existing_entry.display_name
         state.provider_config = dict(existing_entry.config)
-        state.scope = existing_entry.scopes.get(existing_entry.active_scope, ScopeFilter())
+        state.view = existing_entry.views.get(existing_entry.active_view, SavedView())
     else:
         state.provider_config = {}
-        state.scope = ScopeFilter()
+        state.view = SavedView()
     state.provider_key = key
 
 
@@ -365,15 +365,15 @@ def _suggest_display_name(state: WizardState) -> str:
     return suggested or state.display_name or state.type_id
 
 
-# ---- step 4: scope (per-provider) -------------------------------------------
+# ---- step 4: view (per-provider) --------------------------------------------
 
 
-def _step_provider_scope(state: WizardState) -> None:
+def _step_provider_view(state: WizardState) -> None:
     hooks = get_setup_hooks(state.type_id)
-    if hooks and hooks.scope is not None:
-        hooks.scope(state)
+    if hooks and hooks.view is not None:
+        hooks.view(state)
         return
-    state.scope = ScopeFilter()
+    state.view = SavedView()
 
 
 # ---- step 5: telemetry ------------------------------------------------------
@@ -627,7 +627,7 @@ def _build_config_from_state(state: WizardState) -> Config:
         type_id=state.type_id,
         display_name=state.display_name,
         config=state.provider_config,
-        scope=state.scope,
+        view=state.view,
         existing=providers.get(state.provider_key),
     )
     active_provider = state.existing.active_provider

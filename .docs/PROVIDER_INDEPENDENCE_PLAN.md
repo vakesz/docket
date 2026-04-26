@@ -5,6 +5,16 @@
 > Jira (or any other backend) is a contained, additive change. Each phase
 > below is checkpoint-able: complete a phase, run `make check`, commit to
 > `main`, then resume from the next.
+>
+> **Status (2026-04-26):** Phases 0–6 have landed. A follow-up refactor
+> generalized Phase 5's `ScopeFilters` into a richer `SavedView` model
+> (multi-value facets, state buckets, session overrides, per-project facet
+> visibility config). The Phase 5 section below documents the original
+> intermediate shape — read it for historical context, then see
+> `core/model.py:SavedView` / `core/model.py:ScopeFilters` and
+> `core/services/visual_filter.py` for the current contract. The
+> authoring guide in [`ADDING_A_PROVIDER.md`](ADDING_A_PROVIDER.md) is the
+> single source of truth for new-provider authors.
 
 ## Goals
 
@@ -331,7 +341,17 @@ and `/setup/github/discover` with one route.
 
 ---
 
-## Phase 5 — per-provider scope axes ✅ landed
+## Phase 5 — per-provider scope axes ✅ landed (later superseded)
+
+> The Phase 5 shape described below shipped as written, then a follow-up
+> refactor generalized it into `SavedView` (multi-value `axes`,
+> `assignees`, and a `state_bucket` literal) plus `ScopeFilters` (the
+> resolved runtime tuple consumed by `core/services/visual_filter.py`).
+> Sync no longer accepts a filters argument at all — every dimension is
+> a *visual* filter applied post-cache. The historical plan stays here
+> for context; current code is in `src/docket/core/model.py`,
+> `src/docket/config/models.py:SavedView`, and
+> `src/docket/core/services/visual_filter.py`.
 
 **Goal:** kill the deepest leak — `ScopeFilters` in
 `src/docket/core/model.py` is ADO-shaped (`team`, `area_path`,

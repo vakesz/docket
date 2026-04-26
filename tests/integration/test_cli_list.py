@@ -8,7 +8,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from docket.cli.app import app
-from docket.config import Config, ProviderEntry, ScopeFilter, resolve_paths, save_config
+from docket.config import Config, ProviderEntry, SavedView, resolve_paths, save_config
 from docket.core.model import Item, ItemKind, ItemState
 from docket.storage import init_db
 from docket.storage.repos import item_repo
@@ -23,11 +23,11 @@ def _seed(tmp_xdg: Path) -> None:
                 type="github_stub",
                 display_name="Stub",
                 config={},
-                scopes={
-                    "default": ScopeFilter(assignee="@me"),
-                    "all": ScopeFilter(assignee=""),
+                views={
+                    "default": SavedView(assignees=["@me"]),
+                    "all": SavedView(),
                 },
-                active_scope="default",
+                active_view="default",
             )
         },
         active_provider="main",

@@ -8,11 +8,11 @@ from docket.config import (
     Config,
     ConfigMissingError,
     ProviderEntry,
-    ScopeFilter,
     load_config,
     resolve_paths,
     save_config,
 )
+from docket.config.models import SavedView
 
 
 def test_paths_respect_xdg(tmp_xdg: Path) -> None:
@@ -33,11 +33,11 @@ def test_config_roundtrip(tmp_xdg: Path) -> None:
                 type="azure_devops",
                 display_name="Azure DevOps",
                 config={"organization": "https://dev.azure.com/example", "project": "Demo"},
-                scopes={
-                    "default": ScopeFilter(axes={"area_path": "Demo\\Team A"}, assignee="@me"),
-                    "alt": ScopeFilter(assignee="alice@example.com"),
+                views={
+                    "default": SavedView(axes={"area_path": ["Demo\\Team A"]}, assignees=["@me"]),
+                    "alt": SavedView(assignees=["alice@example.com"]),
                 },
-                active_scope="default",
+                active_view="default",
             ),
         },
         active_provider="azure_devops",
@@ -48,8 +48,8 @@ def test_config_roundtrip(tmp_xdg: Path) -> None:
     entry = loaded.providers["azure_devops"]
     assert entry.type == "azure_devops"
     assert entry.config["project"] == "Demo"
-    assert entry.scopes["default"].axes["area_path"] == "Demo\\Team A"
-    assert entry.scopes["alt"].assignee == "alice@example.com"
+    assert entry.views["default"].axes["area_path"] == ["Demo\\Team A"]
+    assert entry.views["alt"].assignees == ["alice@example.com"]
     assert loaded.telemetry.enabled is True  # default
 
 

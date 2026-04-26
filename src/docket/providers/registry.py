@@ -124,7 +124,12 @@ def _register_builtins() -> None:
     module import so the registry is populated even without entry-point
     discovery."""
     from docket.providers.azure_devops.provider import AzureDevOpsProvider
-    from docket.providers.azure_devops.scope import axis_matcher as azure_devops_axis_matcher
+    from docket.providers.azure_devops.scope import (
+        axis_extract as azure_devops_axis_extract,
+    )
+    from docket.providers.azure_devops.scope import (
+        axis_matcher as azure_devops_axis_matcher,
+    )
     from docket.providers.azure_devops.setup import register as register_ado_hooks
     from docket.providers.github.provider import GitHubProvider
     from docket.providers.github.setup import register as register_github_hooks
@@ -230,6 +235,7 @@ def _register_builtins() -> None:
                 ),
             ),
             axis_matcher=azure_devops_axis_matcher,
+            axis_extract=azure_devops_axis_extract,
         )
     )
     register(

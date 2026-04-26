@@ -26,7 +26,7 @@ from docket.config.models import (
     Config,
     HttpConfig,
     ProviderEntry,
-    ScopeFilter,
+    SavedView,
 )
 from docket.config.paths import Paths
 from docket.core.model import Item
@@ -57,18 +57,18 @@ def _mk_config() -> Config:
                 type="github_stub",
                 display_name="Primary",
                 config={"default_repo": "example/primary"},
-                scopes={
-                    "default": ScopeFilter(assignee="@me"),
-                    "team": ScopeFilter(assignee="@me", axes={"team": "core"}),
+                views={
+                    "default": SavedView(assignees=["@me"]),
+                    "team": SavedView(assignees=["@me"], axes={"team": ["core"]}),
                 },
-                active_scope="default",
+                active_view="default",
             ),
             "secondary": ProviderEntry(
                 type="github_stub",
                 display_name="Secondary",
                 config={"default_repo": "example/secondary"},
-                scopes={"default": ScopeFilter()},
-                active_scope="default",
+                views={"default": SavedView()},
+                active_view="default",
             ),
         },
         active_provider="primary",
@@ -92,7 +92,6 @@ def env(tmp_path: Path, make_item: MakeItem):
         config=config,
         providers=providers,
         provider_key="primary",
-        scope_key="default",
     )
     proposals = ProposalStore()
     yield {
@@ -426,16 +425,16 @@ def test_update_provider_replaces_config_and_swaps_runtime(client: TestClient, e
     assert env["runtime"].providers["secondary"].display_name == "Secondary (renamed)"
 
 
-def test_update_provider_preserves_existing_scope_when_omitted(client: TestClient, env) -> None:
-    before = dict(env["runtime"].config.providers["primary"].scopes)
+def test_update_provider_preserves_existing_views_when_omitted(client: TestClient, env) -> None:
+    before = dict(env["runtime"].config.providers["primary"].views)
     r = client.put(
         "/api/settings/providers/primary",
         headers=AUTH,
         json={"display_name": "Primary", "config": {"default_repo": "example/primary"}},
     )
     assert r.status_code == 200, r.text
-    after = dict(env["runtime"].config.providers["primary"].scopes)
-    # Both 'default' and 'team' scopes survive a config-only update.
+    after = dict(env["runtime"].config.providers["primary"].views)
+    # Both 'default' and 'team' saved views survive a config-only update.
     assert set(after.keys()) == set(before.keys())
     assert after["team"].axes == before["team"].axes
 
@@ -449,14 +448,14 @@ def test_update_provider_unknown_returns_404(client: TestClient) -> None:
     assert r.status_code == 404
 
 
-def test_update_provider_invalid_scope_422(client: TestClient) -> None:
+def test_update_provider_invalid_view_422(client: TestClient) -> None:
     r = client.put(
         "/api/settings/providers/primary",
         headers=AUTH,
         json={
             "display_name": "Primary",
             "config": {"default_repo": "example/primary"},
-            "scope": {"assignee": 123},  # wrong type — ScopeFilter expects str
+            "view": {"assignees": 123},  # wrong type — SavedView expects list[str]
         },
     )
     assert r.status_code == 422, r.text
@@ -471,38 +470,35 @@ def test_update_provider_read_only_403(ro_client: TestClient) -> None:
     assert r.status_code == 403
 
 
-# -- scopes ------------------------------------------------------------------
+# -- views -------------------------------------------------------------------
 
 
-def test_list_scopes_marks_active(client: TestClient) -> None:
-    r = client.get("/api/scopes", headers=AUTH)
+def test_list_views_marks_active(client: TestClient) -> None:
+    r = client.get("/api/providers/primary/views", headers=AUTH)
     assert r.status_code == 200
     body = r.json()
     actives = [s for s in body if s["active"]]
     assert len(actives) == 1 and actives[0]["name"] == "default"
 
 
-def test_switch_scope_updates_runtime(client: TestClient, env) -> None:
-    r = client.put("/api/scopes/active", headers=AUTH, json={"name": "team"})
+def test_switch_view_updates_runtime(client: TestClient, env) -> None:
+    r = client.put("/api/providers/primary/views/active", headers=AUTH, json={"name": "team"})
     assert r.status_code == 200
-    assert env["runtime"].scope_key == "team"
-    active_provider = client.get("/api/providers/active", headers=AUTH)
-    assert active_provider.status_code == 200
-    assert active_provider.json()["active_scope"] == "team"
+    assert env["runtime"].active_view_name == "team"
     listed = client.get("/api/providers", headers=AUTH)
     assert listed.status_code == 200
     by_key = {row["key"]: row for row in listed.json()}
-    assert by_key["primary"]["active_scope"] == "team"
-    assert by_key["secondary"]["active_scope"] == "default"
+    assert by_key["primary"]["active_view"] == "team"
+    assert by_key["secondary"]["active_view"] == "default"
 
 
-def test_switch_scope_unknown_returns_404(client: TestClient) -> None:
-    r = client.put("/api/scopes/active", headers=AUTH, json={"name": "ghost"})
+def test_switch_view_unknown_returns_404(client: TestClient) -> None:
+    r = client.put("/api/providers/primary/views/active", headers=AUTH, json={"name": "ghost"})
     assert r.status_code == 404
 
 
-def test_scope_switch_read_only_403(ro_client: TestClient) -> None:
-    r = ro_client.put("/api/scopes/active", headers=AUTH, json={"name": "team"})
+def test_view_switch_read_only_403(ro_client: TestClient) -> None:
+    r = ro_client.put("/api/providers/primary/views/active", headers=AUTH, json={"name": "team"})
     assert r.status_code == 403
 
 
@@ -518,13 +514,13 @@ def test_list_providers(client: TestClient) -> None:
     assert len(actives) == 1 and actives[0]["key"] == "primary"
 
 
-def test_switch_provider_resets_scope(client: TestClient, env) -> None:
-    # primary is on scope 'default'; move it to 'team' then switch providers
-    client.put("/api/scopes/active", headers=AUTH, json={"name": "team"})
+def test_switch_provider_resets_view(client: TestClient, env) -> None:
+    # primary is on view 'default'; move it to 'team' then switch providers
+    client.put("/api/providers/primary/views/active", headers=AUTH, json={"name": "team"})
     r = client.put("/api/providers/active", headers=AUTH, json={"key": "secondary"})
     assert r.status_code == 200
     assert env["runtime"].provider_key == "secondary"
-    assert env["runtime"].scope_key == "default"  # reset to secondary's active_scope
+    assert env["runtime"].active_view_name == "default"  # secondary's active_view
 
 
 def test_switch_provider_unknown_404(client: TestClient) -> None:
@@ -568,7 +564,7 @@ def test_status_snapshot(client: TestClient, env) -> None:
     body = r.json()
     assert body["provider_key"] == "primary"
     assert body["provider_display"] == "Primary"
-    assert body["scope_key"] == "default"
+    assert body["active_view"] == "default"
     assert body["read_only"] is False
     assert body["chat_enabled"] is False
     assert body["pending_proposals"] == 0

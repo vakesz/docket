@@ -21,7 +21,6 @@ from docket.core.model import (
     CreateFields,
     Item,
     ItemKind,
-    ScopeFilters,
     TransitionIntent,
 )
 from docket.providers.azure_devops.auth import get_azure_devops_bearer_token
@@ -110,10 +109,8 @@ class AzureDevOpsProvider:
 
     # -- reads ---------------------------------------------------------------
 
-    def list_changes_since(
-        self, watermark: datetime | None, filters: ScopeFilters
-    ) -> Iterable[Item]:
-        wiql = self._build_wiql(watermark, filters)
+    def list_changes_since(self, watermark: datetime | None) -> Iterable[Item]:
+        wiql = self._build_wiql(watermark)
         wit = self._wit_client()
         try:
             result = wit.query_by_wiql(
@@ -315,7 +312,7 @@ class AzureDevOpsProvider:
     def _web_url(self, work_item_id: int | str) -> str:
         return f"{self._org}/{self._project}/_workitems/edit/{work_item_id}"
 
-    def _build_wiql(self, watermark: datetime | None, filters: ScopeFilters) -> str:
+    def _build_wiql(self, watermark: datetime | None) -> str:
         types = ", ".join(f"'{t}'" for t in KIND_BY_WIT)
         clauses: list[str] = [
             f"[System.TeamProject] = '{_escape(self._project)}'",
@@ -324,16 +321,6 @@ class AzureDevOpsProvider:
         if watermark is not None:
             iso = watermark.isoformat().replace("+00:00", "Z")
             clauses.append(f"[System.ChangedDate] >= '{iso}'")
-        area_path = filters.axes.get("area_path", "")
-        if area_path:
-            clauses.append(f"[System.AreaPath] UNDER '{_escape(area_path)}'")
-        iteration_path = filters.axes.get("iteration_path", "")
-        if iteration_path:
-            clauses.append(f"[System.IterationPath] UNDER '{_escape(iteration_path)}'")
-        if filters.assignee == "@me":
-            clauses.append("[System.AssignedTo] = @Me")
-        elif filters.assignee:
-            clauses.append(f"[System.AssignedTo] = '{_escape(filters.assignee)}'")
         where = " AND ".join(clauses)
         return f"SELECT [System.Id] FROM WorkItems WHERE {where} ORDER BY [System.ChangedDate] ASC"
 

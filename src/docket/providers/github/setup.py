@@ -1,7 +1,7 @@
 """First-time setup hooks for the GitHub provider.
 
 Owns the `gh auth` retry loop, the host + repo pickers (with manual
-fallbacks), and the assignee-only scope step. Importing this module
+fallbacks), and the assignee-only default-view step. Importing this module
 registers the callbacks with `config.setup_hooks`."""
 
 from __future__ import annotations
@@ -37,19 +37,25 @@ def step_connection(state: WizardState) -> None:
     state.provider_config = config
 
 
-def step_scope(state: WizardState) -> None:
-    """GitHub scope is just the assignee — team/area/iteration don't apply."""
-    from docket.config.models import ScopeFilter
+def step_view(state: WizardState) -> None:
+    """Seed the default saved view's `assignees` for GitHub.
+
+    Sync is full-project; this just chooses the "@me / nobody / a specific
+    login" filter the chip bar starts with. The user can flip it any time
+    via the chip bar in the TUI/SPA — this is just the persisted default."""
+    from docket.config.models import SavedView
 
     console.print(
-        "Scope filters limit which issues/PRs get cached locally. "
-        "Only 'assignee' is meaningful for GitHub."
+        "Saved views narrow what shows up in the items pane. "
+        "For GitHub the meaningful starter knob is the assignee filter."
     )
+    current = state.view.assignees[0] if state.view.assignees else ""
     assignee = pick_assignee(
         signed_in_email=state.signed_in_email,
-        current_assignee=state.scope.assignee,
+        current_assignee=current,
     )
-    state.scope = ScopeFilter(assignee=assignee)
+    assignees = [assignee] if assignee else []
+    state.view = SavedView(assignees=assignees)
 
 
 def pick_github_host() -> HostRef | None:
@@ -239,7 +245,7 @@ def register() -> None:
         WizardHooks(
             auth=step_auth,
             connection=step_connection,
-            scope=step_scope,
+            view=step_view,
             discover=discover_step,
         ),
     )
@@ -252,5 +258,5 @@ __all__ = [
     "register",
     "step_auth",
     "step_connection",
-    "step_scope",
+    "step_view",
 ]

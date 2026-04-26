@@ -25,7 +25,6 @@ from docket.cli.tui.widgets.chat_pane import ChatPane
 from docket.cli.tui.widgets.item_detail import ItemDetail
 from docket.cli.tui.widgets.item_tree import ItemSelected, ItemTree
 from docket.cli.tui.widgets.quick_open import QuickOpenModal, QuickOpenResult
-from docket.core.model import ItemState
 from docket.core.services import visual_filter
 from docket.providers import registry
 from docket.providers.base import GroupingStrategy
@@ -62,28 +61,13 @@ def resolved_grouping(app: DocketApp) -> GroupingStrategy:
     return spec.grouping
 
 
-def list_item_states(app: DocketApp) -> tuple[ItemState, ...] | None:
-    """States to pass to `item_repo.list_items`. `None` means "no filter"
-    — for the "show done" toggle — and matches calling `list_items` with no
-    `states=` argument."""
-    if not app.tui_ctx.hide_done:
-        return None
-    return (
-        ItemState.NEW,
-        ItemState.ACTIVE,
-        ItemState.BLOCKED,
-        ItemState.NEEDS_INFO,
-    )
-
-
 def apply_filter(app: DocketApp, raw: str) -> None:
     """Re-render the tree for the given filter query.
 
     Empty query = full list. Non-empty delegates to the FTS5-backed
     search_repo so title + description + comments all match, returning
-    items in bm25 rank order. The active view filter (assignee, area,
-    iteration, team) is layered on top of the search hits so scope and
-    free-text narrow together."""
+    items in bm25 rank order. The resolved view filter (assignees, axes,
+    state bucket) is applied post-query so search and view narrow together."""
     query = raw.strip()
     tree = app.query_one(ItemTree)
     pinned = watchlist_repo.list_pinned_items(
@@ -91,13 +75,10 @@ def apply_filter(app: DocketApp, raw: str) -> None:
     )
     resolved = app._active_view_filter()
     grouping = resolved_grouping(app)
-    states = list_item_states(app)
     if not query:
         items = item_repo.list_items(
             app.tui_ctx.conn,
             provider_key=app.tui_ctx.provider_key,
-            assignee=resolved.assignee,
-            states=states,
         )
         tree.load_items(
             visual_filter.apply_to_items(items, resolved),
@@ -109,7 +90,6 @@ def apply_filter(app: DocketApp, raw: str) -> None:
         app.tui_ctx.conn,
         query,
         provider_key=app.tui_ctx.provider_key,
-        assignee=resolved.assignee,
     )
     if not ids:
         tree.load_items([], pinned=pinned, grouping=grouping)
@@ -120,7 +100,6 @@ def apply_filter(app: DocketApp, raw: str) -> None:
             app.tui_ctx.conn,
             ids,
             provider_key=app.tui_ctx.provider_key,
-            states=states,
         )
     }
     ordered = [by_id[iid] for iid in ids if iid in by_id]
@@ -315,7 +294,6 @@ def toggle_pin(app: DocketApp) -> None:
 __all__ = [
     "apply_filter",
     "focus_filter",
-    "list_item_states",
     "on_input_changed",
     "on_input_submitted",
     "on_item_selected",

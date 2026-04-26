@@ -19,15 +19,14 @@ router = APIRouter(prefix="/providers", tags=["providers"])
 
 def _to_dto(runtime: RuntimeState, key: str) -> ProviderDTO:
     entry = runtime.config.providers[key]
-    active_scope = runtime.scope_key if key == runtime.provider_key else entry.active_scope
     spec = provider_spec(entry.type)
     kinds = [k.value for k in spec.supported_kinds] if spec is not None else []
     return ProviderDTO(
         key=key,
         type=entry.type,
         display_name=entry.display_name,
-        scopes=sorted(entry.scopes),
-        active_scope=active_scope,
+        views=sorted(entry.views),
+        active_view=entry.active_view,
         active=(key == runtime.provider_key),
         supported_kinds=kinds,
     )

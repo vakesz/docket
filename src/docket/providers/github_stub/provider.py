@@ -26,7 +26,6 @@ from docket.core.model import (
     Item,
     ItemKind,
     ItemState,
-    ScopeFilters,
     TransitionIntent,
 )
 from docket.providers.github_stub.state_map import to_canonical, to_native
@@ -53,9 +52,7 @@ class GitHubStubProvider:
         """Return the stub identity used by tests for `@me` filtering."""
         return "stub-user"
 
-    def list_changes_since(
-        self, watermark: datetime | None, filters: ScopeFilters
-    ) -> Iterable[Item]:
+    def list_changes_since(self, watermark: datetime | None) -> Iterable[Item]:
         if watermark is None:
             return list(self.issues)
         return [i for i in self.issues if i.updated_at and i.updated_at > watermark]

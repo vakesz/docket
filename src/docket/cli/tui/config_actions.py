@@ -9,8 +9,7 @@ mechanics live here as `app: DocketApp` callables."""
 
 from __future__ import annotations
 
-import contextlib
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from textual.widgets import Input
 
@@ -70,30 +69,31 @@ def edit_prompts(app: DocketApp) -> None:
     app.push_screen(PromptLibraryModal(app.tui_ctx.paths))
 
 
-def toggle_done_visibility(app: DocketApp) -> None:
-    """Flip the backlog's show/hide for resolved + closed items.
+_BUCKET_CYCLE: tuple[Literal["open", "closed", "all"], ...] = ("open", "closed", "all")
 
-    Persists the new value to config.toml so the choice survives
-    relaunches. Falls back gracefully if paths/config aren't wired
-    (pilot tests, read-only sessions)."""
-    app.tui_ctx.hide_done = not app.tui_ctx.hide_done
-    # Persist to config so the next launch opens with the same setting.
-    cfg = app.tui_ctx.config
-    paths = app.tui_ctx.paths
-    if cfg is not None and paths is not None:
-        cfg.ui.hide_done = app.tui_ctx.hide_done
-        with contextlib.suppress(Exception):
-            save_config(paths, cfg)
-    # Re-run the active search (if any) so the toggle respects the current
-    # filter input rather than silently dropping it.
+
+def cycle_state_bucket(app: DocketApp) -> None:
+    """Cycle the active view's `state_bucket` (open → closed → all → open).
+
+    Session-only — the saved view in `config.toml` is unchanged. Re-runs
+    the current filter input so the cycle respects whatever the user has
+    typed into the search box."""
+    from dataclasses import replace as dc_replace
+
+    current = app.tui_ctx.scope.state_bucket
+    try:
+        idx = _BUCKET_CYCLE.index(current)
+    except ValueError:
+        idx = -1
+    nxt = _BUCKET_CYCLE[(idx + 1) % len(_BUCKET_CYCLE)]
+    app.tui_ctx.scope = dc_replace(app.tui_ctx.scope, state_bucket=nxt)
     try:
         filter_input = app.query_one("#filter", Input)
     except Exception:
         app._reload_tree()
     else:
         app._apply_filter(filter_input.value or "")
-    label = "hidden" if app.tui_ctx.hide_done else "visible"
-    app.notify(f"Done items {label}.", severity="information")
+    app.notify(f"State bucket: {nxt}.", severity="information")
 
 
 def set_default_provider(app: DocketApp) -> None:
@@ -151,12 +151,11 @@ def apply_saved_config(app: DocketApp, config: Config) -> None:
     app.tui_ctx.stale_threshold_by_provider = dict(config.stale.threshold_days_by_provider)
     app.tui_ctx.default_new_item_kind = ItemKind(config.ui.default_new_item_kind)
     app.tui_ctx.show_acceptance_criteria = config.ui.show_acceptance_criteria
-    app.tui_ctx.hide_done = config.ui.hide_done
     app.query_one(ItemTree).stale_threshold_days = app._resolved_stale_threshold()
     app.query_one(ChatPane).set_show_acceptance_criteria(config.ui.show_acceptance_criteria)
     entry = config.providers.get(app.tui_ctx.provider_key) if app.tui_ctx.provider_key else None
-    if entry is not None and entry.active_scope in entry.scopes:
-        app.action_switch_view(entry.active_scope)
+    if entry is not None and entry.active_view in entry.views:
+        app.action_switch_view(entry.active_view)
     else:
         app._reload_tree()
     app.notify(
@@ -168,9 +167,9 @@ def apply_saved_config(app: DocketApp, config: Config) -> None:
 __all__ = [
     "apply_saved_config",
     "apply_saved_theme",
+    "cycle_state_bucket",
     "edit_prompts",
     "open_settings",
     "pick_theme",
     "set_default_provider",
-    "toggle_done_visibility",
 ]

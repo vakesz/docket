@@ -18,7 +18,7 @@ Two integration shapes, both real, easy to confuse:
 
 | You want… | Use a |
 | --- | --- |
-| Native CRUD (transition, patch description, create item) on the canonical model, with scope filtering, sync, and proposal-first writes. | **Provider** (this guide). |
+| Native CRUD (transition, patch description, create item) on the canonical model, with view-time filtering, sync, and proposal-first writes. | **Provider** (this guide). |
 | Read-only adjunct that the agent calls as a tool — search, fetch, etc. — without participating in the SQLite cache or proposal flow. | **MCP server** (`src/docket/agent/mcp/`, configured per project in `config.toml`). |
 
 If your data isn't a work item (incident timelines, runbooks, dashboards),
@@ -41,8 +41,8 @@ src/docket/providers/<type_id>/
 ├── discover.py        # list_orgs/list_repos/etc — pure data, raises DiscoveryError
 ├── field_map.py       # (optional) provider field name → canonical field
 ├── provider.py        # WorkItemProvider implementation
-├── scope.py           # (optional) axis_matcher for view-time scope filtering
-├── setup.py           # WizardHooks: auth/connection/scope/discover callbacks
+├── scope.py           # (optional) axis_matcher + axis_extract for view-time facet filtering
+├── setup.py           # WizardHooks: auth/connection/view/discover callbacks
 └── state_map.py       # provider-native state ↔ canonical ItemState/TransitionIntent
 ```
 
@@ -58,7 +58,7 @@ resistance.
 | `auth.py` | Side-effecting login probe. Imports `keyring`, `subprocess`, the SDK — whatever it takes. Imported by `setup.py`, never by `provider.py`. |
 | `discover.py` | Pure-ish lookups (orgs, projects, repos, paths). Raises `DiscoveryError` (subclass of `ProviderError`) on failure. Used by both the CLI wizard prompts and the SPA's `/discover` endpoint. |
 | `setup.py` | The wizard's per-provider hook table. Imports Rich + the discover/auth helpers. Calls `setup_hooks.register(type_id, WizardHooks(...))`. |
-| `scope.py` | Optional `axis_matcher(item, axis_key, expected) -> bool` for any provider that declares `scope_axes`. Lives separately from `provider.py` so `core/`'s view-time filter stays SDK-free. |
+| `scope.py` | Optional `axis_matcher(item, axis_key, expected) -> bool` plus `axis_extract(item, axis_key) -> str | None` for any provider that declares `scope_axes`. Lives separately from `provider.py` so `core/`'s view-time filter stays SDK-free. |
 | `field_map.py` | Optional canonicalization helpers — handy for providers with weird per-field shapes (HTML descriptions, custom-field UUID indirection, etc.). |
 
 ---
@@ -67,16 +67,17 @@ resistance.
 
 The Protocol lives in `src/docket/providers/base.py`. Every method takes
 canonical types in (`ItemKind`, `ItemState`, `TransitionIntent`,
-`ScopeFilters`, `CreateFields`) and returns canonical types out
-(`Item`, `Comment`). Provider-native enums and field names never escape.
+`CreateFields`) and returns canonical types out (`Item`, `Comment`).
+Provider-native enums and field names never escape. **Sync is
+unconstrained** — `list_changes_since` takes a watermark only. Every
+narrowing dimension (assignee, state bucket, provider scope axes) is a
+*visual* filter applied to cached items via `core/services/visual_filter.py`.
 
 ```python
 class WorkItemProvider(Protocol):
     def health_check(self) -> None: ...
 
-    def list_changes_since(
-        self, watermark: datetime | None, filters: ScopeFilters
-    ) -> Iterable[Item]: ...
+    def list_changes_since(self, watermark: datetime | None) -> Iterable[Item]: ...
 
     def get_item(self, id: str) -> Item: ...
     def get_comments(self, id: str) -> list[Comment]: ...
@@ -188,6 +189,7 @@ ProviderSpec(
         ScopeAxis(key="component", label="Component"),  # discovery_stage=None → manual entry
     ),
     axis_matcher=_acme_axis_matcher,    # required iff scope_axes is non-empty
+    axis_extract=_acme_axis_extract,    # required iff scope_axes is non-empty (for facet popovers)
 )
 ```
 
@@ -213,10 +215,12 @@ providers where the bare type id is fine.
 
 ## 6. Scope axes
 
-Scope axes are how Docket narrows the cached `items` table without taking
-on provider-specific knowledge in `core/`. The `assignee` axis is always
-present (every provider with assignment supports it); everything else is
-declared by the spec.
+Scope axes are how Docket narrows cached items without taking on provider-
+specific knowledge in `core/`. They are **visual** (post-cache) filters —
+sync always pulls everything the credentials see, and the filter pipeline
+in `core/services/visual_filter.py` decides what gets shown. The
+`assignee` axis is always present (every provider with assignment supports
+it); everything else is declared by the spec.
 
 When to add an axis:
 - The provider exposes a stable narrowing dimension users actually filter by
@@ -227,10 +231,10 @@ When to add an axis:
 When NOT to add an axis:
 - For sort orders or display preferences (those are UI concerns).
 - For values that change per-item without a stable enumeration — those
-  belong in full-text search, not the scope filter.
+  belong in full-text search, not the chip bar.
 
 Each axis carries:
-- `key` — wire id stored in `ScopeFilter.axes` and sent over the SPA wire.
+- `key` — wire id stored in `SavedView.axes` and sent over the SPA wire.
 - `label` — rendered to humans in the wizard, settings modal, and SPA.
 - `discovery_stage` — when set, names the `WizardHooks.discover` stage
   that lists candidate values for autocomplete. Leave `None` for free-form
@@ -254,8 +258,26 @@ def axis_matcher(item: Item, axis_key: str, expected: str) -> bool:
 
 Returning `False` on unknown keys (rather than `True`) is the safe default
 — a misconfigured filter narrows to nothing instead of silently dropping
-the constraint. The ADO matcher in
-`src/docket/providers/azure_devops/scope.py` is the canonical example.
+the constraint.
+
+`axis_extract` is the dual that powers the chip-bar facet popovers — for
+each cached item it returns the canonical value the item carries on that
+axis, or `None` when the axis doesn't apply:
+
+```python
+def axis_extract(item: Item, axis_key: str) -> str | None:
+    raw = item.provider_raw.get("fields")
+    if not isinstance(raw, dict):
+        return None
+    if axis_key in ("squad", "component"):
+        value = raw.get(axis_key)
+        return value if isinstance(value, str) and value else None
+    return None
+```
+
+Both `axis_matcher` and `axis_extract` are required when `scope_axes` is
+non-empty. The ADO pair in `src/docket/providers/azure_devops/scope.py`
+is the canonical example.
 
 ---
 
@@ -280,8 +302,8 @@ def step_connection(state: WizardState) -> None:
     endpoint = Prompt.ask("ACME endpoint", default=state.provider_config.get("endpoint", ""))
     state.provider_config = {"endpoint": endpoint}
 
-def step_scope(state: WizardState) -> None:
-    """Build a ScopeFilter from the spec's axes — see _pick_optional pattern."""
+def step_view(state: WizardState) -> None:
+    """Build the default `SavedView` from the spec's axes — see _pick_optional pattern."""
     ...
 
 def discover_step(stage: str, payload: Mapping[str, str]) -> list[DiscoveryItem]:
@@ -296,13 +318,13 @@ def register() -> None:
         WizardHooks(
             auth=step_auth,
             connection=step_connection,
-            scope=step_scope,
+            view=step_view,
             discover=discover_step,
         ),
     )
 ```
 
-Any of `auth`, `connection`, `scope` may be `None` — the wizard falls
+Any of `auth`, `connection`, `view` may be `None` — the wizard falls
 through to a sensible default. `discover` may also be `None`, in which case
 the SPA's discovery datalist is empty and the user falls back to free-form
 input. (The Azure DevOps and GitHub setup modules are good copy-paste
@@ -395,8 +417,8 @@ The bare minimum for a new provider:
 | `tests/unit/test_<type>_provider.py` | Round-trip: instantiate via factory, exercise `list_changes_since` / `get_item` / `transition` against an SDK fake, assert canonical types come out. |
 | `tests/unit/test_state_map_reverse.py` | Add cases under your `type_id` so the round-trip guard runs against your map. |
 | `tests/unit/test_provider_setup_hooks.py` | Add the type id to whichever fixture lists "specs that must have hooks". |
-| `tests/integration/test_setup_wizard.py` | End-to-end CLI wizard run: pick the new provider, exercise discovery + scope, assert config writes. |
-| `tests/integration/test_api_setup.py` | (Optional) `/setup/probe-scope` round-trip with the new provider's axes shape — proves the SPA's wire format works. |
+| `tests/integration/test_setup_wizard.py` | End-to-end CLI wizard run: pick the new provider, exercise discovery + default-view picker, assert config writes. |
+| `tests/integration/test_api_setup.py` | (Optional) `/setup/providers/{type_id}/discover` round-trip with the new provider's axes shape — proves the SPA's wire format works. |
 
 Architectural guards that should keep passing without changes:
 - `tests/unit/test_import_boundary.py` — fails if you accidentally import
@@ -428,9 +450,9 @@ Then walk through the wizard end-to-end (browser at http://127.0.0.1:8765/):
 2. Provider step lists your `setup_fields` from
    `/setup/providers/types`.
 3. Connection step calls your `discover_step` for every datalist.
-4. Scope step renders one input per `scope_axes` entry; the
-   "Preview match count" button hits `/setup/probe-scope` against your
-   `factory + list_changes_since`.
+4. Default-view step renders one chip group per `scope_axes` entry plus
+   the always-on assignee + state-bucket chips. Selections become the
+   provider entry's `views.default`.
 5. Review step's chips iterate `scope_axes` generically — each axis
    value should appear with the spec's label, not a hardcoded one.
 6. Finish setup → restart → `docket list --provider <key>` shows the items.
@@ -446,12 +468,14 @@ that's a missed leak — file it and re-read the relevant phase doc in
 ## Reference
 
 - `src/docket/providers/base.py` — `WorkItemProvider`, `ProviderSpec`,
-  `ScopeAxis`, `SetupField`, `LabelTemplate`, `GroupingStrategy`.
+  `ScopeAxis`, `SetupField`, `LabelTemplate`, `GroupingStrategy`,
+  `AxisMatcher`, `AxisExtractor`.
 - `src/docket/providers/registry.py` — `register`, `build`, `specs`,
   `spec`, `normalize_config`, `load_entry_points`.
 - `src/docket/config/setup_hooks.py` — `WizardHooks`, `WizardStep`,
   `DiscoverFn`, `DiscoveryItem`.
 - `src/docket/core/model.py` — `Item`, `ItemKind`, `ItemState`,
-  `TransitionIntent`, `ScopeFilters`, `CreateFields`.
-- `src/docket/core/services/visual_filter.py` — view-time scope filter.
+  `TransitionIntent`, `SavedView`, `ScopeFilters`, `CreateFields`.
+- `src/docket/core/services/visual_filter.py` — view-time filter +
+  facet computation.
 - `tests/fakes/provider.py` — `FakeProvider` reference impl.

@@ -6,12 +6,17 @@
  */
 import type { DTO } from "~/api/client";
 
-export interface ScopeDraft {
+type StateBucket = DTO["SavedViewDTO"]["state_bucket"];
+
+export interface ViewDraft {
   /** Provider-declared narrowing axes keyed by `ProviderSpec.scope_axes[*].key`.
-   * Empty values mean the axis is unconstrained — same UX as the CLI's
-   * "blank for any". */
-  axes: Record<string, string>;
-  assignee: string;
+   * Each value is a list so multi-select is first-class; an empty list means
+   * the axis is unconstrained — same UX as the CLI's "blank for any". */
+  axes: Record<string, string[]>;
+  /** OR-set of identities to filter by. `@me` resolves at view time to the
+   * provider's `current_user_identity()`. */
+  assignees: string[];
+  state_bucket: StateBucket;
 }
 
 export interface ProviderDraft {
@@ -20,7 +25,7 @@ export interface ProviderDraft {
   display_name: string;
   display_name_dirty: boolean;
   config: Record<string, string>;
-  scope: ScopeDraft;
+  view: ViewDraft;
 }
 
 export interface LlmDraft {
@@ -56,30 +61,23 @@ export function defaultPricesFor(deployment: string): { input: string; output: s
   return KNOWN_MODEL_PRICES[deployment.trim().toLowerCase()] ?? null;
 }
 
-export function emptyScope(): ScopeDraft {
-  return { axes: {}, assignee: "" };
+export function emptyView(): ViewDraft {
+  return { axes: {}, assignees: [], state_bucket: "open" };
 }
 
-/** Convert a ScopeDraft to the wire shape consumed by `SetupCompleteRequest`.
- * Empty axis values are dropped so ScopeFilter validation treats them as
- * unconstrained — matches the CLI wizard's "blank for any" UX. */
-export function scopeToWire(scope: ScopeDraft): Record<string, unknown> {
+/** Convert a ViewDraft to the wire shape consumed by `SetupProviderEntry.view`.
+ * Empty axis lists are dropped so the backend treats them as unconstrained. */
+export function viewToWire(view: ViewDraft): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  const axes: Record<string, string> = {};
-  for (const [key, value] of Object.entries(scope.axes)) {
-    if (value) axes[key] = value;
+  const axes: Record<string, string[]> = {};
+  for (const [key, values] of Object.entries(view.axes)) {
+    const cleaned = values.filter((v) => v.trim().length > 0);
+    if (cleaned.length > 0) axes[key] = cleaned;
   }
   if (Object.keys(axes).length > 0) out.axes = axes;
-  if (scope.assignee) out.assignee = scope.assignee;
+  if (view.assignees.length > 0) out.assignees = view.assignees;
+  out.state_bucket = view.state_bucket;
   return out;
 }
 
-export type Step =
-  | "welcome"
-  | "cli"
-  | "provider"
-  | "scope"
-  | "llm"
-  | "settings"
-  | "review"
-  | "done";
+export type Step = "welcome" | "cli" | "provider" | "view" | "llm" | "settings" | "review" | "done";

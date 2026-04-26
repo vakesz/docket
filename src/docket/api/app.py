@@ -25,13 +25,15 @@ from docket.api.routes import pins as pins_routes
 from docket.api.routes import projects as projects_routes
 from docket.api.routes import prompts as prompts_routes
 from docket.api.routes import providers as providers_routes
-from docket.api.routes import scopes as scopes_routes
 from docket.api.routes import settings as settings_routes
 from docket.api.routes import setup as setup_routes
 from docket.api.routes import source as source_routes
 from docket.api.routes import status as status_routes
 from docket.api.routes import suggestions as suggestions_routes
 from docket.api.routes import sync as sync_routes
+from docket.api.routes import view_config as view_config_routes
+from docket.api.routes import view_overrides as view_overrides_routes
+from docket.api.routes import views as views_routes
 from docket.api.runtime import RuntimeState, rebuild_agent
 from docket.api.schemas import HealthDTO
 from docket.api.spa import mount_spa, resolve_frontend_dist
@@ -86,7 +88,7 @@ def create_app(
     `paths` and `runtime` are optional so lightweight test fixtures can
     spin up an app without wiring the whole runtime. When omitted, the
     endpoints that need them return 503; when set (by `docket serve`),
-    pins/suggestions/prompts/settings/scopes/providers/sync/status work
+    pins/suggestions/prompts/settings/views/providers/sync/status work
     end-to-end.
     """
     if not bearer_token:
@@ -155,7 +157,9 @@ def create_app(
     app.include_router(items_routes.router, prefix=api_prefix, dependencies=bearer)
     app.include_router(prompts_routes.router, prefix=api_prefix, dependencies=bearer)
     app.include_router(settings_routes.router, prefix=api_prefix, dependencies=bearer)
-    app.include_router(scopes_routes.router, prefix=api_prefix, dependencies=bearer)
+    app.include_router(views_routes.router, prefix=api_prefix, dependencies=bearer)
+    app.include_router(view_config_routes.router, prefix=api_prefix, dependencies=bearer)
+    app.include_router(view_overrides_routes.router, prefix=api_prefix, dependencies=bearer)
     app.include_router(providers_routes.router, prefix=api_prefix, dependencies=bearer)
     # Memory routes must come before `projects_routes` because the catch-all
     # `/projects/{project_id:path}` greedy-matches and would swallow

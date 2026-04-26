@@ -21,13 +21,12 @@ def list_command(
     with prepare_or_wizard() as ctx:
         kind_filter = ItemKind(kind) if kind else None
         spec = registry.spec(ctx.config.providers[ctx.active_provider].type)
-        resolved = visual_filter.resolve(ctx.scope_filters(), ctx.provider, spec)
+        resolved = visual_filter.resolve(ctx.view_filters(), ctx.provider, spec)
         items = item_repo.list_items(
             ctx.conn,
             kind=kind_filter,
             include_archived=show_archived,
             provider_key=ctx.active_provider or None,
-            assignee=resolved.assignee,
         )
         items = visual_filter.apply_to_items(items, resolved)
         table = Table(title=f"Docket ({len(items)} items)")

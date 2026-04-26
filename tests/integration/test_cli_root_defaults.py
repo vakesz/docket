@@ -25,12 +25,12 @@ def test_bare_invocation_passes_real_defaults_to_run_open_tui(
 
     def _recording_run_open_tui(
         *,
-        scope: str | None,
+        view: str | None,
         no_chat: bool,
         read_only: bool,
         provider: str | None,
     ) -> None:
-        captured["scope"] = scope
+        captured["view"] = view
         captured["no_chat"] = no_chat
         captured["read_only"] = read_only
         captured["provider"] = provider
@@ -48,7 +48,7 @@ def test_bare_invocation_passes_real_defaults_to_run_open_tui(
             f"(likely a typer.OptionInfo sentinel)"
         )
     assert captured == {
-        "scope": None,
+        "view": None,
         "no_chat": False,
         "read_only": False,
         "provider": None,

@@ -10,11 +10,12 @@ from textual.screen import ModalScreen
 from textual.widgets import Checkbox, Input, Select, Static
 
 from docket.config.loader import save_config
-from docket.config.models import Config, ProviderEntry, ScopeFilter, TelemetryLevel
+from docket.config.models import Config, ProviderEntry, SavedView, TelemetryLevel
 from docket.config.paths import Paths
 from docket.providers import registry
 
-_NEW_SCOPE = "__new__"
+_NEW_VIEW = "__new__"
+_BUCKETS: tuple[tuple[str, str], ...] = (("open", "open"), ("closed", "closed"), ("all", "all"))
 
 
 def _parse_scalar[T: (int, float)](
@@ -148,12 +149,12 @@ class SettingsModal(ModalScreen[Config | None]):
 
     def compose(self) -> ComposeResult:
         entry = self._active_entry
-        scopes = entry.scopes if entry is not None else {}
-        active_scope_name = entry.active_scope if entry is not None else "default"
-        scope_options = [("Create new view…", _NEW_SCOPE)]
-        scope_options.extend((name, name) for name in sorted(scopes))
-        active_scope_value = active_scope_name if active_scope_name in scopes else _NEW_SCOPE
-        current_scope = scopes.get(active_scope_name, ScopeFilter())
+        views = entry.views if entry is not None else {}
+        active_view_name = entry.active_view if entry is not None else "default"
+        view_options = [("Create new view…", _NEW_VIEW)]
+        view_options.extend((name, name) for name in sorted(views))
+        active_view_value = active_view_name if active_view_name in views else _NEW_VIEW
+        current_view = views.get(active_view_name, SavedView())
 
         provider_type = entry.type if entry is not None else "github"
         provider_spec = registry.spec(provider_type)
@@ -165,43 +166,50 @@ class SettingsModal(ModalScreen[Config | None]):
                 id="subtitle",
             )
             with VerticalScroll():
-                yield Static("Views & scope", classes="section")
+                yield Static("Views", classes="section")
                 yield Static(
                     f"editing saved views for [cyan]{self._active_provider_key or '—'}[/cyan]",
                     classes="field-label",
                 )
                 yield Static("saved view", classes="field-label")
-                scope_picker = Select(
-                    options=scope_options,
-                    value=active_scope_value,
+                view_picker = Select(
+                    options=view_options,
+                    value=active_view_value,
                     prompt="pick a saved view",
-                    id="scope-select",
+                    id="view-select",
                 )
-                scope_picker.tooltip = "Choose a saved view to edit, or create a new one."
-                yield scope_picker
+                view_picker.tooltip = "Choose a saved view to edit, or create a new one."
+                yield view_picker
                 yield Static("view name", classes="field-label")
-                yield Input(value=active_scope_name, placeholder="view name", id="scope-name")
+                yield Input(value=active_view_name, placeholder="view name", id="view-name")
                 default_checkbox = Checkbox(
                     "Make this the default view",
                     value=True,
-                    id="scope-default",
+                    id="view-default",
                     classes="checkbox",
                 )
                 default_checkbox.tooltip = "When enabled, Docket opens this view by default."
                 yield default_checkbox
+                yield Static("state bucket", classes="field-label")
+                yield Select(
+                    options=list(_BUCKETS),
+                    value=current_view.state_bucket,
+                    allow_blank=False,
+                    id="view-state-bucket",
+                )
                 if provider_spec is not None:
                     for axis in provider_spec.scope_axes:
                         yield Static(axis.label.lower(), classes="field-label")
                         yield Input(
-                            value=current_scope.axes.get(axis.key, ""),
-                            placeholder=f"{axis.label} (optional)",
-                            id=f"scope-axis-{axis.key}",
+                            value=", ".join(current_view.axes.get(axis.key, [])),
+                            placeholder=f"{axis.label} (comma-separated; blank = any)",
+                            id=f"view-axis-{axis.key}",
                         )
-                yield Static("assignee", classes="field-label")
+                yield Static("assignees", classes="field-label")
                 yield Input(
-                    value=current_scope.assignee,
-                    placeholder="@me, email, or blank for any",
-                    id="scope-assignee",
+                    value=", ".join(current_view.assignees),
+                    placeholder="comma-separated; @me supported; blank for any",
+                    id="view-assignees",
                 )
 
                 yield Static("Active provider", classes="section")
@@ -362,35 +370,37 @@ class SettingsModal(ModalScreen[Config | None]):
             yield Static("Ctrl+S save  ·  Esc cancel", id="hint")
 
     def on_mount(self) -> None:
-        self.query_one("#scope-select", Select).focus()
+        self.query_one("#view-select", Select).focus()
 
     def on_select_changed(self, event: Select.Changed) -> None:
-        if event.select.id != "scope-select":
+        if event.select.id != "view-select":
             return
         selected = event.value
         if selected is Select.BLANK or not isinstance(selected, str):
             return
         entry = self._active_entry
-        scopes = entry.scopes if entry is not None else {}
-        scope = scopes.get(selected, ScopeFilter())
-        name_input = self.query_one("#scope-name", Input)
-        default_checkbox = self.query_one("#scope-default", Checkbox)
-        if selected == _NEW_SCOPE:
+        views = entry.views if entry is not None else {}
+        view = views.get(selected, SavedView())
+        name_input = self.query_one("#view-name", Input)
+        default_checkbox = self.query_one("#view-default", Checkbox)
+        if selected == _NEW_VIEW:
             name_input.value = ""
             default_checkbox.value = False
-            scope = ScopeFilter()
+            view = SavedView()
         else:
             name_input.value = selected
-            current_active = entry.active_scope if entry is not None else ""
+            current_active = entry.active_view if entry is not None else ""
             default_checkbox.value = current_active == selected
+        bucket_select = self.query_one("#view-state-bucket", Select)
+        bucket_select.value = view.state_bucket
         provider_spec = registry.spec(entry.type) if entry is not None else None
         if provider_spec is not None:
             for axis in provider_spec.scope_axes:
-                widget_id = f"#scope-axis-{axis.key}"
+                widget_id = f"#view-axis-{axis.key}"
                 widgets = self.query(widget_id).results(Input)
                 for widget in widgets:
-                    widget.value = scope.axes.get(axis.key, "")
-        self.query_one("#scope-assignee", Input).value = scope.assignee
+                    widget.value = ", ".join(view.axes.get(axis.key, []))
+        self.query_one("#view-assignees", Input).value = ", ".join(view.assignees)
 
     def action_save(self) -> None:
         try:
@@ -412,26 +422,32 @@ class SettingsModal(ModalScreen[Config | None]):
         if entry is None or not provider_key:
             raise ValueError("No provider is active — add one via `docket setup provider add`.")
 
-        scope_name = self.query_one("#scope-name", Input).value.strip()
-        if not scope_name:
+        view_name = self.query_one("#view-name", Input).value.strip()
+        if not view_name:
             raise ValueError("View name is required.")
 
         provider_raw = raw["providers"].setdefault(provider_key, {})
-        provider_raw.setdefault("scopes", {})
+        provider_raw.setdefault("views", {})
         provider_spec = registry.spec(entry.type)
-        axes: dict[str, str] = {}
+        axes: dict[str, list[str]] = {}
         if provider_spec is not None:
             for axis in provider_spec.scope_axes:
-                widget = self.query_one(f"#scope-axis-{axis.key}", Input)
-                value = widget.value.strip()
-                if value:
-                    axes[axis.key] = value
-        provider_raw["scopes"][scope_name] = {
-            "assignee": self.query_one("#scope-assignee", Input).value.strip(),
+                widget = self.query_one(f"#view-axis-{axis.key}", Input)
+                values = [v.strip() for v in widget.value.split(",") if v.strip()]
+                if values:
+                    axes[axis.key] = values
+        assignees_raw = self.query_one("#view-assignees", Input).value
+        assignees = [v.strip() for v in assignees_raw.split(",") if v.strip()]
+        bucket_value = self.query_one("#view-state-bucket", Select).value
+        if bucket_value is Select.BLANK or not isinstance(bucket_value, str):
+            bucket_value = "open"
+        provider_raw["views"][view_name] = {
+            "assignees": assignees,
             "axes": axes,
+            "state_bucket": bucket_value,
         }
-        if self.query_one("#scope-default", Checkbox).value:
-            provider_raw["active_scope"] = scope_name
+        if self.query_one("#view-default", Checkbox).value:
+            provider_raw["active_view"] = view_name
 
         display = self.query_one("#provider-display", Input).value.strip()
         if display:

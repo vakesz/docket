@@ -179,7 +179,7 @@ class HealthDTO(BaseModel):
 class StatusDTO(BaseModel):
     provider_key: str
     provider_display: str
-    scope_key: str
+    active_view: str
     read_only: bool
     chat_enabled: bool
     last_sync_at: datetime | None = None

@@ -24,7 +24,6 @@ from pydantic import ValidationError
 from docket.agent.prompt import scaffold as scaffold_prompts
 from docket.api._provider_setup import (
     build_and_validate_provider_entry,
-    count_items_for_scope,
     provider_type_dtos,
     test_provider_draft,
 )
@@ -37,8 +36,6 @@ from docket.api.schemas import (
     DiscoverResultDTO,
     DiscoveryItemDTO,
     GithubHostDTO,
-    ProbeScopeDTO,
-    ProbeScopeRequest,
     SetupCompleteDTO,
     SetupCompleteRequest,
     SetupProviderTypeDTO,
@@ -56,7 +53,6 @@ from docket.config import setup_discovery, setup_hooks
 from docket.config.loader import load_config, save_config
 from docket.config.models import (
     ProviderEntry,
-    ScopeFilter,
     compose_setup_config,
 )
 from docket.config.paths import Paths
@@ -155,8 +151,8 @@ def setup_complete(
 
     http_token = req.http_token or secrets.token_urlsafe(32)
 
-    # Load any pre-existing config so we preserve per-provider extra scope
-    # slots / active_scope choices when the wizard is re-run against a
+    # Load any pre-existing config so we preserve per-provider extra view
+    # slots / active_view choices when the wizard is re-run against a
     # configured instance. Bootstrap mode will return None here.
     try:
         existing_cfg = load_config(paths, optional=True)
@@ -171,7 +167,7 @@ def setup_complete(
             type_id=entry.type,
             display_name=entry.display_name,
             config=dict(entry.config),
-            scope=dict(entry.scope),
+            view=dict(entry.view),
             existing=existing_cfg.providers.get(key) if existing_cfg else None,
         )
         providers_cfg[key] = provider_entry
@@ -361,26 +357,6 @@ def suggest_label(req: SuggestLabelRequest) -> SuggestLabelDTO:
     when nothing useful can be inferred."""
     label = build_label_suggestion(type_id=req.type, config=dict(req.config))
     return SuggestLabelDTO(label=label or req.type)
-
-
-@router.post(
-    "/probe-scope",
-    response_model=ProbeScopeDTO,
-    dependencies=[Depends(require_setup_token)],
-)
-def probe_scope(req: ProbeScopeRequest) -> ProbeScopeDTO:
-    """Estimate match-count for a draft scope before the user commits.
-
-    Best-effort wrapper over `WorkItemProvider.list_changes_since(...)` —
-    returns `count=None` when the provider cannot be reached or the
-    config doesn't validate. The SPA falls back to "could not count"
-    in that case (same UX as the CLI wizard)."""
-    try:
-        scope_filter = ScopeFilter(**dict(req.scope))
-    except ValidationError as e:
-        return ProbeScopeDTO(count=None, error=f"invalid scope: {e}")
-    count = count_items_for_scope(req.type, dict(req.config), scope_filter)
-    return ProbeScopeDTO(count=count)
 
 
 def _schedule_restart(app: FastAPI) -> None:

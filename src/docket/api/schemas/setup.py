@@ -38,12 +38,12 @@ class SetupProviderFieldDTO(BaseModel):
 class SetupProviderScopeAxisDTO(BaseModel):
     """One provider-declared narrowing axis the visual filter exposes.
 
-    `key` is the wire identifier persisted under `ScopeFilter.axes`;
+    `key` is the wire identifier persisted under `SavedView.axes`;
     `label` is rendered to humans. `discovery_stage`, when present, names
     the `discover` stage the SPA can hit to populate a datalist of
     candidate values; the SPA falls back to a free-form input when it's
     `None`. Assignee is intentionally not modeled here — it's a separate
-    first-class field on every scope."""
+    first-class field on every saved view."""
 
     key: str
     label: str
@@ -79,7 +79,7 @@ class SetupProviderEntry(BaseModel):
     type: str
     display_name: str = ""
     config: dict[str, Any] = Field(default_factory=dict)
-    scope: dict[str, Any] = Field(default_factory=dict)
+    view: dict[str, Any] = Field(default_factory=dict)
 
 
 class SetupLlmEntry(BaseModel):
@@ -188,20 +188,3 @@ class SuggestLabelRequest(BaseModel):
 
 class SuggestLabelDTO(BaseModel):
     label: str
-
-
-class ProbeScopeRequest(BaseModel):
-    """Estimate match-count for a scope draft, before the user commits.
-
-    Same UX as the CLI wizard's "→ N item(s) match this scope" preview.
-    Returns `count=None` when the provider can't be reached or doesn't
-    support cheap counting — callers fall back to "could not count"."""
-
-    type: str
-    config: dict[str, Any] = Field(default_factory=dict)
-    scope: dict[str, Any] = Field(default_factory=dict)
-
-
-class ProbeScopeDTO(BaseModel):
-    count: int | None = None
-    error: str = ""

@@ -167,11 +167,11 @@ def test_wizard_uses_discovery_selections_end_to_end(
     entry = _azure_devops_entry(cfg)
     assert str(entry.config["organization"]).rstrip("/") == "https://dev.azure.com/contoso"
     assert entry.config["project"] == "platform"
-    scope = entry.scopes["default"]
-    assert scope.axes["team"] == "Alpha"
-    assert scope.axes["area_path"] == "platform"
-    assert scope.axes["iteration_path"] == "platform\\Sprint 42"
-    assert scope.assignee == "@me"
+    view = entry.views["default"]
+    assert view.axes["team"] == ["Alpha"]
+    assert view.axes["area_path"] == ["platform"]
+    assert view.axes["iteration_path"] == ["platform\\Sprint 42"]
+    assert view.assignees == ["@me"]
 
 
 def test_wizard_falls_back_when_discovery_fails(
@@ -214,9 +214,9 @@ def test_wizard_falls_back_when_discovery_fails(
     entry = _azure_devops_entry(cfg)
     assert str(entry.config["organization"]).rstrip("/") == "https://dev.azure.com/contoso"
     assert entry.config["project"] == "platform"
-    scope = entry.scopes["default"]
-    assert scope.axes == {}
-    assert scope.assignee == "@me"
+    view = entry.views["default"]
+    assert view.axes == {}
+    assert view.assignees == ["@me"]
 
 
 def test_wizard_rejects_bare_org_name_then_accepts_full_url(
@@ -436,9 +436,9 @@ def test_wizard_github_end_to_end(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
     # github.com gets the default api base url, which is dropped from the
     # persisted config (only GHE hosts get an explicit base_url).
     assert "base_url" not in entry.config
-    scope = entry.scopes["default"]
-    assert scope.axes == {}
-    assert scope.assignee == "@me"
+    view = entry.views["default"]
+    assert view.axes == {}
+    assert view.assignees == ["@me"]
     assert entry.display_name == "GitHub · contoso/example"
 
 
@@ -480,7 +480,7 @@ def test_wizard_github_ghe_persists_base_url(
     # Label suggestion picks up the GHE host as the prefix instead of the
     # generic "GitHub" — keeps multi-host setups disambiguated in the picker.
     assert entry.display_name == "ghe.example.com · acme/widgets"
-    assert entry.scopes["default"].assignee == ""
+    assert entry.views["default"].assignees == []
 
 
 def test_wizard_github_stub_end_to_end(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -507,5 +507,5 @@ def test_wizard_github_stub_end_to_end(monkeypatch: pytest.MonkeyPatch, tmp_path
     entry = cfg.providers["github_stub"]
     assert entry.type == "github_stub"
     assert entry.config["default_repo"] == "myorg/myrepo"
-    assert entry.scopes["default"].assignee == "@me"
+    assert entry.views["default"].assignees == ["@me"]
     assert entry.display_name == "GitHub (stub) · myorg/myrepo"

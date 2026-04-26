@@ -12,7 +12,7 @@ import { Notice } from "~/components/common/Notice";
 import { cn } from "~/lib/cn";
 import { metaLabelClass, primaryButtonClass, setupCardClass } from "~/lib/formClasses";
 import type { LlmDraft, ProviderDraft, SettingsDraft } from "./types";
-import { scopeToWire } from "./types";
+import { viewToWire } from "./types";
 
 function parseOptionalFloat(raw: string): number | null {
   const trimmed = raw.trim();
@@ -40,7 +40,7 @@ export function ReviewStep({ provider, spec, llm, settings, onBack, onCompleted 
           type: provider.type,
           display_name: provider.display_name || provider.type,
           config: { ...provider.config },
-          scope: scopeToWire(provider.scope),
+          view: viewToWire(provider.view),
         },
       },
       active_provider: provider.key,
@@ -66,7 +66,7 @@ export function ReviewStep({ provider, spec, llm, settings, onBack, onCompleted 
     });
   };
 
-  const scopeChips = scopeChipsFor(provider, spec);
+  const viewChips = viewChipsFor(provider, spec);
 
   return (
     <div className={setupCardClass}>
@@ -78,9 +78,9 @@ export function ReviewStep({ provider, spec, llm, settings, onBack, onCompleted 
             ({provider.type} · key {provider.key})
           </span>
         </div>
-        {scopeChips.length > 0 && (
+        {viewChips.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1">
-            {scopeChips.map((chip) => (
+            {viewChips.map((chip) => (
               <span
                 key={chip}
                 className="rounded-full border border-border px-2 py-0.5 font-mono text-[10px] text-fg-muted"
@@ -127,16 +127,15 @@ export function ReviewStep({ provider, spec, llm, settings, onBack, onCompleted 
   );
 }
 
-function scopeChipsFor(
-  provider: ProviderDraft,
-  spec: DTO["SetupProviderTypeDTO"] | null,
-): string[] {
+function viewChipsFor(provider: ProviderDraft, spec: DTO["SetupProviderTypeDTO"] | null): string[] {
   const chips: string[] = [];
   for (const axis of spec?.scope_axes ?? []) {
-    const value = provider.scope.axes[axis.key];
-    if (value) chips.push(`${axis.label}: ${value}`);
+    const values = provider.view.axes[axis.key] ?? [];
+    if (values.length > 0) chips.push(`${axis.label}: ${values.join(", ")}`);
   }
-  if (provider.scope.assignee) chips.push(`assignee: ${provider.scope.assignee}`);
-  if (chips.length === 0) chips.push("scope: any");
+  if (provider.view.assignees.length > 0) {
+    chips.push(`assignee: ${provider.view.assignees.join(", ")}`);
+  }
+  chips.push(`state: ${provider.view.state_bucket}`);
   return chips;
 }

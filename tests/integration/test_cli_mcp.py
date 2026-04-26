@@ -11,7 +11,7 @@ from docket.cli.app import app
 from docket.config import (
     Config,
     ProviderEntry,
-    ScopeFilter,
+    SavedView,
     load_config,
     resolve_paths,
     save_config,
@@ -28,8 +28,8 @@ def _seed(tmp_xdg: Path) -> None:
                 type="github_stub",
                 display_name="Stub",
                 config={},
-                scopes={"default": ScopeFilter()},
-                active_scope="default",
+                views={"default": SavedView()},
+                active_view="default",
             )
         },
         active_provider="main",

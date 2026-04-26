@@ -22,7 +22,7 @@ def status(
     return StatusDTO(
         provider_key=runtime.provider_key,
         provider_display=entry.display_name,
-        scope_key=runtime.scope_key,
+        active_view=entry.active_view,
         read_only=bool(getattr(request.app.state, "read_only", False)),
         chat_enabled=getattr(request.app.state, "agent", None) is not None,
         last_sync_at=runtime.last_sync_at,

@@ -17,7 +17,7 @@ from docket.cli.tui.commands import DocketCommands
 from docket.cli.tui.widgets.item_detail import ItemDetail
 from docket.cli.tui.widgets.quick_open import QuickOpenModal
 from docket.cli.tui.widgets.theme_picker import ThemePicker
-from docket.config import Config, ProviderEntry, ScopeFilter, load_config, resolve_paths
+from docket.config import Config, ProviderEntry, SavedView, load_config, resolve_paths
 from docket.core.model import ScopeFilters
 from docket.storage import init_db
 from docket.storage.repos import item_repo
@@ -35,7 +35,6 @@ def ctx(tmp_path: Path, make_item: MakeItem):
         conn=conn,
         provider=provider,
         scope=ScopeFilters(),
-        scope_key="default",
     )
     conn.close()
 
@@ -84,7 +83,7 @@ async def test_theme_picker_persists_selection_to_config(tmp_xdg: Path, ctx) -> 
                 type="azure_devops",
                 display_name="Azure DevOps",
                 config={"organization": "https://dev.azure.com/example", "project": "Demo"},
-                scopes={"default": ScopeFilter()},
+                views={"default": SavedView()},
             )
         },
         active_provider="azure_devops",

@@ -1,7 +1,7 @@
 """Per-provider setup callbacks the wizard dispatches to.
 
 The first-time setup wizard walks generic step names (`auth`, `connection`,
-`scope`); each step asks the registered provider for the matching callable
+`view`); each step asks the registered provider for the matching callable
 and runs it. This module is the boundary that lets `config/setup_wizard.py`
 stay free of concrete-provider imports — every provider package owns its
 own `setup.py` that registers its hooks at import time.
@@ -54,16 +54,16 @@ so the route surfaces them as `ok=false` instead of a 500."""
 class WizardHooks:
     """Per-provider onboarding callbacks.
 
-    Any of `auth`, `connection`, `scope` may be `None`; the orchestrator
+    Any of `auth`, `connection`, `view` may be `None`; the orchestrator
     falls through to a sensible default in that case (a short "no auth
     needed" message for `auth`, the spec-driven prompts for `connection`,
-    and an empty scope for `scope`). `discover` powers the SPA wizard's
+    and an empty default view for `view`). `discover` powers the SPA wizard's
     stage-driven picker; `None` means the SPA falls back to manual entry.
     """
 
     auth: WizardStep | None = None
     connection: WizardStep | None = None
-    scope: WizardStep | None = None
+    view: WizardStep | None = None
     discover: DiscoverFn | None = None
 
 

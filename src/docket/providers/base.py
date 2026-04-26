@@ -10,7 +10,6 @@ from docket.core.model import (
     CreateFields,
     Item,
     ItemKind,
-    ScopeFilters,
     TransitionIntent,
 )
 
@@ -23,6 +22,17 @@ declare in `scope_axes`; the visual-filter layer iterates declared axes and
 calls the matcher for whichever ones the user constrained. Empty string is
 treated as "don't filter" before the matcher is invoked, so matchers can
 assume `expected` is a concrete value."""
+
+AxisExtractor = Callable[[Item, str], str | None]
+"""View-time value extractor for a single scope-axis on a cached item.
+
+Receives `(item, axis_key)` and returns the canonical string value the
+item carries for that axis (or None if absent). The visual-filter layer
+calls this once per cached item per declared axis to populate the chip
+popovers (top-N values + counts). Implementations read from
+`Item.provider_raw` so `core/` stays provider-agnostic — the same place
+`axis_matcher` looks. Return None for items the axis doesn't apply to;
+the facet computation skips Nones rather than counting them as a value."""
 
 
 class ProviderError(Exception):
@@ -48,9 +58,7 @@ class WorkItemProvider(Protocol):
 
     def health_check(self) -> None: ...
 
-    def list_changes_since(
-        self, watermark: datetime | None, filters: ScopeFilters
-    ) -> Iterable[Item]: ...
+    def list_changes_since(self, watermark: datetime | None) -> Iterable[Item]: ...
 
     def get_item(self, id: str) -> Item: ...
 
@@ -135,7 +143,7 @@ _ALL_KINDS: tuple[ItemKind, ...] = tuple(ItemKind)
 class ScopeAxis:
     """One provider-defined axis for the visual scope filter.
 
-    `key` is the wire/storage identifier persisted in `ScopeFilter.axes`
+    `key` is the wire/storage identifier persisted in `SavedView.axes`
     (e.g. `"area_path"`). `label` is rendered to humans in the wizard,
     settings modal, and SPA. `discovery_stage` — when set — names the
     `WizardHooks.discover` stage that lists candidate values for this axis;
@@ -170,12 +178,15 @@ class ProviderSpec:
     reads (cached items already carry a translated `ItemKind`). Defaults to all
     canonical kinds so non-overriding specs keep full-range behavior.
 
-    `scope_axes` declares the provider-defined narrowing axes the visual
-    filter exposes (in addition to the always-on `assignee` axis). Empty
-    `()` means assignee is the only axis — the GitHub default. `axis_matcher`
-    is the view-time predicate the visual filter calls for each constrained
-    axis; it must be set whenever `scope_axes` is non-empty so cached rows
-    can be filtered without touching the provider."""
+    `scope_axes` declares the provider-defined narrowing axes the chip bar
+    exposes alongside the reserved `assignee`, `state`, and `tags` chips.
+    Empty `()` means only the reserved chips render — the GitHub default.
+
+    `axis_matcher` is the view-time predicate the visual filter calls for
+    each constrained axis; it must be set whenever `scope_axes` is
+    non-empty. `axis_extract` is the dual: the visual-filter layer calls
+    it to enumerate values for chip popovers (top-N by count). Both must
+    be set together — if you can match an axis you can extract it."""
 
     type_id: str
     display_name: str
@@ -188,3 +199,4 @@ class ProviderSpec:
     label_template: LabelTemplate | None = None
     scope_axes: tuple[ScopeAxis, ...] = field(default_factory=tuple)
     axis_matcher: AxisMatcher | None = None
+    axis_extract: AxisExtractor | None = None

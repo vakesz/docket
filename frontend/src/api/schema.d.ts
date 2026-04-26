@@ -346,6 +346,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/items/facets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Facets
+         * @description Top-N values + counts per chip on the view bar.
+         *
+         *     Computed off the unfiltered cache (the `?archived=` flag aside) so a
+         *     chip's options stay stable when the user picks one. Per-facet caps
+         *     come from `ProjectViewConfig` and hidden facets are skipped — the
+         *     SPA renders whatever this returns, in order.
+         */
+        get: operations["list_facets_api_items_facets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/items/search": {
         parameters: {
             query?: never;
@@ -677,15 +702,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/scopes": {
+    "/api/providers/{provider_key}/views": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List Scopes */
-        get: operations["list_scopes_api_scopes_get"];
+        /** List Views */
+        get: operations["list_views_api_providers__provider_key__views_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -694,22 +719,77 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/scopes/active": {
+    "/api/providers/{provider_key}/views/active": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Active Scope */
-        get: operations["active_scope_api_scopes_active_get"];
-        /** Set Active Scope */
-        put: operations["set_active_scope_api_scopes_active_put"];
+        /** Active View */
+        get: operations["active_view_api_providers__provider_key__views_active_get"];
+        /** Set Active View */
+        put: operations["set_active_view_api_providers__provider_key__views_active_put"];
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/providers/{provider_key}/views/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Upsert View */
+        put: operations["upsert_view_api_providers__provider_key__views__name__put"];
+        post?: never;
+        /** Delete View */
+        delete: operations["delete_view_api_providers__provider_key__views__name__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{provider_key}/view-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get View Config */
+        get: operations["get_view_config_api_projects__provider_key__view_config_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch View Config */
+        patch: operations["patch_view_config_api_projects__provider_key__view_config_patch"];
+        trace?: never;
+    };
+    "/api/runtime/view-overrides": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Overrides */
+        get: operations["get_overrides_api_runtime_view_overrides_get"];
+        put?: never;
+        post?: never;
+        /** Clear Overrides */
+        delete: operations["clear_overrides_api_runtime_view_overrides_delete"];
+        options?: never;
+        head?: never;
+        /** Patch Overrides */
+        patch: operations["patch_overrides_api_runtime_view_overrides_patch"];
         trace?: never;
     };
     "/api/providers": {
@@ -1298,31 +1378,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/setup/probe-scope": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Probe Scope
-         * @description Estimate match-count for a draft scope before the user commits.
-         *
-         *     Best-effort wrapper over `WorkItemProvider.list_changes_since(...)` —
-         *     returns `count=None` when the provider cannot be reached or the
-         *     config doesn't validate. The SPA falls back to "could not count"
-         *     in that case (same UX as the CLI wizard).
-         */
-        post: operations["probe_scope_api_setup_probe_scope_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -1558,6 +1613,46 @@ export interface components {
             extras?: {
                 [key: string]: string;
             };
+        };
+        /** FacetConfigDTO */
+        FacetConfigDTO: {
+            /**
+             * Visible
+             * @default true
+             */
+            visible: boolean;
+            /**
+             * Max Options
+             * @default 4
+             */
+            max_options: number;
+        };
+        /**
+         * FacetDTO
+         * @description One chip on the view bar (assignee, state, tags, or a provider axis).
+         *
+         *     `options` is the (capped) top-N values + counts; `total_options` is the
+         *     full unique-value count before the cap so the SPA can render `+N more`.
+         */
+        FacetDTO: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Options */
+            options?: components["schemas"]["FacetOptionDTO"][];
+            /**
+             * Total Options
+             * @default 0
+             */
+            total_options: number;
+        };
+        /** FacetOptionDTO */
+        FacetOptionDTO: {
+            /** Value */
+            value: string;
+            /** Count */
+            count: number;
         };
         /** GithubHostDTO */
         GithubHostDTO: {
@@ -1985,36 +2080,6 @@ export interface components {
             /** Pinned */
             pinned: boolean;
         };
-        /** ProbeScopeDTO */
-        ProbeScopeDTO: {
-            /** Count */
-            count?: number | null;
-            /**
-             * Error
-             * @default
-             */
-            error: string;
-        };
-        /**
-         * ProbeScopeRequest
-         * @description Estimate match-count for a scope draft, before the user commits.
-         *
-         *     Same UX as the CLI wizard's "→ N item(s) match this scope" preview.
-         *     Returns `count=None` when the provider can't be reached or doesn't
-         *     support cheap counting — callers fall back to "could not count".
-         */
-        ProbeScopeRequest: {
-            /** Type */
-            type: string;
-            /** Config */
-            config?: {
-                [key: string]: unknown;
-            };
-            /** Scope */
-            scope?: {
-                [key: string]: unknown;
-            };
-        };
         /**
          * ProjectDTO
          * @description Project surface for the HTTP API.
@@ -2057,6 +2122,29 @@ export interface components {
             description?: string | null;
             /** Archived */
             archived?: boolean | null;
+        };
+        /**
+         * ProjectViewConfigDTO
+         * @description Per-project facet visibility + caps for the view bar.
+         */
+        ProjectViewConfigDTO: {
+            /** Facets */
+            facets?: {
+                [key: string]: components["schemas"]["FacetConfigDTO"];
+            };
+        };
+        /**
+         * ProjectViewConfigPatch
+         * @description PATCH body for `/api/projects/{key}/view-config`.
+         *
+         *     Each facet entry replaces the existing one; missing facets are left
+         *     untouched. To restore defaults for a facet, omit it.
+         */
+        ProjectViewConfigPatch: {
+            /** Facets */
+            facets?: {
+                [key: string]: components["schemas"]["FacetConfigDTO"];
+            };
         };
         /** PromptDTO */
         PromptDTO: {
@@ -2147,13 +2235,13 @@ export interface components {
             type: string;
             /** Display Name */
             display_name: string;
-            /** Scopes */
-            scopes?: string[];
+            /** Views */
+            views?: string[];
             /**
-             * Active Scope
+             * Active View
              * @default
              */
-            active_scope: string;
+            active_view: string;
             /**
              * Active
              * @default false
@@ -2213,35 +2301,56 @@ export interface components {
             description: string;
         };
         /**
-         * ScopeDTO
-         * @description A saved view exposed over HTTP.
+         * SavedViewDTO
+         * @description One saved view exposed over HTTP.
          *
-         *     `axes` carries the provider-declared narrowing values keyed by
-         *     `ProviderSpec.scope_axes[*].key`. The frontend looks up labels via the
-         *     matching `SetupProviderTypeDTO.scope_axes` entry.
+         *     `assignees` matches `Item.assignee` with OR semantics; `@me` is the
+         *     sentinel resolved to the provider's `current_user_identity`. `axes`
+         *     is keyed by `ProviderSpec.scope_axes[*].key` and each value is a list
+         *     so multi-select is first-class. `state_bucket` toggles the open/done
+         *     grouping for this view; the chip-bar can override it in-session.
          */
-        ScopeDTO: {
+        SavedViewDTO: {
             /** Name */
             name: string;
-            /**
-             * Assignee
-             * @default @me
-             */
-            assignee: string;
+            /** Assignees */
+            assignees?: string[];
             /** Axes */
             axes?: {
-                [key: string]: string;
+                [key: string]: string[];
             };
+            /**
+             * State Bucket
+             * @default open
+             * @enum {string}
+             */
+            state_bucket: "open" | "closed" | "all";
             /**
              * Active
              * @default false
              */
             active: boolean;
         };
-        /** ScopeSwitchRequest */
-        ScopeSwitchRequest: {
-            /** Name */
-            name: string;
+        /**
+         * SavedViewWriteRequest
+         * @description Body for create/update of a saved view.
+         *
+         *     The view name is the URL path param (`PUT /providers/{key}/views/{name}`).
+         *     Empty `assignees`/`axes` mean "no narrowing on that facet".
+         */
+        SavedViewWriteRequest: {
+            /** Assignees */
+            assignees?: string[];
+            /** Axes */
+            axes?: {
+                [key: string]: string[];
+            };
+            /**
+             * State Bucket
+             * @default open
+             * @enum {string}
+             */
+            state_bucket: "open" | "closed" | "all";
         };
         /** SendMessageRequest */
         SendMessageRequest: {
@@ -2332,7 +2441,8 @@ export interface components {
          *
          *     Shape mirrors `SetupProviderEntry` but is handled under /settings so
          *     bootstrap-token gating doesn't apply. `make_active=true` also flips
-         *     `active_provider` to the new key.
+         *     `active_provider` to the new key. `view` provides the initial saved
+         *     view (named `default`); omit for an empty default view.
          */
         SettingsProviderAddRequest: {
             /** Key */
@@ -2348,8 +2458,8 @@ export interface components {
             config?: {
                 [key: string]: unknown;
             };
-            /** Scope */
-            scope?: {
+            /** View */
+            view?: {
                 [key: string]: unknown;
             };
             /**
@@ -2363,8 +2473,8 @@ export interface components {
          * @description Update an existing provider's display_name and config.
          *
          *     The provider `key` (path param) and `type` are immutable — to change them
-         *     the caller removes and re-adds. `scope` is left untouched if omitted, so
-         *     in-flight scope edits aren't clobbered by a credentials-only update.
+         *     the caller removes and re-adds. `view` is left untouched if omitted, so
+         *     in-flight view edits aren't clobbered by a credentials-only update.
          */
         SettingsProviderUpdateRequest: {
             /**
@@ -2376,8 +2486,8 @@ export interface components {
             config?: {
                 [key: string]: unknown;
             };
-            /** Scope */
-            scope?: {
+            /** View */
+            view?: {
                 [key: string]: unknown;
             } | null;
         };
@@ -2473,8 +2583,8 @@ export interface components {
             config?: {
                 [key: string]: unknown;
             };
-            /** Scope */
-            scope?: {
+            /** View */
+            view?: {
                 [key: string]: unknown;
             };
         };
@@ -2513,12 +2623,12 @@ export interface components {
          * SetupProviderScopeAxisDTO
          * @description One provider-declared narrowing axis the visual filter exposes.
          *
-         *     `key` is the wire identifier persisted under `ScopeFilter.axes`;
+         *     `key` is the wire identifier persisted under `SavedView.axes`;
          *     `label` is rendered to humans. `discovery_stage`, when present, names
          *     the `discover` stage the SPA can hit to populate a datalist of
          *     candidate values; the SPA falls back to a free-form input when it's
          *     `None`. Assignee is intentionally not modeled here — it's a separate
-         *     first-class field on every scope.
+         *     first-class field on every saved view.
          */
         SetupProviderScopeAxisDTO: {
             /** Key */
@@ -2686,8 +2796,8 @@ export interface components {
             provider_key: string;
             /** Provider Display */
             provider_display: string;
-            /** Scope Key */
-            scope_key: string;
+            /** Active View */
+            active_view: string;
             /** Read Only */
             read_only: boolean;
             /** Chat Enabled */
@@ -2795,6 +2905,51 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /**
+         * ViewOverrideDTO
+         * @description The active session-level chip-bar override for the current provider.
+         *
+         *     `present=False` means no override is in effect; `view` then mirrors the
+         *     saved view. `present=True` means the chip bar has unsaved selections
+         *     different from the saved view; the user can clear them with
+         *     `DELETE /api/runtime/view-overrides`.
+         */
+        ViewOverrideDTO: {
+            /** Present */
+            present: boolean;
+            view: components["schemas"]["SavedViewDTO"];
+        };
+        /**
+         * ViewOverridePatch
+         * @description Body for `PATCH /api/runtime/view-overrides`.
+         *
+         *     Replaces this session's chip-bar override outright. Sending an empty
+         *     payload (defaults) parks the user on "open + no narrowing" — same as
+         *     if they cleared every chip. To remove the override entirely (so the
+         *     saved view shows through), call `DELETE` instead.
+         */
+        ViewOverridePatch: {
+            /** Assignees */
+            assignees?: string[];
+            /** Axes */
+            axes?: {
+                [key: string]: string[];
+            };
+            /**
+             * State Bucket
+             * @default open
+             * @enum {string}
+             */
+            state_bucket: "open" | "closed" | "all";
+        };
+        /**
+         * ViewSwitchRequest
+         * @description Activate one of the provider's saved views by name.
+         */
+        ViewSwitchRequest: {
+            /** Name */
+            name: string;
         };
     };
     responses: never;
@@ -3388,7 +3543,7 @@ export interface operations {
                 tag?: string | null;
                 archived?: boolean;
                 parent_id?: string | null;
-                /** @description Apply the active saved view as a post-cache filter. Set false to see every cached item regardless of view. */
+                /** @description Apply the active saved view + session overrides as a post-cache filter. Set false to see every cached item regardless of view. */
                 apply_view?: boolean;
             };
             header?: never;
@@ -3437,6 +3592,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProposalDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_facets_api_items_facets_get: {
+        parameters: {
+            query?: {
+                archived?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FacetDTO"][];
                 };
             };
             /** @description Validation Error */
@@ -4038,7 +4224,238 @@ export interface operations {
             };
         };
     };
-    list_scopes_api_scopes_get: {
+    list_views_api_providers__provider_key__views_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedViewDTO"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    active_view_api_providers__provider_key__views_active_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedViewDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_active_view_api_providers__provider_key__views_active_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ViewSwitchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedViewDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upsert_view_api_providers__provider_key__views__name__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_key: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavedViewWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedViewDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_view_api_providers__provider_key__views__name__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_key: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedViewDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_view_config_api_projects__provider_key__view_config_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectViewConfigDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_view_config_api_projects__provider_key__view_config_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectViewConfigPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectViewConfigDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_overrides_api_runtime_view_overrides_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -4053,12 +4470,12 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ScopeDTO"][];
+                    "application/json": components["schemas"]["ViewOverrideDTO"];
                 };
             };
         };
     };
-    active_scope_api_scopes_active_get: {
+    clear_overrides_api_runtime_view_overrides_delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -4073,12 +4490,12 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ScopeDTO"];
+                    "application/json": components["schemas"]["ViewOverrideDTO"];
                 };
             };
         };
     };
-    set_active_scope_api_scopes_active_put: {
+    patch_overrides_api_runtime_view_overrides_patch: {
         parameters: {
             query?: never;
             header?: never;
@@ -4087,7 +4504,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ScopeSwitchRequest"];
+                "application/json": components["schemas"]["ViewOverridePatch"];
             };
         };
         responses: {
@@ -4097,7 +4514,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ScopeDTO"];
+                    "application/json": components["schemas"]["ViewOverrideDTO"];
                 };
             };
             /** @description Validation Error */
@@ -5325,39 +5742,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SuggestLabelDTO"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    probe_scope_api_setup_probe_scope_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ProbeScopeRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProbeScopeDTO"];
                 };
             };
             /** @description Validation Error */

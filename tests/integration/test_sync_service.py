@@ -4,7 +4,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from docket.core import Item, ItemKind, ItemState
-from docket.core.model import ScopeFilters
 from docket.core.services import sync_service
 from docket.storage import init_db
 from docket.storage.repos import item_repo, sync_repo
@@ -87,19 +86,18 @@ def test_provider_scoped_refresh_namespaces_watermarks(tmp_path: Path) -> None:
     assert sync_repo.get_watermark(conn, "github") == t_gh
 
 
-def test_refresh_uses_unfiltered_scope_for_cache_fill(tmp_path: Path) -> None:
+def test_refresh_pulls_full_provider_inventory(tmp_path: Path) -> None:
+    """Sync is provider-wide; visual filtering happens at query time."""
     conn = init_db(tmp_path / "t.db")
-    seen_filters: list[ScopeFilters] = []
+    watermarks: list[datetime | None] = []
 
     class RecordingProvider(FakeProvider):
-        def list_changes_since(
-            self, watermark: datetime | None, filters: ScopeFilters
-        ) -> list[Item]:
-            seen_filters.append(filters)
-            return super().list_changes_since(watermark, filters)
+        def list_changes_since(self, watermark: datetime | None) -> list[Item]:
+            watermarks.append(watermark)
+            return super().list_changes_since(watermark)
 
     prov = RecordingProvider(items=[_item("1", datetime(2026, 4, 21, 10, 0, tzinfo=UTC))])
 
     sync_service.refresh(conn, prov)
 
-    assert seen_filters == [ScopeFilters(assignee="")]
+    assert watermarks == [None]

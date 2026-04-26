@@ -36,7 +36,7 @@ import {
 } from "~/lib/formClasses";
 import { ConnectionFields } from "./connection";
 import type { ProviderDraft } from "./types";
-import { emptyScope } from "./types";
+import { emptyView } from "./types";
 
 interface Props {
   types: DTO["SetupProviderTypeDTO"][];
@@ -91,7 +91,7 @@ export function ProviderStep({ types, loading, draft, setDraft, onBack, onNext }
                     display_name: t.display,
                     display_name_dirty: false,
                     config: {},
-                    scope: emptyScope(),
+                    view: emptyView(),
                   }))
                 }
               />

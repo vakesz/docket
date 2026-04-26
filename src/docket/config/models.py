@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, HttpUrl
 
-from docket.core.model import ScopeFilters
+from docket.core.model import ScopeFilters, StateBucketLiteral
 
 
 class TelemetryLevel(StrEnum):
@@ -24,25 +24,64 @@ class TelemetryLevel(StrEnum):
     CRITICAL = "CRITICAL"
 
 
-class ScopeFilter(BaseModel):
-    """A named scope filter for work-item sync.
+class SavedView(BaseModel):
+    """A persisted, named view configuration for one provider.
 
-    `assignee` is always present (every provider with assignment supports
-    it). `axes` carries the provider-declared narrowing values — keyed by
-    `ProviderSpec.scope_axes[*].key` — so adding a third-party provider
-    with its own axes does not require schema churn here. Empty values
-    mean the axis is unconstrained."""
+    Every dimension here is a *visual* filter applied post-cache — sync
+    pulls the full project, and these fields narrow what the user sees
+    at render time.
 
-    assignee: str = ""
-    axes: dict[str, str] = Field(default_factory=dict)
+    `assignees` matches `Item.assignee` with OR semantics. The sentinel
+    `"@me"` resolves at view-time to the provider's
+    `current_user_identity()`; providers that don't expose identity
+    collapse `@me` to "no narrowing" rather than hiding everything.
+
+    `axes` carries provider-defined values keyed by
+    `ProviderSpec.scope_axes[*].key`. Each value is a list so multiple
+    selections (multiple teams, area paths, …) are first-class.
+
+    `state_bucket` is the open/closed/all toggle. Done items are still
+    cached; this just hides them from the default view (`"open"`)."""
+
+    assignees: list[str] = Field(default_factory=list)
+    axes: dict[str, list[str]] = Field(default_factory=dict)
+    state_bucket: StateBucketLiteral = "open"
 
     def to_core(self) -> ScopeFilters:
         """Convert to the core-layer filter (same shape, different layer).
 
-        Providers and services accept `core.model.ScopeFilters`; `ScopeFilter`
+        Providers and services accept `core.model.ScopeFilters`; `SavedView`
         is the pydantic config model. Keep the two separate so core has no
         pydantic dependency, but offer the obvious conversion here."""
-        return ScopeFilters(assignee=self.assignee, axes=dict(self.axes))
+        return ScopeFilters(
+            assignees=tuple(self.assignees),
+            axes={k: tuple(v) for k, v in self.axes.items() if v},
+            state_bucket=self.state_bucket,
+        )
+
+
+class FacetConfig(BaseModel):
+    """Per-facet display settings.
+
+    `visible` hides the chip from the view bar entirely (settings hide
+    'assignee' for solo projects, etc.). `max_options` caps the popover's
+    top-N list before "+N more" — per-facet, per-project."""
+
+    visible: bool = True
+    max_options: int = Field(default=4, ge=0, le=100)
+
+
+class ProjectViewConfig(BaseModel):
+    """Per-project facet visibility + caps. Keys are facet ids:
+    `"assignee"`, `"state"`, `"tags"`, plus every spec-declared
+    `ProviderSpec.scope_axes[*].key`. Missing keys take `FacetConfig`
+    defaults (visible, cap=4)."""
+
+    facets: dict[str, FacetConfig] = Field(default_factory=dict)
+
+    def for_facet(self, key: str) -> FacetConfig:
+        """Return the configured `FacetConfig` for `key`, or defaults."""
+        return self.facets.get(key) or FacetConfig()
 
 
 class ProviderEntry(BaseModel):
@@ -51,15 +90,18 @@ class ProviderEntry(BaseModel):
     free-form and validated by the factory — the registry itself does not
     peek inside.
 
-    Each provider owns its own scopes + active_scope: when you switch
-    providers in the TUI, both the work-item pane and the view filter reset
-    to that provider's default."""
+    Each provider owns a set of named saved views; `active_view` names the
+    one that loads by default when this provider becomes active. Switching
+    provider in the TUI/SPA resets to that provider's `active_view`. The
+    chip bar can override the active view's selections in-session, but
+    those overrides are session-only — to change the persisted default,
+    edit the saved view via Settings → Providers."""
 
     type: str
     display_name: str
     config: dict[str, Any] = Field(default_factory=dict)
-    scopes: dict[str, ScopeFilter] = Field(default_factory=lambda: {"default": ScopeFilter()})
-    active_scope: str = "default"
+    views: dict[str, SavedView] = Field(default_factory=lambda: {"default": SavedView()})
+    active_view: str = "default"
 
 
 def build_provider_entry(
@@ -67,39 +109,39 @@ def build_provider_entry(
     type_id: str,
     display_name: str,
     config: dict[str, Any],
-    scope: ScopeFilter,
+    view: SavedView,
     existing: ProviderEntry | None = None,
 ) -> ProviderEntry:
-    """Assemble a `ProviderEntry` with consistent scope-preservation policy.
+    """Assemble a `ProviderEntry` with consistent view-preservation policy.
 
     Why: every wizard / CLI / HTTP surface that edits providers had its own
-    inlined construction, and at least one (`_build_config_from_state`)
-    drifted — it read from `existing.active_scope` but wrote the user's edit
-    into a hard-coded `"default"` slot, so reconfiguring a provider whose
-    active scope was e.g. `"my-team"` silently lost the change.
+    inlined construction, and one of them drifted — it read from
+    `existing.active_view` but wrote the user's edit into a hard-coded
+    `"default"` slot, silently losing the change for providers whose active
+    view had been renamed.
 
     Policy:
-      - No `existing`: fresh entry with `scopes={"default": scope}` and
-        `active_scope="default"`.
-      - With `existing`: keep every extra scope slot, replace only
-        `existing.scopes[existing.active_scope]` with `scope`, and keep the
-        active-scope name unchanged."""
+      - No `existing`: fresh entry with `views={"default": view}` and
+        `active_view="default"`.
+      - With `existing`: keep every extra view slot, replace only
+        `existing.views[existing.active_view]` with `view`, and keep the
+        active-view name unchanged."""
     if existing is None:
         return ProviderEntry(
             type=type_id,
             display_name=display_name,
             config=dict(config),
-            scopes={"default": scope},
-            active_scope="default",
+            views={"default": view},
+            active_view="default",
         )
-    scopes = dict(existing.scopes)
-    scopes[existing.active_scope] = scope
+    views = dict(existing.views)
+    views[existing.active_view] = view
     return ProviderEntry(
         type=type_id,
         display_name=display_name,
         config=dict(config),
-        scopes=scopes,
-        active_scope=existing.active_scope,
+        views=views,
+        active_view=existing.active_view,
     )
 
 
@@ -184,13 +226,6 @@ class UiConfig(BaseModel):
         pattern="^(epic|feature|story|task|bug)$",
     )
     show_acceptance_criteria: bool = True
-    # Whether to hide resolved/closed items from the backlog on startup.
-    # The `c` key toggles it at runtime and writes back here so the choice
-    # survives relaunches.
-    hide_done: bool = True
-    # Web UI only: number of tag-filter chips to show before the "+N more"
-    # toggle. 0 disables collapsing (show every tag).
-    tag_filter_collapse_limit: int = Field(default=4, ge=0, le=100)
 
 
 class SyncConfig(BaseModel):
@@ -242,7 +277,7 @@ class ProjectEntry(BaseModel):
     """User-facing project metadata persisted in `config.toml`.
 
     A project IS a provider — the dict key in `Config.projects` is the
-    provider key, and all scopes on that provider share one project
+    provider key, and every saved view on that provider shares one project
     (one name, one description, one MCP fleet, one memory store). The
     SQLite `projects` table mirrors this for FK integrity (memory,
     sources, sub-agents) but `config.toml` is the source of truth for
@@ -257,6 +292,10 @@ class ProjectEntry(BaseModel):
     # name is what shows up in tool ids (`mcp__<name>__<tool>`), so keep it
     # short and stable — renaming invalidates the prompt prefix cache.
     mcp: dict[str, MCPServerEntry] = Field(default_factory=dict)
+    # Per-project facet visibility + caps for the view bar (chip row above
+    # the items pane). Hides chips the user doesn't care about and caps the
+    # top-N options inside each popover.
+    view: ProjectViewConfig = Field(default_factory=ProjectViewConfig)
 
 
 class Config(BaseModel):
@@ -265,8 +304,8 @@ class Config(BaseModel):
 
     providers: dict[str, ProviderEntry] = Field(default_factory=dict)
     active_provider: str = ""
-    # Project metadata, keyed by provider key (one entry per provider). Scopes
-    # are visual filters on the provider — they share the same project entry.
+    # Project metadata, keyed by provider key (one entry per provider). Saved
+    # views are visual filters on the provider — they share the same project entry.
     projects: dict[str, ProjectEntry] = Field(default_factory=dict)
     llm: LlmConfig = Field(default_factory=LlmConfig)
     http: HttpConfig = Field(default_factory=HttpConfig)

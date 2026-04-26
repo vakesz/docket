@@ -20,7 +20,8 @@ from fastapi.testclient import TestClient
 
 from docket.api import create_app
 from docket.api.runtime import RuntimeState
-from docket.config import Config, ProviderEntry, ScopeFilter
+from docket.config import Config, ProviderEntry
+from docket.config.models import SavedView
 from docket.core.services.proposal_store import ProposalStore
 from docket.storage import init_db
 from docket.storage.repos import item_repo
@@ -71,8 +72,8 @@ def build_api_env(tmp_path: Path, make_item: MakeItem) -> ApiEnv:
                 type="github_stub",
                 display_name="Stub",
                 config={},
-                scopes={"default": ScopeFilter(assignee=""), "mine": ScopeFilter(assignee="@me")},
-                active_scope="default",
+                views={"default": SavedView(), "mine": SavedView(assignees=["@me"])},
+                active_view="default",
             )
         },
         active_provider="main",
@@ -81,7 +82,6 @@ def build_api_env(tmp_path: Path, make_item: MakeItem) -> ApiEnv:
         config=config,
         providers={"main": provider},
         provider_key="main",
-        scope_key="default",
     )
     return ApiEnv(
         conn=conn,

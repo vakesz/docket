@@ -58,7 +58,7 @@ def tui_setup(tmp_path: Path, make_item: MakeItem):
         ],
     )
     provider = FakeProvider(items=[epic, story, bug])
-    ctx = TuiContext(conn=conn, provider=provider, scope=ScopeFilters(), scope_key="default")
+    ctx = TuiContext(conn=conn, provider=provider, scope=ScopeFilters())
     yield ctx, provider
     conn.close()
 
@@ -198,8 +198,9 @@ async def test_azure_provider_keeps_kind_grouping(tui_setup) -> None:
 async def test_closed_items_hidden_by_default_and_toggle_reveals_them(
     tui_setup, make_item: MakeItem
 ) -> None:
-    """`hide_done` defaults to True so the backlog matches the frontend's
-    "open" bucket; `c` flips it and the tree repaints with the closed rows."""
+    """`state_bucket` defaults to "open" so the backlog hides closed rows.
+    Cycling the bucket via `c` (open → closed → all) flips to "closed" and the
+    tree repaints with the done rows."""
     ctx, _ = tui_setup
     closed = make_item(
         "C-1",
@@ -216,7 +217,7 @@ async def test_closed_items_hidden_by_default_and_toggle_reveals_them(
         tree = app.query_one(ItemTree)
         assert find_node(tree.root, "C-1") is None
 
-        await app.run_action("toggle_done_visibility")
+        await app.run_action("cycle_state_bucket")
         await pilot.pause()
         tree = app.query_one(ItemTree)
         assert find_node(tree.root, "C-1") is not None
@@ -321,7 +322,6 @@ async def test_tree_clamps_virtual_width_to_viewport(tmp_path: Path, make_item: 
         conn=conn,
         provider=FakeProvider(items=[item]),
         scope=ScopeFilters(),
-        scope_key="default",
     )
     app = DocketApp(ctx)
     try:

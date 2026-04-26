@@ -46,7 +46,7 @@ make serve     # builds the SPA, mints a bootstrap token into ./.docket-dev/conf
                # then opens at http://127.0.0.1:8765 — point a browser there and step through the wizard
 ```
 
-The browser sees the same wizard the CLI runs (provider auth probe, discovery-driven pickers for org/project/repo, scope match-count preview, optional LLM, telemetry + HTTP host knobs). On `Complete`, the backend writes `./.docket-dev/config.toml` and exits — re-run `make serve` to come up with real wiring.
+The browser sees the same wizard the CLI runs (provider auth probe, discovery-driven pickers for org/project/repo, default-view picker over the provider's scope axes, optional LLM, telemetry + HTTP host knobs). On `Complete`, the backend writes `./.docket-dev/config.toml` and exits — re-run `make serve` to come up with real wiring.
 
 **Terminal (no browser, no Bun needed):**
 
@@ -76,7 +76,7 @@ First run with no config (whether via `make serve` or `uv run docket`) drops str
 | `docket new task --title "Follow up"` | Create a new item through the confirm gate |
 | `docket transition <id> start_work [--dry-run]` | Preview/apply a named transition |
 | `docket patch <id> --from-file body.md [--dry-run]` | Preview/apply a description update |
-| `docket open [--provider …] [--scope …] [--no-chat] [--read-only]` | Open the TUI with explicit flags |
+| `docket open [--provider …] [--view …] [--no-chat] [--read-only]` | Open the TUI with explicit flags |
 | `docket serve [--host …] [--port …] [--no-chat] [--read-only]` | Run the FastAPI surface (default `127.0.0.1:8765`; bearer required) |
 | `docket setup [--step=<name>]` | Run or resume the setup wizard |
 | `docket project` / `memory` / `source` / `mcp` | Manage projects, project memory, sources, and per-project MCP servers |
@@ -90,7 +90,7 @@ Bare `docket` always runs the TUI; a missing `config.toml` auto-triggers the wiz
 In-app help is always one keystroke away (`?` / `F1` / `h`). The essentials:
 
 - **Navigate:** `Tab` / `Shift+Tab` panes · `/` filter · `:` open by id · `Ctrl+F` maximize · `Ctrl+P` palette
-- **Act:** `r` sync · `n` new item · `t` new chat · `s` suggest action · `o` open in browser · `w` pin · `d` review proposals · `c` toggle done
+- **Act:** `r` sync · `n` new item · `t` new chat · `s` suggest action · `o` open in browser · `w` pin · `d` review proposals · `c` cycle state bucket (open → done → all)
 - **Config:** `,` settings · `p` prompts · `m` memory · `u` sources · `Shift+M` MCP servers · `Ctrl+T` theme · `q` quit
 
 ---
@@ -126,7 +126,7 @@ Stack: React 19, TanStack Router + Query, Vite, Tailwind 4, CodeMirror, Biome, B
 
 To add Jira, Linear, or anything else: implement the `WorkItemProvider` Protocol in `src/docket/providers/base.py` (`fetch_list`, `fetch_detail`, `transition`, `patch_description`, `upload_attachment`, `create_item`) plus a state-map module that translates native states to canonical `ItemState` / `TransitionIntent`. Register via `register(...)` in `src/docket/providers/registry.py`, or ship as a separate package with a `docket.providers` entry-point.
 
-For a step-by-step walkthrough — package layout, `ProviderSpec` fields (including per-provider scope axes and discovery hooks), wizard hooks, registration options, and the testing checklist — see **[.docs/ADDING_A_PROVIDER.md](.docs/ADDING_A_PROVIDER.md)**.
+For a step-by-step walkthrough — package layout, `ProviderSpec` fields (including per-provider scope axes used to build saved views and discovery hooks), wizard hooks, registration options, and the testing checklist — see **[.docs/ADDING_A_PROVIDER.md](.docs/ADDING_A_PROVIDER.md)**.
 
 ---
 
@@ -134,9 +134,9 @@ For a step-by-step walkthrough — package layout, `ProviderSpec` fields (includ
 
 Docket stores everything under XDG paths resolved by `platformdirs`. `XDG_CONFIG_HOME` / `XDG_STATE_HOME` / `XDG_CACHE_HOME` overrides are honored everywhere — including macOS — which is how the top-level `--workspace=./.docket-dev` flag (used by every `make` target) keeps dev state out of `~/Library`.
 
-Key files: `config.toml` (providers, scopes, projects, LLM endpoint, HTTP token, runtime knobs, UI prefs), `prompts/` (`system_base.md` + `kind_<kind>.md`, hot-reloaded), `docket.db` (SQLite cache), `logs/docket.log` (rotating JSON, 1 MB × 3). The Azure OpenAI **API key** lives in the OS keyring (macOS Keychain / Windows Credential Manager / Secret Service); only a non-secret hint persists in `config.toml` (`[llm.key_hint]`) so the UI can show a `sk-a…b1c2 · 32 chars · updated 2d ago` preview before you rotate.
+Key files: `config.toml` (providers, saved views, projects, LLM endpoint, HTTP token, runtime knobs, UI prefs), `prompts/` (`system_base.md` + `kind_<kind>.md`, hot-reloaded), `docket.db` (SQLite cache), `logs/docket.log` (rotating JSON, 1 MB × 3). The Azure OpenAI **API key** lives in the OS keyring (macOS Keychain / Windows Credential Manager / Secret Service); only a non-secret hint persists in `config.toml` (`[llm.key_hint]`) so the UI can show a `sk-a…b1c2 · 32 chars · updated 2d ago` preview before you rotate.
 
-The setup wizard writes `config.toml` atomically after every step; partial runs resume via `docket setup --step=<name>` (`provider`, `auth`, `connection`, `label`, `scope`, `telemetry`, `http`, `llm`, `prompts`, `sync`, `default`). The same wizard is reachable in a browser through the bootstrap SPA mount described under [Web UI](#web-ui).
+The setup wizard writes `config.toml` atomically after every step; partial runs resume via `docket setup --step=<name>` (`provider`, `auth`, `connection`, `label`, `view`, `telemetry`, `http`, `llm`, `prompts`, `sync`, `default`). The same wizard is reachable in a browser through the bootstrap SPA mount described under [Web UI](#web-ui).
 
 There is no `.env` file — `config.toml` is the single source of truth for non-secret config, and the keyring is the single source of truth for secrets. The only environment knobs are:
 

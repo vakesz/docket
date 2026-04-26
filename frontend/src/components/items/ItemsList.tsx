@@ -45,8 +45,8 @@ export function ItemsList({ selectedId }: Props) {
   const status = useStatus();
   const readOnly = status.data?.read_only ?? false;
   const staleThresholdDays = useStaleThreshold();
-  // `ui.tag_filter_collapse_limit` in config.toml; 0 means "never collapse".
-  const tagCollapseLimit = readTagCollapseLimit(settings.data?.config);
+  // Top-N tags before "+N more" — matches FacetConfig.max_options default.
+  const tagCollapseLimit = 4;
 
   const items = useItems({
     kind: kind === "all" ? undefined : kind,
@@ -411,14 +411,6 @@ function readDefaultKind(config: Record<string, unknown> | undefined): ItemKind 
   return typeof raw === "string" && (allowed as string[]).includes(raw)
     ? (raw as ItemKind)
     : "task";
-}
-
-function readTagCollapseLimit(config: Record<string, unknown> | undefined): number {
-  if (!config) return 4;
-  const ui = config.ui;
-  if (!ui || typeof ui !== "object") return 4;
-  const raw = (ui as Record<string, unknown>).tag_filter_collapse_limit;
-  return typeof raw === "number" && Number.isFinite(raw) ? Math.max(0, Math.trunc(raw)) : 4;
 }
 
 // Per the chunk-2d spec, all states render with the same accent-tinted pill.

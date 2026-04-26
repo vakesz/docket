@@ -97,13 +97,6 @@ export function useSuggestLabel() {
   });
 }
 
-export function useProbeScope() {
-  return useMutation({
-    mutationFn: (body: DTO["ProbeScopeRequest"]) =>
-      api.post<DTO["ProbeScopeDTO"]>("/setup/probe-scope", body),
-  });
-}
-
 // ---------- Status / settings / identity -------------------------------------
 
 export function useStatus(refetchIntervalMs?: number) {
@@ -226,7 +219,7 @@ export function useRemoveProvider() {
   });
 }
 
-// ---------- Providers and scopes --------------------------------------------
+// ---------- Providers --------------------------------------------------------
 
 export function useProviders() {
   return useQuery({
@@ -256,22 +249,151 @@ export function useSetActiveProvider() {
   });
 }
 
-export function useScopes() {
+// ---------- Saved views (per-provider) ---------------------------------------
+
+export function useViews(providerKey: string | null | undefined) {
   return useQuery({
-    queryKey: qk.scopes(),
-    queryFn: ({ signal }) => api.get<DTO["ScopeDTO"][]>("/scopes", undefined, signal),
+    queryKey: qk.views(providerKey ?? ""),
+    queryFn: ({ signal }) =>
+      api.get<DTO["SavedViewDTO"][]>(
+        `/providers/${encodeURIComponent(providerKey ?? "")}/views`,
+        undefined,
+        signal,
+      ),
+    enabled: !!providerKey,
   });
 }
 
-export function useSetActiveScope() {
+export function useActiveView(providerKey: string | null | undefined) {
+  return useQuery({
+    queryKey: qk.activeView(providerKey ?? ""),
+    queryFn: ({ signal }) =>
+      api.get<DTO["SavedViewDTO"]>(
+        `/providers/${encodeURIComponent(providerKey ?? "")}/views/active`,
+        undefined,
+        signal,
+      ),
+    enabled: !!providerKey,
+  });
+}
+
+export function useSetActiveView(providerKey: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: DTO["ScopeSwitchRequest"]) =>
-      api.put<DTO["ScopeDTO"]>("/scopes/active", body),
-    // Scope changes what the next sync pulls; items, pinned status, and the
-    // status footer can all shift. Keeping the net wide here matches the
-    // provider-switch handler and avoids stale-row surprises.
+    mutationFn: (body: DTO["ViewSwitchRequest"]) =>
+      api.put<DTO["SavedViewDTO"]>(
+        `/providers/${encodeURIComponent(providerKey)}/views/active`,
+        body,
+      ),
+    // View activation drops session overrides on the backend and changes
+    // what `/items` and `/items/facets` return; cast a wide net like the
+    // provider-switch handler.
     onSuccess: () => qc.invalidateQueries({ queryKey: qk.all }),
+  });
+}
+
+export function useUpsertView(providerKey: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, body }: { name: string; body: DTO["SavedViewWriteRequest"] }) =>
+      api.put<DTO["SavedViewDTO"]>(
+        `/providers/${encodeURIComponent(providerKey)}/views/${encodeURIComponent(name)}`,
+        body,
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.views(providerKey) });
+      qc.invalidateQueries({ queryKey: qk.activeView(providerKey) });
+      qc.invalidateQueries({ queryKey: qk.viewOverrides() });
+      qc.invalidateQueries({ queryKey: [...qk.all, "items"] });
+    },
+  });
+}
+
+export function useDeleteView(providerKey: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api.delete<DTO["SavedViewDTO"]>(
+        `/providers/${encodeURIComponent(providerKey)}/views/${encodeURIComponent(name)}`,
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.views(providerKey) });
+      qc.invalidateQueries({ queryKey: qk.activeView(providerKey) });
+      qc.invalidateQueries({ queryKey: [...qk.all, "items"] });
+    },
+  });
+}
+
+// ---------- Session-only view overrides (chip bar) ---------------------------
+
+export function useViewOverrides() {
+  return useQuery({
+    queryKey: qk.viewOverrides(),
+    queryFn: ({ signal }) =>
+      api.get<DTO["ViewOverrideDTO"]>("/runtime/view-overrides", undefined, signal),
+  });
+}
+
+export function useSetViewOverrides() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: DTO["ViewOverridePatch"]) =>
+      api.patch<DTO["ViewOverrideDTO"]>("/runtime/view-overrides", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.viewOverrides() });
+      qc.invalidateQueries({ queryKey: [...qk.all, "items"] });
+    },
+  });
+}
+
+export function useClearViewOverrides() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.delete<DTO["ViewOverrideDTO"]>("/runtime/view-overrides"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.viewOverrides() });
+      qc.invalidateQueries({ queryKey: [...qk.all, "items"] });
+    },
+  });
+}
+
+// ---------- Per-project facet config (chip visibility + caps) ---------------
+
+export function useViewConfig(providerKey: string | null | undefined) {
+  return useQuery({
+    queryKey: qk.viewConfig(providerKey ?? ""),
+    queryFn: ({ signal }) =>
+      api.get<DTO["ProjectViewConfigDTO"]>(
+        `/projects/${encodeURIComponent(providerKey ?? "")}/view-config`,
+        undefined,
+        signal,
+      ),
+    enabled: !!providerKey,
+  });
+}
+
+export function useUpdateViewConfig(providerKey: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: DTO["ProjectViewConfigPatch"]) =>
+      api.patch<DTO["ProjectViewConfigDTO"]>(
+        `/projects/${encodeURIComponent(providerKey)}/view-config`,
+        body,
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.viewConfig(providerKey) });
+      qc.invalidateQueries({ queryKey: [...qk.all, "items", "facets"] });
+    },
+  });
+}
+
+// ---------- Facets (top-N values per chip) -----------------------------------
+
+export function useFacets(filter: { archived?: boolean } = {}) {
+  return useQuery({
+    queryKey: qk.facets(filter),
+    queryFn: ({ signal }) =>
+      api.get<DTO["FacetDTO"][]>("/items/facets", { archived: filter.archived }, signal),
   });
 }
 

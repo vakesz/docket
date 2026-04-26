@@ -14,7 +14,6 @@ from unittest.mock import MagicMock
 import pytest
 from azure.devops.v7_0.work_item_tracking.models import TeamContext
 
-from docket.core.model import ScopeFilters
 from docket.providers.azure_devops.provider import AzureDevOpsProvider
 
 
@@ -46,7 +45,7 @@ def test_list_changes_since_passes_team_context_model(provider: AzureDevOpsProvi
     wit.query_by_wiql.return_value = SimpleNamespace(work_items=[])
     _stub_clients(provider, wit)
 
-    result = list(provider.list_changes_since(None, ScopeFilters()))
+    result = list(provider.list_changes_since(None))
 
     assert result == []
     assert wit.query_by_wiql.called
@@ -87,6 +86,6 @@ def test_list_changes_since_batches_and_maps_items(provider: AzureDevOpsProvider
     ]
     _stub_clients(provider, wit)
 
-    items = list(provider.list_changes_since(None, ScopeFilters()))
+    items = list(provider.list_changes_since(None))
     assert [i.id for i in items] == ["1", "2"]
     assert [i.title for i in items] == ["One", "Two"]

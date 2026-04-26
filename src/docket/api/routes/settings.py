@@ -41,7 +41,7 @@ from docket.api.schemas import (
     SetupTestResultDTO,
 )
 from docket.config.loader import save_config
-from docket.config.models import KeyHintConfig, ScopeFilter
+from docket.config.models import KeyHintConfig, SavedView
 from docket.config.paths import Paths
 from docket.config.secrets import (
     clear_llm_api_key,
@@ -263,7 +263,7 @@ def add_provider(
         type_id=payload.type,
         display_name=payload.display_name,
         config=dict(payload.config),
-        scope=dict(payload.scope),
+        view=dict(payload.view),
     )
 
     def _add(cfg: dict[str, Any]) -> None:
@@ -302,17 +302,17 @@ def update_provider(
     existing = runtime.config.providers[key]
 
     display_name = payload.display_name or existing.display_name or key
-    if payload.scope is None:
-        scope_dict = existing.scopes.get(existing.active_scope, ScopeFilter()).model_dump()
+    if payload.view is None:
+        view_dict = existing.views.get(existing.active_view, SavedView()).model_dump()
     else:
-        scope_dict = dict(payload.scope)
+        view_dict = dict(payload.view)
 
     entry, built = build_and_validate_provider_entry(
         key=key,
         type_id=existing.type,
         display_name=display_name,
         config=dict(payload.config),
-        scope=scope_dict,
+        view=view_dict,
         existing=existing,
     )
 

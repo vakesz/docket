@@ -3,11 +3,11 @@
  *
  * Steps mirror `STEP_NAMES` in `src/docket/config/setup_wizard.py`, with two
  * collapses for the web's vertical room:
- *   welcome → cli → provider (= pick + connection + label) → scope →
+ *   welcome → cli → provider (= pick + connection + label) → view →
  *   llm → settings (= telemetry + http) → review → done
  *
- * Discovery, label suggestion, and scope-count probing all hit dedicated
- * `/setup/*` endpoints so the SPA needs zero provider knowledge.
+ * Discovery and label suggestion hit dedicated `/setup/*` endpoints so the
+ * SPA needs zero provider knowledge.
  */
 import { useState } from "react";
 import type { DTO } from "~/api/client";
@@ -15,21 +15,21 @@ import { useProviderTypes, useSetupStatus } from "~/api/hooks";
 import { cn } from "~/lib/cn";
 
 import { CliStep } from "./CliStep";
+import { DefaultViewStep } from "./DefaultViewStep";
 import { DoneStep } from "./DoneStep";
 import { LlmStep } from "./LlmStep";
 import { ProviderStep } from "./ProviderStep";
 import { ReviewStep } from "./ReviewStep";
-import { ScopeStep } from "./ScopeStep";
 import { SettingsStep } from "./SettingsStep";
 import type { LlmDraft, ProviderDraft, SettingsDraft, Step } from "./types";
-import { defaultPricesFor, emptyScope } from "./types";
+import { defaultPricesFor, emptyView } from "./types";
 import { WelcomeStep } from "./WelcomeStep";
 
 const STEP_LABELS: { id: Step; label: string }[] = [
   { id: "welcome", label: "Welcome" },
   { id: "cli", label: "CLI" },
   { id: "provider", label: "Provider" },
-  { id: "scope", label: "Scope" },
+  { id: "view", label: "Default view" },
   { id: "llm", label: "LLM" },
   { id: "settings", label: "Settings" },
   { id: "review", label: "Review" },
@@ -47,7 +47,7 @@ export function SetupWizard() {
     display_name: "",
     display_name_dirty: false,
     config: {},
-    scope: emptyScope(),
+    view: emptyView(),
   });
 
   const [llm, setLlm] = useState<LlmDraft>(() => {
@@ -114,11 +114,11 @@ export function SetupWizard() {
                 draft={provider}
                 setDraft={setProvider}
                 onBack={() => setStep("cli")}
-                onNext={() => setStep("scope")}
+                onNext={() => setStep("view")}
               />
             )}
-            {step === "scope" && (
-              <ScopeStep
+            {step === "view" && (
+              <DefaultViewStep
                 draft={provider}
                 setDraft={setProvider}
                 spec={activeSpec}
@@ -130,7 +130,7 @@ export function SetupWizard() {
               <LlmStep
                 draft={llm}
                 setDraft={setLlm}
-                onBack={() => setStep("scope")}
+                onBack={() => setStep("view")}
                 onNext={() => setStep("settings")}
               />
             )}

@@ -10,8 +10,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from docket.config.models import ProjectEntry
-from docket.core.model import MemoryEntry, Source, TransitionIntent
+from docket.config.models import FacetConfig, ProjectEntry, ProjectViewConfig, SavedView
+from docket.core.model import MemoryEntry, Source, StateBucketLiteral, TransitionIntent
 
 
 class PinnedStatusDTO(BaseModel):
@@ -50,29 +50,125 @@ class PromptUpdateRequest(BaseModel):
     content_md: str
 
 
-class ScopeDTO(BaseModel):
-    """A saved view exposed over HTTP.
+class SavedViewDTO(BaseModel):
+    """One saved view exposed over HTTP.
 
-    `axes` carries the provider-declared narrowing values keyed by
-    `ProviderSpec.scope_axes[*].key`. The frontend looks up labels via the
-    matching `SetupProviderTypeDTO.scope_axes` entry."""
+    `assignees` matches `Item.assignee` with OR semantics; `@me` is the
+    sentinel resolved to the provider's `current_user_identity`. `axes`
+    is keyed by `ProviderSpec.scope_axes[*].key` and each value is a list
+    so multi-select is first-class. `state_bucket` toggles the open/done
+    grouping for this view; the chip-bar can override it in-session."""
 
     name: str
-    assignee: str = ""
-    axes: dict[str, str] = Field(default_factory=dict)
+    assignees: list[str] = Field(default_factory=list)
+    axes: dict[str, list[str]] = Field(default_factory=dict)
+    state_bucket: StateBucketLiteral = "open"
     active: bool = False
 
+    @classmethod
+    def from_core(cls, name: str, view: SavedView, *, active: bool) -> SavedViewDTO:
+        return cls(
+            name=name,
+            assignees=list(view.assignees),
+            axes={k: list(v) for k, v in view.axes.items()},
+            state_bucket=view.state_bucket,
+            active=active,
+        )
 
-class ScopeSwitchRequest(BaseModel):
+
+class ViewSwitchRequest(BaseModel):
+    """Activate one of the provider's saved views by name."""
+
     name: str
+
+
+class SavedViewWriteRequest(BaseModel):
+    """Body for create/update of a saved view.
+
+    The view name is the URL path param (`PUT /providers/{key}/views/{name}`).
+    Empty `assignees`/`axes` mean "no narrowing on that facet"."""
+
+    assignees: list[str] = Field(default_factory=list)
+    axes: dict[str, list[str]] = Field(default_factory=dict)
+    state_bucket: StateBucketLiteral = "open"
+
+
+class ViewOverrideDTO(BaseModel):
+    """The active session-level chip-bar override for the current provider.
+
+    `present=False` means no override is in effect; `view` then mirrors the
+    saved view. `present=True` means the chip bar has unsaved selections
+    different from the saved view; the user can clear them with
+    `DELETE /api/runtime/view-overrides`."""
+
+    present: bool
+    view: SavedViewDTO
+
+
+class ViewOverridePatch(BaseModel):
+    """Body for `PATCH /api/runtime/view-overrides`.
+
+    Replaces this session's chip-bar override outright. Sending an empty
+    payload (defaults) parks the user on "open + no narrowing" — same as
+    if they cleared every chip. To remove the override entirely (so the
+    saved view shows through), call `DELETE` instead."""
+
+    assignees: list[str] = Field(default_factory=list)
+    axes: dict[str, list[str]] = Field(default_factory=dict)
+    state_bucket: StateBucketLiteral = "open"
+
+
+class FacetOptionDTO(BaseModel):
+    value: str
+    count: int
+
+
+class FacetDTO(BaseModel):
+    """One chip on the view bar (assignee, state, tags, or a provider axis).
+
+    `options` is the (capped) top-N values + counts; `total_options` is the
+    full unique-value count before the cap so the SPA can render `+N more`."""
+
+    key: str
+    label: str
+    options: list[FacetOptionDTO] = Field(default_factory=list)
+    total_options: int = 0
+
+
+class FacetConfigDTO(BaseModel):
+    visible: bool = True
+    max_options: int = 4
+
+    @classmethod
+    def from_core(cls, cfg: FacetConfig) -> FacetConfigDTO:
+        return cls(visible=cfg.visible, max_options=cfg.max_options)
+
+
+class ProjectViewConfigDTO(BaseModel):
+    """Per-project facet visibility + caps for the view bar."""
+
+    facets: dict[str, FacetConfigDTO] = Field(default_factory=dict)
+
+    @classmethod
+    def from_core(cls, cfg: ProjectViewConfig) -> ProjectViewConfigDTO:
+        return cls(facets={k: FacetConfigDTO.from_core(v) for k, v in cfg.facets.items()})
+
+
+class ProjectViewConfigPatch(BaseModel):
+    """PATCH body for `/api/projects/{key}/view-config`.
+
+    Each facet entry replaces the existing one; missing facets are left
+    untouched. To restore defaults for a facet, omit it."""
+
+    facets: dict[str, FacetConfigDTO] = Field(default_factory=dict)
 
 
 class ProviderDTO(BaseModel):
     key: str
     type: str
     display_name: str
-    scopes: list[str] = Field(default_factory=list)
-    active_scope: str = ""
+    views: list[str] = Field(default_factory=list)
+    active_view: str = ""
     active: bool = False
     supported_kinds: list[str] = Field(default_factory=list)
 
@@ -180,13 +276,14 @@ class SettingsProviderAddRequest(BaseModel):
 
     Shape mirrors `SetupProviderEntry` but is handled under /settings so
     bootstrap-token gating doesn't apply. `make_active=true` also flips
-    `active_provider` to the new key."""
+    `active_provider` to the new key. `view` provides the initial saved
+    view (named `default`); omit for an empty default view."""
 
     key: str
     type: str
     display_name: str = ""
     config: dict[str, Any] = Field(default_factory=dict)
-    scope: dict[str, Any] = Field(default_factory=dict)
+    view: dict[str, Any] = Field(default_factory=dict)
     make_active: bool = False
 
 
@@ -194,12 +291,12 @@ class SettingsProviderUpdateRequest(BaseModel):
     """Update an existing provider's display_name and config.
 
     The provider `key` (path param) and `type` are immutable — to change them
-    the caller removes and re-adds. `scope` is left untouched if omitted, so
-    in-flight scope edits aren't clobbered by a credentials-only update."""
+    the caller removes and re-adds. `view` is left untouched if omitted, so
+    in-flight view edits aren't clobbered by a credentials-only update."""
 
     display_name: str = ""
     config: dict[str, Any] = Field(default_factory=dict)
-    scope: dict[str, Any] | None = None
+    view: dict[str, Any] | None = None
 
 
 class SyncSummaryDTO(BaseModel):

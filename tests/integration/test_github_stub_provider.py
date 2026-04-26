@@ -19,7 +19,6 @@ from docket.core.model import (
     Item,
     ItemKind,
     ItemState,
-    ScopeFilters,
     TransitionIntent,
 )
 from docket.core.mutation import StateChange
@@ -123,11 +122,11 @@ def test_list_changes_since_respects_watermark() -> None:
     new = _issue("example/repo#2", updated=t1)
     provider = GitHubStubProvider(issues=[old, new])
 
-    assert [i.id for i in provider.list_changes_since(None, ScopeFilters())] == [
+    assert [i.id for i in provider.list_changes_since(None)] == [
         old.id,
         new.id,
     ]
-    later = list(provider.list_changes_since(t0, ScopeFilters()))
+    later = list(provider.list_changes_since(t0))
     assert [i.id for i in later] == [new.id]
 
 

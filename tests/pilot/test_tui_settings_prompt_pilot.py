@@ -7,7 +7,7 @@ from docket.cli.tui.widgets.chat_pane import ChatPane
 from docket.cli.tui.widgets.help_modal import HelpModal
 from docket.cli.tui.widgets.prompt_library import PromptLibraryModal
 from docket.cli.tui.widgets.settings_modal import SettingsModal
-from docket.config import Config, ProviderEntry, ScopeFilter, load_config, resolve_paths
+from docket.config import Config, ProviderEntry, SavedView, load_config, resolve_paths
 from docket.core.model import ItemKind, ScopeFilters
 from docket.storage import init_db
 from docket.storage.repos import item_repo
@@ -41,8 +41,8 @@ async def test_settings_modal_persists_and_updates_runtime(
                 type="azure_devops",
                 display_name="Azure DevOps",
                 config={"organization": "https://dev.azure.com/example", "project": "Demo"},
-                scopes={"default": ScopeFilter()},
-                active_scope="default",
+                views={"default": SavedView()},
+                active_view="default",
             ),
         },
         active_provider="azure_devops",
@@ -55,7 +55,6 @@ async def test_settings_modal_persists_and_updates_runtime(
         provider=FakeProvider(items=[item]),
         provider_key="azure_devops",
         scope=ScopeFilters(),
-        scope_key="default",
         paths=paths,
         config=cfg,
     )
@@ -67,9 +66,9 @@ async def test_settings_modal_persists_and_updates_runtime(
         assert isinstance(app.screen, SettingsModal)
 
         modal = app.screen
-        modal.query_one("#scope-name").value = "focused"
-        modal.query_one("#scope-default").value = True
-        modal.query_one("#scope-axis-team").value = "Platform"
+        modal.query_one("#view-name").value = "focused"
+        modal.query_one("#view-default").value = True
+        modal.query_one("#view-axis-team").value = "Platform"
         modal.query_one("#ui-show-criteria").value = False
         modal.query_one("#ui-default-kind").value = "bug"
         modal.query_one("#stale-threshold").value = "3"
@@ -81,8 +80,8 @@ async def test_settings_modal_persists_and_updates_runtime(
 
     reloaded = load_config(paths)
     azure_devops_entry = reloaded.providers["azure_devops"]
-    assert azure_devops_entry.active_scope == "focused"
-    assert azure_devops_entry.scopes["focused"].axes["team"] == "Platform"
+    assert azure_devops_entry.active_view == "focused"
+    assert azure_devops_entry.views["focused"].axes["team"] == ["Platform"]
     assert reloaded.ui.default_new_item_kind == "bug"
     assert reloaded.ui.show_acceptance_criteria is False
     assert reloaded.stale.threshold_days == 3

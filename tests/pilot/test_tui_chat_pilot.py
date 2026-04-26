@@ -37,7 +37,6 @@ def chat_env(tmp_path: Path, make_item: MakeItem):
         conn=conn,
         provider=provider,
         scope=ScopeFilters(),
-        scope_key="default",
         llm=client,
     )
     yield ctx, client, item
@@ -225,7 +224,7 @@ async def test_acceptance_checklist_mounts_from_description(
     )
     item_repo.upsert_item(conn, item)
     provider = FakeProvider(items=[item])
-    ctx = TuiContext(conn=conn, provider=provider, scope=ScopeFilters(), scope_key="default")
+    ctx = TuiContext(conn=conn, provider=provider, scope=ScopeFilters())
 
     app = DocketApp(ctx)
     async with app.run_test() as pilot:

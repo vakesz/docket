@@ -15,7 +15,7 @@ from docket.config import (
     Config,
     ProjectEntry,
     ProviderEntry,
-    ScopeFilter,
+    SavedView,
     resolve_paths,
     save_config,
 )
@@ -33,8 +33,8 @@ def _seeded_config() -> Config:
                 type="github_stub",
                 display_name="Stub",
                 config={},
-                scopes={"default": ScopeFilter()},
-                active_scope="default",
+                views={"default": SavedView()},
+                active_view="default",
             )
         },
         active_provider="main",
@@ -53,7 +53,6 @@ def _ctx(conn, *, read_only: bool = False) -> TuiContext:
         provider=FakeProvider(),
         provider_key="main",
         scope=ScopeFilters(),
-        scope_key="default",
         paths=paths,
         config=cfg,
         read_only=read_only,

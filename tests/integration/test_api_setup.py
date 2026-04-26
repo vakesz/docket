@@ -28,7 +28,7 @@ from docket.config.models import (
     HttpConfig,
     LlmConfig,
     ProviderEntry,
-    ScopeFilter,
+    SavedView,
     StaleConfig,
     SyncConfig,
     UiConfig,
@@ -310,8 +310,8 @@ def _full_app_client(tmp_path: Path) -> TestClient:
                 type="github_stub",
                 display_name="Primary",
                 config={"default_repo": "example/primary"},
-                scopes={"default": ScopeFilter(assignee="@me")},
-                active_scope="default",
+                views={"default": SavedView(assignees=["@me"])},
+                active_view="default",
             )
         },
         active_provider="primary",
@@ -325,7 +325,7 @@ def _full_app_client(tmp_path: Path) -> TestClient:
     conn = init_db(paths.db_file)
     provider = FakeProvider()
     runtime = RuntimeState(
-        config=cfg, providers={"primary": provider}, provider_key="primary", scope_key="default"
+        config=cfg, providers={"primary": provider}, provider_key="primary"
     )
     app = create_app(
         conn=conn,
@@ -370,9 +370,9 @@ def test_full_app_setup_rejects_unknown_token(tmp_path: Path) -> None:
     assert r.status_code == 401
 
 
-def test_setup_complete_preserves_existing_scopes_and_active_slot(tmp_path: Path) -> None:
+def test_setup_complete_preserves_existing_views_and_active_slot(tmp_path: Path) -> None:
     """Re-running /setup/complete against a configured instance must keep extra
-    named scopes and the user's active-scope choice — the incoming scope should
+    named views and the user's active-view choice — the incoming view should
     land in whatever slot was already active, not clobber it with a new
     'default' slot."""
     paths = _mk_paths(tmp_path)
@@ -382,12 +382,12 @@ def test_setup_complete_preserves_existing_scopes_and_active_slot(tmp_path: Path
                 type="github_stub",
                 display_name="Primary",
                 config={"default_repo": "example/primary"},
-                scopes={
-                    "default": ScopeFilter(),
-                    "my-team": ScopeFilter(axes={"team": "Team A"}),
-                    "blocked": ScopeFilter(axes={"area_path": "Blocked"}),
+                views={
+                    "default": SavedView(),
+                    "my-team": SavedView(axes={"team": ["Team A"]}),
+                    "blocked": SavedView(axes={"area_path": ["Blocked"]}),
                 },
-                active_scope="my-team",
+                active_view="my-team",
             )
         },
         active_provider="primary",
@@ -402,7 +402,6 @@ def test_setup_complete_preserves_existing_scopes_and_active_slot(tmp_path: Path
         config=existing,
         providers={"primary": provider},
         provider_key="primary",
-        scope_key="my-team",
     )
     app = create_app(
         conn=conn,
@@ -420,7 +419,7 @@ def test_setup_complete_preserves_existing_scopes_and_active_slot(tmp_path: Path
                 "type": "github_stub",
                 "display_name": "Primary",
                 "config": {"default_repo": "example/primary"},
-                "scope": {"axes": {"team": "Team B"}},
+                "view": {"axes": {"team": ["Team B"]}},
             }
         },
         "active_provider": "primary",
@@ -434,13 +433,13 @@ def test_setup_complete_preserves_existing_scopes_and_active_slot(tmp_path: Path
     with paths.config_file.open("rb") as f:
         raw = tomllib.load(f)
     entry = raw["providers"]["primary"]
-    # active_scope preserved at "my-team" (not silently reset to "default").
-    assert entry["active_scope"] == "my-team"
+    # active_view preserved at "my-team" (not silently reset to "default").
+    assert entry["active_view"] == "my-team"
     # The user's incoming edit landed in the my-team slot.
-    assert entry["scopes"]["my-team"]["axes"]["team"] == "Team B"
-    # Extra scopes ("default", "blocked") are still present and unchanged.
-    assert entry["scopes"]["default"]["axes"] == {}
-    assert entry["scopes"]["blocked"]["axes"]["area_path"] == "Blocked"
+    assert entry["views"]["my-team"]["axes"]["team"] == ["Team B"]
+    # Extra views ("default", "blocked") are still present and unchanged.
+    assert entry["views"]["default"]["axes"] == {}
+    assert entry["views"]["blocked"]["axes"]["area_path"] == ["Blocked"]
 
 
 def test_setup_complete_preserves_non_wizard_fields(tmp_path: Path) -> None:
@@ -455,8 +454,8 @@ def test_setup_complete_preserves_non_wizard_fields(tmp_path: Path) -> None:
                 type="github_stub",
                 display_name="Primary",
                 config={"default_repo": "example/primary"},
-                scopes={"default": ScopeFilter()},
-                active_scope="default",
+                views={"default": SavedView()},
+                active_view="default",
             )
         },
         active_provider="primary",
@@ -466,7 +465,7 @@ def test_setup_complete_preserves_non_wizard_fields(tmp_path: Path) -> None:
             compaction_threshold_tokens=12345,
             external_watch_interval_seconds=17.5,
         ),
-        ui=UiConfig(theme="textual-light", hide_done=False, tag_filter_collapse_limit=9),
+        ui=UiConfig(theme="textual-light"),
         sync=SyncConfig(
             background_interval_seconds=42.0,
             min_interval_seconds_by_provider={"primary": 15.0},
@@ -485,7 +484,6 @@ def test_setup_complete_preserves_non_wizard_fields(tmp_path: Path) -> None:
         config=existing,
         providers={"primary": provider},
         provider_key="primary",
-        scope_key="default",
     )
     app = create_app(
         conn=conn,
@@ -503,7 +501,7 @@ def test_setup_complete_preserves_non_wizard_fields(tmp_path: Path) -> None:
                 "type": "github_stub",
                 "display_name": "Primary",
                 "config": {"default_repo": "example/primary"},
-                "scope": {"axes": {"team": "Team C"}},
+                "view": {"axes": {"team": ["Team C"]}},
             }
         },
         "active_provider": "primary",
@@ -526,17 +524,15 @@ def test_setup_complete_preserves_non_wizard_fields(tmp_path: Path) -> None:
     assert raw["llm"]["external_watch_interval_seconds"] == 17.5
     # ui / sync / stale never touched by the wizard — must survive intact.
     assert raw["ui"]["theme"] == "textual-light"
-    assert raw["ui"]["hide_done"] is False
-    assert raw["ui"]["tag_filter_collapse_limit"] == 9
     assert raw["sync"]["background_interval_seconds"] == 42.0
     assert raw["sync"]["min_interval_seconds_by_provider"]["primary"] == 15.0
     assert raw["stale"]["threshold_days"] == 3
     assert raw["stale"]["threshold_days_by_provider"]["primary"] == 5
 
 
-def test_update_provider_preserves_active_scope_slot(tmp_path: Path) -> None:
-    """PUT /settings/providers/{key} with a new scope must land the scope in
-    the existing `active_scope` slot while keeping other named scopes intact."""
+def test_update_provider_preserves_active_view_slot(tmp_path: Path) -> None:
+    """PUT /settings/providers/{key} with a new view must land the view in
+    the existing `active_view` slot while keeping other named views intact."""
     paths = _mk_paths(tmp_path)
     existing = Config(
         providers={
@@ -544,11 +540,11 @@ def test_update_provider_preserves_active_scope_slot(tmp_path: Path) -> None:
                 type="github_stub",
                 display_name="Primary",
                 config={"default_repo": "example/primary"},
-                scopes={
-                    "default": ScopeFilter(),
-                    "my-team": ScopeFilter(axes={"team": "Team A"}),
+                views={
+                    "default": SavedView(),
+                    "my-team": SavedView(axes={"team": ["Team A"]}),
                 },
-                active_scope="my-team",
+                active_view="my-team",
             )
         },
         active_provider="primary",
@@ -563,7 +559,6 @@ def test_update_provider_preserves_active_scope_slot(tmp_path: Path) -> None:
         config=existing,
         providers={"primary": provider},
         provider_key="primary",
-        scope_key="my-team",
     )
     app = create_app(
         conn=conn,
@@ -581,7 +576,7 @@ def test_update_provider_preserves_active_scope_slot(tmp_path: Path) -> None:
         json={
             "display_name": "Primary",
             "config": {"default_repo": "example/primary"},
-            "scope": {"axes": {"team": "Team B"}},
+            "view": {"axes": {"team": ["Team B"]}},
         },
     )
     assert r.status_code == 200, r.text
@@ -589,10 +584,10 @@ def test_update_provider_preserves_active_scope_slot(tmp_path: Path) -> None:
     with paths.config_file.open("rb") as f:
         raw = tomllib.load(f)
     entry = raw["providers"]["primary"]
-    assert entry["active_scope"] == "my-team"
-    assert entry["scopes"]["my-team"]["axes"]["team"] == "Team B"
-    # The other named scope is untouched.
-    assert entry["scopes"]["default"]["axes"] == {}
+    assert entry["active_view"] == "my-team"
+    assert entry["views"]["my-team"]["axes"]["team"] == ["Team B"]
+    # The other named view is untouched.
+    assert entry["views"]["default"]["axes"] == {}
 
 
 # ---- discovery + helper endpoints (web-wizard parity with `docket setup`) ----
@@ -1066,66 +1061,13 @@ def test_suggest_label_unknown_type_falls_back_to_id(tmp_path: Path) -> None:
     assert r.json() == {"label": "totally_made_up"}
 
 
-def test_probe_scope_returns_count_for_stub(tmp_path: Path) -> None:
-    """github_stub builds a single demo item — the probe should count 1."""
-    paths = _mk_paths(tmp_path)
-    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
-    r = client.post(
-        "/api/setup/probe-scope",
-        headers=SETUP_AUTH,
-        json={
-            "type": "github_stub",
-            "config": {"default_repo": "contoso/alpha"},
-            "scope": {},
-        },
-    )
-    assert r.status_code == 200
-    body = r.json()
-    assert body["count"] is not None
-    assert body["count"] >= 0
-    assert body["error"] == ""
+# ---- regression: setup-complete view round-trips into active view slot ----
 
 
-def test_probe_scope_reports_count_none_for_unknown_type(tmp_path: Path) -> None:
-    """Unknown provider type → `count=None`, SPA renders 'could not count'."""
-    paths = _mk_paths(tmp_path)
-    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
-    r = client.post(
-        "/api/setup/probe-scope",
-        headers=SETUP_AUTH,
-        json={"type": "nope", "config": {}, "scope": {}},
-    )
-    assert r.status_code == 200
-    assert r.json()["count"] is None
-
-
-def test_probe_scope_reports_invalid_scope(tmp_path: Path) -> None:
-    """A scope dict that doesn't validate as ScopeFilter → `count=None` plus
-    a hint in `error` so the SPA can flag the field."""
-    paths = _mk_paths(tmp_path)
-    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
-    r = client.post(
-        "/api/setup/probe-scope",
-        headers=SETUP_AUTH,
-        json={
-            "type": "github_stub",
-            "config": {"default_repo": "contoso/alpha"},
-            "scope": {"axes": {"team": 12345}},  # axis values must be strings
-        },
-    )
-    body = r.json()
-    assert r.status_code == 200
-    assert body["count"] is None
-    assert "invalid scope" in body["error"]
-
-
-# ---- regression: setup-complete scope round-trips into active scope slot ----
-
-
-def test_setup_complete_scope_round_trips_into_default_slot(tmp_path: Path) -> None:
-    """Bootstrap-mode `/setup/complete` with a non-empty scope must persist
-    the values into `providers[key].scopes['default']` (no other slot exists
-    on first run). Regression for: web-wizard scopes silently dropped when
+def test_setup_complete_view_round_trips_into_default_slot(tmp_path: Path) -> None:
+    """Bootstrap-mode `/setup/complete` with a non-empty view must persist
+    the values into `providers[key].views['default']` (no other slot exists
+    on first run). Regression for: web-wizard views silently dropped when
     the bootstrap path took a different code path than the live one."""
     paths = _mk_paths(tmp_path)
     client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
@@ -1135,7 +1077,7 @@ def test_setup_complete_scope_round_trips_into_default_slot(tmp_path: Path) -> N
                 "type": "github_stub",
                 "display_name": "Demo",
                 "config": {"default_repo": "contoso/alpha"},
-                "scope": {"assignee": "@me", "axes": {"team": "Team Z"}},
+                "view": {"assignees": ["@me"], "axes": {"team": ["Team Z"]}},
             }
         },
         "active_provider": "demo",
@@ -1149,9 +1091,9 @@ def test_setup_complete_scope_round_trips_into_default_slot(tmp_path: Path) -> N
     with paths.config_file.open("rb") as f:
         raw = tomllib.load(f)
     entry = raw["providers"]["demo"]
-    assert entry["active_scope"] == "default"
-    assert entry["scopes"]["default"]["assignee"] == "@me"
-    assert entry["scopes"]["default"]["axes"]["team"] == "Team Z"
+    assert entry["active_view"] == "default"
+    assert entry["views"]["default"]["assignees"] == ["@me"]
+    assert entry["views"]["default"]["axes"]["team"] == ["Team Z"]
 
 
 # ---- bootstrap SPA: setup wizard is reachable from the same origin --------

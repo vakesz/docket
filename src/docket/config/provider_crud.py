@@ -17,7 +17,7 @@ from typing import Any
 from rich.prompt import Confirm, Prompt
 
 from docket.config.loader import load_config, save_config
-from docket.config.models import Config, ScopeFilter, build_provider_entry
+from docket.config.models import Config, SavedView, build_provider_entry
 from docket.config.paths import resolve_paths
 from docket.config.setup_utils import (
     build_label_suggestion,
@@ -42,9 +42,9 @@ def provider_list() -> None:
         console.print(
             f"[cyan]{key}[/cyan] · {entry.display_name} · [dim]{entry.type}[/dim]{active}"
         )
-        for scope_name, _scope in entry.scopes.items():
-            star = "*" if scope_name == entry.active_scope else " "
-            console.print(f"  {star} {scope_name}")
+        for view_name in entry.views:
+            star = "*" if view_name == entry.active_view else " "
+            console.print(f"  {star} {view_name}")
 
 
 def provider_add(
@@ -111,7 +111,7 @@ def provider_add(
         type_id=type_id,
         display_name=display_name,
         config=config,
-        scope=ScopeFilter(),
+        view=SavedView(),
         existing=cfg.providers.get(name),
     )
     if make_active or not cfg.active_provider:

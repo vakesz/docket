@@ -11,14 +11,13 @@ Mapping:
   `find_related_prs(...)` and do not become `Item`s.
 - Issue `ItemKind` is guessed from labels (`bug` → BUG,
   `enhancement|feature` → STORY, else TASK).
-- `updated_at` drives sync watermarks. `list_changes_since(wm, ...)` uses
+- `updated_at` drives sync watermarks. `list_changes_since(wm)` uses
   the REST `since=<iso>` query param.
 - State mapping lives in `state_map.py` (shared with the stub).
 
-Scope filters are partial — `assignee` maps to the GitHub `assignee` query
-param; team/area/iteration don't apply and are ignored. Providers that
-can't honor a filter return a superset, never a subset, so `list_changes_since`
-may return extra rows that the storage layer filters again at write-time.
+Sync pulls everything the user can see — assignee, team, area, and
+iteration narrowing all happen at view time against the cache, so the
+provider boundary doesn't filter anything beyond the watermark.
 """
 
 from __future__ import annotations
@@ -43,7 +42,6 @@ from docket.core.model import (
     PullRequestDetail,
     PullRequestFile,
     PullRequestReview,
-    ScopeFilters,
     TransitionIntent,
 )
 from docket.providers.base import ProviderUnreachableError
@@ -144,9 +142,7 @@ class GitHubProvider:
         """Return the authenticated user's login for the `@me` visual filter."""
         return self._resolve_me_login()
 
-    def list_changes_since(
-        self, watermark: datetime | None, filters: ScopeFilters
-    ) -> Iterable[Item]:
+    def list_changes_since(self, watermark: datetime | None) -> Iterable[Item]:
         # Initial sync (no watermark) sorts newest-first so page 1 is useful on
         # big repos; incremental sync walks forward from the watermark so asc
         # is needed for the watermark bump to be monotonic.
@@ -159,15 +155,6 @@ class GitHubProvider:
         }
         if watermark is not None:
             base_params["since"] = watermark.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-        # @me means "the authenticated user"; GitHub has no literal @me token,
-        # so resolve to the login. If resolution fails, fall through with no
-        # assignee filter rather than silently dropping every unassigned item.
-        if filters.assignee == "@me":
-            login = self._resolve_me_login()
-            if login:
-                base_params["assignee"] = login
-        elif filters.assignee:
-            base_params["assignee"] = filters.assignee
 
         out: list[Item] = []
         for page in range(1, _MAX_PAGES + 1):

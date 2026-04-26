@@ -126,12 +126,15 @@ export function useChatStream({
         publish();
         if (completed) {
           // The server transcript is the source of truth once a turn finishes.
+          // Drop the local turn before awaiting the refetch — otherwise React
+          // commits a frame where both the live bubbles and the freshly fetched
+          // persisted bubbles render at once (duplicate-flash on turn end).
+          setMessages((prev) => prev.filter((message) => message.turnId !== turnId));
           await Promise.allSettled([
             qc.invalidateQueries({ queryKey: qk.conversation(itemId) }),
             qc.invalidateQueries({ queryKey: qk.pendingQuestion(itemId) }),
             qc.invalidateQueries({ queryKey: qk.status() }),
           ]);
-          setMessages((prev) => prev.filter((message) => message.turnId !== turnId));
           if (opts.resolvedQuestionId) onQuestionResolved(opts.resolvedQuestionId);
         } else {
           await qc.invalidateQueries({ queryKey: qk.status() });

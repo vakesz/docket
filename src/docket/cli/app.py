@@ -65,7 +65,7 @@ def _root(
         # stringify as `--provider <typer.models.OptionInfo ...>`. Every flag
         # has to be explicit here; a new one missing from this call is a
         # TypeError, not a silent bug.
-        run_open_tui(scope=None, no_chat=False, read_only=False, provider=None)
+        run_open_tui(view=None, no_chat=False, read_only=False, provider=None)
 
 
 app.add_typer(setup_app, name="setup")

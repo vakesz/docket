@@ -7,7 +7,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from docket.cli.app import app
-from docket.config import Config, ProviderEntry, ScopeFilter, save_config
+from docket.config import Config, ProviderEntry, SavedView, save_config
 
 
 def _seed(tmp_xdg: Path) -> None:
@@ -21,8 +21,8 @@ def _seed(tmp_xdg: Path) -> None:
                 type="github_stub",
                 display_name="Stub",
                 config={},
-                scopes={"default": ScopeFilter()},
-                active_scope="default",
+                views={"default": SavedView()},
+                active_view="default",
             )
         },
         active_provider="main",

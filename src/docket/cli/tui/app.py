@@ -54,7 +54,7 @@ from docket.cli.tui.widgets.memory_pane import MemoryPane
 from docket.cli.tui.widgets.new_item_modal import NewItemModal
 from docket.cli.tui.widgets.source_pane import SourcePane
 from docket.cli.tui.widgets.status_bar import StatusBar
-from docket.config.models import Config, ProviderEntry, ScopeFilter
+from docket.config.models import Config, ProviderEntry, SavedView
 from docket.config.paths import Paths
 from docket.core.model import (
     ItemKind,
@@ -93,7 +93,7 @@ class TuiContext:
     conn: sqlite3.Connection
     provider: WorkItemProvider
     scope: ScopeFilters
-    scope_key: str = "default"
+    view_key: str = "default"
     providers: dict[str, WorkItemProvider] | None = None
     provider_key: str = ""
     llm: LlmClient | None = None  # None disables chat
@@ -114,10 +114,6 @@ class TuiContext:
     stale_threshold_by_provider: dict[str, int] | None = None
     default_new_item_kind: ItemKind = ItemKind.TASK
     show_acceptance_criteria: bool = True
-    # Hide resolved/closed items from the backlog tree by default. Matches the
-    # frontend's "open" state bucket; `c` toggles it at runtime. In-memory only —
-    # not persisted — so a relaunch starts back at "hide done" on every provider.
-    hide_done: bool = True
     # Optional handles for features that persist to config (theme picker, etc).
     # Pilot tests can leave these as None; persistence becomes a no-op.
     paths: Paths | None = None
@@ -192,7 +188,7 @@ class DocketApp(App[None]):
         Binding("o", "open_in_browser", "Open in browser", show=False),
         Binding("s", "suggest_next", "Suggest next action", show=False),
         Binding("w", "toggle_pin", "Pin/unpin item", show=False),
-        Binding("c", "toggle_done_visibility", "Show/hide done", show=False),
+        Binding("c", "cycle_state_bucket", "Cycle state bucket", show=False),
         Binding("comma", "open_settings", "Settings"),
         Binding("p", "edit_prompts", "Prompts"),
         Binding("m", "open_memory", "Memory", show=False),
@@ -359,8 +355,8 @@ class DocketApp(App[None]):
     def action_edit_prompts(self) -> None:
         config_actions.edit_prompts(self)
 
-    def action_toggle_done_visibility(self) -> None:
-        config_actions.toggle_done_visibility(self)
+    def action_cycle_state_bucket(self) -> None:
+        config_actions.cycle_state_bucket(self)
 
     def action_set_default_provider(self) -> None:
         config_actions.set_default_provider(self)
@@ -389,8 +385,8 @@ class DocketApp(App[None]):
         with contextlib.suppress(Exception):
             bar = self.query_one(StatusBar)
             bar.provider_name = str(display)
-            bar.scope_label = self.tui_ctx.scope_key
-            bar.active_view = self.tui_ctx.scope_key
+            bar.scope_label = self.tui_ctx.view_key
+            bar.active_view = self.tui_ctx.view_key
             bar.project_name = self._resolve_project_name()
             bar.read_only = self.tui_ctx.read_only
             bar.pending_count = len(self._proposals)
@@ -933,7 +929,7 @@ class DocketApp(App[None]):
         self._open_next_pending()
 
     def action_switch_view(self, name: str) -> None:
-        """Switch the active saved view (= named scope filter) on the active provider.
+        """Switch the active saved view on the active provider.
 
         Views are visual filters over the cached set — switching one does
         **not** change the project, the MCP fleet, or the agent's tool
@@ -942,14 +938,14 @@ class DocketApp(App[None]):
         pane losing its memory/sources/MCP context.
 
         In-memory only; persisting the active view requires editing the
-        provider's `active_scope` in config.toml."""
+        provider's `active_view` in config.toml."""
         config = self.tui_ctx.config
         entry = self._active_provider_entry()
-        if config is None or entry is None or name not in entry.scopes:
+        if config is None or entry is None or name not in entry.views:
             self.notify(f"No saved view named '{name}'.", severity="warning")
             return
-        self.tui_ctx.scope_key = name
-        self.tui_ctx.scope = entry.scopes[name].to_core()
+        self.tui_ctx.view_key = name
+        self.tui_ctx.scope = entry.views[name].to_core()
         with contextlib.suppress(Exception):
             bar = self.query_one(StatusBar)
             bar.scope_label = name
@@ -977,15 +973,15 @@ class DocketApp(App[None]):
             return
         self.tui_ctx.provider = providers[name]
         self.tui_ctx.provider_key = name
-        scope_name = entry.active_scope
-        sf = entry.scopes.get(scope_name) or entry.scopes.get("default")
-        if sf is None:
-            # No scopes at all on this provider — use a wide-open one so the
-            # UI at least renders. The user can add a scope from settings.
-            sf = ScopeFilter(assignee="")
-            scope_name = "default"
-        self.tui_ctx.scope_key = scope_name
-        self.tui_ctx.scope = sf.to_core()
+        view_name = entry.active_view
+        sv = entry.views.get(view_name) or entry.views.get("default")
+        if sv is None:
+            # No views at all on this provider — use a wide-open one so the
+            # UI at least renders. The user can add a view from settings.
+            sv = SavedView()
+            view_name = "default"
+        self.tui_ctx.view_key = view_name
+        self.tui_ctx.scope = sv.to_core()
         self._selected_item_id = None
         # Drop staged proposals: each embeds an `Item` whose provider_key still
         # points at the previous provider. If the user confirmed one after the
@@ -1008,8 +1004,8 @@ class DocketApp(App[None]):
         with contextlib.suppress(Exception):
             bar = self.query_one(StatusBar)
             bar.provider_name = entry.display_name
-            bar.scope_label = scope_name
-            bar.active_view = scope_name
+            bar.scope_label = view_name
+            bar.active_view = view_name
             bar.project_name = self._resolve_project_name()
         stale = self._resolved_stale_threshold()
         with contextlib.suppress(Exception):

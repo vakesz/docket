@@ -11,7 +11,6 @@ from docket.core.model import (
     Item,
     ItemKind,
     ItemState,
-    ScopeFilters,
     TransitionIntent,
 )
 
@@ -44,9 +43,7 @@ class FakeProvider:
     def health_check(self) -> None:
         pass
 
-    def list_changes_since(
-        self, watermark: datetime | None, filters: ScopeFilters
-    ) -> Iterable[Item]:
+    def list_changes_since(self, watermark: datetime | None) -> Iterable[Item]:
         self.list_calls.append(watermark)
         if watermark is None:
             return list(self.items)

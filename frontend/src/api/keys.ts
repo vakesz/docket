@@ -24,8 +24,13 @@ export const qk = {
 
   providers: () => [...qk.all, "providers"] as const,
   activeProvider: () => [...qk.all, "providers", "active"] as const,
-  scopes: () => [...qk.all, "scopes"] as const,
-  activeScope: () => [...qk.all, "scopes", "active"] as const,
+  views: (providerKey: string) => [...qk.all, "providers", providerKey, "views"] as const,
+  activeView: (providerKey: string) =>
+    [...qk.all, "providers", providerKey, "views", "active"] as const,
+  viewOverrides: () => [...qk.all, "runtime", "viewOverrides"] as const,
+  viewConfig: (providerKey: string) => [...qk.all, "projects", providerKey, "viewConfig"] as const,
+  facets: (filter?: { archived?: boolean }) =>
+    [...qk.all, "items", "facets", filter ?? {}] as const,
 
   items: (filter?: {
     kind?: ItemKind | null;

@@ -23,7 +23,6 @@ from urllib.parse import urlparse
 from rich.prompt import Confirm, Prompt
 
 from docket._console import console
-from docket.providers import registry
 from docket.providers.base import ProviderAuthError
 
 CUSTOM_SENTINEL: Final[Literal["__custom__"]] = "__custom__"
@@ -75,6 +74,8 @@ def build_label_suggestion(*, type_id: str, config: dict[str, Any]) -> str:
     new provider type doesn't require editing this module. Returns an empty
     string for unknown provider types or specs without a template; callers
     fall back to their own default (usually the provider key)."""
+    from docket.providers import registry
+
     spec = registry.spec(type_id)
     if spec is None or spec.label_template is None:
         return ""
