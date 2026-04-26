@@ -51,3 +51,4 @@ Thumbs.db
 
 # SPA bundle copied into the package tree at wheel-build time (make bundle-spa)
 src/docket/frontend_dist/
+.claude/
