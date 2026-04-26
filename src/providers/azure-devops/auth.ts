@@ -1,0 +1,86 @@
+/**
+ * Custom NextAuth provider for Azure DevOps.
+ *
+ * AzDO's OAuth story is awkward: Microsoft has *deprecated* the legacy
+ * `app.vssps.visualstudio.com/oauth2/*` flow (the one NextAuth ships
+ * out-of-the-box as `azure-devops`) and now recommends Microsoft Entra ID
+ * with the AzDO resource scope. We follow that recommendation — the user
+ * registers an Entra app, grants it `499b84ac-1321-427f-aa17-267ca6975798`
+ * (the well-known AzDO API resource id), and we ask for the `.default`
+ * scope on top of OIDC.
+ *
+ * Provider id is set to `azure_devops` (matching `OauthProviderConfig.kind`
+ * and `Project.providerKind`) so the NextAuth `Account.provider` column
+ * lines up with what `buildProviderForUser` looks up. That symmetry is
+ * load-bearing — change one side, change both.
+ *
+ * Tenant: callers pass either a specific tenant guid or the literal
+ * `common` (the default). For org-internal apps a single-tenant guid is
+ * the right choice; for ones that need to support multiple AAD tenants,
+ * `common` works.
+ */
+
+import "server-only";
+import type { OIDCConfig } from "next-auth/providers";
+
+const AZDO_RESOURCE_ID = "499b84ac-1321-427f-aa17-267ca6975798";
+
+/**
+ * Profile shape Entra ID returns at the userinfo endpoint. Trimmed to what
+ * NextAuth's `profile` callback needs to map onto a User row.
+ */
+export interface AzureDevOpsEntraProfile {
+  sub: string;
+  name?: string;
+  email?: string;
+  preferred_username?: string;
+  oid?: string;
+}
+
+export type AzureDevOpsAuthOptions = {
+  clientId: string;
+  clientSecret: string;
+  /**
+   * Entra tenant id, or "common" / "organizations" / "consumers" for the
+   * multi-tenant endpoints. When unset we default to "common", which lets
+   * any AAD or Microsoft account in.
+   */
+  tenant?: string;
+  /**
+   * Extra scopes to request alongside the AzDO `.default` scope.
+   * `offline_access` triggers refresh-token issuance; OIDC scopes
+   * (`openid profile email`) populate the userinfo response so the
+   * NextAuth user row has a name + email.
+   */
+  extraScope?: string;
+};
+
+export function azureDevOpsProvider(
+  opts: AzureDevOpsAuthOptions,
+): OIDCConfig<AzureDevOpsEntraProfile> {
+  const trimmed = opts.tenant?.trim();
+  const tenant = trimmed ? trimmed : "common";
+  const issuer = `https://login.microsoftonline.com/${tenant}/v2.0`;
+  const baseScope = `openid profile email offline_access ${AZDO_RESOURCE_ID}/.default`;
+  const scope = opts.extraScope ? `${baseScope} ${opts.extraScope}` : baseScope;
+  return {
+    id: "azure_devops",
+    name: "Azure DevOps",
+    type: "oidc",
+    issuer,
+    clientId: opts.clientId,
+    clientSecret: opts.clientSecret,
+    authorization: { params: { scope } },
+    // The Microsoft userinfo response uses `oid` for stable user id and
+    // `preferred_username` for the email-shaped UPN; fall back to `sub`
+    // (always present) so we never end up with a null id.
+    profile(profile) {
+      return {
+        id: profile.oid || profile.sub,
+        name: profile.name ?? null,
+        email: profile.email ?? profile.preferred_username ?? null,
+        image: null,
+      };
+    },
+  };
+}

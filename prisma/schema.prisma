@@ -49,6 +49,7 @@ model User {
   watchlist     WatchlistEntry[]
   commandUsage  CommandUsage[]
   settings      Setting[]
+  savedViews    SavedView[]
 }
 
 model Account {
@@ -190,6 +191,7 @@ model Project {
   suggestions   Suggestion[]
   commandUsage  CommandUsage[]
   sync          SyncCursor?
+  savedViews    SavedView[]
 
   @@index([ownerUserId, archivedAt])
   @@index([providerKind])
@@ -288,6 +290,52 @@ model WatchlistEntry {
 
   @@unique([userId, projectId, providerItemId])
   @@index([userId, pinnedAt(sort: Desc)])
+}
+
+// ----------------------------------------------------------------------------
+// Saved views — per-user, per-project named visual filters
+// ----------------------------------------------------------------------------
+//
+// Phase 9 design: every narrowing dimension is a *visual* (post-cache)
+// filter — sync pulls everything the credentials see, and `view-filter.ts`
+// decides what renders. A SavedView captures the three filter axes the
+// product surfaces:
+//   - state bucket (open / closed / all) — over the canonical ItemState enum
+//   - assignees (set of usernames; empty = no filter, "" entries match
+//     unassigned)
+//   - axes (per-provider-spec narrowing — area path / iteration / repo /
+//     team / etc; declared by `ProviderSpec.scopeAxes`)
+//
+// One row per (user, project, name). One row per (user, project) may have
+// `isDefault = true`; the application enforces this — no DB partial unique
+// because Postgres needs an awkward partial index that Prisma 7 can't
+// declare cleanly yet.
+
+model SavedView {
+  id          String   @id @default(cuid())
+  userId      String
+  projectId   String
+  /// Display name shown in the picker. Unique per (user, project).
+  name        String
+  /// 'open' | 'closed' | 'all' — over the canonical ItemState enum.
+  stateBucket String   @default("open")
+  /// Usernames to include. Empty list = no assignee filter. An empty string
+  /// in the list means "unassigned" (so the user can pin "show me unassigned
+  /// items only").
+  assignees   String[] @default([])
+  /// Per-provider axis selections — `{ axisKey: expectedValue }`. The
+  /// `ProviderSpec.axisMatcher` interprets each axis. Empty object means no
+  /// axis filter.
+  axes        Json     @default("{}")
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, projectId, name])
+  @@index([userId, projectId, isDefault])
 }
 
 // ----------------------------------------------------------------------------

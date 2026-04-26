@@ -1,5 +1,6 @@
 import "server-only";
 import type { ProviderSpec } from "@/core/provider";
+import { azureDevOpsSpec } from "@/providers/azure-devops/spec";
 import { githubSpec } from "@/providers/github/spec";
 
 /**
@@ -13,7 +14,7 @@ import { githubSpec } from "@/providers/github/spec";
  * Phase 3 wires GitHub. Phase 9 adds Azure DevOps. The github_stub provider
  * is dropped — tests use vi mocks against `WorkItemProvider` instead.
  */
-export const PROVIDER_SPECS: readonly ProviderSpec[] = [githubSpec];
+export const PROVIDER_SPECS: readonly ProviderSpec[] = [githubSpec, azureDevOpsSpec];
 
 export function getProviderSpec(typeId: string): ProviderSpec | null {
   return PROVIDER_SPECS.find((spec) => spec.typeId === typeId) ?? null;

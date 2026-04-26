@@ -12,6 +12,8 @@
  * Allowed importers of `src/providers/<x>/` modules:
  *   - sibling files inside the same `src/providers/<x>/` package
  *   - `src/server/provider-registry.ts` (the registry itself)
+ *   - `src/server/providers/build.ts` (work-item provider builder)
+ *   - `src/server/providers/auth-build.ts` (NextAuth provider builder)
  *   - the provider's own arch tests under `src/__arch__/`
  *
  * Anything under `src/server/routers/` or `src/server/<feature>/router.ts`
@@ -27,6 +29,7 @@ const SRC_ROOT = join(PROJECT_ROOT, "src");
 const SERVER_ROOT = join("src", "server") + sep;
 const PROVIDER_REGISTRY = join("src", "server", "provider-registry.ts");
 const PROVIDER_BUILD = join("src", "server", "providers", "build.ts");
+const PROVIDER_AUTH_BUILD = join("src", "server", "providers", "auth-build.ts");
 const SKIP_DIRS = new Set(["node_modules", "generated", "__arch__"]);
 
 const PROVIDER_IMPORT =
@@ -53,7 +56,9 @@ describe("arch: server provider-import boundary", () => {
     for await (const file of walk(SRC_ROOT)) {
       const rel = relative(PROJECT_ROOT, file);
       if (!rel.startsWith(SERVER_ROOT)) continue;
-      if (rel === PROVIDER_REGISTRY || rel === PROVIDER_BUILD) continue;
+      if (rel === PROVIDER_REGISTRY || rel === PROVIDER_BUILD || rel === PROVIDER_AUTH_BUILD) {
+        continue;
+      }
 
       const text = await readFile(file, "utf8");
       for (const match of text.matchAll(PROVIDER_IMPORT)) {

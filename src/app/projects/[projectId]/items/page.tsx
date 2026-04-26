@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createCaller } from "@/server/trpc-caller";
 import { SyncButton } from "@/ui/items/sync-button";
+import { ViewBar } from "@/ui/views/view-bar";
 import { WatchlistPane } from "@/ui/watchlist/watchlist-pane";
 
 export default async function ItemsListPage({
@@ -19,11 +20,12 @@ export default async function ItemsListPage({
     bucketParam === "open" || bucketParam === "closed" || bucketParam === "all"
       ? bucketParam
       : "open";
+  const viewId = typeof search.viewId === "string" && search.viewId ? search.viewId : undefined;
 
   const trpc = await createCaller();
   let items: Awaited<ReturnType<typeof trpc.items.list>>;
   try {
-    items = await trpc.items.list({ projectId, bucket });
+    items = await trpc.items.list({ projectId, bucket, viewId });
   } catch (err) {
     if (err instanceof TRPCError && (err.code === "FORBIDDEN" || err.code === "NOT_FOUND")) {
       notFound();
@@ -42,21 +44,7 @@ export default async function ItemsListPage({
           </div>
         </div>
 
-        <nav className="flex items-center gap-1 text-xs">
-          {(["open", "closed", "all"] as const).map((b) => (
-            <Link
-              key={b}
-              href={`/projects/${projectId}/items?bucket=${b}`}
-              className={
-                bucket === b
-                  ? "rounded-full bg-zinc-900 px-3 py-1 text-white dark:bg-white dark:text-black"
-                  : "rounded-full border border-zinc-300 px-3 py-1 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-900"
-              }
-            >
-              {b}
-            </Link>
-          ))}
-        </nav>
+        <ViewBar projectId={projectId} />
 
         {items.length === 0 ? (
           <p className="rounded-md border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-500 dark:border-zinc-700">

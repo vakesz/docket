@@ -1,17 +1,34 @@
 import "server-only";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import type { Prisma } from "@/db/generated/client";
+import type { Item, ItemKind, ItemState, StateBucket } from "@/core/types";
+import { STATE_BUCKETS } from "@/core/types";
+import { applyViewFilter, STATE_BUCKET_MEMBERS, type ViewFilter } from "@/core/view-filter";
+import type { Prisma, Item as PrismaItem } from "@/db/generated/client";
+import { getProviderSpec } from "@/server/provider-registry";
 import { buildProviderForUser } from "@/server/providers/build";
 import { runFullSync, runIncrementalSync } from "@/server/sync";
 import { projectScopedProcedure, router } from "@/server/trpc";
 
 const ProjectId = z.object({ projectId: z.string().min(1) });
 
+const StateBucketEnum = z.enum(STATE_BUCKETS);
+
 const ListInput = ProjectId.extend({
   kind: z.string().optional(),
   state: z.string().optional(),
-  bucket: z.enum(["open", "closed", "all"]).default("open"),
+  bucket: StateBucketEnum.default("open"),
+  /// Optional saved view to apply on top of the inline filters. When set,
+  /// the view's stateBucket/assignees/axes win over `bucket` and the inline
+  /// `assignees`/`axes` inputs (the surface either drives a saved view or
+  /// drives ad-hoc knobs — never both at once).
+  viewId: z.string().min(1).optional(),
+  /// Inline assignee filter — applied when `viewId` is unset. Empty list =
+  /// no constraint. An empty string element means "unassigned".
+  assignees: z.array(z.string().min(0).max(200)).max(50).default([]),
+  /// Inline per-axis filter — applied when `viewId` is unset. Empty values
+  /// are treated as "no constraint" by the view-filter layer.
+  axes: z.record(z.string().min(1).max(64), z.string().max(500)).default({}),
   search: z.string().max(200).optional(),
   archived: z.boolean().default(false),
   limit: z.number().int().min(1).max(200).default(100),
@@ -23,13 +40,167 @@ const SyncInput = ProjectId.extend({
   mode: z.enum(["incremental", "full"]).default("incremental"),
 });
 
+function userIdOrThrow(ctx: { session: { user: { id?: string } } }): string {
+  const userId = ctx.session.user.id;
+  if (!userId) {
+    throw new TRPCError({ code: "UNAUTHORIZED" });
+  }
+  return userId;
+}
+
+type ListInputResolved = z.infer<typeof ListInput>;
+
 /**
- * Items API (Phase 3).
+ * Resolve the effective view filter for a list call. A `viewId` wins over
+ * inline knobs (the surface either drives a saved view or drives ad-hoc
+ * inputs, never both). Returns null when no narrowing is requested at all
+ * — caller treats that as "open bucket only" via the inline default.
+ */
+async function resolveViewFilter(
+  db: typeof import("@/server/db").db,
+  projectId: string,
+  userId: string,
+  input: ListInputResolved,
+): Promise<ViewFilter> {
+  if (input.viewId) {
+    const row = await db.savedView.findFirst({
+      where: { id: input.viewId, userId, projectId },
+    });
+    if (!row) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "view not found" });
+    }
+    return {
+      stateBucket: row.stateBucket as StateBucket,
+      assignees: row.assignees,
+      axes: (row.axes ?? {}) as Record<string, string>,
+    };
+  }
+  return {
+    stateBucket: input.bucket,
+    assignees: input.assignees,
+    axes: input.axes,
+  };
+}
+
+/**
+ * Cheap SQL pre-filters that don't need the provider matcher: state bucket
+ * (resolves to an `IN` clause via `STATE_BUCKET_MEMBERS`), assignees,
+ * archived flag, kind, search. Axes need spec.axisMatcher and are applied
+ * in-app downstream.
+ *
+ * Inline `state` (a single canonical state) wins over the bucket — it's an
+ * existing escape hatch for the items page UI and we keep it.
+ */
+function buildItemListWhere(
+  projectId: string,
+  input: ListInputResolved,
+  view: ViewFilter,
+): Prisma.ItemWhereInput {
+  const stateClause: Prisma.ItemWhereInput = input.state
+    ? { state: input.state }
+    : view.stateBucket === "all"
+      ? {}
+      : { state: { in: [...STATE_BUCKET_MEMBERS[view.stateBucket]] } };
+
+  const assigneeClause: Prisma.ItemWhereInput = (() => {
+    if (view.assignees.length === 0) return {};
+    const wantUnassigned = view.assignees.includes("");
+    const named = view.assignees.filter((a) => a !== "");
+    if (wantUnassigned && named.length > 0) {
+      return { OR: [{ assignee: null }, { assignee: { in: named } }] };
+    }
+    if (wantUnassigned) return { assignee: null };
+    return { assignee: { in: named } };
+  })();
+
+  return {
+    projectId,
+    archived: input.archived,
+    ...(input.kind ? { kind: input.kind } : {}),
+    ...stateClause,
+    ...assigneeClause,
+    ...(input.search
+      ? {
+          OR: [
+            { title: { contains: input.search, mode: "insensitive" } },
+            { descriptionMd: { contains: input.search, mode: "insensitive" } },
+            { providerItemId: { contains: input.search, mode: "insensitive" } },
+          ],
+        }
+      : {}),
+  };
+}
+
+function hasAxisFilter(view: ViewFilter): boolean {
+  return Object.values(view.axes).some((v) => v !== "");
+}
+
+/**
+ * Apply provider-axis post-cache narrowing via the spec's matcher. When the
+ * provider has no spec or no axis matcher (declared `scopeAxes: []`), this
+ * is the identity — same contract as `filterByAxes` in `view-filter.ts`.
+ *
+ * Cached `Item` rows are Prisma rows, not the canonical `Item` shape, so
+ * we lift them through a thin adapter that mirrors what each axisExtract /
+ * axisMatcher actually reads off the row. In practice that's just
+ * `providerRaw` plus the canonical state/assignee fields the matcher might
+ * cross-reference — wide enough that a typical matcher Just Works.
+ */
+function filterRowsByAxes(
+  rows: PrismaItem[],
+  view: ViewFilter,
+  providerKind: string,
+): PrismaItem[] {
+  if (!hasAxisFilter(view)) return rows;
+  const spec = getProviderSpec(providerKind);
+  if (!spec || spec.axisMatcher === null) return rows;
+  // Build a (row, lifted) zip so we can keep the original row identity
+  // around for the projection step while passing the canonical shape into
+  // the matcher.
+  const lifted = rows.map((row) => ({ row, item: liftRowToCanonical(row, providerKind) }));
+  const filtered = applyViewFilter(
+    lifted.map((x) => x.item),
+    { stateBucket: "all", assignees: [], axes: view.axes },
+    spec.axisMatcher,
+  );
+  const keep = new Set(filtered.map((i) => i.id));
+  return lifted.filter((x) => keep.has(x.item.id)).map((x) => x.row);
+}
+
+function liftRowToCanonical(row: PrismaItem, providerKind: string): Item {
+  const providerRaw =
+    row.providerRaw && typeof row.providerRaw === "object" && !Array.isArray(row.providerRaw)
+      ? (row.providerRaw as Record<string, unknown>)
+      : {};
+  return {
+    id: row.id,
+    kind: row.kind as ItemKind,
+    title: row.title,
+    descriptionMd: row.descriptionMd,
+    state: row.state as ItemState,
+    assignee: row.assignee,
+    parentId: row.parentId,
+    tags: row.tags,
+    updatedAt: row.updatedAt,
+    url: row.url,
+    author: row.author,
+    repositoryUrl: row.repositoryUrl,
+    attachments: [],
+    providerRaw,
+    providerKey: `${providerKind}:${row.projectId}`,
+  };
+}
+
+/**
+ * Items API (Phase 3, view-filter wiring in Phase 9).
  *
  * Reads come straight from the Prisma Item cache so they never need an
  * outbound provider call. The cache is filled by `items.runSync`, which
  * the UI exposes as a "Refresh" button on the items page. Phase 4 wires
- * proposal-first writes; Phase 5 wires real-time inbound updates.
+ * proposal-first writes; Phase 5 wires real-time inbound updates. Phase 9
+ * adds saved-view application — `viewId` resolves to a stored
+ * `(stateBucket, assignees, axes)` tuple that narrows the cache the same
+ * way inline `bucket`/`assignees`/`axes` would.
  *
  * Project membership is enforced by `projectScopedProcedure`, which also
  * injects `ctx.project` so the mutating procedures don't need a second
@@ -38,45 +209,35 @@ const SyncInput = ProjectId.extend({
  */
 export const itemsRouter = router({
   list: projectScopedProcedure.input(ListInput).query(async ({ ctx, input }) => {
-    const where: Prisma.ItemWhereInput = {
-      projectId: ctx.projectId,
-      archived: input.archived,
-      ...(input.kind ? { kind: input.kind } : {}),
-      ...(input.state
-        ? { state: input.state }
-        : input.bucket === "open"
-          ? { state: { in: ["new", "active", "blocked", "needs_info"] } }
-          : input.bucket === "closed"
-            ? { state: { in: ["resolved", "closed"] } }
-            : {}),
-      ...(input.search
-        ? {
-            OR: [
-              { title: { contains: input.search, mode: "insensitive" } },
-              { descriptionMd: { contains: input.search, mode: "insensitive" } },
-              { providerItemId: { contains: input.search, mode: "insensitive" } },
-            ],
-          }
-        : {}),
-    };
-    return ctx.db.item.findMany({
+    const userId = userIdOrThrow(ctx);
+    const view = await resolveViewFilter(ctx.db, ctx.projectId, userId, input);
+    const where = buildItemListWhere(ctx.projectId, input, view);
+    const rows = await ctx.db.item.findMany({
       where,
       orderBy: [{ updatedAt: "desc" }],
-      take: input.limit,
-      select: {
-        id: true,
-        providerItemId: true,
-        kind: true,
-        title: true,
-        state: true,
-        assignee: true,
-        author: true,
-        tags: true,
-        url: true,
-        updatedAt: true,
-        syncedAt: true,
-      },
+      // Axes filter is applied in-app via the spec's matcher, so over-fetch
+      // by a small factor when axes are present to keep the after-filter
+      // page size near the requested limit. When no axes are set the SQL
+      // result already matches the final shape.
+      take: hasAxisFilter(view) ? Math.min(input.limit * 4, 800) : input.limit,
     });
+
+    const filteredRows = filterRowsByAxes(rows, view, ctx.project.providerKind);
+    const trimmed = filteredRows.slice(0, input.limit);
+
+    return trimmed.map((row) => ({
+      id: row.id,
+      providerItemId: row.providerItemId,
+      kind: row.kind,
+      title: row.title,
+      state: row.state,
+      assignee: row.assignee,
+      author: row.author,
+      tags: row.tags,
+      url: row.url,
+      updatedAt: row.updatedAt,
+      syncedAt: row.syncedAt,
+    }));
   }),
 
   get: projectScopedProcedure.input(ItemRef).query(async ({ ctx, input }) => {
@@ -128,10 +289,7 @@ export const itemsRouter = router({
    * cached row the provider no longer returns. Both bump SyncCursor.
    */
   runSync: projectScopedProcedure.input(SyncInput).mutation(async ({ ctx, input }) => {
-    const userId = ctx.session.user.id;
-    if (!userId) {
-      throw new TRPCError({ code: "UNAUTHORIZED" });
-    }
+    const userId = userIdOrThrow(ctx);
     return input.mode === "full"
       ? runFullSync(ctx.db, ctx.project, userId)
       : runIncrementalSync(ctx.db, ctx.project, userId);
@@ -142,10 +300,7 @@ export const itemsRouter = router({
    * Comment cache. Cheap to run on detail-page open.
    */
   refreshComments: projectScopedProcedure.input(ItemRef).mutation(async ({ ctx, input }) => {
-    const userId = ctx.session.user.id;
-    if (!userId) {
-      throw new TRPCError({ code: "UNAUTHORIZED" });
-    }
+    const userId = userIdOrThrow(ctx);
     const item = await ctx.db.item.findFirst({
       where: { id: input.itemId, projectId: ctx.projectId },
     });
