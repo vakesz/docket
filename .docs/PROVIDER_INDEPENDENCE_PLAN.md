@@ -82,7 +82,7 @@ Additional leaks discovered while researching:
 
 ---
 
-## Phase 0 — pin behavior with tests
+## Phase 0 — pin behavior with tests ✅ landed
 
 **Goal:** before any refactor, lock in current behavior so we can detect
 regressions phase by phase.
