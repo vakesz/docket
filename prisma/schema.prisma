@@ -1,6 +1,20 @@
-// Docket schema. Phase 0 ships only the NextAuth-managed tables so the
-// Prisma adapter compiles and sign-in works end-to-end. Phase 2 expands
-// this with Project, OauthProviderConfig, LlmProvider, Item cache, etc.
+// Docket schema — full Phase 2 surface. Every persisted concept lives here:
+// NextAuth tables, multi-tenancy (Project / ProviderConfig), the item cache
+// + comments, conversations + messages, proposals, memory + sources,
+// watchlist, MCP server config, settings, suggestions, command-usage
+// counters, sync cursors. Phase-by-phase routers fill in the read/write
+// paths against these tables; the schema does not move from here forward
+// except to add fields when later phases introduce a feature that demands
+// them.
+//
+// Naming conventions:
+// - camelCase fields throughout (Prisma default).
+// - Provider-kind / LLM-kind / role / proposal-kind use plain `String` so
+//   adding a new value is a row, not a migration. The string-literal-union
+//   types in `src/core/types.ts` and `src/core/proposal-types.ts` are the
+//   source of truth at the application layer.
+// - Provider-scope / payload / config use `Json` so per-provider shapes
+//   evolve without a migration.
 
 generator client {
   provider = "prisma-client"
@@ -13,7 +27,9 @@ datasource db {
   provider = "postgresql"
 }
 
-// --- NextAuth v5 / @auth/prisma-adapter required tables ---
+// ----------------------------------------------------------------------------
+// NextAuth v5 / @auth/prisma-adapter
+// ----------------------------------------------------------------------------
 
 model User {
   id            String    @id @default(cuid())
@@ -24,8 +40,15 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  accounts Account[]
-  sessions Session[]
+  accounts      Account[]
+  sessions      Session[]
+  ownedProjects Project[]           @relation("ProjectOwner")
+  memberships   ProjectMembership[]
+  conversations Conversation[]
+  proposals     Proposal[]
+  watchlist     WatchlistEntry[]
+  commandUsage  CommandUsage[]
+  settings      Setting[]
 }
 
 model Account {
@@ -65,4 +88,439 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+// ----------------------------------------------------------------------------
+// Per-deployment OAuth + LLM config — populated by the Phase 11 admin wizard
+// (Phase 2 ships a dev seed reading .env.local). Multi-row from day one;
+// `kind` accepts future vendors without a migration.
+// ----------------------------------------------------------------------------
+
+model OauthProviderConfig {
+  id           String   @id @default(cuid())
+  /// 'github' | 'azure_devops' | future kinds. NextAuth's dynamic provider
+  /// config function dispatches on this string.
+  kind         String
+  /// Human-readable label shown in the sign-in button + admin list.
+  label        String
+  clientId     String
+  /// Encrypted at rest with SECRETS_KEY (Phase 11 helper); plaintext today
+  /// because no encryption helper exists yet. Tracked for fixup in Phase 11.
+  clientSecret String
+  /// Comma-separated scope list. Provider-specific syntax.
+  scopes       String   @default("")
+  /// Optional override for the OAuth API base URL (self-hosted GitHub
+  /// Enterprise, AzDO on a custom domain, etc.). Empty string = stock.
+  baseUrl      String   @default("")
+  enabled      Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([kind])
+}
+
+model LlmProvider {
+  id        String   @id @default(cuid())
+  /// 'openai' | future vendors ('anthropic', 'gemini', 'bedrock', 'mistral',
+  /// 'ollama', ...). The agent's selectAdapterFor switches on this; Phase 6
+  /// ships the OpenAI adapter, future adapters are one file each.
+  kind      String
+  label     String
+  /// Encrypted at rest with SECRETS_KEY (Phase 11 helper); plaintext today.
+  apiKey    String
+  /// Default model for this provider row (e.g. 'gpt-5'). Empty falls back
+  /// to the adapter's hardcoded default.
+  model     String   @default("")
+  /// Optional base URL (Azure OpenAI, OpenAI-compatible Ollama endpoint,
+  /// proxies). Empty = vendor default.
+  baseUrl   String   @default("")
+  /// Whether this row is the global fallback when a project has no
+  /// defaultLlmProviderId. At most one row should have this true, but the
+  /// constraint is application-level (no DB unique partial index for now).
+  isDefault Boolean  @default(false)
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  defaultedByProjects   Project[]      @relation("ProjectDefaultLlm")
+  conversationOverrides Conversation[] @relation("ConversationLlmOverride")
+
+  @@index([kind])
+  @@index([isDefault])
+}
+
+// ----------------------------------------------------------------------------
+// Multi-tenancy: projects + memberships
+// ----------------------------------------------------------------------------
+
+model Project {
+  id                   String    @id @default(cuid())
+  /// Display name for the project ("ACME / web", "Contoso Platform").
+  name                 String
+  description          String    @default("")
+  /// Provider kind this project targets — 'github' | 'azure_devops' | ...
+  /// Same vocabulary as OauthProviderConfig.kind.
+  providerKind         String
+  /// Per-provider scope payload (e.g. `{ owner: "acme", repo: "web" }` for
+  /// GitHub, `{ organization: "Contoso", project: "Platform" }` for AzDO).
+  /// Schemas live in each provider module's spec; this column doesn't
+  /// validate.
+  providerScope        Json
+  /// Project-level LLM choice; falls back to the global default LlmProvider
+  /// if null. Per-conversation override on Conversation.llmProviderIdOverride.
+  defaultLlmProviderId String?
+  /// Owner has implicit membership; explicit memberships go through
+  /// ProjectMembership. Owner can delete the project; members cannot.
+  ownerUserId          String
+  createdAt            DateTime  @default(now())
+  archivedAt           DateTime?
+  updatedAt            DateTime  @updatedAt
+
+  owner         User                @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  defaultLlm    LlmProvider?        @relation("ProjectDefaultLlm", fields: [defaultLlmProviderId], references: [id], onDelete: SetNull)
+  memberships   ProjectMembership[]
+  items         Item[]
+  watchlist     WatchlistEntry[]
+  memory        MemoryEntry[]
+  sources       SourceDoc[]
+  conversations Conversation[]
+  proposals     Proposal[]
+  mcpServers    McpServerConfig[]
+  settings      Setting[]
+  suggestions   Suggestion[]
+  commandUsage  CommandUsage[]
+  sync          SyncCursor?
+
+  @@index([ownerUserId, archivedAt])
+  @@index([providerKind])
+}
+
+/// Per-user role on a project. Phase 10 fills the role permission matrix;
+/// Phase 2 just creates rows so the multi-tenant join is in place.
+model ProjectMembership {
+  id        String   @id @default(cuid())
+  projectId String
+  userId    String
+  /// 'viewer' | 'member' | 'approver' — Phase 10 wires the permissions.
+  role      String   @default("member")
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([userId])
+}
+
+// ----------------------------------------------------------------------------
+// Item cache + comments — populated by sync, refreshed on confirm
+// ----------------------------------------------------------------------------
+
+model Item {
+  id             String   @id @default(cuid())
+  projectId      String
+  /// Provider-native id (e.g. "acme/web#42" for GitHub, "1234" for AzDO).
+  /// Stable across syncs; the surrogate `id` is the FK target for everything
+  /// else so renames at the provider don't ripple.
+  providerItemId String
+  /// Canonical kind: ItemKind in src/core/types.ts.
+  kind           String
+  title          String
+  descriptionMd  String   @default("")
+  /// Canonical state: ItemState in src/core/types.ts. Provider-native state
+  /// strings are translated by each provider's state-map.ts.
+  state          String
+  assignee       String?
+  author         String?
+  /// Parent's providerItemId, not the surrogate cuid. Resolved at query
+  /// time; null when no parent or parent is outside the synced cache.
+  parentId       String?
+  tags           String[] @default([])
+  providerRaw    Json     @default("{}")
+  url            String?
+  repositoryUrl  String?
+  updatedAt      DateTime
+  syncedAt       DateTime
+  archived       Boolean  @default(false)
+
+  project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  comments Comment[]
+
+  @@unique([projectId, providerItemId])
+  @@index([projectId, kind, archived])
+  @@index([projectId, updatedAt])
+  @@index([projectId, parentId])
+}
+
+model Comment {
+  id                String   @id @default(cuid())
+  itemId            String
+  /// Provider-native comment id, scoped under itemId.
+  providerCommentId String
+  author            String
+  bodyMd            String
+  createdAt         DateTime
+
+  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, providerCommentId])
+  @@index([itemId, createdAt])
+}
+
+// ----------------------------------------------------------------------------
+// Watchlist — per-user, per-project pinned items
+// ----------------------------------------------------------------------------
+//
+// Pinning a providerItemId that is temporarily outside the active scope is
+// valid; the render join just quietly excludes that row until the next sync
+// re-adds it. So the FK target is the (projectId, providerItemId) tuple via
+// a soft string match, not a hard FK to Item.id.
+
+model WatchlistEntry {
+  id             String   @id @default(cuid())
+  userId         String
+  projectId      String
+  providerItemId String
+  pinnedAt       DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, projectId, providerItemId])
+  @@index([userId, pinnedAt(sort: Desc)])
+}
+
+// ----------------------------------------------------------------------------
+// Per-project memory + sources
+// ----------------------------------------------------------------------------
+
+model MemoryEntry {
+  id        String   @id @default(cuid())
+  projectId String
+  title     String
+  bodyMd    String   @default("")
+  tags      String[] @default([])
+  /// 'user' | 'agent' — informational; both are equally durable.
+  source    String   @default("user")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, updatedAt(sort: Desc)])
+}
+
+model SourceDoc {
+  id        String   @id @default(cuid())
+  projectId String
+  title     String
+  /// Free-text category ("requirements", "runbook", "design"). Empty allowed.
+  kind      String   @default("")
+  uri       String   @default("")
+  bodyMd    String   @default("")
+  tags      String[] @default([])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, updatedAt(sort: Desc)])
+  @@index([projectId, kind])
+}
+
+// ----------------------------------------------------------------------------
+// Conversations + messages
+// ----------------------------------------------------------------------------
+
+model Conversation {
+  id                    String    @id @default(cuid())
+  projectId             String
+  userId                String
+  /// Optional item this conversation hangs off (project-wide chat when null).
+  itemId                String?
+  /// Per-conversation LLM override; null falls back to project default,
+  /// which falls back to the global default LlmProvider.
+  llmProviderIdOverride String?
+  startedAt             DateTime  @default(now())
+  archivedAt            DateTime?
+  tokensIn              Int       @default(0)
+  tokensOut             Int       @default(0)
+  costCents             Int       @default(0)
+
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  llmOverride LlmProvider? @relation("ConversationLlmOverride", fields: [llmProviderIdOverride], references: [id], onDelete: SetNull)
+  messages    Message[]
+
+  @@index([projectId, archivedAt])
+  @@index([userId, archivedAt])
+  @@index([itemId])
+}
+
+model Message {
+  id             String   @id @default(cuid())
+  conversationId String
+  /// 'system' | 'user' | 'assistant' | 'tool'. Vendor-neutral.
+  role           String
+  content        String
+  /// Vendor-neutral discriminated tool-call payload. Null for non-tool turns.
+  toolCallsJson  Json?
+  toolCallId     String?
+  toolName       String?
+  /// True after the compaction service has folded this message into a
+  /// synthetic system summary. Live transcript filters compacted == false.
+  compacted      Boolean  @default(false)
+  pending        Boolean  @default(false)
+  tokensIn       Int      @default(0)
+  tokensOut      Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@index([conversationId, compacted, createdAt])
+}
+
+// ----------------------------------------------------------------------------
+// Proposals — staged provider/memory writes awaiting confirmation
+// ----------------------------------------------------------------------------
+
+model Proposal {
+  id             String    @id @default(cuid())
+  projectId      String
+  userId         String
+  /// One of: state_change, description_patch, attachment_upload,
+  /// item_create, comment_add, memory_write, memory_delete. Source of truth
+  /// at the type layer is src/core/proposal-types.ts.
+  kind           String
+  /// Provider-native item id this proposal targets, when relevant. Null for
+  /// item_create (the item doesn't exist yet) and memory_* (no item).
+  providerItemId String?
+  /// Full proposal payload (Item snapshot + the change). Type narrowing
+  /// happens in src/server/proposals/ (Phase 4).
+  payload        Json
+  /// 'pending' | 'confirmed' | 'rejected' | 'expired'.
+  status         String    @default("pending")
+  /// Populated when status flips to confirmed; the executor stamps it.
+  confirmedAt    DateTime?
+  /// Populated after the provider write succeeds; null while pending or
+  /// while the executor is in flight.
+  executedAt     DateTime?
+  /// Populated when execution failed; the proposal stays in 'confirmed'
+  /// state with this message attached so the user can retry.
+  errorMessage   String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, status, createdAt(sort: Desc)])
+  @@index([userId, status])
+}
+
+// ----------------------------------------------------------------------------
+// MCP server config — per-project HTTP-only servers
+// ----------------------------------------------------------------------------
+
+model McpServerConfig {
+  id          String   @id @default(cuid())
+  projectId   String
+  name        String
+  /// 'http' only at launch (Phase 8). The Python tree's stdio transport is
+  /// dropped for security reasons; this column accepts other transports
+  /// without a migration if we ever revisit that decision.
+  transport   String   @default("http")
+  url         String
+  /// Optional headers (auth tokens, etc). Encrypted-at-rest deferred to
+  /// Phase 11 alongside other secrets.
+  headersJson Json     @default("{}")
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, name])
+  @@index([projectId, enabled])
+}
+
+// ----------------------------------------------------------------------------
+// Generic key-value settings (per-user, per-project, or global)
+// ----------------------------------------------------------------------------
+
+model Setting {
+  id        String   @id @default(cuid())
+  /// Kebab-cased key (e.g. "ui.theme", "agent.compaction-threshold").
+  key       String
+  /// Stringified value. JSON encoding decided per-key by the consumer.
+  value     String
+  /// 'global' | 'user' | 'project'. The unique index uses the relevant
+  /// FK column for user/project scope; global is enforced application-side
+  /// (only one row with userId == null && projectId == null per key).
+  scope     String
+  userId    String?
+  projectId String?
+  /// True when value is encrypted with SECRETS_KEY (Phase 11). False today.
+  encrypted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([key, userId, projectId])
+  @@index([scope, key])
+}
+
+// ----------------------------------------------------------------------------
+// Suggestions + command-usage counters
+// ----------------------------------------------------------------------------
+
+model Suggestion {
+  id          String    @id @default(cuid())
+  projectId   String
+  /// Free-text category — the suggestion service decides what these mean.
+  /// 'duplicate' | 'related' | 'transition' at minimum (Phase 9).
+  kind        String
+  payload     Json
+  createdAt   DateTime  @default(now())
+  /// When the user clicks "ignore" — kept for analytics rather than deleted.
+  dismissedAt DateTime?
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, kind, dismissedAt])
+}
+
+/// Command palette usage counter — floats recently-used commands to the
+/// top of the picker. Phase 9 wires the surface; Phase 2 ships the table.
+model CommandUsage {
+  id         String   @id @default(cuid())
+  userId     String
+  projectId  String?
+  /// Stable command id (e.g. "items.new", "memory.write"). Display labels
+  /// can change without invalidating the counter.
+  commandId  String
+  lastUsedAt DateTime @default(now())
+  usageCount Int      @default(1)
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, projectId, commandId])
+  @@index([userId, lastUsedAt(sort: Desc)])
+}
+
+// ----------------------------------------------------------------------------
+// Sync cursor — per-project incremental sync watermark
+// ----------------------------------------------------------------------------
+
+model SyncCursor {
+  projectId      String    @id
+  watermark      DateTime?
+  lastFullSyncAt DateTime?
+  updatedAt      DateTime  @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
