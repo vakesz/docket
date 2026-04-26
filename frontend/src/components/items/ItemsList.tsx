@@ -8,6 +8,7 @@ import { NewItemButton } from "~/components/items/NewItemButton";
 import { NewItemModal } from "~/components/items/NewItemModal";
 import { cn } from "~/lib/cn";
 import { displayTag, formatKind, formatState } from "~/lib/format";
+import { metaLabelFaintClass } from "~/lib/formClasses";
 import { freshnessTone } from "~/lib/staleness";
 
 type Item = DTO["ItemDTO"];
@@ -150,7 +151,8 @@ export function ItemsList({ selectedId }: Props) {
             ))}
           <label
             className={cn(
-              "flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-fg-faint",
+              "flex items-center gap-1",
+              metaLabelFaintClass,
               visibleKinds.length > 2 && "ml-auto",
             )}
           >
@@ -245,7 +247,7 @@ export function ItemsList({ selectedId }: Props) {
 
       {pinned.data && pinned.data.length > 0 && (
         <div className="border-b border-border bg-surface">
-          <div className="flex items-center gap-2 px-3 pt-2 pb-1 font-mono text-[10px] uppercase tracking-wider text-fg-faint">
+          <div className={cn("flex items-center gap-2 px-3 pt-2 pb-1", metaLabelFaintClass)}>
             <span className="text-accent">●</span>
             <span>Pinned</span>
             <span className="text-fg-faint">{pinned.data.length}</span>
@@ -364,9 +366,7 @@ function ItemRow({
       )}
     >
       <div className="flex items-center gap-2 text-xs">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-faint">
-          {formatKind(item.kind)}
-        </span>
+        <span className={metaLabelFaintClass}>{formatKind(item.kind)}</span>
         <StatePill state={item.state} />
         {pinned && (
           <span className="font-mono text-[10px] text-accent" title="Pinned">

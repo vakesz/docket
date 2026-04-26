@@ -858,8 +858,7 @@ export interface paths {
         /** List Mcp Servers */
         get: operations["list_mcp_servers_projects__project_id__mcp_get"];
         put?: never;
-        /** Create Mcp Server */
-        post: operations["create_mcp_server_projects__project_id__mcp_post"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -876,33 +875,14 @@ export interface paths {
         /** Get Mcp Server */
         get: operations["get_mcp_server_projects__project_id__mcp__name__get"];
         put?: never;
-        post?: never;
+        /** Create Mcp Server */
+        post: operations["create_mcp_server_projects__project_id__mcp__name__post"];
         /** Delete Mcp Server */
         delete: operations["delete_mcp_server_projects__project_id__mcp__name__delete"];
         options?: never;
         head?: never;
         /** Update Mcp Server */
         patch: operations["update_mcp_server_projects__project_id__mcp__name__patch"];
-        trace?: never;
-    };
-    "/projects/{project_id}/mcp/test": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Test Mcp Server Draft
-         * @description Validate a draft MCP server config without saving it.
-         */
-        post: operations["test_mcp_server_draft_projects__project_id__mcp_test_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
         trace?: never;
     };
     "/projects/{project_id}/mcp/{name}/test": {
@@ -916,9 +896,12 @@ export interface paths {
         put?: never;
         /**
          * Test Mcp Server
-         * @description Spawn the configured MCP server, complete the handshake, list its
-         *     tools, then close. Lets the UI verify a fresh entry without restarting
-         *     the running fleet.
+         * @description Spawn an MCP server, complete the handshake, list its tools, then close.
+         *
+         *     With a body, validates a draft entry without persisting it (used by the
+         *     Settings UI before save). Without a body, looks up the saved entry and
+         *     spawns a fresh subprocess for it — the live runtime fleet is not touched
+         *     either way.
          */
         post: operations["test_mcp_server_projects__project_id__mcp__name__test_post"];
         delete?: never;
@@ -1371,8 +1354,8 @@ export interface components {
          * @description Body for `POST /projects/{id}/mcp/presets/{preset_id}/apply`.
          *
          *     `name` overrides the preset's own default server name; leave unset to use
-         *     the preset default. `env` must contain all env vars the preset marks
-         *     `required`.
+         *     the preset default. `env` must contain values for every env var the
+         *     preset declares.
          */
         MCPPresetApplyRequest: {
             /** Name */
@@ -1392,7 +1375,8 @@ export interface components {
          * @description A frozen recipe for a known MCP server.
          *
          *     Surfaces turn this into a real `MCPServerDTO` by calling
-         *     `POST /mcp/presets/{id}/apply` with the env values filled in.
+         *     `POST /mcp/presets/{id}/apply` with the env values filled in. All
+         *     bundled presets are stdio; the transport isn't surfaced here.
          */
         MCPPresetDTO: {
             /** Id */
@@ -1415,11 +1399,6 @@ export interface components {
              */
             docs_url: string;
             /**
-             * Transport
-             * @default stdio
-             */
-            transport: string;
-            /**
              * Startup Timeout Seconds
              * @default 15
              */
@@ -1428,17 +1407,15 @@ export interface components {
         /**
          * MCPPresetEnvDTO
          * @description One env-var slot a preset asks the caller to supply.
+         *
+         *     Every slot is required — there is no optional knob today. Surfaces
+         *     should refuse to apply the preset until every name has a value.
          */
         MCPPresetEnvDTO: {
             /** Name */
             name: string;
             /** Description */
             description: string;
-            /**
-             * Required
-             * @default true
-             */
-            required: boolean;
             /**
              * Placeholder
              * @default
@@ -1449,34 +1426,6 @@ export interface components {
         MCPPresetListDTO: {
             /** Presets */
             presets?: components["schemas"]["MCPPresetDTO"][];
-        };
-        /** MCPServerCreateRequest */
-        MCPServerCreateRequest: {
-            /** Name */
-            name: string;
-            /** Command */
-            command: string;
-            /** Args */
-            args?: string[];
-            /** Env */
-            env?: {
-                [key: string]: string;
-            };
-            /**
-             * Transport
-             * @default stdio
-             */
-            transport: string;
-            /**
-             * Enabled
-             * @default true
-             */
-            enabled: boolean;
-            /**
-             * Startup Timeout Seconds
-             * @default 10
-             */
-            startup_timeout_seconds: number;
         };
         /**
          * MCPServerDTO
@@ -1517,21 +1466,27 @@ export interface components {
              */
             startup_timeout_seconds: number;
         };
-        /** MCPServerListDTO */
-        MCPServerListDTO: {
-            /** Project Id */
-            project_id: string;
-            /** Entries */
-            entries?: components["schemas"]["MCPServerDTO"][];
-        };
         /**
-         * MCPServerTestRequest
-         * @description Draft MCP server config to validate without persisting it.
+         * MCPServerEntry
+         * @description One MCP server, scoped to a project.
+         *
+         *     Only stdio transport is supported in this iteration. The server is launched
+         *     as a subprocess with `command` + `args` (and optional `env`); its tools are
+         *     auto-registered into the agent under `mcp__<server_name>__<tool>`.
+         *
+         *     Set `enabled=False` to keep the entry in `config.toml` without spawning
+         *     the server (useful for one-off debugging without losing the config).
          */
-        MCPServerTestRequest: {
-            /** Name */
-            name: string;
-            /** Command */
+        MCPServerEntry: {
+            /**
+             * Transport
+             * @default stdio
+             */
+            transport: string;
+            /**
+             * Command
+             * @default
+             */
             command: string;
             /** Args */
             args?: string[];
@@ -1539,11 +1494,6 @@ export interface components {
             env?: {
                 [key: string]: string;
             };
-            /**
-             * Transport
-             * @default stdio
-             */
-            transport: string;
             /**
              * Enabled
              * @default true
@@ -1554,6 +1504,13 @@ export interface components {
              * @default 10
              */
             startup_timeout_seconds: number;
+        };
+        /** MCPServerListDTO */
+        MCPServerListDTO: {
+            /** Project Id */
+            project_id: string;
+            /** Entries */
+            entries?: components["schemas"]["MCPServerDTO"][];
         };
         /**
          * MCPServerTestResultDTO
@@ -1659,20 +1616,10 @@ export interface components {
             /** Updated At */
             updated_at?: string | null;
         };
-        /**
-         * MemoryListDTO
-         * @description List response carries the project's memory `revision` so a frontend
-         *     can compare against a cached value and skip re-rendering when nothing
-         *     has changed. The same revision is keyed into the LLM prompt prefix.
-         */
+        /** MemoryListDTO */
         MemoryListDTO: {
             /** Project Id */
             project_id: string;
-            /**
-             * Revision
-             * @default 0
-             */
-            revision: number;
             /** Entries */
             entries?: components["schemas"]["MemoryDTO"][];
         };
@@ -2322,10 +2269,7 @@ export interface components {
             /** Updated At */
             updated_at?: string | null;
         };
-        /**
-         * SourceListDTO
-         * @description No revision counter: sources are not part of the prompt prefix.
-         */
+        /** SourceListDTO */
         SourceListDTO: {
             /** Project Id */
             project_id: string;
@@ -4234,23 +4178,20 @@ export interface operations {
             };
         };
     };
-    create_mcp_server_projects__project_id__mcp_post: {
+    get_mcp_server_projects__project_id__mcp__name__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 project_id: string;
+                name: string;
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MCPServerCreateRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
-            201: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4269,7 +4210,7 @@ export interface operations {
             };
         };
     };
-    get_mcp_server_projects__project_id__mcp__name__get: {
+    create_mcp_server_projects__project_id__mcp__name__post: {
         parameters: {
             query?: never;
             header?: never;
@@ -4279,10 +4220,14 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MCPServerEntry"];
+            };
+        };
         responses: {
             /** @description Successful Response */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4367,41 +4312,6 @@ export interface operations {
             };
         };
     };
-    test_mcp_server_draft_projects__project_id__mcp_test_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MCPServerTestRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MCPServerTestResultDTO"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     test_mcp_server_projects__project_id__mcp__name__test_post: {
         parameters: {
             query?: never;
@@ -4412,7 +4322,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MCPServerEntry"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

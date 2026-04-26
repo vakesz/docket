@@ -51,6 +51,13 @@ export function McpPage() {
 
   const selectedEntry = entries.find((e) => e.name === selectedName) ?? null;
 
+  // Memoize so the form's reset effect (keyed on identity) only fires when the
+  // user actually swaps entries or toggles creating, not on unrelated re-renders.
+  const draft = useMemo<McpServerDraft>(
+    () => (creating ? blankDraft() : selectedEntry ? draftFromServer(selectedEntry) : blankDraft()),
+    [creating, selectedEntry],
+  );
+
   const startNewDraft = () => {
     if (readOnly) return;
     setCreating(true);
@@ -91,12 +98,6 @@ export function McpPage() {
       </div>
     );
   }
-
-  const draft: McpServerDraft = creating
-    ? blankDraft()
-    : selectedEntry
-      ? draftFromServer(selectedEntry)
-      : blankDraft();
 
   return (
     <div className="flex h-full min-h-0 bg-bg">

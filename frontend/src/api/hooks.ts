@@ -179,10 +179,19 @@ export function useSetActiveProvider() {
   return useMutation({
     mutationFn: (body: DTO["ProviderSwitchRequest"]) =>
       api.put<DTO["ProviderDTO"]>("/providers/active", body),
-    // Every cached read is provider-scoped (items, pins, conversations, prompts
-    // live against the active provider's cache slice). Blow it all away rather
-    // than enumerate — missing one leaves stale rows in the UI.
-    onSuccess: () => qc.invalidateQueries({ queryKey: qk.all }),
+    onSuccess: () => {
+      // Per-id detail caches (item / comments / linked / conversation /
+      // pendingQuestion / isPinned) key on bare item id, not (provider, id).
+      // The same numeric id can resolve to a different real item in a
+      // different provider, and the backend's get_item_or_fetch fallback
+      // will silently fetch it. Drop those entries entirely so no stale
+      // cross-provider data lingers in the inactive cache.
+      qc.removeQueries({ queryKey: [...qk.all, "item"] });
+      // List/aggregate queries (items, pinned, status, prompts, etc.) are
+      // safe to mark stale and let refetch repopulate them with the new
+      // provider's data — gives a kinder UX than a flash of empty state.
+      qc.invalidateQueries({ queryKey: qk.all });
+    },
   });
 }
 
@@ -376,6 +385,11 @@ export function useConfirmProposal() {
     onSuccess: (_data, { itemId }) => {
       qc.invalidateQueries({ queryKey: qk.item(itemId) });
       qc.invalidateQueries({ queryKey: qk.comments(itemId) });
+      // Provider-side automation can update linked items when a transition
+      // confirms (e.g. fixed-by / closes-via links), so refetch alongside the
+      // primary item to avoid a stale linked panel until the next manual
+      // refresh.
+      qc.invalidateQueries({ queryKey: qk.linked(itemId) });
       qc.invalidateQueries({ queryKey: [...qk.all, "items"] });
       qc.invalidateQueries({ queryKey: qk.status() });
     },
@@ -565,8 +579,11 @@ export function useMcpServers(projectId: string | undefined) {
 export function useCreateMcpServer(projectId: string | undefined) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: DTO["MCPServerCreateRequest"]) =>
-      api.post<DTO["MCPServerDTO"]>(`/projects/${encodeURIComponent(projectId ?? "")}/mcp`, body),
+    mutationFn: ({ name, body }: { name: string; body: DTO["MCPServerEntry"] }) =>
+      api.post<DTO["MCPServerDTO"]>(
+        `/projects/${encodeURIComponent(projectId ?? "")}/mcp/${encodeURIComponent(name)}`,
+        body,
+      ),
     onSuccess: () => {
       if (!projectId) return;
       qc.invalidateQueries({ queryKey: qk.mcpServers(projectId) });
@@ -607,26 +624,16 @@ export function useDeleteMcpServer(projectId: string | undefined) {
   });
 }
 
-/** Test a saved server by name. Spawns the subprocess, runs the handshake,
- * lists tools, then cleans up. Blocking: may take up to the server's
- * startup timeout. */
+/** Spawn a subprocess for an MCP server, run the handshake, list tools,
+ * then clean up. With `body`, validates a draft entry without persisting
+ * (used by the Settings UI before save). Without `body`, looks up the
+ * saved entry by `name`. Blocking — may take up to the startup timeout. */
 export function useTestMcpServer(projectId: string | undefined) {
   return useMutation({
-    mutationFn: (name: string) =>
+    mutationFn: ({ name, body }: { name: string; body?: DTO["MCPServerEntry"] | null }) =>
       api.post<DTO["MCPServerTestResultDTO"]>(
         `/projects/${encodeURIComponent(projectId ?? "")}/mcp/${encodeURIComponent(name)}/test`,
-      ),
-  });
-}
-
-/** Test a draft server config without saving it. Same blocking caveats as
- * `useTestMcpServer`; useful when iterating on a new entry. */
-export function useTestMcpServerDraft(projectId: string | undefined) {
-  return useMutation({
-    mutationFn: (body: DTO["MCPServerTestRequest"]) =>
-      api.post<DTO["MCPServerTestResultDTO"]>(
-        `/projects/${encodeURIComponent(projectId ?? "")}/mcp/test`,
-        body,
+        body ?? undefined,
       ),
   });
 }

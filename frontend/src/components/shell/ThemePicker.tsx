@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { metaLabelFaintClass } from "~/lib/formClasses";
 import {
   ADAPTIVE_VARIANTS,
   applyTheme,
@@ -63,7 +64,7 @@ export function ThemePicker() {
 
   return (
     <label className="flex items-center gap-1 text-xs">
-      <span className="font-mono text-[10px] uppercase tracking-wider text-fg-faint">Theme</span>
+      <span className={metaLabelFaintClass}>Theme</span>
       <select
         value={theme}
         onChange={(e) => setTheme(e.target.value as ThemeId)}

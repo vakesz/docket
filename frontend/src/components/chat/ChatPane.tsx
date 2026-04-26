@@ -12,7 +12,7 @@ import { Markdown } from "~/components/detail/Markdown";
 import { ProposalCard } from "~/components/mutations/ProposalCard";
 import { useLocalProposals } from "~/components/mutations/useLocalProposals";
 import { cn } from "~/lib/cn";
-import { microCapsButtonClass } from "~/lib/formClasses";
+import { metaLabelClass, metaLabelFaintClass, microCapsButtonClass } from "~/lib/formClasses";
 import { type IssueLinkContext, issueLinkContextFromUrl } from "~/lib/issueLinks";
 import { type ToolDisplayMode, useToolDisplayMode } from "~/lib/uiPrefs";
 import { useChatPaneController } from "./ChatPaneContext";
@@ -159,7 +159,13 @@ export function ChatPane({ itemId }: { itemId: string }) {
                 question={pendingQuestion}
                 disabled={streaming}
                 onSubmit={(answers) => {
-                  void answer(pendingQuestion.id, answers);
+                  const id = pendingQuestion.id;
+                  // Drop the card now so it doesn't sit pinned at the bottom
+                  // while the resume turn streams tool calls above it. A new
+                  // ask_user during the resume re-sets pendingQuestion via the
+                  // SSE `question` event with a fresh id.
+                  setPendingQuestion(null);
+                  void answer(id, answers);
                 }}
               />
             )}
@@ -207,7 +213,7 @@ export function ChatPane({ itemId }: { itemId: string }) {
           placeholder={disabled ? "Chat disabled" : "Ask the agent… (⏎ to send, ⇧⏎ for newline)"}
           className="w-full resize-none rounded border border-border bg-bg p-2 text-sm text-fg focus:border-accent focus:outline-none disabled:bg-surface-alt"
         />
-        <div className="mt-1 flex items-center justify-between font-mono text-[10px] uppercase tracking-wider text-fg-faint">
+        <div className={cn("mt-1 flex items-center justify-between", metaLabelFaintClass)}>
           <span>{streaming ? "Streaming…" : "Ready"}</span>
         </div>
       </form>
@@ -242,7 +248,7 @@ function PersistedMessage({
         role === "user" ? "bg-surface-alt text-fg" : "bg-surface text-fg",
       )}
     >
-      <div className="mb-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+      <div className={cn("mb-1", metaLabelClass)}>
         {role}
         {message.name ? ` · ${message.name}` : ""}
       </div>
@@ -278,7 +284,7 @@ function LiveMessage({
         message.kind === "user" ? "bg-surface-alt text-fg" : "bg-surface text-fg",
       )}
     >
-      <div className="mb-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+      <div className={cn("mb-1", metaLabelClass)}>
         {message.kind}
         {message.kind === "assistant" && message.streaming ? " · streaming" : ""}
       </div>
@@ -321,9 +327,7 @@ function ToolMessage({
         <ChevronRight
           className={cn("h-3 w-3 shrink-0 transition-transform", open && "rotate-90")}
         />
-        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-          {label}
-        </span>
+        <span className={metaLabelClass}>{label}</span>
         {!open && preview && (
           <span className="truncate font-mono text-[11px] text-fg-faint">{preview}</span>
         )}

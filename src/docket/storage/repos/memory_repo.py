@@ -59,7 +59,7 @@ def create(
     tags: list[str] | None = None,
     source: str = "user",
 ) -> MemoryEntry:
-    """Insert a new memory row and bump the project's revision.
+    """Insert a new memory row.
 
     Raises `KeyError` if the project is unknown."""
     project_repo.require_project(conn, project_id)

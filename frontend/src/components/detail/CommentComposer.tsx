@@ -2,7 +2,8 @@ import { useState } from "react";
 import type { DTO } from "~/api/client";
 import { useProposeComment } from "~/api/hooks";
 import { MarkdownEditor } from "~/components/common/MarkdownEditor";
-import { xsAccentButtonClass, xsBorderButtonClass } from "~/lib/formClasses";
+import { cn } from "~/lib/cn";
+import { metaLabelClass, xsAccentButtonClass, xsBorderButtonClass } from "~/lib/formClasses";
 
 interface Props {
   itemId: string;
@@ -21,7 +22,10 @@ export function CommentComposer({ itemId, onStaged }: Props) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="self-start rounded border border-border px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:bg-surface-alt"
+        className={cn(
+          "self-start rounded border border-border px-3 py-1 hover:bg-surface-alt",
+          metaLabelClass,
+        )}
       >
         Add comment
       </button>
@@ -38,7 +42,7 @@ export function CommentComposer({ itemId, onStaged }: Props) {
           placeholder="Write a comment in markdown…"
         />
       </div>
-      {propose.error && <p className="text-xs text-danger">{(propose.error as Error).message}</p>}
+      {propose.error && <p className="text-xs text-danger">{propose.error.message}</p>}
       <div className="flex justify-end gap-2">
         <button
           type="button"

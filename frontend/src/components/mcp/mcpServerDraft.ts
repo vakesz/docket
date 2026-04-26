@@ -42,9 +42,27 @@ function parseArgs(raw: string): string[] {
   return raw.split(/\s+/u).filter((p) => p.length > 0);
 }
 
-export function serializeDraft(
-  draft: McpServerDraft,
-): Omit<DTO["MCPServerCreateRequest"], "name"> & { name?: string } {
+export function draftsEqual(a: McpServerDraft, b: McpServerDraft): boolean {
+  if (
+    a.name !== b.name ||
+    a.command !== b.command ||
+    a.args !== b.args ||
+    a.transport !== b.transport ||
+    a.enabled !== b.enabled ||
+    a.startup_timeout_seconds !== b.startup_timeout_seconds ||
+    a.env.length !== b.env.length
+  ) {
+    return false;
+  }
+  for (let i = 0; i < a.env.length; i++) {
+    const ra = a.env[i];
+    const rb = b.env[i];
+    if (!ra || !rb || ra.key !== rb.key || ra.value !== rb.value) return false;
+  }
+  return true;
+}
+
+export function serializeDraft(draft: McpServerDraft): DTO["MCPServerEntry"] {
   const env: Record<string, string> = {};
   for (const { key, value } of draft.env) {
     const k = key.trim();
@@ -52,7 +70,6 @@ export function serializeDraft(
     env[k] = value;
   }
   return {
-    name: draft.name.trim(),
     command: draft.command.trim(),
     args: parseArgs(draft.args),
     env,

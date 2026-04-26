@@ -6,13 +6,12 @@ import {
   useCreateMcpServer,
   useDeleteMcpServer,
   useTestMcpServer,
-  useTestMcpServerDraft,
   useUpdateMcpServer,
 } from "~/api/hooks";
 import { NumberInput, Select, StatusPill, TextInput } from "~/components/common/FormInputs";
 import { Notice } from "~/components/common/Notice";
 import { Toggle } from "~/components/common/Toggle";
-import { type McpServerDraft, serializeDraft } from "~/components/mcp/mcpServerDraft";
+import { draftsEqual, type McpServerDraft, serializeDraft } from "~/components/mcp/mcpServerDraft";
 import { cn } from "~/lib/cn";
 import { outlineButtonClass, primaryButtonClass } from "~/lib/formClasses";
 
@@ -39,24 +38,21 @@ export function McpServerForm({
   const create = useCreateMcpServer(projectId);
   const update = useUpdateMcpServer(projectId);
   const del = useDeleteMcpServer(projectId);
-  const testSaved = useTestMcpServer(projectId);
-  const testDraft = useTestMcpServerDraft(projectId);
+  const testServer = useTestMcpServer(projectId);
 
   const [draft, setDraft] = useState<McpServerDraft>(initialDraft);
   const [testResult, setTestResult] = useState<DTO["MCPServerTestResultDTO"] | null>(null);
 
-  const baseDraftKey = useMemo(() => JSON.stringify(initialDraft), [initialDraft]);
   // Reset the form when the caller swaps to a different entry (or mode).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: swapping driven by baseDraftKey change, not live mutations.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: swapping driven by initialDraft identity, not live mutations.
   useEffect(() => {
     setDraft(initialDraft);
     setTestResult(null);
     create.reset();
     update.reset();
     del.reset();
-    testSaved.reset();
-    testDraft.reset();
-  }, [baseDraftKey]);
+    testServer.reset();
+  }, [initialDraft]);
 
   const nameError = useMemo(() => {
     if (mode !== "create") return null;
@@ -76,36 +72,24 @@ export function McpServerForm({
 
   const formError = nameError || commandError || timeoutError;
 
-  const dirty = useMemo(() => JSON.stringify(draft) !== baseDraftKey, [draft, baseDraftKey]);
+  const dirty = useMemo(() => !draftsEqual(draft, initialDraft), [draft, initialDraft]);
 
   const save = useCallback(async () => {
     if (readOnly || formError) return;
-    const payload = serializeDraft(draft);
+    const body = serializeDraft(draft);
     if (mode === "create") {
-      const body: DTO["MCPServerCreateRequest"] = {
-        name: payload.name ?? "",
-        command: payload.command ?? "",
-        args: payload.args,
-        env: payload.env,
-        transport: payload.transport ?? "stdio",
-        enabled: payload.enabled ?? true,
-        startup_timeout_seconds: payload.startup_timeout_seconds ?? 10,
-      };
-      const created = await create.mutateAsync(body);
+      const created = await create.mutateAsync({ name: draft.name.trim(), body });
       onCreated?.(created.name);
     } else {
-      // PATCH body — we send everything that could have changed. The backend
-      // treats omitted keys as "leave alone" and explicit empty containers as
-      // "clear" (per MCPServerUpdateRequest docs).
-      const body: DTO["MCPServerUpdateRequest"] = {
-        command: payload.command ?? "",
-        args: payload.args,
-        env: payload.env,
-        transport: payload.transport ?? "stdio",
-        enabled: payload.enabled ?? true,
-        startup_timeout_seconds: payload.startup_timeout_seconds ?? 10,
+      const patch: DTO["MCPServerUpdateRequest"] = {
+        command: body.command,
+        args: body.args,
+        env: body.env,
+        transport: body.transport,
+        enabled: body.enabled,
+        startup_timeout_seconds: body.startup_timeout_seconds,
       };
-      await update.mutateAsync({ name: initialDraft.name, body });
+      await update.mutateAsync({ name: initialDraft.name, body: patch });
     }
   }, [create, draft, formError, initialDraft.name, mode, onCreated, readOnly, update]);
 
@@ -122,34 +106,24 @@ export function McpServerForm({
   const onTest = useCallback(async () => {
     if (readOnly || commandError) return;
     setTestResult(null);
-    const payload = serializeDraft(draft);
-    if (mode === "edit" && !dirty) {
-      // Server is saved AND untouched — hit the saved test path so the runtime
-      // fleet's live client config (if any) is exercised rather than a fresh
-      // subprocess created just for the test.
-      const result = await testSaved.mutateAsync(initialDraft.name);
-      setTestResult(result);
-      return;
-    }
-    const body: DTO["MCPServerTestRequest"] = {
-      name: payload.name || initialDraft.name || "draft",
-      command: payload.command ?? "",
-      args: payload.args,
-      env: payload.env,
-      transport: payload.transport ?? "stdio",
-      enabled: payload.enabled ?? true,
-      startup_timeout_seconds: payload.startup_timeout_seconds ?? 10,
-    };
-    const result = await testDraft.mutateAsync(body);
+    // For a saved-and-untouched server, omit the body so the backend exercises
+    // the runtime fleet's live client config rather than spawning a throwaway
+    // subprocess. For drafts and dirty edits, send the in-flight config.
+    const sendBody = mode === "create" || dirty;
+    const name = mode === "edit" ? initialDraft.name : draft.name.trim() || "draft";
+    const result = await testServer.mutateAsync({
+      name,
+      body: sendBody ? serializeDraft(draft) : undefined,
+    });
     setTestResult(result);
-  }, [commandError, dirty, draft, initialDraft.name, mode, readOnly, testDraft, testSaved]);
+  }, [commandError, dirty, draft, initialDraft.name, mode, readOnly, testServer]);
 
   const saving = create.isPending || update.isPending;
-  const testing = testSaved.isPending || testDraft.isPending;
+  const testing = testServer.isPending;
   const deleting = del.isPending;
   const saveError = create.error ?? update.error;
   const deleteError = del.error;
-  const testError = testSaved.error ?? testDraft.error;
+  const testError = testServer.error;
 
   // Ctrl/Cmd + S saves.
   useEffect(() => {

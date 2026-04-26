@@ -975,6 +975,12 @@ class DocketApp(App[None]):
         self.tui_ctx.scope_key = scope_name
         self.tui_ctx.scope = sf.to_core()
         self._selected_item_id = None
+        # Drop staged proposals: each embeds an `Item` whose provider_key still
+        # points at the previous provider. If the user confirmed one after the
+        # switch, `mutation_service.confirm` would route it through the *new*
+        # active provider and apply, e.g., an Azure-staged transition against
+        # the GitHub item that happens to share the same id.
+        self._proposals.clear()
         # The agent holds tool closures bound to the old provider + provider_key.
         # Rebuild so `search_items` and `get_item` target the new backend. MCP
         # fleet is per-project (= per-provider), so rebind first.

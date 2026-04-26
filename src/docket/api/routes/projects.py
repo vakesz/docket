@@ -25,6 +25,7 @@ from docket.config.models import Config
 from docket.config.paths import Paths
 from docket.core.model import project_id_for
 from docket.core.services import project_service
+from docket.core.services.proposal_store import ProposalStore
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -133,6 +134,13 @@ def activate_project(
             f"Provider '{entry.provider_key}' is not currently loaded.",
         )
     runtime.switch_provider(entry.provider_key)
+    # Drop staged proposals: their embedded `Item.provider_key` belongs to the
+    # previous provider, and confirming after the switch would route the
+    # change through the new backend's API. Same reasoning as in the
+    # `/providers/active` route.
+    proposals = getattr(request.app.state, "proposals", None)
+    if isinstance(proposals, ProposalStore):
+        proposals.clear()
     # Active project changed → memory/sources tools captured the previous one.
     rebuild_agent(request.app, runtime)
     return ProjectDTO.from_core(project_id, entry, active_id=project_id_for(entry.provider_key))

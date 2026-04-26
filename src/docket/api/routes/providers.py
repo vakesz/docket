@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from docket.api.deps import get_runtime, require_not_read_only
 from docket.api.runtime import RuntimeState, rebuild_agent
 from docket.api.schemas import ProviderDTO, ProviderSwitchRequest
+from docket.core.services.proposal_store import ProposalStore
 from docket.providers.registry import spec as provider_spec
 
 router = APIRouter(prefix="/providers", tags=["providers"])
@@ -59,6 +60,16 @@ def set_active_provider(
             status.HTTP_404_NOT_FOUND,
             f"Unknown provider '{payload.key}' (known: {sorted(runtime.providers)})",
         ) from e
+    # Pending proposals embed an `Item` that carries the *previous* provider's
+    # provider_key. Confirming after a switch would route the staged change
+    # through `mutation_service.confirm` with the new active provider — i.e.
+    # apply an Azure-staged transition/comment/description-patch against the
+    # GitHub item that happens to share the same id. Drop them so a stale
+    # proposal can't be confirmed against the wrong backend. Mirrors the
+    # `question_store.clear()` already done inside `rebuild_agent`.
+    proposals = getattr(request.app.state, "proposals", None)
+    if isinstance(proposals, ProposalStore):
+        proposals.clear()
     # The agent's tool closures captured the previous provider + provider_key
     # at create_app time. Rebuild so tool calls hit the new backend; otherwise
     # chat in the same session keeps reasoning over the old provider's items.

@@ -128,6 +128,7 @@ export function useChatStream({
           // The server transcript is the source of truth once a turn finishes.
           await Promise.allSettled([
             qc.invalidateQueries({ queryKey: qk.conversation(itemId) }),
+            qc.invalidateQueries({ queryKey: qk.pendingQuestion(itemId) }),
             qc.invalidateQueries({ queryKey: qk.status() }),
           ]);
           setMessages((prev) => prev.filter((message) => message.turnId !== turnId));

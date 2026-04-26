@@ -1,15 +1,15 @@
 import { FileText, RotateCcw, Save, Search, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import type { DTO } from "~/api/client";
 import { usePrompt, usePrompts, usePutPrompt, useResetPrompt } from "~/api/hooks";
-import type { components } from "~/api/schema";
 import { StatusPill } from "~/components/common/FormInputs";
 import { MarkdownEditor } from "~/components/common/MarkdownEditor";
 import { Notice } from "~/components/common/Notice";
 import { cn } from "~/lib/cn";
 import { outlineButtonClass, primaryButtonClass } from "~/lib/formClasses";
 
-type PromptSummary = components["schemas"]["PromptSummaryDTO"];
+type PromptSummary = DTO["PromptSummaryDTO"];
 
 type PromptFilter = "all" | "customized" | "default";
 
@@ -43,7 +43,7 @@ export function PromptsPanel() {
 
   useEffect(() => {
     if (!list.length) return;
-    if (!selected || !list.some((p) => p.key === selected)) {
+    if (!selected || !filtered.some((p) => p.key === selected)) {
       setSelected(filtered[0]?.key ?? list[0]?.key);
     }
   }, [list, filtered, selected]);
@@ -94,7 +94,7 @@ export function PromptsPanel() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search prompts…"
-              className="w-full rounded-xl border border-border bg-surface py-1.5 pl-8 pr-2 text-sm text-fg placeholder:text-fg-faint focus:border-accent focus:outline-none-muted"
+              className="w-full rounded-xl border border-border bg-surface py-1.5 pl-8 pr-2 text-sm text-fg placeholder:text-fg-faint focus:border-accent focus:outline-none"
             />
           </label>
           <div className="mt-2 grid grid-cols-3 gap-1 rounded-xl bg-surface-alt p-1">

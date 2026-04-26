@@ -1,3 +1,4 @@
+import { metaLabelFaintClass } from "~/lib/formClasses";
 import { type ToolDisplayMode, useToolDisplayMode } from "~/lib/uiPrefs";
 
 const OPTIONS: { value: ToolDisplayMode; label: string }[] = [
@@ -14,9 +15,7 @@ export function ToolDisplayPicker() {
   const [mode, setMode] = useToolDisplayMode();
   return (
     <label className="flex items-center gap-1 text-xs">
-      <span className="font-mono text-[10px] uppercase tracking-wider text-fg-faint">
-        Tool messages
-      </span>
+      <span className={metaLabelFaintClass}>Tool messages</span>
       <select
         value={mode}
         onChange={(e) => setMode(e.target.value as ToolDisplayMode)}

@@ -50,20 +50,14 @@ def get_item_or_fetch(
 
     Parents often live outside the sync scope (different Azure DevOps project,
     untracked work-item type, or a scope filter that excludes them), so the
-    cache alone isn't enough to back parent-link navigation. On a cache miss
-    we fall back to `provider.get_item`, upsert the result, and return it.
-    Raises 404 if the provider can't produce the item either."""
-    cached = item_repo.get_item(conn, item_id, provider_key=provider_key)
-    if cached is not None:
-        return cached
+    cache alone isn't enough to back parent-link navigation. Translates the
+    miss-with-failed-fallback `KeyError` from `mutation_service` into a 404."""
     try:
-        fresh = provider.get_item(item_id)
-    except Exception as e:
+        return mutation_service.require_cached_item(
+            conn, item_id, provider_key=provider_key, provider=provider
+        )
+    except KeyError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown item '{item_id}'") from e
-    if provider_key:
-        fresh.provider_key = provider_key
-    item_repo.upsert_item(conn, fresh)
-    return fresh
 
 
 router = APIRouter(prefix="/items", tags=["items"])

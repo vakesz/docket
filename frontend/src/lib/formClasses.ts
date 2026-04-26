@@ -21,5 +21,12 @@ export const xsAccentButtonClass =
 export const microCapsButtonClass =
   "rounded border border-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:bg-surface-alt";
 
+// Tiny uppercase mono labels used for field captions, badges, and switcher
+// chrome. `metaLabelClass` is the standard muted variant; `metaLabelFaintClass`
+// is for chrome where the label fades behind its value.
+export const metaLabelClass = "font-mono text-[10px] uppercase tracking-wider text-fg-muted";
+
+export const metaLabelFaintClass = "font-mono text-[10px] uppercase tracking-wider text-fg-faint";
+
 export const setupCardClass =
   "flex flex-col gap-4 rounded border border-border bg-surface p-6 text-sm text-fg";

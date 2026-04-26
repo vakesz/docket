@@ -9,7 +9,7 @@ import { ProposalCard } from "~/components/mutations/ProposalCard";
 import { useLocalProposals } from "~/components/mutations/useLocalProposals";
 import { cn } from "~/lib/cn";
 import { displayTag, formatKind, formatRelative } from "~/lib/format";
-import { microCapsButtonClass } from "~/lib/formClasses";
+import { metaLabelClass, microCapsButtonClass } from "~/lib/formClasses";
 import { issueLinkContextFromUrl } from "~/lib/issueLinks";
 import { CommentComposer } from "./CommentComposer";
 import { DescriptionEditor } from "./DescriptionEditor";
@@ -21,8 +21,6 @@ import { TransitionBar } from "./TransitionBar";
 interface Props {
   itemId: string;
 }
-
-const metaLabelClassName = "font-mono text-[10px] uppercase tracking-wider text-fg-muted";
 
 export function ItemDetail({ itemId }: Props) {
   const item = useItem(itemId);
@@ -54,9 +52,7 @@ export function ItemDetail({ itemId }: Props) {
     <div className="flex h-full flex-col overflow-auto bg-bg">
       <header className="flex flex-col gap-2 border-b border-border p-4">
         <div className="flex items-center gap-2 text-xs">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-            {formatKind(it.kind)}
-          </span>
+          <span className={metaLabelClass}>{formatKind(it.kind)}</span>
           <StatePill state={it.state} />
           <span className="font-mono text-[10px] text-fg-faint">#{it.id}</span>
           <span className="inline-flex items-center gap-1">
@@ -100,17 +96,17 @@ export function ItemDetail({ itemId }: Props) {
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs text-fg-muted">
           {it.author && (
             <>
-              <dt className={metaLabelClassName}>Opened by</dt>
+              <dt className={metaLabelClass}>Opened by</dt>
               <dd className="text-fg">{it.author}</dd>
             </>
           )}
-          <dt className={metaLabelClassName}>Assignee</dt>
+          <dt className={metaLabelClass}>Assignee</dt>
           <dd className={cn(!it.assignee && "italic text-fg-faint")}>
             {it.assignee ?? "Unassigned"}
           </dd>
           {it.parent_id && (
             <>
-              <dt className={metaLabelClassName}>Parent</dt>
+              <dt className={metaLabelClass}>Parent</dt>
               <dd>
                 <ParentLink id={it.parent_id} />
               </dd>
@@ -118,7 +114,7 @@ export function ItemDetail({ itemId }: Props) {
           )}
           {(it.tags?.length ?? 0) > 0 && (
             <>
-              <dt className={metaLabelClassName}>Labels</dt>
+              <dt className={metaLabelClass}>Labels</dt>
               <dd className="flex flex-wrap gap-1">
                 {it.tags?.map((tag) => (
                   <span
@@ -134,13 +130,13 @@ export function ItemDetail({ itemId }: Props) {
           )}
           {(it.attachments?.length ?? 0) > 0 && (
             <>
-              <dt className={metaLabelClassName}>Attachments</dt>
+              <dt className={metaLabelClass}>Attachments</dt>
               <dd>{it.attachments?.length}</dd>
             </>
           )}
           {it.url && (
             <>
-              <dt className={metaLabelClassName}>Link</dt>
+              <dt className={metaLabelClass}>Link</dt>
               <dd>
                 <a
                   href={it.url}
@@ -156,9 +152,7 @@ export function ItemDetail({ itemId }: Props) {
         </dl>
         <div className="flex flex-col gap-1.5 pt-1">
           <div className="flex items-center gap-2">
-            <h2 className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-              Actions
-            </h2>
+            <h2 className={metaLabelClass}>Actions</h2>
             <span className="text-[11px] text-fg-muted">
               tap to stage a proposal — nothing is written until you confirm
             </span>
@@ -270,9 +264,7 @@ function LinkedSection({ itemId }: { itemId: string }) {
               params={{ itemId: lk.id }}
               className="flex w-full items-center gap-2 py-1.5 text-left text-sm hover:text-accent"
             >
-              <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-                {formatKind(lk.kind)}
-              </span>
+              <span className={metaLabelClass}>{formatKind(lk.kind)}</span>
               <StatePill state={lk.state} />
               <span className="truncate">{lk.title}</span>
               <span className="ml-auto font-mono text-[10px] text-fg-faint">#{lk.id}</span>

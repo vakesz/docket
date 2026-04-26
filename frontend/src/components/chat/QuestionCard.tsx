@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { DTO } from "~/api/client";
 import { cn } from "~/lib/cn";
+import { metaLabelClass } from "~/lib/formClasses";
 
 interface Props {
   question: DTO["QuestionDTO"];
@@ -84,7 +85,7 @@ export function QuestionCard({ question, onSubmit, disabled = false }: Props) {
           return (
             // biome-ignore lint/suspicious/noArrayIndexKey: questions array is fixed for the lifetime of one Question; idx pairs each item with its draft slot.
             <fieldset key={`${question.id}-${idx}`} className="flex flex-col gap-2">
-              <legend className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              <legend className={cn("flex items-center gap-2", metaLabelClass)}>
                 <span className="rounded border border-border px-1 py-0.5 text-fg">
                   {item.header}
                 </span>

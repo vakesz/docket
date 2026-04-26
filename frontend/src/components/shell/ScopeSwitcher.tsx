@@ -1,4 +1,5 @@
 import { useScopes, useSetActiveScope } from "~/api/hooks";
+import { metaLabelFaintClass } from "~/lib/formClasses";
 
 /**
  * Inline scope picker. Returns `null` unless the active provider exposes more
@@ -14,7 +15,7 @@ export function ScopeSwitcher() {
 
   return (
     <div className="flex items-center gap-2 border-b border-border bg-surface px-3 py-1.5">
-      <span className="font-mono text-[10px] uppercase tracking-wider text-fg-faint">Scope</span>
+      <span className={metaLabelFaintClass}>Scope</span>
       <select
         value={active.name}
         disabled={setActive.isPending}

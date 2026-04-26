@@ -10,7 +10,7 @@ import {
 import { HelpText, TextInput } from "~/components/common/FormInputs";
 import { Label } from "~/components/common/Label";
 import { cn } from "~/lib/cn";
-import { setupCardClass, xsBorderButtonClass } from "~/lib/formClasses";
+import { metaLabelClass, setupCardClass, xsBorderButtonClass } from "~/lib/formClasses";
 
 type Step = "welcome" | "provider" | "llm" | "review";
 
@@ -192,7 +192,7 @@ function ProviderStep({
               >
                 <div className="font-medium">{t.display}</div>
                 {(t.requires_cli?.length ?? 0) > 0 && (
-                  <div className="mt-1 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                  <div className={cn("mt-1", metaLabelClass)}>
                     needs: {t.requires_cli?.join(" ")}
                   </div>
                 )}

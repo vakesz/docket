@@ -10,6 +10,7 @@ import {
 import type { ReactNode } from "react";
 
 import { AppShell } from "~/components/common/AppShell";
+import { ADAPTIVE_VARIANTS, STORAGE_KEY, THEMES } from "~/lib/theme";
 import globalsCss from "~/styles/globals.css?url";
 
 interface RouterContext {
@@ -17,27 +18,21 @@ interface RouterContext {
 }
 
 // Applied before React hydrates so <html data-theme> and the `dark` class
-// match the user's saved theme on first paint. Mirrors lib/theme.ts logic
-// (kept inline + duplicated because this script runs before any module
-// loads). Keep the DARK / ADAPTIVE / VALID lists in sync with `THEMES`
-// and `ADAPTIVE_VARIANTS` in lib/theme.ts.
+// match the user's saved theme on first paint. Built from the canonical
+// THEMES / ADAPTIVE_VARIANTS catalog in lib/theme.ts so adding a theme
+// there automatically updates the bootstrap.
+const DARK_IDS = THEMES.filter((t) => t.dark).map((t) => t.id);
+const ADAPTIVE_PAIRS = Object.fromEntries(
+  Object.entries(ADAPTIVE_VARIANTS).map(([id, v]) => [id, [v.light, v.dark]]),
+);
+const VALID_IDS = THEMES.map((t) => t.id);
+
 const THEME_BOOTSTRAP = `(() => {
   try {
-    var DARK = ["dark","nord","dracula","gruvbox-dark","tokyo-night","monokai","catppuccin-mocha","catppuccin-frappe","catppuccin-macchiato","solarized-dark","rose-pine","rose-pine-moon","atom-one-dark","flexoki-dark","github-dark","ayu-dark","everforest-dark"];
-    var ADAPTIVE = {
-      "system": ["light","dark"],
-      "catppuccin": ["catppuccin-latte","catppuccin-mocha"],
-      "gruvbox": ["gruvbox-light","gruvbox-dark"],
-      "solarized": ["solarized-light","solarized-dark"],
-      "rose-pine-auto": ["rose-pine-dawn","rose-pine"],
-      "atom-one": ["atom-one-light","atom-one-dark"],
-      "flexoki": ["flexoki-light","flexoki-dark"],
-      "github": ["github-light","github-dark"],
-      "ayu": ["ayu-light","ayu-dark"],
-      "everforest": ["everforest-light","everforest-dark"]
-    };
-    var VALID = ["system","catppuccin","gruvbox","solarized","rose-pine-auto","atom-one","flexoki","github","ayu","everforest","light","gruvbox-light","catppuccin-latte","solarized-light","rose-pine-dawn","atom-one-light","flexoki-light","github-light","ayu-light","everforest-light","dark","nord","dracula","gruvbox-dark","tokyo-night","monokai","catppuccin-mocha","catppuccin-frappe","catppuccin-macchiato","solarized-dark","rose-pine","rose-pine-moon","atom-one-dark","flexoki-dark","github-dark","ayu-dark","everforest-dark"];
-    var s = localStorage.getItem("docket.theme");
+    var DARK = ${JSON.stringify(DARK_IDS)};
+    var ADAPTIVE = ${JSON.stringify(ADAPTIVE_PAIRS)};
+    var VALID = ${JSON.stringify(VALID_IDS)};
+    var s = localStorage.getItem(${JSON.stringify(STORAGE_KEY)});
     var id = (s && VALID.indexOf(s) !== -1) ? s : "system";
     var resolved;
     if (ADAPTIVE[id]) {
@@ -60,7 +55,10 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "Docket" },
     ],
-    links: [{ rel: "stylesheet", href: globalsCss }],
+    links: [
+      { rel: "stylesheet", href: globalsCss },
+      { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+    ],
     scripts: [{ children: THEME_BOOTSTRAP }],
   }),
   component: RootComponent,
