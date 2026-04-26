@@ -269,65 +269,35 @@ function PromptEditor({ promptKey }: { promptKey: string }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex flex-wrap items-start gap-3 border-b border-border bg-surface/70 px-6 py-4 backdrop-blur">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="truncate text-lg font-semibold text-fg">{label}</h2>
-            <StatusPill
-              tone={dirty ? "warn" : savedFlash ? "ok" : "muted"}
-              label={dirty ? "Unsaved changes" : savedFlash ? "Saved" : "Up to date"}
-            />
-            {customized && !dirty && (
-              <span className="rounded-full bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent">
-                Customized
-              </span>
-            )}
-          </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] text-fg-muted">
-            <span className="truncate">{filename}</span>
-            <span aria-hidden>·</span>
-            <span>
-              {lineCount} line{lineCount === 1 ? "" : "s"}
-            </span>
-            <span aria-hidden>·</span>
-            <span>{charCount.toLocaleString()} chars</span>
-            {dirty && delta !== 0 && (
-              <>
-                <span aria-hidden>·</span>
-                <span className={delta > 0 ? "text-success-fg" : "text-danger-fg"}>
-                  {delta > 0 ? `+${delta}` : delta} lines
-                </span>
-              </>
-            )}
-          </div>
-        </div>
-
+      <header className="border-b border-border bg-surface/70 px-6 py-4 backdrop-blur">
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={onReset}
-            disabled={!customized || reset.isPending || dirty}
-            title={
-              dirty
-                ? "Revert your unsaved changes first"
-                : !customized
-                  ? "This prompt is already the bundled default"
-                  : "Restore the bundled default content"
-            }
-            className={outlineButtonClass}
-          >
-            <Sparkles className="h-4 w-4" />
-            {reset.isPending ? "Resetting…" : "Reset to default"}
-          </button>
-          <button type="button" onClick={revert} disabled={!dirty} className={outlineButtonClass}>
-            <RotateCcw className="h-4 w-4" />
-            Revert
-          </button>
-          <button type="button" onClick={save} disabled={!canSave} className={primaryButtonClass}>
-            <Save className="h-4 w-4" />
-            {put.isPending ? "Saving…" : "Save changes"}
-            <span className="ml-1 hidden font-mono text-[10px] opacity-70 sm:inline">⌘S</span>
-          </button>
+          <h2 className="truncate text-lg font-semibold text-fg">{label}</h2>
+          <StatusPill
+            tone={dirty ? "warn" : savedFlash ? "ok" : "muted"}
+            label={dirty ? "Unsaved changes" : savedFlash ? "Saved" : "Up to date"}
+          />
+          {customized && !dirty && (
+            <span className="rounded-full bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent">
+              Customized
+            </span>
+          )}
+        </div>
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] text-fg-muted">
+          <span className="truncate">{filename}</span>
+          <span aria-hidden>·</span>
+          <span>
+            {lineCount} line{lineCount === 1 ? "" : "s"}
+          </span>
+          <span aria-hidden>·</span>
+          <span>{charCount.toLocaleString()} chars</span>
+          {dirty && delta !== 0 && (
+            <>
+              <span aria-hidden>·</span>
+              <span className={delta > 0 ? "text-success-fg" : "text-danger-fg"}>
+                {delta > 0 ? `+${delta}` : delta} lines
+              </span>
+            </>
+          )}
         </div>
       </header>
 
@@ -351,6 +321,34 @@ function PromptEditor({ promptKey }: { promptKey: string }) {
           lineWrapping
           className="h-full text-[13px]"
         />
+      </div>
+
+      <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border bg-surface/70 px-6 py-3 backdrop-blur">
+        <button
+          type="button"
+          onClick={onReset}
+          disabled={!customized || reset.isPending || dirty}
+          title={
+            dirty
+              ? "Revert your unsaved changes first"
+              : !customized
+                ? "This prompt is already the bundled default"
+                : "Restore the bundled default content"
+          }
+          className={outlineButtonClass}
+        >
+          <Sparkles className="h-4 w-4" />
+          {reset.isPending ? "Resetting…" : "Reset to default"}
+        </button>
+        <button type="button" onClick={revert} disabled={!dirty} className={outlineButtonClass}>
+          <RotateCcw className="h-4 w-4" />
+          Revert
+        </button>
+        <button type="button" onClick={save} disabled={!canSave} className={primaryButtonClass}>
+          <Save className="h-4 w-4" />
+          {put.isPending ? "Saving…" : "Save changes"}
+          <span className="ml-1 hidden font-mono text-[10px] opacity-70 sm:inline">⌘S</span>
+        </button>
       </div>
     </div>
   );

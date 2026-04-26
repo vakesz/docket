@@ -167,11 +167,7 @@ export function SourcesPage() {
               onDeleted={onDeleted}
             />
           ) : (
-            <EmptySourcesState
-              hasEntries={entries.length > 0}
-              readOnly={readOnly}
-              onCreate={startNewDraft}
-            />
+            <EmptySourcesState hasEntries={entries.length > 0} />
           )}
         </section>
       </div>
@@ -179,45 +175,14 @@ export function SourcesPage() {
   );
 }
 
-function EmptySourcesState({
-  hasEntries,
-  readOnly,
-  onCreate,
-}: {
-  hasEntries: boolean;
-  readOnly: boolean;
-  onCreate: () => void;
-}) {
+function EmptySourcesState({ hasEntries }: { hasEntries: boolean }) {
   return (
-    <div className="flex flex-1 items-center justify-center px-6 py-10">
-      <div className="flex w-full max-w-md flex-col items-center gap-4 rounded-2xl border border-border bg-surface p-8 text-center shadow-sm">
-        <div className="rounded-2xl bg-accent/10 p-3 text-accent">
-          <FileText className="h-6 w-6" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <h3 className="text-base font-semibold text-fg">
-            {hasEntries ? "No source selected" : "No source documents yet"}
-          </h3>
-          <p className="text-sm text-fg-muted">
-            {hasEntries
-              ? "Pick a source on the left to edit, or add a new one."
-              : "Sources are reference docs the agent can read on demand — requirements, design notes, runbooks. Add the first one to get started."}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onCreate}
-          disabled={readOnly}
-          className={primaryButtonClass}
-          title={readOnly ? "Read-only mode" : "Add a new source document"}
-        >
-          <Plus className="h-4 w-4" />
-          {hasEntries ? "New source" : "Create your first source"}
-        </button>
-        {readOnly && (
-          <p className="text-xs text-fg-muted">Read-only mode is on — saves are disabled.</p>
-        )}
-      </div>
+    <div className="flex flex-1 flex-col items-center px-6 pt-12 text-center">
+      <p className="max-w-md text-sm text-fg-muted">
+        {hasEntries
+          ? "Pick a source on the left to edit, or use New source to add another."
+          : "Sources are reference docs the agent can read on demand — requirements, design notes, runbooks. Use New source on the left to add the first one."}
+      </p>
     </div>
   );
 }
@@ -331,50 +296,25 @@ function SourceEntryForm({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex flex-wrap items-start gap-3 border-b border-border bg-surface/70 px-6 py-4 backdrop-blur">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="truncate text-lg font-semibold text-fg">
-              {mode === "create" ? "New source" : initialDraft.title || "(untitled)"}
-            </h2>
-            <StatusPill
-              tone={mode === "create" ? "muted" : dirty ? "warn" : "ok"}
-              label={mode === "create" ? "Unsaved draft" : dirty ? "Unsaved changes" : "Up to date"}
-            />
-          </div>
-          <p className="mt-1 text-sm text-fg-muted">
-            {mode === "create"
-              ? "Reference doc the agent can read on demand. Long-form is fine — sources don't ship in every prompt."
-              : "Edit the document. Sources are read by the agent through tools, not the prompt prefix."}
-          </p>
-        </div>
+      <header className="border-b border-border bg-surface/70 px-6 py-4 backdrop-blur">
         <div className="flex flex-wrap items-center gap-2">
-          {mode === "edit" && (
-            <button
-              type="button"
-              onClick={() => void onDelete()}
-              disabled={readOnly || deleting}
-              className="inline-flex items-center gap-2 rounded-xl border border-danger/40 bg-danger-bg/40 px-3 py-2 text-sm font-medium text-danger-fg hover:bg-danger-bg disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <Trash2 className="h-4 w-4" />
-              {deleting ? "Deleting…" : "Delete"}
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => void save()}
-            disabled={readOnly || saving || Boolean(titleError) || (mode === "edit" && !dirty)}
-            className={primaryButtonClass}
-          >
-            <Save className="h-4 w-4" />
-            {saving ? "Saving…" : mode === "create" ? "Create" : "Save changes"}
-            <span className="ml-1 hidden font-mono text-[10px] opacity-70 sm:inline">⌘S</span>
-          </button>
+          <h2 className="truncate text-lg font-semibold text-fg">
+            {mode === "create" ? "New source" : initialDraft.title || "(untitled)"}
+          </h2>
+          <StatusPill
+            tone={mode === "create" ? "muted" : dirty ? "warn" : "ok"}
+            label={mode === "create" ? "Unsaved draft" : dirty ? "Unsaved changes" : "Up to date"}
+          />
         </div>
+        <p className="mt-1 text-sm text-fg-muted">
+          {mode === "create"
+            ? "Reference doc the agent can read on demand. Long-form is fine — sources don't ship in every prompt."
+            : "Edit the document. Sources are read by the agent through tools, not the prompt prefix."}
+        </p>
       </header>
 
       <div className="min-h-0 flex-1 overflow-auto px-6 py-6">
-        <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
           {readOnly && (
             <Notice tone="warning" title="Read-only mode">
               Saves and deletes are disabled.
@@ -443,20 +383,41 @@ function SourceEntryForm({
                 />
               </div>
             </FormField>
-
-            {mode === "edit" && (
-              <p className="text-xs text-fg-muted">
-                <button
-                  type="button"
-                  onClick={() => setDraft(initialDraft)}
-                  disabled={!dirty || readOnly}
-                  className={cn(outlineButtonClass, "py-1.5 text-xs")}
-                >
-                  Reset
-                </button>
-              </p>
-            )}
           </section>
+
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {mode === "edit" && (
+              <button
+                type="button"
+                onClick={() => setDraft(initialDraft)}
+                disabled={!dirty || readOnly}
+                className={cn(outlineButtonClass, "py-1.5 text-xs")}
+              >
+                Reset
+              </button>
+            )}
+            {mode === "edit" && (
+              <button
+                type="button"
+                onClick={() => void onDelete()}
+                disabled={readOnly || deleting}
+                className="inline-flex items-center gap-2 rounded-xl border border-danger/40 bg-danger-bg/40 px-3 py-2 text-sm font-medium text-danger-fg hover:bg-danger-bg disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Trash2 className="h-4 w-4" />
+                {deleting ? "Deleting…" : "Delete"}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => void save()}
+              disabled={readOnly || saving || Boolean(titleError) || (mode === "edit" && !dirty)}
+              className={primaryButtonClass}
+            >
+              <Save className="h-4 w-4" />
+              {saving ? "Saving…" : mode === "create" ? "Create" : "Save changes"}
+              <span className="ml-1 hidden font-mono text-[10px] opacity-70 sm:inline">⌘S</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

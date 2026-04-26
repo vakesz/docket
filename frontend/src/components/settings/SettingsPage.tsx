@@ -204,8 +204,8 @@ export function SettingsPage() {
   const formCanSwitchToForm = mode === "raw" && !rawParsed.error && !!rawParsed.value;
 
   return (
-    <div className="flex h-full min-h-0 bg-bg">
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)] xl:grid-cols-[280px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(0,1fr)]">
+    <div className="flex h-full min-h-0 w-full flex-1 bg-bg">
+      <div className="grid min-h-0 w-full flex-1 grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)] xl:grid-cols-[280px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(0,1fr)]">
         <aside className="min-h-0 overflow-auto border-b border-border bg-surface/80 px-3 py-4 lg:border-b-0 lg:border-r">
           <nav className="flex flex-col gap-4">
             {SECTION_GROUPS.map((group) => {
@@ -300,74 +300,39 @@ export function SettingsPage() {
             <SourcesPage />
           ) : (
             <>
-              <header className="flex flex-wrap items-center gap-3 border-b border-border bg-surface/70 px-6 py-4 backdrop-blur">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-lg font-semibold text-fg">
-                      {mode === "form" ? activeMeta.label : "Raw JSON"}
-                    </h2>
-                    {mode === "form" && activeMeta.requiresRestart && (
-                      <span
-                        className="rounded-full bg-surface-alt px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted"
-                        title="Saving fields here typically requires a restart"
-                      >
-                        restart-sensitive
-                      </span>
-                    )}
-                    <StatusPill
-                      tone={dirty ? "warn" : savedFlash ? "ok" : "muted"}
-                      label={dirty ? "Unsaved changes" : savedFlash ? "Saved" : "Up to date"}
-                    />
-                    {mode === "raw" && (
-                      <StatusPill
-                        tone={rawParsed.error ? "error" : "muted"}
-                        label={rawParsed.error ? "Invalid JSON" : "Valid JSON"}
-                      />
-                    )}
-                  </div>
-                  <p className="mt-1 max-w-3xl text-sm text-fg-muted">
-                    {mode === "form"
-                      ? activeMeta.description
-                      : "Edit the masked config JSON directly. Saves go through the same deep-merge endpoint."}
-                  </p>
-                </div>
-
+              <header className="border-b border-border bg-surface/70 px-6 py-4 backdrop-blur">
                 <div className="flex flex-wrap items-center gap-2">
-                  {mode === "form" && dirtySectionKeys.has(activeMeta.key) && (
-                    <button
-                      type="button"
-                      onClick={() => resetSection(activeMeta.key)}
-                      className="text-xs text-fg-muted hover:text-fg"
+                  <h2 className="text-lg font-semibold text-fg">
+                    {mode === "form" ? activeMeta.label : "Raw JSON"}
+                  </h2>
+                  {mode === "form" && activeMeta.requiresRestart && (
+                    <span
+                      className="rounded-full bg-surface-alt px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted"
+                      title="Saving fields here typically requires a restart"
                     >
-                      Reset section
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={revertAll}
-                    disabled={!dirty}
-                    className={outlineButtonClass}
-                  >
-                    <RotateCcw className="h-4 w-4" />
-                    Revert
-                  </button>
-                  <button
-                    type="button"
-                    onClick={save}
-                    disabled={!canSave}
-                    className={primaryButtonClass}
-                  >
-                    <Save className="h-4 w-4" />
-                    {patch.isPending ? "Saving…" : "Save changes"}
-                    <span className="ml-1 hidden font-mono text-[10px] opacity-70 sm:inline">
-                      ⌘S
+                      restart-sensitive
                     </span>
-                  </button>
+                  )}
+                  <StatusPill
+                    tone={dirty ? "warn" : savedFlash ? "ok" : "muted"}
+                    label={dirty ? "Unsaved changes" : savedFlash ? "Saved" : "Up to date"}
+                  />
+                  {mode === "raw" && (
+                    <StatusPill
+                      tone={rawParsed.error ? "error" : "muted"}
+                      label={rawParsed.error ? "Invalid JSON" : "Valid JSON"}
+                    />
+                  )}
                 </div>
+                <p className="mt-1 max-w-3xl text-sm text-fg-muted">
+                  {mode === "form"
+                    ? activeMeta.description
+                    : "Edit the masked config JSON directly. Saves go through the same deep-merge endpoint."}
+                </p>
               </header>
 
               <div className="min-h-0 flex-1 overflow-auto px-6 py-6">
-                <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
+                <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
                   {patch.error && (
                     <Notice tone="error" title="Save failed">
                       {patch.error.message}
@@ -392,6 +357,39 @@ export function SettingsPage() {
                   ) : (
                     <RawEditor value={rawDraft} onChange={setRawDraft} error={rawParsed.error} />
                   )}
+
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    {mode === "form" && dirtySectionKeys.has(activeMeta.key) && (
+                      <button
+                        type="button"
+                        onClick={() => resetSection(activeMeta.key)}
+                        className="text-xs text-fg-muted hover:text-fg"
+                      >
+                        Reset section
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={revertAll}
+                      disabled={!dirty}
+                      className={outlineButtonClass}
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                      Revert
+                    </button>
+                    <button
+                      type="button"
+                      onClick={save}
+                      disabled={!canSave}
+                      className={primaryButtonClass}
+                    >
+                      <Save className="h-4 w-4" />
+                      {patch.isPending ? "Saving…" : "Save changes"}
+                      <span className="ml-1 hidden font-mono text-[10px] opacity-70 sm:inline">
+                        ⌘S
+                      </span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </>

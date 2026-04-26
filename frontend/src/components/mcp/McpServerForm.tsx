@@ -152,70 +152,30 @@ export function McpServerForm({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex flex-wrap items-start gap-3 border-b border-border bg-surface/70 px-6 py-4 backdrop-blur">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="truncate text-lg font-semibold text-fg">
-              {mode === "create" ? "New MCP server" : initialDraft.name}
-            </h2>
-            <StatusPill
-              tone={mode === "create" ? "muted" : dirty ? "warn" : "ok"}
-              label={mode === "create" ? "Unsaved draft" : dirty ? "Unsaved changes" : "Up to date"}
-            />
-            {!draft.enabled && (
-              <span className="rounded-full bg-surface-alt px-2.5 py-1 text-xs font-medium text-fg-muted">
-                Disabled
-              </span>
-            )}
-          </div>
-          <p className="mt-1 text-sm text-fg-muted">
-            {mode === "create"
-              ? "MCP server (stdio subprocess or remote http/sse endpoint) that exposes tools to the agent. Names are immutable once saved."
-              : "Edit the server config. Changes rebind the live client on save."}
-          </p>
-        </div>
-
+      <header className="border-b border-border bg-surface/70 px-6 py-4 backdrop-blur">
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => void onTest()}
-            disabled={readOnly || testing || Boolean(testBlockedReason)}
-            className={outlineButtonClass}
-            title={
-              isStdio
-                ? "Spawn the subprocess, run the MCP handshake, and list its tools"
-                : "Open a connection to the remote MCP server, run the handshake, and list its tools"
-            }
-          >
-            <FlaskConical className="h-4 w-4" />
-            {testing ? "Testing…" : "Test"}
-          </button>
-          {mode === "edit" && (
-            <button
-              type="button"
-              onClick={() => void onDelete()}
-              disabled={readOnly || deleting}
-              className="inline-flex items-center gap-2 rounded-xl border border-danger/40 bg-danger-bg/40 px-3 py-2 text-sm font-medium text-danger-fg hover:bg-danger-bg disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <Trash2 className="h-4 w-4" />
-              {deleting ? "Deleting…" : "Delete"}
-            </button>
+          <h2 className="truncate text-lg font-semibold text-fg">
+            {mode === "create" ? "New MCP server" : initialDraft.name}
+          </h2>
+          <StatusPill
+            tone={mode === "create" ? "muted" : dirty ? "warn" : "ok"}
+            label={mode === "create" ? "Unsaved draft" : dirty ? "Unsaved changes" : "Up to date"}
+          />
+          {!draft.enabled && (
+            <span className="rounded-full bg-surface-alt px-2.5 py-1 text-xs font-medium text-fg-muted">
+              Disabled
+            </span>
           )}
-          <button
-            type="button"
-            onClick={() => void save()}
-            disabled={readOnly || saving || Boolean(formError) || (mode === "edit" && !dirty)}
-            className={primaryButtonClass}
-          >
-            <Save className="h-4 w-4" />
-            {saving ? "Saving…" : mode === "create" ? "Create" : "Save changes"}
-            <span className="ml-1 hidden font-mono text-[10px] opacity-70 sm:inline">⌘S</span>
-          </button>
         </div>
+        <p className="mt-1 text-sm text-fg-muted">
+          {mode === "create"
+            ? "MCP server (stdio subprocess or remote http/sse endpoint) that exposes tools to the agent. Names are immutable once saved."
+            : "Edit the server config. Changes rebind the live client on save."}
+        </p>
       </header>
 
       <div className="min-h-0 flex-1 overflow-auto px-6 py-6">
-        <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+        <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
           {readOnly && (
             <Notice tone="warning" title="Read-only mode">
               Saves, deletes, and tests are disabled.
@@ -366,6 +326,44 @@ export function McpServerForm({
               />
             </FormField>
           </section>
+
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => void onTest()}
+              disabled={readOnly || testing || Boolean(testBlockedReason)}
+              className={outlineButtonClass}
+              title={
+                isStdio
+                  ? "Spawn the subprocess, run the MCP handshake, and list its tools"
+                  : "Open a connection to the remote MCP server, run the handshake, and list its tools"
+              }
+            >
+              <FlaskConical className="h-4 w-4" />
+              {testing ? "Testing…" : "Test"}
+            </button>
+            {mode === "edit" && (
+              <button
+                type="button"
+                onClick={() => void onDelete()}
+                disabled={readOnly || deleting}
+                className="inline-flex items-center gap-2 rounded-xl border border-danger/40 bg-danger-bg/40 px-3 py-2 text-sm font-medium text-danger-fg hover:bg-danger-bg disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Trash2 className="h-4 w-4" />
+                {deleting ? "Deleting…" : "Delete"}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => void save()}
+              disabled={readOnly || saving || Boolean(formError) || (mode === "edit" && !dirty)}
+              className={primaryButtonClass}
+            >
+              <Save className="h-4 w-4" />
+              {saving ? "Saving…" : mode === "create" ? "Create" : "Save changes"}
+              <span className="ml-1 hidden font-mono text-[10px] opacity-70 sm:inline">⌘S</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
