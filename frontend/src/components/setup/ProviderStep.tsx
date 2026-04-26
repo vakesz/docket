@@ -494,7 +494,7 @@ function DisplayNameField({
   useEffect(() => {
     if (draft.display_name_dirty || !draft.type) return;
     suggest.mutate(
-      { type: draft.type, config: { ...draft.config }, github_host: draft.github_host },
+      { type: draft.type, config: { ...draft.config } },
       {
         onSuccess: (res) => {
           setDraft((d) => {
@@ -508,7 +508,6 @@ function DisplayNameField({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     draft.type,
-    draft.github_host,
     draft.config.organization,
     draft.config.project,
     draft.config.default_repo,

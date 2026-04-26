@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal, Protocol, runtime_checkable
@@ -93,6 +93,19 @@ canonicalize URLs, fill template defaults). Raise `ValueError` with a
 human-readable message on invalid input; the HTTP/CLI surfaces will relay it."""
 
 
+LabelTemplate = Callable[[Mapping[str, Any]], str]
+"""Build a human-readable display name from a provider's config dict.
+
+Used as the default for the display-name prompt in the first-run wizard, in
+`docket setup provider add`, and in the SPA's suggest-label endpoint. The
+template reads only what's already in `config` (e.g. `base_url`,
+`default_repo`, `organization`) — no out-of-band hints — so any surface that
+calls it sees the same result for the same config.
+
+Return an empty string when no useful label can be inferred; callers fall
+back to the provider's `display_name` or the bare type id."""
+
+
 GroupingStrategy = Literal["by_kind", "by_state_bucket"]
 """How the TUI's backlog tree should group items for this provider.
 
@@ -134,3 +147,4 @@ class ProviderSpec:
     grouping: GroupingStrategy = "by_kind"
     supported_kinds: tuple[ItemKind, ...] = _ALL_KINDS
     normalize_config: ProviderConfigNormalizer | None = None
+    label_template: LabelTemplate | None = None

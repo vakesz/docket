@@ -92,3 +92,55 @@ def test_built_in_spec_keys_match_wizard_expectations() -> None:
     stub = registry.spec("github_stub")
     assert stub is not None
     assert _setup_field_keys(stub.setup_fields) == {"default_repo"}
+
+
+@pytest.mark.parametrize("type_id", BUILT_IN_TYPE_IDS)
+def test_built_in_spec_has_label_template(type_id: str) -> None:
+    """Every built-in spec must own a `label_template` callable.
+
+    `setup_utils.build_label_suggestion` is now a registry walker — when a
+    spec lacks a template it falls back to an empty string and the wizard
+    defaults to the bare type id. That's acceptable for third-party plugins
+    but not for built-ins, where the SPA suggest-label endpoint and the CLI
+    wizard both depend on a useful default."""
+    spec = registry.spec(type_id)
+    assert spec is not None
+    assert spec.label_template is not None, f"{type_id!r} missing label_template"
+    assert callable(spec.label_template)
+
+
+def test_built_in_label_templates_match_legacy_outputs() -> None:
+    """Pin the label strings the CLI + SPA show by default.
+
+    Catches subtle regressions if a future template change drops the
+    "GitHub · " prefix or rearranges the "Azure DevOps · org/project" form."""
+    ado = registry.spec("azure_devops")
+    assert ado is not None and ado.label_template is not None
+    assert ado.label_template(
+        {"organization": "https://dev.azure.com/contoso", "project": "Acme"}
+    ) == "Azure DevOps · contoso/Acme"
+    assert ado.label_template({"organization": "", "project": "Solo"}) == "Azure DevOps · Solo"
+    assert ado.label_template({}) == "Azure DevOps"
+
+    gh = registry.spec("github")
+    assert gh is not None and gh.label_template is not None
+    assert gh.label_template({"default_repo": "contoso/alpha"}) == "GitHub · contoso/alpha"
+    # GHE hosts surface the hostname so multi-host setups stay distinguishable.
+    assert (
+        gh.label_template(
+            {"default_repo": "contoso/alpha", "base_url": "https://ghe.contoso.com/api/v3"}
+        )
+        == "ghe.contoso.com · contoso/alpha"
+    )
+    # api.github.com explicitly stored is still the cloud default.
+    assert (
+        gh.label_template(
+            {"default_repo": "contoso/alpha", "base_url": "https://api.github.com"}
+        )
+        == "GitHub · contoso/alpha"
+    )
+
+    stub = registry.spec("github_stub")
+    assert stub is not None and stub.label_template is not None
+    assert stub.label_template({"default_repo": "myorg/myrepo"}) == "GitHub (stub) · myorg/myrepo"
+    assert stub.label_template({}) == "GitHub (stub)"

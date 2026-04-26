@@ -137,9 +137,6 @@ class WizardState:
     llm_key_hint: KeyHintConfig | None = None
     # Discovered hints (used to pre-populate assignee pickers).
     signed_in_email: str | None = None
-    # gh host picked during the GitHub connection step. Feeds the label
-    # step's default and is not persisted directly (base_url is).
-    signed_in_github_host: str | None = None
     # Whether this entry should become the active provider after saving.
     make_active: bool = True
 
@@ -410,9 +407,6 @@ def _github_step_connection(state: WizardState) -> None:
     if host and host.api_base_url != "https://api.github.com":
         config["base_url"] = host.api_base_url
     state.provider_config = config
-    # Store the hostname as a hint for the label step's default — doesn't
-    # persist to config.toml; only `base_url` / `default_repo` do.
-    state.signed_in_github_host = host.hostname if host else None
 
 
 def _github_stub_step_connection(state: WizardState) -> None:
@@ -502,11 +496,7 @@ def _suggest_display_name(state: WizardState) -> str:
     `docket setup provider add` offer identical defaults. Falls back to the
     user's existing `state.display_name` (or the raw `type_id`) when the
     provider type isn't built-in and no label can be inferred."""
-    suggested = build_label_suggestion(
-        type_id=state.type_id,
-        config=state.provider_config,
-        github_host_hint=state.signed_in_github_host or "",
-    )
+    suggested = build_label_suggestion(type_id=state.type_id, config=state.provider_config)
     return suggested or state.display_name or state.type_id
 
 

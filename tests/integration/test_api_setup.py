@@ -922,15 +922,16 @@ def test_suggest_label_for_github(tmp_path: Path) -> None:
         json={
             "type": "github",
             "config": {"default_repo": "contoso/alpha"},
-            "github_host": "github.com",
         },
     )
     assert r.status_code == 200
-    # github.com host folds into the generic "GitHub" prefix.
+    # github.com is the implicit default (no `base_url` in config) and folds
+    # into the generic "GitHub" prefix.
     assert r.json() == {"label": "GitHub · contoso/alpha"}
 
 
 def test_suggest_label_for_github_enterprise_host(tmp_path: Path) -> None:
+    """A GHE host is identified by the `base_url` in config, not a side hint."""
     paths = _mk_paths(tmp_path)
     client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
     r = client.post(
@@ -938,8 +939,10 @@ def test_suggest_label_for_github_enterprise_host(tmp_path: Path) -> None:
         headers=SETUP_AUTH,
         json={
             "type": "github",
-            "config": {"default_repo": "contoso/alpha"},
-            "github_host": "ghe.contoso.com",
+            "config": {
+                "default_repo": "contoso/alpha",
+                "base_url": "https://ghe.contoso.com/api/v3",
+            },
         },
     )
     assert r.status_code == 200

@@ -187,7 +187,6 @@ class SuggestKeyDTO(BaseModel):
 class SuggestLabelRequest(BaseModel):
     type: str
     config: dict[str, Any] = Field(default_factory=dict)
-    github_host: str = ""
 
 
 class SuggestLabelDTO(BaseModel):

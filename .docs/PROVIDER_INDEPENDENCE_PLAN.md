@@ -108,7 +108,13 @@ regressions phase by phase.
 
 ---
 
-## Phase 1 — `label_template` on `ProviderSpec`
+## Phase 1 — `label_template` on `ProviderSpec` ✅ landed
+
+**Status:** completed. `setup_utils.build_label_suggestion` is now a
+registry walker over `ProviderSpec.label_template`; `signed_in_github_host`
+and the `github_host` field on `SuggestLabelRequest` are gone (host derived
+from `base_url` in config). `tests/unit/test_provider_setup_hooks.py` pins
+template outputs per built-in.
 
 **Goal:** delete the `if/elif/else` ladder in
 `src/docket/config/setup_utils.py:85-103` (`build_label_suggestion`).

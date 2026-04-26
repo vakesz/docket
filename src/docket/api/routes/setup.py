@@ -421,11 +421,7 @@ def suggest_label(req: SuggestLabelRequest) -> SuggestLabelDTO:
     Same logic as `setup_wizard._suggest_display_name` so the CLI and
     web wizard offer identical defaults; falls back to the `type` id
     when nothing useful can be inferred."""
-    label = build_label_suggestion(
-        type_id=req.type,
-        config=dict(req.config),
-        github_host_hint=req.github_host,
-    )
+    label = build_label_suggestion(type_id=req.type, config=dict(req.config))
     return SuggestLabelDTO(label=label or req.type)
 
 

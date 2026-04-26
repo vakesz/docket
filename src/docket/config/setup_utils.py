@@ -19,6 +19,7 @@ from urllib.parse import urlparse
 from rich.prompt import Confirm, Prompt
 
 from docket._console import console
+from docket.providers import registry
 from docket.providers.base import ProviderAuthError
 
 if TYPE_CHECKING:
@@ -65,42 +66,18 @@ def step_auth_with_retry(
         return identity
 
 
-def build_label_suggestion(
-    *,
-    type_id: str,
-    config: dict[str, Any],
-    github_host_hint: str = "",
-) -> str:
+def build_label_suggestion(*, type_id: str, config: dict[str, Any]) -> str:
     """Build a human-readable provider label from its config dict.
 
-    Used as the default for the display-name prompt in both the first-run
-    wizard (`setup_wizard._suggest_display_name`) and incremental
-    `docket setup provider add` (`provider_crud`). Returns an empty string
-    only for unknown provider types where no useful label can be inferred —
-    callers fall back to their own default (usually the provider key).
-
-    `github_host_hint` is the signed-in GH hostname captured during the
-    connection step; when it's a GHE host (not `github.com`) it replaces
-    the "GitHub" prefix so labels distinguish cloud from enterprise."""
-    if type_id == "azure_devops":
-        org_url = str(config.get("organization", ""))
-        project = str(config.get("project", ""))
-        org_slug = urlparse(org_url).path.strip("/") or urlparse(org_url).netloc
-        if org_slug and project:
-            return f"Azure DevOps · {org_slug}/{project}"
-        if project:
-            return f"Azure DevOps · {project}"
-        return "Azure DevOps"
-    if type_id == "github":
-        repo = str(config.get("default_repo", ""))
-        prefix = (
-            github_host_hint if github_host_hint and github_host_hint != "github.com" else "GitHub"
-        )
-        return f"{prefix} · {repo}" if repo else prefix
-    if type_id == "github_stub":
-        repo = str(config.get("default_repo", ""))
-        return f"GitHub (stub) · {repo}" if repo else "GitHub (stub)"
-    return ""
+    Walks the provider registry and runs whichever spec's `label_template`
+    matches the type — each provider plugin owns its own labeling so adding a
+    new provider type doesn't require editing this module. Returns an empty
+    string for unknown provider types or specs without a template; callers
+    fall back to their own default (usually the provider key)."""
+    spec = registry.spec(type_id)
+    if spec is None or spec.label_template is None:
+        return ""
+    return spec.label_template(config)
 
 
 def next_sibling_key(type_id: str, taken: set[str]) -> str:

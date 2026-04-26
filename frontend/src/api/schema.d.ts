@@ -2793,11 +2793,6 @@ export interface components {
             config?: {
                 [key: string]: unknown;
             };
-            /**
-             * Github Host
-             * @default
-             */
-            github_host: string;
         };
         /** SuggestionDTO */
         SuggestionDTO: {

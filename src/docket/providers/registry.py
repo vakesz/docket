@@ -13,7 +13,9 @@ specs so a new provider type shows up automatically without edits in
 from __future__ import annotations
 
 import importlib.metadata
+from collections.abc import Mapping
 from typing import Any
+from urllib.parse import urlparse
 
 from pydantic import HttpUrl, ValidationError
 
@@ -157,6 +159,30 @@ def _register_builtins() -> None:
         config["project"] = project
         return config
 
+    def _azure_devops_label(config: Mapping[str, Any]) -> str:
+        org_url = str(config.get("organization", ""))
+        project = str(config.get("project", ""))
+        org_slug = urlparse(org_url).path.strip("/") or urlparse(org_url).netloc
+        if org_slug and project:
+            return f"Azure DevOps · {org_slug}/{project}"
+        if project:
+            return f"Azure DevOps · {project}"
+        return "Azure DevOps"
+
+    def _github_label(config: Mapping[str, Any]) -> str:
+        repo = str(config.get("default_repo", ""))
+        base_url = str(config.get("base_url", ""))
+        # api.github.com (the cloud default) collapses to the plain "GitHub"
+        # prefix; any other base_url is a GHE host whose hostname doubles as
+        # a useful disambiguator for users running multiple github entries.
+        host = urlparse(base_url).netloc if base_url else ""
+        prefix = host if host and host != "api.github.com" else "GitHub"
+        return f"{prefix} · {repo}" if repo else prefix
+
+    def _github_stub_label(config: Mapping[str, Any]) -> str:
+        repo = str(config.get("default_repo", ""))
+        return f"GitHub (stub) · {repo}" if repo else "GitHub (stub)"
+
     register(
         ProviderSpec(
             type_id="azure_devops",
@@ -182,6 +208,7 @@ def _register_builtins() -> None:
                 ),
             ),
             normalize_config=_azure_devops_normalize,
+            label_template=_azure_devops_label,
         )
     )
     register(
@@ -202,6 +229,7 @@ def _register_builtins() -> None:
             ),
             grouping="by_state_bucket",
             supported_kinds=(ItemKind.EPIC, ItemKind.STORY, ItemKind.TASK, ItemKind.BUG),
+            label_template=_github_label,
         )
     )
     register(
@@ -220,6 +248,7 @@ def _register_builtins() -> None:
             ),
             grouping="by_state_bucket",
             supported_kinds=(ItemKind.EPIC, ItemKind.STORY, ItemKind.TASK, ItemKind.BUG),
+            label_template=_github_stub_label,
         )
     )
 

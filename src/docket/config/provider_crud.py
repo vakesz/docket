@@ -65,7 +65,6 @@ def provider_add(
         raise SystemExit(2)
 
     config: dict[str, object] = {}
-    github_host_hint = ""
     match type_id:
         case "azure_devops":
             org = Prompt.ask("Azure DevOps organization URL").strip().rstrip("/")
@@ -83,7 +82,6 @@ def provider_add(
             config = {"default_repo": default_repo}
             if host and host.api_base_url != "https://api.github.com":
                 config["base_url"] = host.api_base_url
-            github_host_hint = host.hostname if host else ""
         case "github_stub":
             default_repo = Prompt.ask("Default repo (owner/name)", default="example/repo").strip()
             config = {"default_repo": default_repo}
@@ -95,11 +93,7 @@ def provider_add(
                 f"[dim]No wizard prompts for '{type_id}' — config starts empty. "
                 "Edit config.toml to fill it in.[/dim]"
             )
-    label_hint = build_label_suggestion(
-        type_id=type_id,
-        config=dict(config),
-        github_host_hint=github_host_hint,
-    )
+    label_hint = build_label_suggestion(type_id=type_id, config=dict(config))
 
     cfg = load_config(paths, optional=True) or Config()
     if name in cfg.providers and not Confirm.ask(
