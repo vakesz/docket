@@ -5,6 +5,9 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // `server-only` throws unconditionally outside a Next.js RSC bundler
+      // condition. Tests run in plain node, so stub it to a no-op.
+      "server-only": path.resolve(__dirname, "./src/test/server-only-stub.ts"),
     },
   },
   test: {
