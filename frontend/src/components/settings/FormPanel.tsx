@@ -28,7 +28,7 @@ export function FormPanel({
   const value = draft ?? asRecord(initialConfig[section.key]) ?? {};
 
   return (
-    <div className="flex flex-col gap-5 rounded-2xl border border-border bg-surface p-6 shadow-sm">
+    <div className="flex flex-col gap-5">
       {section.key === "providers" && (
         <ProvidersForm initialConfig={initialConfig} value={value} onChange={onChange} />
       )}

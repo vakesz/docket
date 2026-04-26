@@ -169,7 +169,11 @@ export function MemoryPage() {
               onDeleted={onDeleted}
             />
           ) : (
-            <EmptyMemoryState hasEntries={entries.length > 0} />
+            <EmptyMemoryState
+              hasEntries={entries.length > 0}
+              readOnly={readOnly}
+              onCreate={startNewDraft}
+            />
           )}
         </section>
       </div>
@@ -177,14 +181,47 @@ export function MemoryPage() {
   );
 }
 
-function EmptyMemoryState({ hasEntries }: { hasEntries: boolean }) {
+function EmptyMemoryState({
+  hasEntries,
+  readOnly,
+  onCreate,
+}: {
+  hasEntries: boolean;
+  readOnly: boolean;
+  onCreate: () => void;
+}) {
   return (
-    <div className="flex flex-1 flex-col items-center px-6 pt-12 text-center">
-      <p className="max-w-md text-sm text-fg-muted">
-        {hasEntries
-          ? "Pick an entry on the left to edit, or use New entry to create another."
-          : "Memory entries are short Markdown notes the agent reads on every turn for this project. Use New entry on the left to create your first one."}
-      </p>
+    <div className="flex flex-1 items-center justify-center px-6 py-10">
+      <div className="flex max-w-md flex-col items-center gap-4 text-center">
+        <div className="rounded-2xl bg-accent/10 p-3 text-accent">
+          <Brain className="h-6 w-6" />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <h3 className="text-base font-semibold text-fg">
+            {hasEntries ? "No entry selected" : "No memory entries yet"}
+          </h3>
+          <p className="text-sm leading-6 text-fg-muted">
+            {hasEntries
+              ? "Pick an entry on the left to edit, or create a new one."
+              : "Short Markdown notes the agent reads on every turn for this project — conventions, glossary, gotchas."}
+          </p>
+        </div>
+        {!hasEntries && (
+          <button
+            type="button"
+            onClick={onCreate}
+            disabled={readOnly}
+            className={primaryButtonClass}
+            title={readOnly ? "Read-only mode" : "Add a new memory entry"}
+          >
+            <Plus className="h-4 w-4" />
+            Create your first entry
+          </button>
+        )}
+        {readOnly && !hasEntries && (
+          <p className="text-xs text-fg-muted">Read-only mode is on — saves are disabled.</p>
+        )}
+      </div>
     </div>
   );
 }
