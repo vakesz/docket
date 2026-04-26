@@ -17,6 +17,7 @@ import { OpenAiAdapter } from "@/agent/llm/openai";
 import type { LlmAdapter } from "@/agent/llm/types";
 import type { LlmProvider, Project } from "@/db/generated/client";
 import type { db as Db } from "@/server/db";
+import { decryptSecret } from "@/server/secrets/encryption";
 
 type Database = typeof Db;
 
@@ -48,10 +49,14 @@ export async function selectAdapterFor(db: Database, ctx: AdapterContext): Promi
 }
 
 export function buildAdapter(row: LlmProvider): LlmAdapter {
+  // `apiKey` is encrypted at rest with `SECRETS_KEY` (Phase 11). Legacy
+  // plaintext rows decrypt to themselves, so this is a no-op until the
+  // operator rolls a key.
+  const apiKey = decryptSecret(row.apiKey);
   switch (row.kind) {
     case "openai":
       return new OpenAiAdapter({
-        apiKey: row.apiKey,
+        apiKey,
         label: row.label,
         model: row.model || undefined,
         baseUrl: row.baseUrl || undefined,

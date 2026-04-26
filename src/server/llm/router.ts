@@ -1,5 +1,6 @@
 import "server-only";
 import { z } from "zod";
+import { encryptSecret } from "@/server/secrets/encryption";
 import { mutationProcedure, protectedProcedure, router } from "@/server/trpc";
 
 /**
@@ -49,7 +50,9 @@ export const llmProvidersRouter = router({
         data: { isDefault: false },
       });
     }
-    const created = await ctx.db.llmProvider.create({ data: input });
+    const created = await ctx.db.llmProvider.create({
+      data: { ...input, apiKey: encryptSecret(input.apiKey) },
+    });
     return { id: created.id, kind: created.kind, label: created.label };
   }),
 

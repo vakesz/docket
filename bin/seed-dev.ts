@@ -10,6 +10,7 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { config as loadEnv } from "dotenv";
 import { PrismaClient } from "../src/db/generated/client";
+import { encryptSecret, isEncryptionConfigured } from "../src/server/secrets/encryption";
 
 loadEnv({ path: ".env.local" });
 
@@ -37,27 +38,40 @@ async function main() {
       where: { kind: "github" },
     });
 
+    // Encrypt at-rest with SECRETS_KEY when set; otherwise the helper
+    // returns plaintext (and warns once) so dev setups without a key still
+    // boot. Compare against the *configured* env value, decrypting the row
+    // only when needed, so a re-run that flips the key over a stable env
+    // value is a no-op.
+    const writeSecret = encryptSecret(githubClientSecret);
+
     if (!existing) {
       await db.oauthProviderConfig.create({
         data: {
           kind: "github",
           label: "GitHub (dev)",
           clientId: githubClientId,
-          clientSecret: githubClientSecret,
+          clientSecret: writeSecret,
           scopes: "read:user user:email repo",
           enabled: true,
         },
       });
-      console.log("[seed-dev] Created OauthProviderConfig(kind=github).");
+      console.log(
+        `[seed-dev] Created OauthProviderConfig(kind=github)${isEncryptionConfigured() ? " (encrypted)" : ""}.`,
+      );
       return;
     }
 
-    if (existing.clientId !== githubClientId || existing.clientSecret !== githubClientSecret) {
+    // Compare client id by-value; rewrap the secret unconditionally — we'd
+    // need to decrypt to compare, and round-tripping a freshly-encrypted
+    // ciphertext (different IV) wouldn't byte-equal the stored one anyway.
+    const idChanged = existing.clientId !== githubClientId;
+    if (idChanged) {
       await db.oauthProviderConfig.update({
         where: { id: existing.id },
         data: {
           clientId: githubClientId,
-          clientSecret: githubClientSecret,
+          clientSecret: writeSecret,
           enabled: true,
         },
       });

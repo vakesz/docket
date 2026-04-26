@@ -18,13 +18,18 @@ import type { Provider } from "next-auth/providers";
 import GitHub from "next-auth/providers/github";
 import type { OauthProviderConfig } from "@/db/generated/client";
 import { azureDevOpsProvider } from "@/providers/azure-devops/auth";
+import { decryptSecret } from "@/server/secrets/encryption";
 
 export function buildAuthProvider(row: OauthProviderConfig): Provider | null {
+  // `clientSecret` is encrypted at rest with `SECRETS_KEY` (Phase 11).
+  // Legacy plaintext rows (pre-Phase-11 dev setups) are returned as-is
+  // by `decryptSecret`, so this is a no-op until the operator rolls a key.
+  const clientSecret = decryptSecret(row.clientSecret);
   switch (row.kind) {
     case "github":
       return GitHub({
         clientId: row.clientId,
-        clientSecret: row.clientSecret,
+        clientSecret,
         // GitHub's NextAuth provider derives scopes from the default
         // authorization URL; if the row carries an override, splice it in.
         ...(row.scopes ? { authorization: { params: { scope: row.scopes } } } : {}),
@@ -36,7 +41,7 @@ export function buildAuthProvider(row: OauthProviderConfig): Provider | null {
       // Empty string → multi-tenant `common` endpoint.
       return azureDevOpsProvider({
         clientId: row.clientId,
-        clientSecret: row.clientSecret,
+        clientSecret,
         tenant: row.baseUrl || undefined,
         extraScope: row.scopes || undefined,
       });
