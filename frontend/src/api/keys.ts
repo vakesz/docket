@@ -16,6 +16,7 @@ export const qk = {
 
   setupStatus: () => [...qk.all, "setup", "status"] as const,
   setupProviderTypes: () => [...qk.all, "setup", "providerTypes"] as const,
+  setupCliStatus: () => [...qk.all, "setup", "cliStatus"] as const,
 
   status: () => [...qk.all, "status"] as const,
   settings: () => [...qk.all, "settings"] as const,

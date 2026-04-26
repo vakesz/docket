@@ -24,12 +24,25 @@ from pydantic import ValidationError
 from docket.agent.prompt import scaffold as scaffold_prompts
 from docket.api._provider_setup import (
     build_and_validate_provider_entry,
+    count_items_for_scope,
     provider_type_dtos,
     test_provider_draft,
 )
 from docket.api.auth import require_setup_token
 from docket.api.deps import get_paths
 from docket.api.schemas import (
+    AdoDiscoverRequest,
+    AdoDiscoverResultDTO,
+    AdoOrgDTO,
+    CliStatusDTO,
+    CliToolStatusDTO,
+    GithubDiscoverRequest,
+    GithubDiscoverResultDTO,
+    GithubHostDTO,
+    GithubOrgDTO,
+    GithubRepoDTO,
+    ProbeScopeDTO,
+    ProbeScopeRequest,
     SetupCompleteDTO,
     SetupCompleteRequest,
     SetupProviderTypeDTO,
@@ -37,15 +50,22 @@ from docket.api.schemas import (
     SetupTestLlmRequest,
     SetupTestProviderRequest,
     SetupTestResultDTO,
+    SuggestKeyDTO,
+    SuggestKeyRequest,
+    SuggestLabelDTO,
+    SuggestLabelRequest,
     SyncSummaryDTO,
 )
+from docket.config import setup_discovery
 from docket.config.loader import load_config, save_config
 from docket.config.models import (
     ProviderEntry,
+    ScopeFilter,
     compose_setup_config,
 )
 from docket.config.paths import Paths
 from docket.config.secrets import keyring_available, set_llm_api_key
+from docket.config.setup_utils import build_label_suggestion, next_sibling_key
 from docket.core.services import sync_service
 from docket.providers.base import ProviderError, WorkItemProvider
 from docket.storage import init_db
@@ -238,6 +258,195 @@ def setup_complete(
         restart_required=True,
         initial_sync=initial_sync,
     )
+
+
+@router.get("/cli-status", response_model=CliStatusDTO)
+def cli_status() -> CliStatusDTO:
+    """Probe the local `gh` / `az` CLI sessions and OS keyring.
+
+    Auth-free so the SPA can read it before it has a token to send. Each
+    sub-probe is best-effort: if `gh` isn't installed we report
+    `present=false` rather than 500ing. Identity is reported only when
+    the session is live, mirroring the CLI wizard's "Checking … session"
+    line. The `gh_hosts` list reflects every authenticated `gh auth login`
+    target so the GitHub picker can disambiguate cloud vs. enterprise."""
+    az = setup_discovery.probe_az()
+    gh = setup_discovery.probe_gh()
+    gh_hosts: list[GithubHostDTO] = []
+    if gh.logged_in:
+        gh_hosts = [
+            GithubHostDTO(hostname=h.hostname, api_base_url=h.api_base_url)
+            for h in setup_discovery.list_gh_hosts()
+        ]
+    keyring_ok, keyring_err = keyring_available()
+    return CliStatusDTO(
+        az=_to_cli_dto(az),
+        gh=_to_cli_dto(gh),
+        gh_hosts=gh_hosts,
+        keyring_available=keyring_ok,
+        keyring_error=keyring_err or "",
+    )
+
+
+def _to_cli_dto(status: setup_discovery.CliToolStatus) -> CliToolStatusDTO:
+    return CliToolStatusDTO(
+        name=status.name,
+        present=status.present,
+        logged_in=status.logged_in,
+        identity=status.identity,
+        error=status.error,
+    )
+
+
+@router.post(
+    "/azure-devops/discover",
+    response_model=AdoDiscoverResultDTO,
+    dependencies=[Depends(require_setup_token)],
+)
+def azure_devops_discover(req: AdoDiscoverRequest) -> AdoDiscoverResultDTO:
+    """Run one Azure DevOps discovery stage against the user's `az` session.
+
+    Stage map (1:1 with `providers.azure_devops.discover`):
+      - orgs       → list_orgs() → {orgs:[{name,url}]}
+      - projects   → list_projects(org) → {projects:[name]}
+      - teams      → list_teams(org, project) → {items:[name]}
+      - areas      → list_area_paths(org, project) → {items:[path]}
+      - iterations → list_iteration_paths(org, project) → {items:[path]}
+
+    Failures map to `ok=false` with the helper's human-readable message;
+    the SPA falls back to free-form input on failure (same UX as the CLI
+    wizard's `__custom__` branch)."""
+    try:
+        if req.stage == "orgs":
+            return AdoDiscoverResultDTO(
+                ok=True,
+                orgs=[
+                    AdoOrgDTO(name=o.name, url=o.url) for o in setup_discovery.ado_list_orgs()
+                ],
+            )
+        if req.stage == "projects":
+            if not req.org:
+                return AdoDiscoverResultDTO(ok=False, error="org is required")
+            return AdoDiscoverResultDTO(
+                ok=True, projects=setup_discovery.ado_list_projects(req.org)
+            )
+        if not req.org or not req.project:
+            return AdoDiscoverResultDTO(ok=False, error="org and project are required")
+        if req.stage == "teams":
+            return AdoDiscoverResultDTO(
+                ok=True, items=setup_discovery.ado_list_teams(req.org, req.project)
+            )
+        if req.stage == "areas":
+            return AdoDiscoverResultDTO(
+                ok=True, items=setup_discovery.ado_list_areas(req.org, req.project)
+            )
+        # iterations
+        return AdoDiscoverResultDTO(
+            ok=True, items=setup_discovery.ado_list_iterations(req.org, req.project)
+        )
+    except setup_discovery.AdoDiscoveryError as e:
+        return AdoDiscoverResultDTO(ok=False, error=str(e))
+
+
+@router.post(
+    "/github/discover",
+    response_model=GithubDiscoverResultDTO,
+    dependencies=[Depends(require_setup_token)],
+)
+def github_discover(req: GithubDiscoverRequest) -> GithubDiscoverResultDTO:
+    """Run one GitHub discovery stage via `gh api`.
+
+    Stage map (1:1 with `providers.github.discover`):
+      - hosts     → list_hosts() (also returned in /cli-status; here for symmetry)
+      - repos     → list_repos(host) (signed-in user's repos)
+      - orgs      → list_orgs(host) (orgs the user is a member of)
+      - org_repos → list_org_repos(org, host)
+
+    Same failure UX as the ADO discovery: `ok=false` + message → SPA
+    drops back to manual repo entry."""
+    host = req.host or None
+    try:
+        if req.stage == "hosts":
+            return GithubDiscoverResultDTO(
+                ok=True,
+                hosts=[
+                    GithubHostDTO(hostname=h.hostname, api_base_url=h.api_base_url)
+                    for h in setup_discovery.list_gh_hosts()
+                ],
+            )
+        if req.stage == "repos":
+            refs = setup_discovery.gh_list_repos(host)
+            return GithubDiscoverResultDTO(
+                ok=True, repos=[GithubRepoDTO(full_name=r.full_name) for r in refs]
+            )
+        if req.stage == "orgs":
+            return GithubDiscoverResultDTO(
+                ok=True,
+                orgs=[GithubOrgDTO(login=o.login) for o in setup_discovery.gh_list_orgs(host)],
+            )
+        if req.stage == "org_repos":
+            if not req.org:
+                return GithubDiscoverResultDTO(ok=False, error="org is required")
+            refs = setup_discovery.gh_list_org_repos(req.org, host)
+            return GithubDiscoverResultDTO(
+                ok=True, repos=[GithubRepoDTO(full_name=r.full_name) for r in refs]
+            )
+        return GithubDiscoverResultDTO(ok=False, error=f"unknown stage: {req.stage}")
+    except setup_discovery.GhDiscoveryError as e:
+        return GithubDiscoverResultDTO(ok=False, error=str(e))
+
+
+@router.post(
+    "/suggest-key",
+    response_model=SuggestKeyDTO,
+    dependencies=[Depends(require_setup_token)],
+)
+def suggest_key(req: SuggestKeyRequest) -> SuggestKeyDTO:
+    """Suggest a free provider config key (`<type>` or `<type>-<n>`).
+
+    Mirrors `setup_wizard._step_pick_provider` so a re-run from the web
+    wizard offers the same default the CLI does. `taken` is supplied by
+    the caller so the route doesn't need to re-load config."""
+    return SuggestKeyDTO(key=next_sibling_key(req.type, set(req.taken)))
+
+
+@router.post(
+    "/suggest-label",
+    response_model=SuggestLabelDTO,
+    dependencies=[Depends(require_setup_token)],
+)
+def suggest_label(req: SuggestLabelRequest) -> SuggestLabelDTO:
+    """Suggest a human-readable display name from the provider draft.
+
+    Same logic as `setup_wizard._suggest_display_name` so the CLI and
+    web wizard offer identical defaults; falls back to the `type` id
+    when nothing useful can be inferred."""
+    label = build_label_suggestion(
+        type_id=req.type,
+        config=dict(req.config),
+        github_host_hint=req.github_host,
+    )
+    return SuggestLabelDTO(label=label or req.type)
+
+
+@router.post(
+    "/probe-scope",
+    response_model=ProbeScopeDTO,
+    dependencies=[Depends(require_setup_token)],
+)
+def probe_scope(req: ProbeScopeRequest) -> ProbeScopeDTO:
+    """Estimate match-count for a draft scope before the user commits.
+
+    Best-effort wrapper over `WorkItemProvider.list_changes_since(...)` —
+    returns `count=None` when the provider cannot be reached or the
+    config doesn't validate. The SPA falls back to "could not count"
+    in that case (same UX as the CLI wizard)."""
+    try:
+        scope_filter = ScopeFilter(**dict(req.scope))
+    except ValidationError as e:
+        return ProbeScopeDTO(count=None, error=f"invalid scope: {e}")
+    count = count_items_for_scope(req.type, dict(req.config), scope_filter)
+    return ProbeScopeDTO(count=count)
 
 
 def _schedule_restart() -> None:

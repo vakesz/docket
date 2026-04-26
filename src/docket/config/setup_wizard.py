@@ -52,6 +52,7 @@ from docket.config.setup_utils import (
     build_label_suggestion,
     console,
     looks_like_http_url,
+    next_sibling_key,
     pick,
     pick_assignee,
     pick_github_host,
@@ -264,7 +265,7 @@ def _step_pick_provider(state: WizardState) -> None:
         state.scope = ScopeFilter()
         return
 
-    default_key = _next_sibling_key(spec.type_id, existing_keys)
+    default_key = next_sibling_key(spec.type_id, existing_keys)
     console.print(
         f"[dim]A provider of type '{spec.type_id}' is already configured. "
         f"Choose a new id to add another, or reuse an existing id to reconfigure it.[/dim]"
@@ -286,13 +287,6 @@ def _step_pick_provider(state: WizardState) -> None:
         state.provider_config = {}
         state.scope = ScopeFilter()
     state.provider_key = key
-
-
-def _next_sibling_key(type_id: str, taken: set[str]) -> str:
-    i = 2
-    while f"{type_id}-{i}" in taken:
-        i += 1
-    return f"{type_id}-{i}"
 
 
 # ---- step 2: auth (per-provider) --------------------------------------------

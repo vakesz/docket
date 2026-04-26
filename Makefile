@@ -26,8 +26,11 @@ frontend-build: ## build the SPA (vite emits straight into src/docket/frontend_d
 	cd $(FRONTEND) && bun run build
 
 .PHONY: serve
-serve: frontend-build ## build the SPA, then run the backend at http://127.0.0.1:8765
-	$(DOCKET) serve
+serve: ## run backend + SPA watcher together at http://127.0.0.1:8765 (Ctrl-C stops both); refresh browser to see FE changes
+	@trap 'kill 0' INT TERM EXIT; \
+		cd $(FRONTEND) && bun run build --watch & \
+		$(DOCKET) serve & \
+		wait
 
 .PHONY: token
 token: ## print the bearer token from the workspace config.toml (mint one via `make serve` if missing)

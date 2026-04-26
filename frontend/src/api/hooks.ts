@@ -54,6 +54,52 @@ export function useCompleteSetup() {
   });
 }
 
+export function useCliStatus(enabled = true) {
+  return useQuery({
+    queryKey: qk.setupCliStatus(),
+    queryFn: ({ signal }) => api.get<DTO["CliStatusDTO"]>("/setup/cli-status", undefined, signal),
+    enabled,
+    // Probe is cheap and the user re-runs it after `gh auth login` / `az login`,
+    // so don't let stale data hide a freshly-fixed session.
+    staleTime: 0,
+  });
+}
+
+export function useAdoDiscover() {
+  return useMutation({
+    mutationFn: (body: DTO["AdoDiscoverRequest"]) =>
+      api.post<DTO["AdoDiscoverResultDTO"]>("/setup/azure-devops/discover", body),
+  });
+}
+
+export function useGithubDiscover() {
+  return useMutation({
+    mutationFn: (body: DTO["GithubDiscoverRequest"]) =>
+      api.post<DTO["GithubDiscoverResultDTO"]>("/setup/github/discover", body),
+  });
+}
+
+export function useSuggestKey() {
+  return useMutation({
+    mutationFn: (body: DTO["SuggestKeyRequest"]) =>
+      api.post<DTO["SuggestKeyDTO"]>("/setup/suggest-key", body),
+  });
+}
+
+export function useSuggestLabel() {
+  return useMutation({
+    mutationFn: (body: DTO["SuggestLabelRequest"]) =>
+      api.post<DTO["SuggestLabelDTO"]>("/setup/suggest-label", body),
+  });
+}
+
+export function useProbeScope() {
+  return useMutation({
+    mutationFn: (body: DTO["ProbeScopeRequest"]) =>
+      api.post<DTO["ProbeScopeDTO"]>("/setup/probe-scope", body),
+  });
+}
+
 // ---------- Status / settings / identity -------------------------------------
 
 export function useStatus(refetchIntervalMs?: number) {

@@ -35,14 +35,31 @@ Most triage tools make you context-switch between a browser, a Kanban board, and
 
 ## Quick start
 
+Two front doors, same wizard. Both default to a sandboxed `./.docket-dev/` workspace so config, SQLite cache, and logs land in the repo dir — never in `~/.config/docket` / `~/Library/Application Support/docket` / `%APPDATA%`.
+
+**Web (recommended for first run):**
+
+```bash
+git clone <repo-url> docket && cd docket
+make install   # uv sync + bun install
+make serve     # builds the SPA, mints a bootstrap token into ./.docket-dev/config.toml,
+               # then opens at http://127.0.0.1:8765 — point a browser there and step through the wizard
+```
+
+The browser sees the same wizard the CLI runs (provider auth probe, discovery-driven pickers for org/project/repo, scope match-count preview, optional LLM, telemetry + HTTP host knobs). On `Complete`, the backend writes `./.docket-dev/config.toml` and exits — re-run `make serve` to come up with real wiring.
+
+**Terminal (no browser, no Bun needed):**
+
 ```bash
 git clone <repo-url> docket && cd docket
 uv sync
-uv run docket setup    # provider, scope, telemetry, HTTP token, LLM, prompts, first sync
-uv run docket          # launch the TUI
+uv run docket --workspace=./.docket-dev setup   # same wizard in the terminal
+uv run docket --workspace=./.docket-dev          # launch the TUI
 ```
 
-First run with no config drops straight into the wizard, so `setup` is optional if you're happy answering at TUI launch.
+> The `--workspace=./.docket-dev` flag matters: it redirects every `XDG_*` path under that directory, keeping dev state out of your Library/Roaming. Every `make` target passes it for you. Skip it (i.e. plain `uv run docket setup`) and Docket writes to your real platform paths — fine for a daily-driver install, surprising during dev.
+
+First run with no config (whether via `make serve` or `uv run docket`) drops straight into the wizard, so explicit `setup` is optional.
 
 ---
 
@@ -84,13 +101,13 @@ Docket ships with a React web client in `frontend/` that consumes the FastAPI su
 
 ```bash
 make install   # uv sync + bun install (one-time)
-make serve     # build the SPA and run the backend (mints a fresh bootstrap token if config.toml is missing)
+make serve     # run the backend alongside a SPA watcher (mints a fresh bootstrap token if config.toml is missing)
 make token     # print the bearer token from the workspace config.toml (for the frontend / API clients)
 ```
 
-The first `make serve` writes a stub `config.toml` under `./.docket-dev/` (the dev `WORKSPACE`) and prints a one-time bootstrap bearer. Run the wizard from the web UI or `make token` to see it again.
+The first `make serve` writes a stub `config.toml` under `./.docket-dev/` (the dev `WORKSPACE`) and prints a one-time bootstrap bearer. Browse to `http://127.0.0.1:8765` — the SPA loads in **bootstrap mode** with the wizard at `/`, talks to `/api/setup/*` on the same origin (the token is injected into `index.html` as `window.__DOCKET_TOKEN__`, no copy-paste), and on completion writes the real config and asks you to re-run `make serve`. `make token` reprints the bearer if you need it again.
 
-- **Iterating on the SPA:** re-run `make frontend-build` (or `make serve`) and refresh the browser. Vite emits straight into `src/docket/frontend_dist/`; there is no separate frontend dev server. The bearer is injected into `index.html` at request time as `window.__DOCKET_TOKEN__` and never leaves the local box.
+- **Iterating on the SPA:** `make serve` runs Vite in watch mode alongside the backend — save a frontend file, wait for the rebuild line, and refresh the browser. Vite emits straight into `src/docket/frontend_dist/`; there is no separate frontend dev server. The bearer is injected into `index.html` at request time as `window.__DOCKET_TOKEN__` and never leaves the local box.
 - **Wheel (`make wheel`):** builds the SPA into the same path, then runs `uv build --wheel`, producing one installable artifact with the SPA bundled inside.
 
 All backend routes live under `/api/*` — anything outside that prefix is claimed by the SPA catch-all. Regenerate the OpenAPI client with `cd frontend && bun run gen:api` while the backend is running.
@@ -117,7 +134,7 @@ Docket stores everything under XDG paths resolved by `platformdirs`. `XDG_CONFIG
 
 Key files: `config.toml` (providers, scopes, projects, LLM endpoint, HTTP token, runtime knobs, UI prefs), `prompts/` (`system_base.md` + `kind_<kind>.md`, hot-reloaded), `docket.db` (SQLite cache), `logs/docket.log` (rotating JSON, 1 MB × 3). The Azure OpenAI **API key** lives in the OS keyring (macOS Keychain / Windows Credential Manager / Secret Service); only a non-secret hint persists in `config.toml` (`[llm.key_hint]`) so the UI can show a `sk-a…b1c2 · 32 chars · updated 2d ago` preview before you rotate.
 
-The setup wizard writes `config.toml` atomically after every step; partial runs resume via `docket setup --step=<name>` (`provider`, `auth`, `connection`, `label`, `scope`, `telemetry`, `http`, `llm`, `prompts`, `sync`, `default`).
+The setup wizard writes `config.toml` atomically after every step; partial runs resume via `docket setup --step=<name>` (`provider`, `auth`, `connection`, `label`, `scope`, `telemetry`, `http`, `llm`, `prompts`, `sync`, `default`). The same wizard is reachable in a browser through the bootstrap SPA mount described under [Web UI](#web-ui).
 
 There is no `.env` file — `config.toml` is the single source of truth for non-secret config, and the keyring is the single source of truth for secrets. The only environment knobs are:
 

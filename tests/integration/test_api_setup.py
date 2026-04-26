@@ -593,3 +593,575 @@ def test_update_provider_preserves_active_scope_slot(tmp_path: Path) -> None:
     assert entry["scopes"]["my-team"]["team"] == "Team B"
     # The other named scope is untouched.
     assert entry["scopes"]["default"]["team"] == ""
+
+
+# ---- discovery + helper endpoints (web-wizard parity with `docket setup`) ----
+
+
+def test_cli_status_no_auth(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`/setup/cli-status` is auth-free so the SPA can render before the
+    operator has a token. Probes `gh` and `az` via stubbed helpers."""
+    paths = _mk_paths(tmp_path)
+    from docket.config import setup_discovery
+
+    monkeypatch.setattr(
+        setup_discovery,
+        "probe_gh",
+        lambda: setup_discovery.CliToolStatus(
+            name="gh", present=True, logged_in=True, identity="octocat"
+        ),
+    )
+    monkeypatch.setattr(
+        setup_discovery,
+        "probe_az",
+        lambda: setup_discovery.CliToolStatus(name="az", present=False, logged_in=False),
+    )
+    monkeypatch.setattr(
+        setup_discovery,
+        "list_gh_hosts",
+        lambda: [setup_discovery.GhHostRef(hostname="github.com", api_base_url="api.github.com")],
+    )
+    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
+    r = client.get("/api/setup/cli-status")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["gh"]["present"] is True
+    assert body["gh"]["logged_in"] is True
+    assert body["gh"]["identity"] == "octocat"
+    assert body["az"]["present"] is False
+    assert body["gh_hosts"] == [
+        {"hostname": "github.com", "api_base_url": "api.github.com"}
+    ]
+    assert body["keyring_available"] is True  # in-memory keyring autouse fixture
+
+
+def test_cli_status_skips_gh_hosts_when_logged_out(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When `gh` isn't signed in we don't bother enumerating hosts — the
+    list_gh_hosts helper would shell out to a `gh` that can't help us."""
+    paths = _mk_paths(tmp_path)
+    from docket.config import setup_discovery
+
+    monkeypatch.setattr(
+        setup_discovery,
+        "probe_gh",
+        lambda: setup_discovery.CliToolStatus(name="gh", present=True, logged_in=False),
+    )
+    monkeypatch.setattr(
+        setup_discovery,
+        "probe_az",
+        lambda: setup_discovery.CliToolStatus(name="az", present=True, logged_in=True),
+    )
+
+    def _explode() -> list[Any]:
+        raise AssertionError("list_gh_hosts must not be called when gh is logged out")
+
+    monkeypatch.setattr(setup_discovery, "list_gh_hosts", _explode)
+    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
+    r = client.get("/api/setup/cli-status")
+    assert r.status_code == 200
+    assert r.json()["gh_hosts"] == []
+
+
+def test_azure_devops_discover_orgs_ok(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = _mk_paths(tmp_path)
+    from docket.config import setup_discovery
+
+    monkeypatch.setattr(
+        setup_discovery,
+        "ado_list_orgs",
+        lambda: [
+            setup_discovery.AdoOrgRef(name="Contoso", url="https://dev.azure.com/contoso"),
+        ],
+    )
+    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
+    r = client.post(
+        "/api/setup/azure-devops/discover",
+        headers=SETUP_AUTH,
+        json={"stage": "orgs"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    assert body["orgs"] == [{"name": "Contoso", "url": "https://dev.azure.com/contoso"}]
+
+
+def test_azure_devops_discover_projects_requires_org(tmp_path: Path) -> None:
+    paths = _mk_paths(tmp_path)
+    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
+    r = client.post(
+        "/api/setup/azure-devops/discover",
+        headers=SETUP_AUTH,
+        json={"stage": "projects"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is False
+    assert "org" in body["error"]
+
+
+def test_azure_devops_discover_projects_returns_list(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = _mk_paths(tmp_path)
+    from docket.config import setup_discovery
+
+    monkeypatch.setattr(
+        setup_discovery,
+        "ado_list_projects",
+        lambda org: ["Acme", "Bravo"],
+    )
+    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
+    r = client.post(
+        "/api/setup/azure-devops/discover",
+        headers=SETUP_AUTH,
+        json={"stage": "projects", "org": "https://dev.azure.com/contoso"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    assert body["projects"] == ["Acme", "Bravo"]
+
+
+def test_azure_devops_discover_teams_requires_project(tmp_path: Path) -> None:
+    paths = _mk_paths(tmp_path)
+    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
+    r = client.post(
+        "/api/setup/azure-devops/discover",
+        headers=SETUP_AUTH,
+        json={"stage": "teams", "org": "https://dev.azure.com/contoso"},
+    )
+    body = r.json()
+    assert r.status_code == 200
+    assert body["ok"] is False
+    assert "project" in body["error"]
+
+
+def test_azure_devops_discover_iterations_returns_items(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = _mk_paths(tmp_path)
+    from docket.config import setup_discovery
+
+    monkeypatch.setattr(
+        setup_discovery,
+        "ado_list_iterations",
+        lambda org, project: ["Acme\\Sprint 1", "Acme\\Sprint 2"],
+    )
+    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
+    r = client.post(
+        "/api/setup/azure-devops/discover",
+        headers=SETUP_AUTH,
+        json={
+            "stage": "iterations",
+            "org": "https://dev.azure.com/contoso",
+            "project": "Acme",
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    assert body["items"] == ["Acme\\Sprint 1", "Acme\\Sprint 2"]
+
+
+def test_azure_devops_discover_failure_reports_ok_false(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Helper raising AdoDiscoveryError → DTO with `ok=false` and the
+    helper's message. SPA falls back to free-form entry on this signal."""
+    paths = _mk_paths(tmp_path)
+    from docket.config import setup_discovery
+
+    def _boom() -> list[Any]:
+        raise setup_discovery.AdoDiscoveryError("az session expired")
+
+    monkeypatch.setattr(setup_discovery, "ado_list_orgs", _boom)
+    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
+    r = client.post(
+        "/api/setup/azure-devops/discover",
+        headers=SETUP_AUTH,
+        json={"stage": "orgs"},
+    )
+    body = r.json()
+    assert r.status_code == 200
+    assert body["ok"] is False
+    assert "az session expired" in body["error"]
+
+
+def test_azure_devops_discover_requires_setup_token(tmp_path: Path) -> None:
+    paths = _mk_paths(tmp_path)
+    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
+    r = client.post(
+        "/api/setup/azure-devops/discover",
+        json={"stage": "orgs"},
+    )
+    assert r.status_code == 401
+
+
+def test_github_discover_repos_ok(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = _mk_paths(tmp_path)
+    from docket.config import setup_discovery
+
+    monkeypatch.setattr(
+        setup_discovery,
+        "gh_list_repos",
+        lambda host: [
+            setup_discovery.GhRepoRef(owner="contoso", name="alpha"),
+            setup_discovery.GhRepoRef(owner="contoso", name="bravo"),
+        ],
+    )
+    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
+    r = client.post(
+        "/api/setup/github/discover",
+        headers=SETUP_AUTH,
+        json={"stage": "repos", "host": "github.com"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    assert body["repos"] == [{"full_name": "contoso/alpha"}, {"full_name": "contoso/bravo"}]
+
+
+def test_github_discover_orgs_ok(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = _mk_paths(tmp_path)
+    from docket.config import setup_discovery
+
+    monkeypatch.setattr(
+        setup_discovery,
+        "gh_list_orgs",
+        lambda host: [setup_discovery.GhOrgRef(login="contoso")],
+    )
+    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
+    r = client.post(
+        "/api/setup/github/discover",
+        headers=SETUP_AUTH,
+        json={"stage": "orgs"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    assert body["orgs"] == [{"login": "contoso"}]
+
+
+def test_github_discover_org_repos_requires_org(tmp_path: Path) -> None:
+    paths = _mk_paths(tmp_path)
+    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
+    r = client.post(
+        "/api/setup/github/discover",
+        headers=SETUP_AUTH,
+        json={"stage": "org_repos"},
+    )
+    body = r.json()
+    assert r.status_code == 200
+    assert body["ok"] is False
+    assert "org" in body["error"]
+
+
+def test_github_discover_failure_reports_ok_false(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = _mk_paths(tmp_path)
+    from docket.config import setup_discovery
+
+    def _boom(host: Any) -> list[Any]:
+        raise setup_discovery.GhDiscoveryError("gh: api rate-limited")
+
+    monkeypatch.setattr(setup_discovery, "gh_list_repos", _boom)
+    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
+    r = client.post(
+        "/api/setup/github/discover",
+        headers=SETUP_AUTH,
+        json={"stage": "repos"},
+    )
+    body = r.json()
+    assert r.status_code == 200
+    assert body["ok"] is False
+    assert "rate-limited" in body["error"]
+
+
+def test_suggest_key_avoids_taken_slots(tmp_path: Path) -> None:
+    paths = _mk_paths(tmp_path)
+    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
+
+    r = client.post(
+        "/api/setup/suggest-key",
+        headers=SETUP_AUTH,
+        json={"type": "github", "taken": []},
+    )
+    assert r.status_code == 200
+    assert r.json() == {"key": "github"}
+
+    r = client.post(
+        "/api/setup/suggest-key",
+        headers=SETUP_AUTH,
+        json={"type": "github", "taken": ["github"]},
+    )
+    assert r.json() == {"key": "github-2"}
+
+    r = client.post(
+        "/api/setup/suggest-key",
+        headers=SETUP_AUTH,
+        json={"type": "github", "taken": ["github", "github-2"]},
+    )
+    assert r.json() == {"key": "github-3"}
+
+
+def test_suggest_label_for_github(tmp_path: Path) -> None:
+    paths = _mk_paths(tmp_path)
+    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
+    r = client.post(
+        "/api/setup/suggest-label",
+        headers=SETUP_AUTH,
+        json={
+            "type": "github",
+            "config": {"default_repo": "contoso/alpha"},
+            "github_host": "github.com",
+        },
+    )
+    assert r.status_code == 200
+    # github.com host folds into the generic "GitHub" prefix.
+    assert r.json() == {"label": "GitHub · contoso/alpha"}
+
+
+def test_suggest_label_for_github_enterprise_host(tmp_path: Path) -> None:
+    paths = _mk_paths(tmp_path)
+    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
+    r = client.post(
+        "/api/setup/suggest-label",
+        headers=SETUP_AUTH,
+        json={
+            "type": "github",
+            "config": {"default_repo": "contoso/alpha"},
+            "github_host": "ghe.contoso.com",
+        },
+    )
+    assert r.status_code == 200
+    assert r.json() == {"label": "ghe.contoso.com · contoso/alpha"}
+
+
+def test_suggest_label_for_azure_devops(tmp_path: Path) -> None:
+    paths = _mk_paths(tmp_path)
+    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
+    r = client.post(
+        "/api/setup/suggest-label",
+        headers=SETUP_AUTH,
+        json={
+            "type": "azure_devops",
+            "config": {
+                "organization": "https://dev.azure.com/contoso",
+                "project": "Acme",
+            },
+        },
+    )
+    assert r.status_code == 200
+    assert r.json() == {"label": "Azure DevOps · contoso/Acme"}
+
+
+def test_suggest_label_unknown_type_falls_back_to_id(tmp_path: Path) -> None:
+    paths = _mk_paths(tmp_path)
+    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
+    r = client.post(
+        "/api/setup/suggest-label",
+        headers=SETUP_AUTH,
+        json={"type": "totally_made_up", "config": {}},
+    )
+    assert r.json() == {"label": "totally_made_up"}
+
+
+def test_probe_scope_returns_count_for_stub(tmp_path: Path) -> None:
+    """github_stub builds a single demo item — the probe should count 1."""
+    paths = _mk_paths(tmp_path)
+    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
+    r = client.post(
+        "/api/setup/probe-scope",
+        headers=SETUP_AUTH,
+        json={
+            "type": "github_stub",
+            "config": {"default_repo": "contoso/alpha"},
+            "scope": {},
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["count"] is not None
+    assert body["count"] >= 0
+    assert body["error"] == ""
+
+
+def test_probe_scope_reports_count_none_for_unknown_type(tmp_path: Path) -> None:
+    """Unknown provider type → `count=None`, SPA renders 'could not count'."""
+    paths = _mk_paths(tmp_path)
+    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
+    r = client.post(
+        "/api/setup/probe-scope",
+        headers=SETUP_AUTH,
+        json={"type": "nope", "config": {}, "scope": {}},
+    )
+    assert r.status_code == 200
+    assert r.json()["count"] is None
+
+
+def test_probe_scope_reports_invalid_scope(tmp_path: Path) -> None:
+    """A scope dict that doesn't validate as ScopeFilter → `count=None` plus
+    a hint in `error` so the SPA can flag the field."""
+    paths = _mk_paths(tmp_path)
+    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
+    r = client.post(
+        "/api/setup/probe-scope",
+        headers=SETUP_AUTH,
+        json={
+            "type": "github_stub",
+            "config": {"default_repo": "contoso/alpha"},
+            "scope": {"team": 12345},  # team must be a string
+        },
+    )
+    body = r.json()
+    assert r.status_code == 200
+    assert body["count"] is None
+    assert "invalid scope" in body["error"]
+
+
+# ---- regression: setup-complete scope round-trips into active scope slot ----
+
+
+def test_setup_complete_scope_round_trips_into_default_slot(tmp_path: Path) -> None:
+    """Bootstrap-mode `/setup/complete` with a non-empty scope must persist
+    the values into `providers[key].scopes['default']` (no other slot exists
+    on first run). Regression for: web-wizard scopes silently dropped when
+    the bootstrap path took a different code path than the live one."""
+    paths = _mk_paths(tmp_path)
+    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
+    payload: dict[str, Any] = {
+        "providers": {
+            "demo": {
+                "type": "github_stub",
+                "display_name": "Demo",
+                "config": {"default_repo": "contoso/alpha"},
+                "scope": {"assignee": "@me", "team": "Team Z"},
+            }
+        },
+        "active_provider": "demo",
+        "llm": None,
+        "http_token": "operator-token",
+        "run_initial_sync": False,
+    }
+    r = client.post("/api/setup/complete", headers=SETUP_AUTH, json=payload)
+    assert r.status_code == 200, r.text
+
+    with paths.config_file.open("rb") as f:
+        raw = tomllib.load(f)
+    entry = raw["providers"]["demo"]
+    assert entry["active_scope"] == "default"
+    assert entry["scopes"]["default"]["assignee"] == "@me"
+    assert entry["scopes"]["default"]["team"] == "Team Z"
+
+
+# ---- bootstrap SPA: setup wizard is reachable from the same origin --------
+
+
+def test_bootstrap_spa_root_renders_with_setup_token_injected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When `config.toml` doesn't exist, the bootstrap app's SPA mount must
+    serve `index.html` at `/` with the setup token injected as
+    `window.__DOCKET_TOKEN__` so the browser-side wizard can authenticate
+    against `/api/setup/*` without the operator copy-pasting a token."""
+    dist = tmp_path / "fake-dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text(
+        "<!doctype html><html><head><title>Docket</title></head>"
+        "<body><div id=root></div></body></html>",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("DOCKET_FRONTEND_DIST", str(dist))
+
+    paths = _mk_paths(tmp_path)
+    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
+
+    res = client.get("/")
+    assert res.status_code == 200
+    assert "text/html" in res.headers["content-type"]
+    body = res.text
+    assert "<div id=root>" in body
+    assert "window.__DOCKET_TOKEN__" in body
+    assert f'"{SETUP_TOKEN}"' in body
+
+
+def test_bootstrap_spa_status_endpoint_remains_unauthenticated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Even with a SPA mounted, `/api/setup/status` stays auth-free — the
+    wizard polls it before it has any token to send."""
+    dist = tmp_path / "fake-dist"
+    dist.mkdir()
+    (dist / "index.html").write_text("<html><head></head><body/></html>", encoding="utf-8")
+    monkeypatch.setenv("DOCKET_FRONTEND_DIST", str(dist))
+
+    paths = _mk_paths(tmp_path)
+    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
+
+    res = client.get("/api/setup/status")
+    assert res.status_code == 200
+    assert res.json()["needs_setup"] is True
+
+
+def test_bootstrap_spa_deep_link_returns_index_html(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Deep-linking to a SPA route (e.g. `/wizard`) on the bootstrap app
+    must return `index.html`, not 404 — the React router resolves the
+    in-page route after the bundle loads."""
+    dist = tmp_path / "fake-dist"
+    dist.mkdir()
+    (dist / "index.html").write_text(
+        "<!doctype html><html><head></head><body><div id=root></div></body></html>",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("DOCKET_FRONTEND_DIST", str(dist))
+
+    paths = _mk_paths(tmp_path)
+    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
+
+    res = client.get("/wizard/llm")
+    assert res.status_code == 200
+    assert "<div id=root>" in res.text
+
+
+def test_bootstrap_spa_missing_bundle_falls_back(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """If the bundle isn't built yet, the bootstrap app still serves a
+    friendly fallback page at `/` (so newly-cloned repos don't 404)."""
+    monkeypatch.setenv("DOCKET_FRONTEND_DIST", str(tmp_path / "missing"))
+    paths = _mk_paths(tmp_path)
+    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
+
+    res = client.get("/")
+    assert res.status_code == 200
+    assert "frontend bundle not built" in res.text.lower()
+
+
+def test_bootstrap_spa_does_not_shadow_setup_routes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The SPA's catch-all must not intercept `/api/setup/*` — a SPA mount
+    that swallowed the API routes would brick the wizard."""
+    dist = tmp_path / "fake-dist"
+    dist.mkdir()
+    (dist / "index.html").write_text("<html/>", encoding="utf-8")
+    monkeypatch.setenv("DOCKET_FRONTEND_DIST", str(dist))
+
+    paths = _mk_paths(tmp_path)
+    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
+
+    # Authenticated → JSON, not HTML.
+    res = client.get("/api/setup/providers/types", headers=SETUP_AUTH)
+    assert res.status_code == 200
+    assert res.headers["content-type"].startswith("application/json")

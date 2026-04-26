@@ -1,24 +1,5 @@
 # Simplify — aggressive DRY + canonical-pattern enforcement pass
 
-A re-runnable simplification prompt for the **whole repo** (Python backend +
-React/TanStack frontend). Each pass converges the codebase toward **one
-canonical way** per concern, deletes duplication, and removes accidental
-complexity — without changing intended behavior or touching the load-bearing
-invariants in [CLAUDE.md](../../CLAUDE.md).
-
-## How to use this prompt
-
-- **Default scope:** the whole repo — `src/docket/**` and `frontend/src/**`.
-- **Optional scope** (pass as argument): a tree (`backend`, `frontend`), a
-  module (`src/docket/api/`, `frontend/src/components/items/`), or a
-  changeset (`HEAD~5..HEAD`, `git diff main`). Restrict findings and the
-  execution gates to that scope; everything else is "Do not touch".
-- **Re-runnable.** Run this prompt in successive passes. Each pass leaves the
-  tree greener. A pass that finds nothing high-value-low-risk is a successful
-  termination — say so and stop.
-- **Solo, main-only, no backward-compat.** Delete legacy outright; never add
-  shims, deprecation paths, or `_v2` suffixes (per memory + CLAUDE.md).
-
 ## Goal
 
 Identify the highest-value opportunities to:
@@ -47,51 +28,51 @@ pattern."
 
 ### Backend — Python 3.12, FastAPI, Typer, Textual
 
-| Concern              | Canonical home / shape                                                                                          |
+| Concern | Canonical home / shape |
 | -------------------- | --------------------------------------------------------------------------------------------------------------- |
-| Provider mutation    | `mutation_service.propose_*` → diff → `mutation_service.confirm(...)`. CLI wraps via `cli.confirm.apply_mutation`. |
-| Provider read        | Through the `WorkItemProvider` Protocol only. Concrete classes never imported in `core/`, `storage/`, `agent/`, `api/`. |
-| Cache write          | Refresh after a confirmed mutation via `mutation_service._refresh_cache`. SQLite is cache, not record.          |
-| State translation    | Provider-native ↔ canonical at the `providers/<x>/state_map.py` boundary. The rest of the app uses `ItemKind`, `ItemState`, `TransitionIntent`. |
-| Surface adapter      | Thin: parse input → call **one** service → map result. No business logic in routes, commands, or widgets.       |
-| Service              | Pure-Python, takes `conn`/`provider`/`paths`/`config` explicitly. No hidden globals. No surface imports.        |
-| Repo                 | One repo per aggregate in `storage/repos/`. Surfaces and services call the repo, never raw SQL.                 |
-| Agent tool           | Registered in the **fixed order** in `agent/factory.py:build_tool_registry`. Mutating tools stage proposals only. |
-| Prompt prefix        | Byte-stable. No timestamps/usernames/scope text before the cache boundary.                                      |
-| Read-only mode       | Blocks every mutation entry point and strips mutating tools from the agent + MCP. Not a warning.                |
-| API error            | One `HTTPException` shape per category; preserve `raise ... from err` chains; never swallow with bare `except`. |
-| Pagination / list    | One canonical response model across list endpoints. No bespoke per-route shapes.                                |
-| Path conventions     | `/<resource>/<id>/<sub>`; verbs as POST sub-actions (`/items/{id}/transition`).                                 |
-| Config read          | Through `config/` accessors. No re-reading env / TOML in surfaces.                                              |
-| Logging              | Structured JSON via `telemetry.logging`. No bare `print`.                                                       |
+| Provider mutation | `mutation_service.propose_*` → diff → `mutation_service.confirm(...)`. CLI wraps via `cli.confirm.apply_mutation`. |
+| Provider read | Through the `WorkItemProvider` Protocol only. Concrete classes never imported in `core/`, `storage/`, `agent/`, `api/`. |
+| Cache write | Refresh after a confirmed mutation via `mutation_service._refresh_cache`. SQLite is cache, not record. |
+| State translation | Provider-native ↔ canonical at the `providers/<x>/state_map.py` boundary. The rest of the app uses `ItemKind`, `ItemState`, `TransitionIntent`. |
+| Surface adapter | Thin: parse input → call **one** service → map result. No business logic in routes, commands, or widgets. |
+| Service | Pure-Python, takes `conn`/`provider`/`paths`/`config` explicitly. No hidden globals. No surface imports. |
+| Repo | One repo per aggregate in `storage/repos/`. Surfaces and services call the repo, never raw SQL. |
+| Agent tool | Registered in the **fixed order** in `agent/factory.py:build_tool_registry`. Mutating tools stage proposals only. |
+| Prompt prefix | Byte-stable. No timestamps/usernames/scope text before the cache boundary. |
+| Read-only mode | Blocks every mutation entry point and strips mutating tools from the agent + MCP. Not a warning. |
+| API error | One `HTTPException` shape per category; preserve `raise ... from err` chains; never swallow with bare `except`. |
+| Pagination / list | One canonical response model across list endpoints. No bespoke per-route shapes. |
+| Path conventions | `/<resource>/<id>/<sub>`; verbs as POST sub-actions (`/items/{id}/transition`). |
+| Config read | Through `config/` accessors. No re-reading env / TOML in surfaces. |
+| Logging | Structured JSON via `telemetry.logging`. No bare `print`. |
 
 ### Frontend — React 19 + TanStack Start/Router/Query/Form, Bun, Biome, Tailwind
 
-| Concern              | Canonical home / shape                                                                                          |
+| Concern | Canonical home / shape |
 | -------------------- | --------------------------------------------------------------------------------------------------------------- |
-| API types            | `frontend/src/api/schema.d.ts` — generated from `/openapi.json` via `bun run gen:api`. Hand-typed request/response shapes are a bug. |
-| API client           | `frontend/src/api/client.ts`. No bespoke `fetch` calls in components or hooks; route through the client.        |
-| Server state         | TanStack Query in `frontend/src/api/hooks.ts` keyed by `frontend/src/api/keys.ts`. **Never** mirror server data into `useState`. |
-| Mutations            | `useMutation` in `api/hooks.ts` invalidates the affected `keys.*`. UI surfaces only call the hook.              |
-| Routing              | TanStack Router file-based in `frontend/src/routes/**`. No imperative `navigate()` for things a `<Link>` covers. |
-| Forms                | `@tanstack/react-form` + the shared form primitives. Class strings live in `frontend/src/lib/formClasses.ts`. No parallel form scaffolding. |
-| Component layout     | Feature folders under `frontend/src/components/<feature>/`, co-located handlers (per memory: feature-based UI org). Cross-feature primitives only in `components/common/` or `lib/`. |
-| Tailwind classes     | Inline classes are fine. **Three-or-more identical class strings** → one constant in `lib/formClasses.ts` or a sibling. |
-| `cn` / class merging | `lib/cn.ts`. No re-implementations.                                                                             |
-| Effects              | `useEffect` is the **last** resort. Derived state → `useMemo`/computed; events → handlers; subscriptions → `useSyncExternalStore` or a Query hook. |
-| Env access           | `lib/env.ts`. No raw `import.meta.env` reads in components.                                                     |
-| Theming / prefs      | `lib/theme.ts`, `lib/uiPrefs.ts`. Surfaces consume; do not re-derive.                                           |
-| Loading / error UI   | One canonical pair of components in `components/common/` per shape (skeleton, empty, error). No per-feature copies. |
-| Markdown / code      | `react-markdown` + the shared rehype/remark stack. No second markdown renderer.                                 |
+| API types | `frontend/src/api/schema.d.ts` — generated from `/openapi.json` via `bun run gen:api`. Hand-typed request/response shapes are a bug. |
+| API client | `frontend/src/api/client.ts`. No bespoke `fetch` calls in components or hooks; route through the client. |
+| Server state | TanStack Query in `frontend/src/api/hooks.ts` keyed by `frontend/src/api/keys.ts`. **Never** mirror server data into `useState`. |
+| Mutations | `useMutation` in `api/hooks.ts` invalidates the affected `keys.*`. UI surfaces only call the hook. |
+| Routing | TanStack Router file-based in `frontend/src/routes/**`. No imperative `navigate()` for things a `<Link>` covers. |
+| Forms | `@tanstack/react-form` + the shared form primitives. Class strings live in `frontend/src/lib/formClasses.ts`. No parallel form scaffolding. |
+| Component layout | Feature folders under `frontend/src/components/<feature>/`, co-located handlers (per memory: feature-based UI org). Cross-feature primitives only in `components/common/` or `lib/`. |
+| Tailwind classes | Inline classes are fine. **Three-or-more identical class strings** → one constant in `lib/formClasses.ts` or a sibling. |
+| `cn` / class merging | `lib/cn.ts`. No re-implementations. |
+| Effects | `useEffect` is the **last** resort. Derived state → `useMemo`/computed; events → handlers; subscriptions → `useSyncExternalStore` or a Query hook. |
+| Env access | `lib/env.ts`. No raw `import.meta.env` reads in components. |
+| Theming / prefs | `lib/theme.ts`, `lib/uiPrefs.ts`. Surfaces consume; do not re-derive. |
+| Loading / error UI | One canonical pair of components in `components/common/` per shape (skeleton, empty, error). No per-feature copies. |
+| Markdown / code | `react-markdown` + the shared rehype/remark stack. No second markdown renderer. |
 
 ### Cross-tree
 
-| Concern              | Canonical                                                                                                       |
+| Concern | Canonical |
 | -------------------- | --------------------------------------------------------------------------------------------------------------- |
-| Source of API truth  | FastAPI route → OpenAPI → `gen:api` → `schema.d.ts`. If frontend types drift, regenerate; never patch by hand.  |
-| New endpoint         | Pydantic request + response model → route → regenerate frontend schema → expose via a hook in `api/hooks.ts`.   |
-| Magic literals       | Repeated literal in 3+ places → one constant. Backend: `core/` or service-local. Frontend: `lib/` or feature-local. |
-| Naming               | Roles, not implementations. `Manager`/`Helper`/`Util` is a smell. `_private` for intra-module-only symbols.     |
+| Source of API truth | FastAPI route → OpenAPI → `gen:api` → `schema.d.ts`. If frontend types drift, regenerate; never patch by hand. |
+| New endpoint | Pydantic request + response model → route → regenerate frontend schema → expose via a hook in `api/hooks.ts`. |
+| Magic literals | Repeated literal in 3+ places → one constant. Backend: `core/` or service-local. Frontend: `lib/` or feature-local. |
+| Naming | Roles, not implementations. `Manager`/`Helper`/`Util` is a smell. `_private` for intra-module-only symbols. |
 
 ## What to look for
 

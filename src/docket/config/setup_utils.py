@@ -103,6 +103,20 @@ def build_label_suggestion(
     return ""
 
 
+def next_sibling_key(type_id: str, taken: set[str]) -> str:
+    """Return a free `<type_id>-<n>` key, given the set of already-taken ids.
+
+    Promoted from `setup_wizard._next_sibling_key` so the HTTP wizard can
+    suggest the same default when a re-run hits a configured instance.
+    Returns the bare `type_id` when it isn't already taken."""
+    if type_id not in taken:
+        return type_id
+    i = 2
+    while f"{type_id}-{i}" in taken:
+        i += 1
+    return f"{type_id}-{i}"
+
+
 def looks_like_http_url(value: str) -> bool:
     """True when `value` parses as an `http://` or `https://` URL with a host.
 
@@ -345,6 +359,7 @@ __all__ = [
     "build_label_suggestion",
     "console",
     "looks_like_http_url",
+    "next_sibling_key",
     "pick",
     "pick_assignee",
     "pick_github_host",

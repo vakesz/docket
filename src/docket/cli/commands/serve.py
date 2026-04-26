@@ -38,9 +38,11 @@ def serve_command(
     """Run the HTTP surface (FastAPI + SSE) on the configured port.
 
     When `config.toml` is missing, falls through to bootstrap mode: a tiny
-    FastAPI exposing only `/health` and `/setup/*`. The bootstrap path mints
-    a fresh `[http].token` into a stub `config.toml` and prints it once so
-    the operator can paste it into the wizard."""
+    FastAPI exposing only `/api/health`, `/api/setup/*`, and the SPA at `/`.
+    The bootstrap path mints a fresh `[http].token` into a stub `config.toml`
+    and prints it once. Browsers reach the wizard at `http://<bind>:<port>/`
+    with the bearer auto-injected as `window.__DOCKET_TOKEN__`; headless
+    operators can `POST /api/setup/complete` with the printed token."""
     import uvicorn
 
     from docket.agent.llm_client import LlmClient
@@ -77,9 +79,19 @@ def serve_command(
         listen_port = port or 8765
         bootstrap_log_level = (log_level or "info").lower()
         app = create_bootstrap_app(paths=paths, setup_token=bootstrap_token)
+        from docket.api.spa import resolve_frontend_dist
+
+        dist = resolve_frontend_dist()
+        bundle = str(dist) if dist else "not built (run 'make frontend-build')"
+        url = f"http://{bind}:{listen_port}/"
         console.print(
-            f"[green]docket serve (bootstrap)[/green] listening on http://{bind}:{listen_port} "
-            f"— POST /setup/complete to finish setup"
+            f"[green]docket serve (bootstrap)[/green] listening on {url} "
+            f"— open in a browser to finish setup"
+        )
+        console.print(f"[dim]frontend bundle: {bundle}[/dim]")
+        console.print(
+            f"[dim]headless? POST /api/setup/complete with bearer "
+            f"{bootstrap_token} or run `docket setup` in a terminal.[/dim]"
         )
         uvicorn.run(app, host=bind, port=listen_port, log_level=bootstrap_log_level)
         return

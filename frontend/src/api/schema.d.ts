@@ -526,16 +526,23 @@ export interface paths {
         put?: never;
         /**
          * Rotate Llm Key
-         * @description Set / clear AZURE_OPENAI_API_KEY in the XDG `.env` file.
+         * @description Store / clear the LLM API key in the OS keyring.
          *
-         *     Also updates the current process's `os.environ` so components that read
-         *     `get_llm_api_key()` at call time see the new value. The live `LlmClient`
-         *     still holds the old key in its SDK config — fully rebinding chat requires
-         *     a restart, which we signal via `requires_restart=True` when the key
-         *     actually changed.
+         *     The non-secret hint (`{prefix, suffix, length, updated_at}`) is also
+         *     written into `[llm.key_hint]` in `config.toml` so the frontend can show
+         *     the user which key is loaded without ever returning the secret. The live
+         *     `LlmClient` still holds the old key in its SDK config — fully rebinding
+         *     chat requires a restart, which we signal via `requires_restart=True`.
          */
         post: operations["rotate_llm_key_api_settings_llm_key_post"];
-        delete?: never;
+        /**
+         * Remove Llm Key
+         * @description Remove the LLM API key from the keyring and clear the hint.
+         *
+         *     Idempotent: clearing an already-empty key still succeeds and reports
+         *     `requires_restart=False` (nothing to rebind).
+         */
+        delete: operations["remove_llm_key_api_settings_llm_key_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1188,6 +1195,166 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/setup/cli-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cli Status
+         * @description Probe the local `gh` / `az` CLI sessions and OS keyring.
+         *
+         *     Auth-free so the SPA can read it before it has a token to send. Each
+         *     sub-probe is best-effort: if `gh` isn't installed we report
+         *     `present=false` rather than 500ing. Identity is reported only when
+         *     the session is live, mirroring the CLI wizard's "Checking … session"
+         *     line. The `gh_hosts` list reflects every authenticated `gh auth login`
+         *     target so the GitHub picker can disambiguate cloud vs. enterprise.
+         */
+        get: operations["cli_status_api_setup_cli_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/setup/azure-devops/discover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Azure Devops Discover
+         * @description Run one Azure DevOps discovery stage against the user's `az` session.
+         *
+         *     Stage map (1:1 with `providers.azure_devops.discover`):
+         *       - orgs       → list_orgs() → {orgs:[{name,url}]}
+         *       - projects   → list_projects(org) → {projects:[name]}
+         *       - teams      → list_teams(org, project) → {items:[name]}
+         *       - areas      → list_area_paths(org, project) → {items:[path]}
+         *       - iterations → list_iteration_paths(org, project) → {items:[path]}
+         *
+         *     Failures map to `ok=false` with the helper's human-readable message;
+         *     the SPA falls back to free-form input on failure (same UX as the CLI
+         *     wizard's `__custom__` branch).
+         */
+        post: operations["azure_devops_discover_api_setup_azure_devops_discover_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/setup/github/discover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Github Discover
+         * @description Run one GitHub discovery stage via `gh api`.
+         *
+         *     Stage map (1:1 with `providers.github.discover`):
+         *       - hosts     → list_hosts() (also returned in /cli-status; here for symmetry)
+         *       - repos     → list_repos(host) (signed-in user's repos)
+         *       - orgs      → list_orgs(host) (orgs the user is a member of)
+         *       - org_repos → list_org_repos(org, host)
+         *
+         *     Same failure UX as the ADO discovery: `ok=false` + message → SPA
+         *     drops back to manual repo entry.
+         */
+        post: operations["github_discover_api_setup_github_discover_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/setup/suggest-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Suggest Key
+         * @description Suggest a free provider config key (`<type>` or `<type>-<n>`).
+         *
+         *     Mirrors `setup_wizard._step_pick_provider` so a re-run from the web
+         *     wizard offers the same default the CLI does. `taken` is supplied by
+         *     the caller so the route doesn't need to re-load config.
+         */
+        post: operations["suggest_key_api_setup_suggest_key_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/setup/suggest-label": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Suggest Label
+         * @description Suggest a human-readable display name from the provider draft.
+         *
+         *     Same logic as `setup_wizard._suggest_display_name` so the CLI and
+         *     web wizard offer identical defaults; falls back to the `type` id
+         *     when nothing useful can be inferred.
+         */
+        post: operations["suggest_label_api_setup_suggest_label_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/setup/probe-scope": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Probe Scope
+         * @description Estimate match-count for a draft scope before the user commits.
+         *
+         *     Best-effort wrapper over `WorkItemProvider.list_changes_since(...)` —
+         *     returns `count=None` when the provider cannot be reached or the
+         *     config doesn't validate. The SPA falls back to "could not count"
+         *     in that case (same UX as the CLI wizard).
+         */
+        post: operations["probe_scope_api_setup_probe_scope_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -1226,6 +1393,54 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AdoDiscoverRequest
+         * @description Stage-driven Azure DevOps discovery probe.
+         *
+         *     Each stage maps 1:1 to a `providers.azure_devops.discover` helper.
+         *     `org` is required for `projects` / `teams` / `areas` / `iterations`;
+         *     `project` is required for the latter three.
+         */
+        AdoDiscoverRequest: {
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "orgs" | "projects" | "teams" | "areas" | "iterations";
+            /**
+             * Org
+             * @default
+             */
+            org: string;
+            /**
+             * Project
+             * @default
+             */
+            project: string;
+        };
+        /** AdoDiscoverResultDTO */
+        AdoDiscoverResultDTO: {
+            /** Ok */
+            ok: boolean;
+            /**
+             * Error
+             * @default
+             */
+            error: string;
+            /** Orgs */
+            orgs?: components["schemas"]["AdoOrgDTO"][];
+            /** Projects */
+            projects?: string[];
+            /** Items */
+            items?: string[];
+        };
+        /** AdoOrgDTO */
+        AdoOrgDTO: {
+            /** Name */
+            name: string;
+            /** Url */
+            url: string;
+        };
         /** AnswerQuestionRequest */
         AnswerQuestionRequest: {
             /** Question Id */
@@ -1261,6 +1476,50 @@ export interface components {
             tool_call_id?: string | null;
             /** Name */
             name?: string | null;
+        };
+        /** CliStatusDTO */
+        CliStatusDTO: {
+            az: components["schemas"]["CliToolStatusDTO"];
+            gh: components["schemas"]["CliToolStatusDTO"];
+            /** Gh Hosts */
+            gh_hosts?: components["schemas"]["GithubHostDTO"][];
+            /**
+             * Keyring Available
+             * @default false
+             */
+            keyring_available: boolean;
+            /**
+             * Keyring Error
+             * @default
+             */
+            keyring_error: string;
+        };
+        /**
+         * CliToolStatusDTO
+         * @description One CLI dependency's session status — `gh` or `az`.
+         *
+         *     Mirrors the wizard's terminal probe: is the binary on PATH, does it
+         *     have an active session, and what identity is signed in. The frontend
+         *     uses this to render the same retry-after-`gh auth login` UX the CLI
+         *     has, without trying to start the login itself.
+         */
+        CliToolStatusDTO: {
+            /** Name */
+            name: string;
+            /** Present */
+            present: boolean;
+            /** Logged In */
+            logged_in: boolean;
+            /**
+             * Identity
+             * @default
+             */
+            identity: string;
+            /**
+             * Error
+             * @default
+             */
+            error: string;
         };
         /** CommentDTO */
         CommentDTO: {
@@ -1329,6 +1588,63 @@ export interface components {
             assignee?: string | null;
             /** Tags */
             tags?: string[];
+        };
+        /**
+         * GithubDiscoverRequest
+         * @description Stage-driven GitHub discovery via `gh api`.
+         *
+         *     `host` selects the gh hostname (only meaningful when the user is
+         *     authenticated against multiple). `org` is required for `org_repos`.
+         */
+        GithubDiscoverRequest: {
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "hosts" | "repos" | "orgs" | "org_repos";
+            /**
+             * Host
+             * @default
+             */
+            host: string;
+            /**
+             * Org
+             * @default
+             */
+            org: string;
+        };
+        /** GithubDiscoverResultDTO */
+        GithubDiscoverResultDTO: {
+            /** Ok */
+            ok: boolean;
+            /**
+             * Error
+             * @default
+             */
+            error: string;
+            /** Hosts */
+            hosts?: components["schemas"]["GithubHostDTO"][];
+            /** Repos */
+            repos?: components["schemas"]["GithubRepoDTO"][];
+            /** Orgs */
+            orgs?: components["schemas"]["GithubOrgDTO"][];
+        };
+        /** GithubHostDTO */
+        GithubHostDTO: {
+            /** Hostname */
+            hostname: string;
+            /** Api Base Url */
+            api_base_url: string;
+        };
+        /** GithubOrgDTO */
+        GithubOrgDTO: {
+            /** Login */
+            login: string;
+        };
+        /** GithubRepoDTO */
+        GithubRepoDTO: {
+            /** Full Name */
+            full_name: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1749,6 +2065,36 @@ export interface components {
             /** Pinned */
             pinned: boolean;
         };
+        /** ProbeScopeDTO */
+        ProbeScopeDTO: {
+            /** Count */
+            count?: number | null;
+            /**
+             * Error
+             * @default
+             */
+            error: string;
+        };
+        /**
+         * ProbeScopeRequest
+         * @description Estimate match-count for a scope draft, before the user commits.
+         *
+         *     Same UX as the CLI wizard's "→ N item(s) match this scope" preview.
+         *     Returns `count=None` when the provider can't be reached or doesn't
+         *     support cheap counting — callers fall back to "could not count".
+         */
+        ProbeScopeRequest: {
+            /** Type */
+            type: string;
+            /** Config */
+            config?: {
+                [key: string]: unknown;
+            };
+            /** Scope */
+            scope?: {
+                [key: string]: unknown;
+            };
+        };
         /**
          * ProjectDTO
          * @description Project surface for the HTTP API.
@@ -2016,7 +2362,14 @@ export interface components {
              */
             requires_restart: boolean;
         };
-        /** SettingsLlmKeyDTO */
+        /**
+         * SettingsLlmKeyDTO
+         * @description Response for set/clear of the LLM API key.
+         *
+         *     `configured` reflects whether a key is currently stored. The hint comes
+         *     along on `GET /api/settings` via `config.llm.key_hint`, so we don't
+         *     duplicate it here — clients merge the updated config separately.
+         */
         SettingsLlmKeyDTO: {
             /** Ok */
             ok: boolean;
@@ -2032,10 +2385,12 @@ export interface components {
          * SettingsLlmKeyRequest
          * @description Rotate the LLM API key.
          *
-         *     Persists to the XDG-managed `.env` file so `docket serve` picks it up on
-         *     next start. Leaving `api_key` empty clears the entry (chat 503s until
-         *     re-set). Triggers a rebind of the live LLM client when possible so the
-         *     change takes effect without restart.
+         *     Stores the key in the OS keyring (macOS Keychain / Windows Credential
+         *     Manager / freedesktop Secret Service) and writes a non-secret hint into
+         *     `[llm.key_hint]` in `config.toml` so the UI can render a preview. Leaving
+         *     `api_key` empty here is rejected — use `DELETE /api/settings/llm-key`
+         *     to clear. The live LLM client still holds the previous key; the response
+         *     sets `requires_restart=True` whenever the value actually changed.
          */
         SettingsLlmKeyRequest: {
             /** Api Key */
@@ -2412,6 +2767,37 @@ export interface components {
              * @default 0
              */
             pending_proposals: number;
+        };
+        /** SuggestKeyDTO */
+        SuggestKeyDTO: {
+            /** Key */
+            key: string;
+        };
+        /** SuggestKeyRequest */
+        SuggestKeyRequest: {
+            /** Type */
+            type: string;
+            /** Taken */
+            taken?: string[];
+        };
+        /** SuggestLabelDTO */
+        SuggestLabelDTO: {
+            /** Label */
+            label: string;
+        };
+        /** SuggestLabelRequest */
+        SuggestLabelRequest: {
+            /** Type */
+            type: string;
+            /** Config */
+            config?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Github Host
+             * @default
+             */
+            github_host: string;
         };
         /** SuggestionDTO */
         SuggestionDTO: {
@@ -3524,6 +3910,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_llm_key_api_settings_llm_key_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsLlmKeyDTO"];
                 };
             };
         };
@@ -4866,6 +5272,191 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SetupCompleteDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cli_status_api_setup_cli_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CliStatusDTO"];
+                };
+            };
+        };
+    };
+    azure_devops_discover_api_setup_azure_devops_discover_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdoDiscoverRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdoDiscoverResultDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    github_discover_api_setup_github_discover_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GithubDiscoverRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GithubDiscoverResultDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    suggest_key_api_setup_suggest_key_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SuggestKeyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuggestKeyDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    suggest_label_api_setup_suggest_label_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SuggestLabelRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuggestLabelDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    probe_scope_api_setup_probe_scope_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProbeScopeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProbeScopeDTO"];
                 };
             };
             /** @description Validation Error */

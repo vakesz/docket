@@ -30,6 +30,26 @@ from docket.providers.registry import build as build_provider
 from docket.providers.registry import specs as provider_specs
 
 
+def count_items_for_scope(
+    type_id: str, config: dict[str, Any], scope: ScopeFilter
+) -> int | None:
+    """Probe how many items match a scope draft, returning None on failure.
+
+    Wraps `WorkItemProvider.list_changes_since(None, scope.to_core())` so the
+    HTTP wizard can show "→ N item(s) match this scope" before the user
+    commits — the same UX as the CLI wizard's `_azure_devops_step_scope`,
+    routed through the registry instead of importing `AzureDevOpsProvider`."""
+    try:
+        provider = build_provider(type_id, dict(config), display_name=type_id)
+    except (UnknownProviderError, ValueError, ValidationError):
+        return None
+    try:
+        items = list(provider.list_changes_since(None, scope.to_core()))
+    except ProviderError:
+        return None
+    return len(items)
+
+
 def provider_type_dtos() -> list[SetupProviderTypeDTO]:
     """Snapshot the registry as DTOs for `/setup/providers/types` and `/settings/providers/types`."""
     return [
@@ -165,6 +185,7 @@ def persist_config_change(
 
 __all__ = [
     "build_and_validate_provider_entry",
+    "count_items_for_scope",
     "persist_config_change",
     "provider_type_dtos",
     "test_provider_draft",

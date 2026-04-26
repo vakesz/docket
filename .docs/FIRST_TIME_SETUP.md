@@ -2,11 +2,20 @@
 
 A friendly walkthrough from a clean clone to a working Docket install, covering Azure DevOps and GitHub. Follow this top-to-bottom the first time; skim-read it on upgrades.
 
+There are two front doors to the wizard — pick whichever fits how you work:
+
+- **Web wizard** (`make serve` → browser at `http://127.0.0.1:8765`) — recommended for a first run on a development checkout. Same questions as the CLI, with click-to-select pickers for orgs/projects/repos and a live "→ N items match" scope preview.
+- **CLI wizard** (`docket setup`) — works over SSH, no browser needed.
+
+Both write the same `config.toml`. Either one is safe to re-run.
+
 ## Contents
 
 - [Prerequisites](#prerequisites)
 - [Install](#install)
 - [Run the setup wizard](#run-the-setup-wizard)
+  - [Web wizard (browser)](#web-wizard-browser)
+  - [CLI wizard (terminal)](#cli-wizard-terminal)
 - [Provider walkthroughs](#provider-walkthroughs)
   - [Azure DevOps](#azure-devops)
   - [GitHub](#github)
@@ -62,14 +71,38 @@ You should see the command table. If not, jump to [Troubleshooting](#troubleshoo
 
 ## Run the setup wizard
 
+> **Use `make` targets for development.** Every `make` target runs `docket --workspace=./.docket-dev`, which redirects `XDG_CONFIG_HOME` / `XDG_STATE_HOME` / `XDG_CACHE_HOME` / `XDG_DATA_HOME` under `./.docket-dev/{config,state,cache,data}/`. That keeps the SQLite cache, `config.toml`, prompts, rotating logs, and the bearer-token mint inside the repo dir instead of bloating your real `~/Library/Application Support/docket/` (macOS), `~/.config/docket/` + `~/.local/state/docket/` (Linux), or `%APPDATA%\docket\` (Windows). When you're done iterating, `make clean-workspace` deletes the entire sandbox in one shot.
+>
+> Plain `uv run docket setup` is fine for a daily-driver install — it just writes to the platform-default paths. Pass `--workspace=./somewhere/` if you want sandboxed state without going through Make.
+
+### Web wizard (browser)
+
 ```bash
-uv run docket setup
+make install     # uv sync + bun install — one-time
+make serve       # builds the SPA, mints a bootstrap token, opens at http://127.0.0.1:8765
+```
+
+The first invocation writes a stub `./.docket-dev/config.toml` containing only the freshly-minted `[http].token`, then starts FastAPI in **bootstrap mode**: only `/api/health`, `/api/setup/*`, and the SPA itself are mounted. Browse to `http://127.0.0.1:8765` and the wizard loads at `/`. The bearer is injected into `index.html` as `window.__DOCKET_TOKEN__` — no copy-paste, the page authenticates against the same origin.
+
+The browser flow mirrors the CLI step-for-step:
+
+1. **CLI status** — probes `gh` and `az` sessions on your local box. Each tool gets a card showing presence + sign-in state + identity. If something's missing or signed out, the card prints the install / `gh auth login` / `az login` command; fix it in another terminal and click **Refresh**.
+2. **Provider** — combined pick + connection + label step. The picker only surfaces provider types whose `requires_cli` is satisfied (so e.g. Azure DevOps is hidden until `az` is signed in). For ADO the wizard offers an org / project picker driven by `/api/setup/azure-devops/discover` (with manual fallback when discovery fails); for GitHub it offers a repo / org-repo picker driven by `/api/setup/github/discover`. The display-name field auto-suggests via `/api/setup/suggest-label` until you start typing.
+3. **Scope** — provider-specific filters with a **Preview match count** button that calls `/api/setup/probe-scope` and shows the same "→ N item(s) match this scope" preview the CLI prints.
+4. **LLM** — Azure OpenAI endpoint, deployment, API version, optional cost-tracking prices (auto-filled for known deployments). The API key is round-tripped through a password field; on `Complete` the backend writes it to the OS keyring (Keychain / Credential Manager / Secret Service / kwallet). If no keyring backend is reachable, the page surfaces the same error the CLI raises and refuses to proceed.
+5. **Settings** — telemetry on/off + log level, HTTP bind/port, "run initial sync" toggle.
+6. **Review → Complete** — submits to `/api/setup/complete`, which writes `config.toml`, scaffolds prompt templates, and signals the server to exit so you can re-run `make serve` against the real config.
+
+### CLI wizard (terminal)
+
+```bash
+uv run docket --workspace=./.docket-dev setup
 ```
 
 The wizard is idempotent — re-running it overwrites only the fields you confirm. You can also resume at a specific step:
 
 ```bash
-uv run docket setup --step=llm     # only re-run the LLM step
+uv run docket --workspace=./.docket-dev setup --step=llm     # only re-run the LLM step
 ```
 
 Step names, in order: `provider` · `auth` · `connection` · `label` · `scope` · `telemetry` · `http` · `llm` · `prompts` · `sync` · `default`. The `label` step prompts for the human-readable display name shown in the TUI/web provider switcher.
@@ -209,7 +242,7 @@ uv run docket serve         # listens on http://127.0.0.1:8765, bearer required
 
 ### Bootstrap mode
 
-Before `config.toml` exists, `docket serve` falls through to a tiny FastAPI exposing only `/health` and `/setup/*`. The first invocation mints a fresh bearer token, writes a stub `config.toml` containing only `[http].token`, and prints the token once. Reach the wizard via the web UI (the printed token unlocks `/setup/*`), or recover the token later with `docket admin print-token`.
+Before `config.toml` exists, `docket serve` falls through to a tiny FastAPI exposing only `/api/health`, `/api/setup/*`, and the SPA bundle at `/`. The first invocation mints a fresh bearer token, writes a stub `config.toml` containing only `[http].token`, and prints the token once. Reach the wizard at `http://127.0.0.1:8765` — the SPA loads in bootstrap mode, the bearer is injected as `window.__DOCKET_TOKEN__` so you don't have to copy-paste, and on **Complete** the server writes the real config and exits so you can re-run `make serve` (or `docket serve`) against it. Recover the token later with `make token` or `docket admin print-token`.
 
 ### Web UI
 
@@ -343,8 +376,9 @@ Either you passed `--read-only` on the command line or `runtime.read_only = true
 
 ### Something else
 
-- `docket setup` is always safe to re-run (whole wizard or a single `--step=`).
+- `docket setup` is always safe to re-run (whole wizard or a single `--step=`). The browser wizard (`make serve` → bootstrap mode) is reachable any time you delete or rename `config.toml`.
 - `docket status` (`-v` for recent events) is the fastest health check — it shows paths, cache counts, sync state, MCP fleet, telemetry, and HTTP state in one screen.
-- Open the in-app settings with `,` to fix saved values without touching `config.toml` by hand.
+- Open the in-app settings with `,` (TUI) or **Settings** (web) to fix saved values without touching `config.toml` by hand.
+- During development, run everything via `make` — `make serve`, `make token`, `make check`, `make clean-workspace`. The targets pass `--workspace=./.docket-dev` for you, so logs and cache stay in the repo. `uv run docket …` without the workspace flag writes to your platform-default paths, which is *correct* for a daily-driver install but surprising mid-session.
 
 Still stuck? `tests/` has worked examples for every feature — the TUI pilot tests (`tests/pilot/test_tui_*.py`) double as behavioural documentation for "this is how feature X is expected to behave."

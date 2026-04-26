@@ -93,3 +93,119 @@ class SetupCompleteDTO(BaseModel):
     http_token: str
     restart_required: bool = True
     initial_sync: SyncSummaryDTO | None = None
+
+
+class CliToolStatusDTO(BaseModel):
+    """One CLI dependency's session status — `gh` or `az`.
+
+    Mirrors the wizard's terminal probe: is the binary on PATH, does it
+    have an active session, and what identity is signed in. The frontend
+    uses this to render the same retry-after-`gh auth login` UX the CLI
+    has, without trying to start the login itself."""
+
+    name: str
+    present: bool
+    logged_in: bool
+    identity: str = ""
+    error: str = ""
+
+
+class GithubHostDTO(BaseModel):
+    hostname: str
+    api_base_url: str
+
+
+class CliStatusDTO(BaseModel):
+    az: CliToolStatusDTO
+    gh: CliToolStatusDTO
+    gh_hosts: list[GithubHostDTO] = Field(default_factory=list)
+    keyring_available: bool = False
+    keyring_error: str = ""
+
+
+class AdoOrgDTO(BaseModel):
+    name: str
+    url: str
+
+
+class AdoDiscoverRequest(BaseModel):
+    """Stage-driven Azure DevOps discovery probe.
+
+    Each stage maps 1:1 to a `providers.azure_devops.discover` helper.
+    `org` is required for `projects` / `teams` / `areas` / `iterations`;
+    `project` is required for the latter three."""
+
+    stage: Literal["orgs", "projects", "teams", "areas", "iterations"]
+    org: str = ""
+    project: str = ""
+
+
+class AdoDiscoverResultDTO(BaseModel):
+    ok: bool
+    error: str = ""
+    orgs: list[AdoOrgDTO] = Field(default_factory=list)
+    projects: list[str] = Field(default_factory=list)
+    items: list[str] = Field(default_factory=list)
+
+
+class GithubDiscoverRequest(BaseModel):
+    """Stage-driven GitHub discovery via `gh api`.
+
+    `host` selects the gh hostname (only meaningful when the user is
+    authenticated against multiple). `org` is required for `org_repos`."""
+
+    stage: Literal["hosts", "repos", "orgs", "org_repos"]
+    host: str = ""
+    org: str = ""
+
+
+class GithubRepoDTO(BaseModel):
+    full_name: str
+
+
+class GithubOrgDTO(BaseModel):
+    login: str
+
+
+class GithubDiscoverResultDTO(BaseModel):
+    ok: bool
+    error: str = ""
+    hosts: list[GithubHostDTO] = Field(default_factory=list)
+    repos: list[GithubRepoDTO] = Field(default_factory=list)
+    orgs: list[GithubOrgDTO] = Field(default_factory=list)
+
+
+class SuggestKeyRequest(BaseModel):
+    type: str
+    taken: list[str] = Field(default_factory=list)
+
+
+class SuggestKeyDTO(BaseModel):
+    key: str
+
+
+class SuggestLabelRequest(BaseModel):
+    type: str
+    config: dict[str, Any] = Field(default_factory=dict)
+    github_host: str = ""
+
+
+class SuggestLabelDTO(BaseModel):
+    label: str
+
+
+class ProbeScopeRequest(BaseModel):
+    """Estimate match-count for a scope draft, before the user commits.
+
+    Same UX as the CLI wizard's "→ N item(s) match this scope" preview.
+    Returns `count=None` when the provider can't be reached or doesn't
+    support cheap counting — callers fall back to "could not count"."""
+
+    type: str
+    config: dict[str, Any] = Field(default_factory=dict)
+    scope: dict[str, Any] = Field(default_factory=dict)
+
+
+class ProbeScopeDTO(BaseModel):
+    count: int | None = None
+    error: str = ""

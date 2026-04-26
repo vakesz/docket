@@ -192,12 +192,15 @@ def create_app(
 def create_bootstrap_app(*, paths: Paths, setup_token: str) -> FastAPI:
     """Minimal FastAPI used when `config.toml` is missing.
 
-    Only `/health` and `/setup/*` are exposed, gated by the bootstrap bearer
-    token (which `docket serve` mints into a stub `config.toml` on first run
-    and prints once). The frontend can poll `GET /api/setup/status` (auth-free)
-    to detect this mode and run its built-in wizard. On `POST /setup/complete`
-    the backend writes config and signals itself to exit so the supervisor
-    restarts it in normal mode."""
+    Only `/api/health` and `/api/setup/*` are exposed, gated by the bootstrap
+    bearer token (which `docket serve` mints into a stub `config.toml` on
+    first run and prints once). The SPA is mounted at `/` so the operator
+    can run the same wizard `docket setup` would in a terminal — the
+    frontend probes `GET /api/setup/status` (auth-free) to know it's in
+    bootstrap mode and uses the injected `window.__DOCKET_TOKEN__` for the
+    rest of the setup endpoints. On `POST /api/setup/complete` the backend
+    writes config and signals itself to exit so the operator can re-run
+    `docket serve` in normal mode."""
     if not setup_token:
         raise ValueError(
             "Bootstrap mode requires a bearer token — `docket serve` should mint "
@@ -211,16 +214,22 @@ def create_bootstrap_app(*, paths: Paths, setup_token: str) -> FastAPI:
     )
     app.state.paths = paths
     app.state.setup_token = setup_token
-    # Deliberately absent: conn, provider, proposals, runtime, bearer_token.
+    # Deliberately absent: conn, provider, proposals, runtime.
     # Any route that depends on those will 503 — which is the right signal for
-    # a frontend that reached bootstrap by mistake.
-    app.state.bearer_token = ""
+    # a frontend that reached bootstrap by mistake. `bearer_token` carries the
+    # setup token here so `_render_index` can inject it into the SPA shell;
+    # only `/api/setup/*` accepts it (other API routers aren't mounted).
+    app.state.bearer_token = setup_token
 
     app.include_router(setup_routes.router, prefix="/api")
 
     @app.get("/api/health", response_model=HealthDTO, tags=["health"])
     def health() -> HealthDTO:
         return HealthDTO()
+
+    # Mount the SPA last so the catch-all only fires on paths the setup
+    # router didn't claim.
+    mount_spa(app, dist=resolve_frontend_dist())
 
     return app
 
