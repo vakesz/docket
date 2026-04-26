@@ -46,6 +46,10 @@ const PostMessageInput = ConversationRef.extend({
   content: z.string().min(1).max(20_000),
 });
 
+const SetLlmOverrideInput = ConversationRef.extend({
+  llmProviderId: z.string().min(1).nullable(),
+});
+
 function userIdOrThrow(ctx: { session: { user: { id?: string } } }): string {
   const userId = ctx.session.user.id;
   if (!userId) {
@@ -129,6 +133,37 @@ export const conversationsRouter = router({
     .mutation(async ({ ctx, input }) => {
       await ensureOwn(ctx, input.conversationId, ctx.projectId);
       return archiveConversation(ctx.db, input.conversationId);
+    }),
+
+  /**
+   * Set or clear the per-conversation LLM override. `null` falls back to the
+   * project default. The chat-pane LLM switcher writes here; the agent loop
+   * reads it back via `selectAdapterFor`.
+   */
+  setLlmOverride: projectScopedMutationProcedure
+    .input(SetLlmOverrideInput)
+    .mutation(async ({ ctx, input }) => {
+      await ensureOwn(ctx, input.conversationId, ctx.projectId);
+      if (input.llmProviderId) {
+        const provider = await ctx.db.llmProvider.findUnique({
+          where: { id: input.llmProviderId },
+          select: { id: true, enabled: true },
+        });
+        if (!provider) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "LLM provider not found" });
+        }
+        if (!provider.enabled) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "LLM provider is disabled",
+          });
+        }
+      }
+      return ctx.db.conversation.update({
+        where: { id: input.conversationId },
+        data: { llmProviderIdOverride: input.llmProviderId },
+        select: { id: true, llmProviderIdOverride: true },
+      });
     }),
 });
 

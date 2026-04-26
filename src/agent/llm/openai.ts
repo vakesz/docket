@@ -1,0 +1,222 @@
+/**
+ * OpenAI LLM adapter.
+ *
+ * THE ONLY FILE in the tree allowed to import `openai`. The arch test
+ * `src/__arch__/no-llm-vendor-leak.test.ts` enforces it. Adding a new
+ * vendor is a sibling file under `src/agent/llm/` plus a registry entry.
+ *
+ * Uses the Responses API in streaming mode. Chat-style messages are
+ * translated into Responses input items at the boundary so the agent loop
+ * stays vendor-neutral.
+ *
+ * Model defaults to `gpt-5` (our daily driver) but the LlmProvider row's
+ * `model` overrides it. Cost is reported in USD cents when usage data is
+ * available; the per-million pricing table here is intentionally
+ * conservative — refine as the LlmProvider admin gains a per-row pricing
+ * field in Phase 11.
+ */
+
+import OpenAI from "openai";
+import type {
+  LlmAdapter,
+  LlmEvent,
+  LlmRequest,
+  LlmToolCall,
+  LlmToolResult,
+} from "@/agent/llm/types";
+
+const DEFAULT_MODEL = "gpt-5";
+
+/**
+ * Conservative per-million-tokens pricing in USD cents (input, output).
+ * Used only when the API doesn't surface a precomputed cost. Keep this
+ * table small — wrong is better than overconfident.
+ */
+const PRICE_TABLE_CENTS_PER_MTOK: Record<string, { in: number; out: number }> = {
+  "gpt-5": { in: 1250, out: 10000 },
+  "gpt-5-mini": { in: 25, out: 200 },
+  "gpt-5-nano": { in: 5, out: 40 },
+};
+
+export type OpenAiAdapterConfig = {
+  apiKey: string;
+  /** Display label, surfaced in the LLM switcher. */
+  label: string;
+  /** Defaults to "gpt-5". */
+  model?: string;
+  /** Optional base URL for Azure / Ollama / proxies. */
+  baseUrl?: string;
+};
+
+export class OpenAiAdapter implements LlmAdapter {
+  readonly kind = "openai" as const;
+  readonly label: string;
+  private readonly client: OpenAI;
+  private readonly model: string;
+
+  constructor(config: OpenAiAdapterConfig) {
+    this.label = config.label;
+    this.model = config.model && config.model.length > 0 ? config.model : DEFAULT_MODEL;
+    this.client = new OpenAI({
+      apiKey: config.apiKey,
+      ...(config.baseUrl ? { baseURL: config.baseUrl } : {}),
+    });
+  }
+
+  async *streamMessages(req: LlmRequest): AsyncIterable<LlmEvent> {
+    const tools = req.tools.map((t) => ({
+      type: "function" as const,
+      name: t.name,
+      description: t.description,
+      parameters: t.parameters as Record<string, unknown>,
+      strict: false,
+    }));
+
+    const input = toResponsesInput(req.messages);
+
+    let stream: AsyncIterable<unknown>;
+    try {
+      stream = (await this.client.responses.create({
+        model: req.model || this.model,
+        input,
+        tools: tools.length > 0 ? tools : undefined,
+        stream: true,
+        ...(req.maxOutputTokens ? { max_output_tokens: req.maxOutputTokens } : {}),
+        ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
+      } as unknown as Parameters<OpenAI["responses"]["create"]>[0])) as AsyncIterable<unknown>;
+    } catch (err) {
+      yield { kind: "error", message: err instanceof Error ? err.message : String(err) };
+      return;
+    }
+
+    // Track in-flight tool calls so we can emit a single `tool_call` event
+    // once each one is fully assembled. The Responses API streams arguments
+    // token-by-token under `response.function_call_arguments.delta` /
+    // `.done`, then tags them with the function name on `response.output_item.added`.
+    const pending = new Map<string, { name: string; argsBuf: string }>();
+
+    try {
+      for await (const event of stream) {
+        const evt = event as { type?: string; [k: string]: unknown };
+        const type = evt.type ?? "";
+
+        if (type === "response.output_text.delta") {
+          const delta = (evt.delta as string | undefined) ?? "";
+          if (delta) yield { kind: "text_delta", delta };
+          continue;
+        }
+
+        if (type === "response.output_item.added") {
+          const item = evt.item as
+            | { type?: string; id?: string; call_id?: string; name?: string }
+            | undefined;
+          if (item?.type === "function_call" && item.call_id && item.name) {
+            pending.set(item.id ?? item.call_id, { name: item.name, argsBuf: "" });
+          }
+          continue;
+        }
+
+        if (type === "response.function_call_arguments.delta") {
+          const itemId = (evt.item_id as string | undefined) ?? "";
+          const delta = (evt.delta as string | undefined) ?? "";
+          const slot = pending.get(itemId);
+          if (slot) slot.argsBuf += delta;
+          continue;
+        }
+
+        if (type === "response.function_call_arguments.done") {
+          const itemId = (evt.item_id as string | undefined) ?? "";
+          const slot = pending.get(itemId);
+          if (!slot) continue;
+          const callId = (evt.call_id as string | undefined) ?? itemId;
+          let parsed: Record<string, unknown> = {};
+          try {
+            parsed = slot.argsBuf ? (JSON.parse(slot.argsBuf) as Record<string, unknown>) : {};
+          } catch {
+            parsed = { __unparsable_arguments__: slot.argsBuf };
+          }
+          const call: LlmToolCall = { id: callId, name: slot.name, arguments: parsed };
+          pending.delete(itemId);
+          yield { kind: "tool_call", call };
+          continue;
+        }
+
+        if (type === "response.completed") {
+          const usage = (
+            evt.response as
+              | { usage?: { input_tokens?: number; output_tokens?: number } }
+              | undefined
+          )?.usage;
+          if (usage) {
+            const tokensIn = usage.input_tokens ?? 0;
+            const tokensOut = usage.output_tokens ?? 0;
+            yield {
+              kind: "usage",
+              tokensIn,
+              tokensOut,
+              costCents: estimateCostCents(req.model || this.model, tokensIn, tokensOut),
+            };
+          }
+          yield { kind: "done" };
+          return;
+        }
+
+        if (type === "response.error" || type === "error") {
+          const message =
+            (evt.error as { message?: string } | undefined)?.message ?? "OpenAI stream error";
+          yield { kind: "error", message };
+          return;
+        }
+      }
+      yield { kind: "done" };
+    } catch (err) {
+      yield { kind: "error", message: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
+  formatToolResult(call: LlmToolCall, result: unknown): LlmToolResult {
+    return {
+      role: "tool",
+      toolCallId: call.id,
+      toolName: call.name,
+      content: typeof result === "string" ? result : JSON.stringify(result),
+    };
+  }
+}
+
+function toResponsesInput(messages: readonly import("@/agent/llm/types").LlmMessage[]) {
+  // The Responses API accepts a flat input array of role-tagged items
+  // alongside function_call / function_call_output items. Tool calls are
+  // attached to the assistant turn that produced them.
+  const out: Array<Record<string, unknown>> = [];
+  for (const m of messages) {
+    if (m.role === "system") {
+      out.push({ role: "system", content: m.content });
+    } else if (m.role === "user") {
+      out.push({ role: "user", content: m.content });
+    } else if (m.role === "assistant") {
+      if (m.content) out.push({ role: "assistant", content: m.content });
+      for (const call of m.toolCalls ?? []) {
+        out.push({
+          type: "function_call",
+          call_id: call.id,
+          name: call.name,
+          arguments: JSON.stringify(call.arguments ?? {}),
+        });
+      }
+    } else if (m.role === "tool") {
+      out.push({
+        type: "function_call_output",
+        call_id: m.toolCallId,
+        output: m.content,
+      });
+    }
+  }
+  return out;
+}
+
+function estimateCostCents(model: string, tokensIn: number, tokensOut: number): number | undefined {
+  const price = PRICE_TABLE_CENTS_PER_MTOK[model];
+  if (!price) return undefined;
+  return Math.round((tokensIn * price.in + tokensOut * price.out) / 1_000_000);
+}
