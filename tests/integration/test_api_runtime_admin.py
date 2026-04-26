@@ -137,34 +137,34 @@ def ro_client(env) -> TestClient:
 
 
 def test_pin_then_list_pinned(client: TestClient) -> None:
-    r = client.post("/items/S-1/pin", headers=AUTH)
+    r = client.post("/api/items/S-1/pin", headers=AUTH)
     assert r.status_code == 204
-    status_resp = client.get("/items/S-1/pinned", headers=AUTH)
+    status_resp = client.get("/api/items/S-1/pinned", headers=AUTH)
     assert status_resp.json() == {"item_id": "S-1", "pinned": True}
-    listed = client.get("/pinned", headers=AUTH)
+    listed = client.get("/api/pinned", headers=AUTH)
     assert listed.status_code == 200
     body = listed.json()
     assert len(body) == 1 and body[0]["id"] == "S-1"
 
 
 def test_unpin_is_idempotent(client: TestClient) -> None:
-    client.post("/items/S-1/pin", headers=AUTH)
-    r1 = client.delete("/items/S-1/pin", headers=AUTH)
-    r2 = client.delete("/items/S-1/pin", headers=AUTH)
+    client.post("/api/items/S-1/pin", headers=AUTH)
+    r1 = client.delete("/api/items/S-1/pin", headers=AUTH)
+    r2 = client.delete("/api/items/S-1/pin", headers=AUTH)
     assert r1.status_code == 204
     assert r2.status_code == 204
-    assert client.get("/items/S-1/pinned", headers=AUTH).json()["pinned"] is False
+    assert client.get("/api/items/S-1/pinned", headers=AUTH).json()["pinned"] is False
 
 
 def test_pin_read_only_returns_403(ro_client: TestClient) -> None:
-    assert ro_client.post("/items/S-1/pin", headers=AUTH).status_code == 403
-    assert ro_client.delete("/items/S-1/pin", headers=AUTH).status_code == 403
+    assert ro_client.post("/api/items/S-1/pin", headers=AUTH).status_code == 403
+    assert ro_client.delete("/api/items/S-1/pin", headers=AUTH).status_code == 403
     # reads still work
-    assert ro_client.get("/items/S-1/pinned", headers=AUTH).status_code == 200
+    assert ro_client.get("/api/items/S-1/pinned", headers=AUTH).status_code == 200
 
 
 def test_pinned_status_unknown_item_404(client: TestClient) -> None:
-    assert client.get("/items/unknown/pinned", headers=AUTH).status_code == 404
+    assert client.get("/api/items/unknown/pinned", headers=AUTH).status_code == 404
 
 
 # -- suggestions -------------------------------------------------------------
@@ -192,7 +192,7 @@ def test_suggestion_happy_path(env) -> None:
         llm=llm,
     )
     client = TestClient(app)
-    r = client.post("/items/S-1/suggestion", headers=AUTH)
+    r = client.post("/api/items/S-1/suggestion", headers=AUTH)
     assert r.status_code == 200
     body = r.json()
     assert body["intent"] == "start_work"
@@ -201,13 +201,13 @@ def test_suggestion_happy_path(env) -> None:
 
 
 def test_suggestion_without_llm_is_503(client: TestClient) -> None:
-    r = client.post("/items/S-1/suggestion", headers=AUTH)
+    r = client.post("/api/items/S-1/suggestion", headers=AUTH)
     assert r.status_code == 503
 
 
 def test_stage_suggestion_adds_proposals(client: TestClient, env) -> None:
     r = client.post(
-        "/items/S-1/suggestion/stage",
+        "/api/items/S-1/suggestion/stage",
         headers=AUTH,
         json={"intent": "start_work", "description_patch_md": "New body"},
     )
@@ -221,7 +221,7 @@ def test_stage_suggestion_adds_proposals(client: TestClient, env) -> None:
 
 def test_stage_suggestion_no_patch_only_state_change(client: TestClient, env) -> None:
     r = client.post(
-        "/items/S-1/suggestion/stage",
+        "/api/items/S-1/suggestion/stage",
         headers=AUTH,
         json={"intent": "pause", "description_patch_md": ""},
     )
@@ -231,7 +231,7 @@ def test_stage_suggestion_no_patch_only_state_change(client: TestClient, env) ->
 
 def test_stage_suggestion_read_only_403(ro_client: TestClient) -> None:
     r = ro_client.post(
-        "/items/S-1/suggestion/stage",
+        "/api/items/S-1/suggestion/stage",
         headers=AUTH,
         json={"intent": "start_work"},
     )
@@ -242,7 +242,7 @@ def test_stage_suggestion_read_only_403(ro_client: TestClient) -> None:
 
 
 def test_list_prompts_default_uncustomized(client: TestClient) -> None:
-    r = client.get("/prompts", headers=AUTH)
+    r = client.get("/api/prompts", headers=AUTH)
     assert r.status_code == 200
     body = r.json()
     keys = {p["key"] for p in body}
@@ -252,7 +252,7 @@ def test_list_prompts_default_uncustomized(client: TestClient) -> None:
 
 def test_put_prompt_writes_and_marks_customized(client: TestClient, env) -> None:
     r = client.put(
-        "/prompts/system_base",
+        "/api/prompts/system_base",
         headers=AUTH,
         json={"content_md": "custom system prompt"},
     )
@@ -266,11 +266,11 @@ def test_put_prompt_writes_and_marks_customized(client: TestClient, env) -> None
 
 def test_delete_prompt_restores_default_content(client: TestClient, env) -> None:
     client.put(
-        "/prompts/system_base",
+        "/api/prompts/system_base",
         headers=AUTH,
         json={"content_md": "custom"},
     )
-    r = client.delete("/prompts/system_base", headers=AUTH)
+    r = client.delete("/api/prompts/system_base", headers=AUTH)
     assert r.status_code == 200
     # Returned content is the canonical default
     default = r.json()["content_md"]
@@ -278,13 +278,13 @@ def test_delete_prompt_restores_default_content(client: TestClient, env) -> None
 
 
 def test_prompt_unknown_key_404(client: TestClient) -> None:
-    assert client.get("/prompts/nonsense", headers=AUTH).status_code == 404
-    r = client.put("/prompts/nonsense", headers=AUTH, json={"content_md": "x"})
+    assert client.get("/api/prompts/nonsense", headers=AUTH).status_code == 404
+    r = client.put("/api/prompts/nonsense", headers=AUTH, json={"content_md": "x"})
     assert r.status_code == 404
 
 
 def test_prompt_put_read_only_403(ro_client: TestClient) -> None:
-    r = ro_client.put("/prompts/system_base", headers=AUTH, json={"content_md": "x"})
+    r = ro_client.put("/api/prompts/system_base", headers=AUTH, json={"content_md": "x"})
     assert r.status_code == 403
 
 
@@ -292,7 +292,7 @@ def test_prompt_put_read_only_403(ro_client: TestClient) -> None:
 
 
 def test_get_settings_masks_token(client: TestClient) -> None:
-    r = client.get("/settings", headers=AUTH)
+    r = client.get("/api/settings", headers=AUTH)
     assert r.status_code == 200
     cfg = r.json()["config"]
     masked = cfg["http"]["token"]
@@ -302,7 +302,7 @@ def test_get_settings_masks_token(client: TestClient) -> None:
 
 def test_patch_settings_deep_merges_and_persists(client: TestClient, env) -> None:
     r = client.patch(
-        "/settings",
+        "/api/settings",
         headers=AUTH,
         json={"patch": {"ui": {"default_new_item_kind": "bug"}}},
     )
@@ -318,7 +318,7 @@ def test_patch_settings_deep_merges_and_persists(client: TestClient, env) -> Non
 def test_patch_settings_masked_token_is_ignored(client: TestClient, env) -> None:
     # Client echoes the masked token; we must not persist it as the real token
     r = client.patch(
-        "/settings",
+        "/api/settings",
         headers=AUTH,
         json={"patch": {"http": {"token": "••••••••fake", "port": 9000}}},
     )
@@ -329,7 +329,7 @@ def test_patch_settings_masked_token_is_ignored(client: TestClient, env) -> None
 
 def test_patch_settings_requires_restart_flags(client: TestClient) -> None:
     r = client.patch(
-        "/settings",
+        "/api/settings",
         headers=AUTH,
         json={"patch": {"http": {"port": 9999}}},
     )
@@ -338,7 +338,7 @@ def test_patch_settings_requires_restart_flags(client: TestClient) -> None:
 
 def test_patch_settings_validation_error_422(client: TestClient) -> None:
     r = client.patch(
-        "/settings",
+        "/api/settings",
         headers=AUTH,
         json={"patch": {"ui": {"default_new_item_kind": "nonsense"}}},
     )
@@ -347,7 +347,7 @@ def test_patch_settings_validation_error_422(client: TestClient) -> None:
 
 def test_patch_settings_read_only_403(ro_client: TestClient) -> None:
     r = ro_client.patch(
-        "/settings", headers=AUTH, json={"patch": {"ui": {"default_new_item_kind": "bug"}}}
+        "/api/settings", headers=AUTH, json={"patch": {"ui": {"default_new_item_kind": "bug"}}}
     )
     assert r.status_code == 403
 
@@ -357,7 +357,7 @@ def test_patch_settings_read_only_403(ro_client: TestClient) -> None:
 
 def test_update_provider_replaces_config_and_swaps_runtime(client: TestClient, env) -> None:
     r = client.put(
-        "/settings/providers/secondary",
+        "/api/settings/providers/secondary",
         headers=AUTH,
         json={
             "display_name": "Secondary (renamed)",
@@ -377,7 +377,7 @@ def test_update_provider_replaces_config_and_swaps_runtime(client: TestClient, e
 def test_update_provider_preserves_existing_scope_when_omitted(client: TestClient, env) -> None:
     before = dict(env["runtime"].config.providers["primary"].scopes)
     r = client.put(
-        "/settings/providers/primary",
+        "/api/settings/providers/primary",
         headers=AUTH,
         json={"display_name": "Primary", "config": {"default_repo": "example/primary"}},
     )
@@ -390,7 +390,7 @@ def test_update_provider_preserves_existing_scope_when_omitted(client: TestClien
 
 def test_update_provider_unknown_returns_404(client: TestClient) -> None:
     r = client.put(
-        "/settings/providers/ghost",
+        "/api/settings/providers/ghost",
         headers=AUTH,
         json={"display_name": "x", "config": {"default_repo": "example/x"}},
     )
@@ -399,7 +399,7 @@ def test_update_provider_unknown_returns_404(client: TestClient) -> None:
 
 def test_update_provider_invalid_scope_422(client: TestClient) -> None:
     r = client.put(
-        "/settings/providers/primary",
+        "/api/settings/providers/primary",
         headers=AUTH,
         json={
             "display_name": "Primary",
@@ -412,7 +412,7 @@ def test_update_provider_invalid_scope_422(client: TestClient) -> None:
 
 def test_update_provider_read_only_403(ro_client: TestClient) -> None:
     r = ro_client.put(
-        "/settings/providers/primary",
+        "/api/settings/providers/primary",
         headers=AUTH,
         json={"display_name": "x", "config": {"default_repo": "example/x"}},
     )
@@ -423,7 +423,7 @@ def test_update_provider_read_only_403(ro_client: TestClient) -> None:
 
 
 def test_list_scopes_marks_active(client: TestClient) -> None:
-    r = client.get("/scopes", headers=AUTH)
+    r = client.get("/api/scopes", headers=AUTH)
     assert r.status_code == 200
     body = r.json()
     actives = [s for s in body if s["active"]]
@@ -431,13 +431,13 @@ def test_list_scopes_marks_active(client: TestClient) -> None:
 
 
 def test_switch_scope_updates_runtime(client: TestClient, env) -> None:
-    r = client.put("/scopes/active", headers=AUTH, json={"name": "team"})
+    r = client.put("/api/scopes/active", headers=AUTH, json={"name": "team"})
     assert r.status_code == 200
     assert env["runtime"].scope_key == "team"
-    active_provider = client.get("/providers/active", headers=AUTH)
+    active_provider = client.get("/api/providers/active", headers=AUTH)
     assert active_provider.status_code == 200
     assert active_provider.json()["active_scope"] == "team"
-    listed = client.get("/providers", headers=AUTH)
+    listed = client.get("/api/providers", headers=AUTH)
     assert listed.status_code == 200
     by_key = {row["key"]: row for row in listed.json()}
     assert by_key["primary"]["active_scope"] == "team"
@@ -445,12 +445,12 @@ def test_switch_scope_updates_runtime(client: TestClient, env) -> None:
 
 
 def test_switch_scope_unknown_returns_404(client: TestClient) -> None:
-    r = client.put("/scopes/active", headers=AUTH, json={"name": "ghost"})
+    r = client.put("/api/scopes/active", headers=AUTH, json={"name": "ghost"})
     assert r.status_code == 404
 
 
 def test_scope_switch_read_only_403(ro_client: TestClient) -> None:
-    r = ro_client.put("/scopes/active", headers=AUTH, json={"name": "team"})
+    r = ro_client.put("/api/scopes/active", headers=AUTH, json={"name": "team"})
     assert r.status_code == 403
 
 
@@ -458,7 +458,7 @@ def test_scope_switch_read_only_403(ro_client: TestClient) -> None:
 
 
 def test_list_providers(client: TestClient) -> None:
-    r = client.get("/providers", headers=AUTH)
+    r = client.get("/api/providers", headers=AUTH)
     body = r.json()
     keys = {p["key"] for p in body}
     assert keys == {"primary", "secondary"}
@@ -468,15 +468,15 @@ def test_list_providers(client: TestClient) -> None:
 
 def test_switch_provider_resets_scope(client: TestClient, env) -> None:
     # primary is on scope 'default'; move it to 'team' then switch providers
-    client.put("/scopes/active", headers=AUTH, json={"name": "team"})
-    r = client.put("/providers/active", headers=AUTH, json={"key": "secondary"})
+    client.put("/api/scopes/active", headers=AUTH, json={"name": "team"})
+    r = client.put("/api/providers/active", headers=AUTH, json={"key": "secondary"})
     assert r.status_code == 200
     assert env["runtime"].provider_key == "secondary"
     assert env["runtime"].scope_key == "default"  # reset to secondary's active_scope
 
 
 def test_switch_provider_unknown_404(client: TestClient) -> None:
-    r = client.put("/providers/active", headers=AUTH, json={"key": "ghost"})
+    r = client.put("/api/providers/active", headers=AUTH, json={"key": "ghost"})
     assert r.status_code == 404
 
 
@@ -484,7 +484,7 @@ def test_switch_provider_unknown_404(client: TestClient) -> None:
 
 
 def test_manual_sync_returns_summary(client: TestClient, env) -> None:
-    r = client.post("/sync", headers=AUTH)
+    r = client.post("/api/sync", headers=AUTH)
     assert r.status_code == 200
     body = r.json()
     assert "upserted" in body
@@ -493,7 +493,7 @@ def test_manual_sync_returns_summary(client: TestClient, env) -> None:
 
 
 def test_manual_sync_read_only_403(ro_client: TestClient) -> None:
-    r = ro_client.post("/sync", headers=AUTH)
+    r = ro_client.post("/api/sync", headers=AUTH)
     assert r.status_code == 403
 
 
@@ -502,7 +502,7 @@ def test_manual_sync_provider_error_502_and_offline(client: TestClient, env) -> 
         raise RuntimeError("provider down")
 
     env["providers"]["primary"].list_changes_since = boom  # type: ignore[assignment]
-    r = client.post("/sync", headers=AUTH)
+    r = client.post("/api/sync", headers=AUTH)
     assert r.status_code == 502
     assert env["runtime"].offline is True
 
@@ -511,7 +511,7 @@ def test_manual_sync_provider_error_502_and_offline(client: TestClient, env) -> 
 
 
 def test_status_snapshot(client: TestClient, env) -> None:
-    r = client.get("/status", headers=AUTH)
+    r = client.get("/api/status", headers=AUTH)
     assert r.status_code == 200
     body = r.json()
     assert body["provider_key"] == "primary"
@@ -534,10 +534,10 @@ def test_status_chat_enabled_follows_llm(env) -> None:
         llm=llm,
     )
     client = TestClient(app)
-    r = client.get("/status", headers=AUTH)
+    r = client.get("/api/status", headers=AUTH)
     assert r.json()["chat_enabled"] is True
 
 
 def test_status_read_only_flag(ro_client: TestClient) -> None:
-    r = ro_client.get("/status", headers=AUTH)
+    r = ro_client.get("/api/status", headers=AUTH)
     assert r.json()["read_only"] is True

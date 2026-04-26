@@ -24,9 +24,17 @@ from tests.integration._api_fixtures import build_api_env, build_client
 
 # Routes that legitimately bypass the bearer gate. `/setup/*` uses
 # `require_setup_token` (a one-shot bootstrap secret, not the API token);
-# `/health` is unauthenticated by design so monitors can probe liveness;
-# `/openapi.json`, `/docs`, `/redoc` are framework-provided.
-_AUTH_FREE_PREFIXES = ("/health", "/setup", "/openapi", "/docs", "/redoc")
+# `/api/health` is unauthenticated by design so monitors can probe liveness;
+# `/api/openapi.json`, `/api/docs` are framework-provided; `/{full_path:path}`
+# is the SPA catch-all (static file serving + token-injected index.html, no
+# mutation surface).
+_AUTH_FREE_PREFIXES = (
+    "/api/health",
+    "/api/setup",
+    "/api/openapi",
+    "/api/docs",
+    "/{full_path:path}",
+)
 
 
 def _flatten(dep: Dependant) -> list[Dependant]:

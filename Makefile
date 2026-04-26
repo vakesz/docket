@@ -38,12 +38,21 @@ dev: ## run backend + frontend concurrently (Ctrl-C stops both)
 	 wait
 
 .PHONY: frontend-build
-frontend-build: ## build the production frontend bundle
+frontend-build: ## build the static SPA bundle (frontend/dist)
 	cd $(FRONTEND) && bun run build
 
-.PHONY: frontend-start
-frontend-start: ## run the built frontend with the Bun production server
-	cd $(FRONTEND) && bun run start
+.PHONY: bundle-spa
+bundle-spa: frontend-build ## copy the built SPA into src/docket/frontend_dist/ for wheel packaging
+	rm -rf src/docket/frontend_dist
+	cp -R $(FRONTEND)/dist src/docket/frontend_dist
+
+.PHONY: serve
+serve: frontend-build ## build the SPA, then run the backend serving it at http://127.0.0.1:8765
+	uv run docket serve
+
+.PHONY: wheel
+wheel: bundle-spa ## build a single-artifact wheel with the SPA bundled inside
+	uv build --wheel
 
 ## ---------- quality ----------
 
@@ -81,8 +90,8 @@ stats: ## show LOC stats using cloc (git-tracked files only)
 ## ---------- maintenance ----------
 
 .PHONY: clean
-clean: ## remove local caches and the frontend build output
-	rm -rf $(FRONTEND)/dist $(FRONTEND)/.vite
+clean: ## remove local caches and the SPA build output
+	rm -rf $(FRONTEND)/dist $(FRONTEND)/.vite src/docket/frontend_dist
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +
 	rm -rf .mypy_cache .pytest_cache .ruff_cache
 

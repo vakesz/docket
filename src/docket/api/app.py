@@ -34,6 +34,7 @@ from docket.api.routes import suggestions as suggestions_routes
 from docket.api.routes import sync as sync_routes
 from docket.api.runtime import RuntimeState, rebuild_agent
 from docket.api.schemas import HealthDTO
+from docket.api.spa import mount_spa, resolve_frontend_dist
 from docket.config.models import Config
 from docket.config.paths import Paths
 from docket.core.services.proposal_store import ProposalStore
@@ -94,11 +95,18 @@ def create_app(
             "Set config.http.token or disable the surface."
         )
 
+    # API lives under `/api/*` so the SPA can own root paths (`/items/123`
+    # is the SPA detail route; `/api/items/123` is its data). Without this
+    # split there's no clean way to serve same-origin: the API and SPA
+    # would collide on every shared path.
     app = FastAPI(
         title="Docket",
         version="0.1.0",
         description="Terminal work-item triage over HTTP.",
         lifespan=_lifespan,
+        openapi_url="/api/openapi.json",
+        docs_url="/api/docs",
+        redoc_url=None,
     )
     app.state.conn = conn
     app.state.provider = provider
@@ -135,38 +143,48 @@ def create_app(
     # gate. The setup router uses `require_setup_token` per-route instead and
     # is intentionally bearer-free here.
     bearer = [Depends(require_bearer)]
-    # Sub-routers keyed off `/items/{item_id:path}/…` must be registered
+    api_prefix = "/api"
+    # Sub-routers keyed off `/api/items/{item_id:path}/…` must be registered
     # before the catch-all item routes, otherwise the `:path` converter
     # on the plain `/{item_id}` route greedy-matches and swallows
     # `/conversation`, `/pinned`, etc. into the item id.
-    app.include_router(mutations_routes.router, dependencies=bearer)
-    app.include_router(conversations_routes.router, dependencies=bearer)
-    app.include_router(pins_routes.router, dependencies=bearer)
-    app.include_router(suggestions_routes.router, dependencies=bearer)
-    app.include_router(items_routes.router, dependencies=bearer)
-    app.include_router(prompts_routes.router, dependencies=bearer)
-    app.include_router(settings_routes.router, dependencies=bearer)
-    app.include_router(scopes_routes.router, dependencies=bearer)
-    app.include_router(providers_routes.router, dependencies=bearer)
+    app.include_router(mutations_routes.router, prefix=api_prefix, dependencies=bearer)
+    app.include_router(conversations_routes.router, prefix=api_prefix, dependencies=bearer)
+    app.include_router(pins_routes.router, prefix=api_prefix, dependencies=bearer)
+    app.include_router(suggestions_routes.router, prefix=api_prefix, dependencies=bearer)
+    app.include_router(items_routes.router, prefix=api_prefix, dependencies=bearer)
+    app.include_router(prompts_routes.router, prefix=api_prefix, dependencies=bearer)
+    app.include_router(settings_routes.router, prefix=api_prefix, dependencies=bearer)
+    app.include_router(scopes_routes.router, prefix=api_prefix, dependencies=bearer)
+    app.include_router(providers_routes.router, prefix=api_prefix, dependencies=bearer)
     # Memory routes must come before `projects_routes` because the catch-all
     # `/projects/{project_id:path}` greedy-matches and would swallow
     # `/projects/{project_id}/memory` into the project_id. Same applies to
     # source and mcp routes.
-    app.include_router(memory_routes.router, dependencies=bearer)
-    app.include_router(source_routes.router, dependencies=bearer)
-    app.include_router(mcp_routes.router, dependencies=bearer)
-    app.include_router(projects_routes.router, dependencies=bearer)
-    app.include_router(sync_routes.router, dependencies=bearer)
-    app.include_router(status_routes.router, dependencies=bearer)
-    app.include_router(setup_routes.router)
+    app.include_router(memory_routes.router, prefix=api_prefix, dependencies=bearer)
+    app.include_router(source_routes.router, prefix=api_prefix, dependencies=bearer)
+    app.include_router(mcp_routes.router, prefix=api_prefix, dependencies=bearer)
+    app.include_router(projects_routes.router, prefix=api_prefix, dependencies=bearer)
+    app.include_router(sync_routes.router, prefix=api_prefix, dependencies=bearer)
+    app.include_router(status_routes.router, prefix=api_prefix, dependencies=bearer)
+    # Setup is auth-free (gated by setup-token, not bearer) but still lives
+    # under `/api/*` so the frontend's `api.get("/setup/...")` reaches it
+    # without a special-case base. Bootstrap app does the same prefixing.
+    app.include_router(setup_routes.router, prefix=api_prefix)
 
-    @app.get("/health", response_model=HealthDTO, tags=["health"])
+    @app.get("/api/health", response_model=HealthDTO, tags=["health"])
     def health() -> HealthDTO:
         return HealthDTO()
 
-    @app.get("/whoami", tags=["health"], dependencies=[Depends(require_bearer)])
+    @app.get("/api/whoami", tags=["health"], dependencies=[Depends(require_bearer)])
     def whoami() -> dict[str, str]:
         return {"app": "docket", "status": "ok"}
+
+    # SPA mount must be last: its catch-all `/{full_path:path}` would
+    # otherwise win over real API routes. With FastAPI's first-match
+    # routing, registering it after every include_router keeps API
+    # paths authoritative; the SPA only sees what the API didn't claim.
+    mount_spa(app, dist=resolve_frontend_dist())
 
     return app
 
@@ -175,7 +193,7 @@ def create_bootstrap_app(*, paths: Paths, setup_token: str) -> FastAPI:
     """Minimal FastAPI used when `config.toml` is missing.
 
     Only `/health` and `/setup/*` are exposed, gated by `DOCKET_SETUP_TOKEN`.
-    The frontend can poll `GET /setup/status` (auth-free) to detect this mode
+    The frontend can poll `GET /api/setup/status` (auth-free) to detect this mode
     and run its built-in wizard. On `POST /setup/complete` the backend writes
     config and signals itself to exit so the supervisor restarts it in normal
     mode."""
@@ -187,7 +205,7 @@ def create_bootstrap_app(*, paths: Paths, setup_token: str) -> FastAPI:
     app = FastAPI(
         title="Docket (setup)",
         version="0.1.0",
-        description="First-time setup surface. Only /health and /setup/* are exposed.",
+        description="First-time setup surface. Only /api/health and /api/setup/* are exposed.",
     )
     app.state.paths = paths
     app.state.setup_token = setup_token
@@ -196,9 +214,9 @@ def create_bootstrap_app(*, paths: Paths, setup_token: str) -> FastAPI:
     # a frontend that reached bootstrap by mistake.
     app.state.bearer_token = ""
 
-    app.include_router(setup_routes.router)
+    app.include_router(setup_routes.router, prefix="/api")
 
-    @app.get("/health", response_model=HealthDTO, tags=["health"])
+    @app.get("/api/health", response_model=HealthDTO, tags=["health"])
     def health() -> HealthDTO:
         return HealthDTO()
 

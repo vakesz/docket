@@ -79,7 +79,7 @@ def ro_client(env) -> TestClient:
 
 def test_create_item_blocked(ro_client: TestClient) -> None:
     resp = ro_client.post(
-        "/items",
+        "/api/items",
         headers=AUTH,
         json={"kind": "task", "title": "Nope"},
     )
@@ -91,12 +91,12 @@ def test_create_item_confirm_also_blocked(ro_client: TestClient) -> None:
     # Every step of the create proposal pipeline is blocked in read-only
     # mode — callers should never even see a staged proposal they can't apply.
     resp = ro_client.post(
-        "/items/proposals/any-id/confirm",
+        "/api/items/proposals/any-id/confirm",
         headers=AUTH,
     )
     assert resp.status_code == 403
     resp = ro_client.post(
-        "/items/proposals/any-id/reject",
+        "/api/items/proposals/any-id/reject",
         headers=AUTH,
     )
     assert resp.status_code == 403
@@ -104,7 +104,7 @@ def test_create_item_confirm_also_blocked(ro_client: TestClient) -> None:
 
 def test_propose_transition_blocked(ro_client: TestClient) -> None:
     resp = ro_client.post(
-        "/items/S-1/mutations/transition/propose",
+        "/api/items/S-1/mutations/transition/propose",
         headers=AUTH,
         json={"intent": "start_work"},
     )
@@ -113,7 +113,7 @@ def test_propose_transition_blocked(ro_client: TestClient) -> None:
 
 def test_propose_description_blocked(ro_client: TestClient) -> None:
     resp = ro_client.post(
-        "/items/S-1/mutations/description/propose",
+        "/api/items/S-1/mutations/description/propose",
         headers=AUTH,
         json={"new_description_md": "body"},
     )
@@ -122,7 +122,7 @@ def test_propose_description_blocked(ro_client: TestClient) -> None:
 
 def test_propose_attachment_blocked(ro_client: TestClient) -> None:
     resp = ro_client.post(
-        "/items/S-1/mutations/attachment/propose",
+        "/api/items/S-1/mutations/attachment/propose",
         headers=AUTH,
         json={
             "filename": "x.md",
@@ -134,7 +134,7 @@ def test_propose_attachment_blocked(ro_client: TestClient) -> None:
 
 def test_propose_comment_blocked(ro_client: TestClient) -> None:
     resp = ro_client.post(
-        "/items/S-1/mutations/comment/propose",
+        "/api/items/S-1/mutations/comment/propose",
         headers=AUTH,
         json={"body_md": "hello"},
     )
@@ -145,7 +145,7 @@ def test_confirm_blocked(ro_client: TestClient) -> None:
     # The proposal id doesn't need to exist — the router-level guard
     # fires before the handler runs.
     resp = ro_client.post(
-        "/items/S-1/mutations/anything/confirm",
+        "/api/items/S-1/mutations/anything/confirm",
         headers=AUTH,
     )
     assert resp.status_code == 403
@@ -153,19 +153,19 @@ def test_confirm_blocked(ro_client: TestClient) -> None:
 
 def test_reject_blocked(ro_client: TestClient) -> None:
     resp = ro_client.post(
-        "/items/S-1/mutations/anything/reject",
+        "/api/items/S-1/mutations/anything/reject",
         headers=AUTH,
     )
     assert resp.status_code == 403
 
 
 def test_reads_still_work(ro_client: TestClient) -> None:
-    assert ro_client.get("/health").status_code == 200
-    assert ro_client.get("/whoami", headers=AUTH).status_code == 200
-    listing = ro_client.get("/items", headers=AUTH)
+    assert ro_client.get("/api/health").status_code == 200
+    assert ro_client.get("/api/whoami", headers=AUTH).status_code == 200
+    listing = ro_client.get("/api/items", headers=AUTH)
     assert listing.status_code == 200
     assert len(listing.json()) == 1
-    get_one = ro_client.get("/items/S-1", headers=AUTH)
+    get_one = ro_client.get("/api/items/S-1", headers=AUTH)
     assert get_one.status_code == 200
 
 
@@ -204,7 +204,7 @@ def test_writable_default_keeps_mutations(env) -> None:
     )
     client = TestClient(app)
     resp = client.post(
-        "/items/S-1/mutations/transition/propose",
+        "/api/items/S-1/mutations/transition/propose",
         headers=AUTH,
         json={"intent": "start_work"},
     )

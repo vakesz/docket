@@ -121,8 +121,13 @@ def serve_command(
             config=ctx.config,
         )
         mode = "read-only" if effective_read_only else "read-write"
+        from docket.api.spa import resolve_frontend_dist
+
+        dist = resolve_frontend_dist()
+        bundle = str(dist) if dist else "not built (run 'make frontend-build')"
         console.print(
             f"[green]docket serve[/green] listening on http://{bind}:{listen_port} "
             f"(bearer required; chat {'disabled' if llm is None else 'enabled'}; {mode})"
         )
+        console.print(f"[dim]frontend bundle: {bundle}[/dim]")
         uvicorn.run(app, host=bind, port=listen_port, log_level=_resolve_log_level())

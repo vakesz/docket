@@ -37,7 +37,7 @@ def client(env: ApiEnv) -> TestClient:
 
 def test_create_stage_returns_proposal(client: TestClient) -> None:
     resp = client.post(
-        "/items",
+        "/api/items",
         headers=AUTH_HEADERS,
         json={"kind": "task", "title": "Do thing"},
     )
@@ -52,7 +52,7 @@ def test_create_stage_then_confirm_commits_through_provider(
     client: TestClient, env: ApiEnv
 ) -> None:
     staged = client.post(
-        "/items",
+        "/api/items",
         headers=AUTH_HEADERS,
         json={"kind": "task", "title": "Ship it"},
     )
@@ -60,7 +60,7 @@ def test_create_stage_then_confirm_commits_through_provider(
     proposal_id = staged.json()["id"]
 
     confirmed = client.post(
-        f"/items/proposals/{proposal_id}/confirm",
+        f"/api/items/proposals/{proposal_id}/confirm",
         headers=AUTH_HEADERS,
     )
     assert confirmed.status_code == 200
@@ -71,19 +71,19 @@ def test_create_stage_then_confirm_commits_through_provider(
 
 def test_create_reject_discards_proposal(client: TestClient) -> None:
     staged = client.post(
-        "/items",
+        "/api/items",
         headers=AUTH_HEADERS,
         json={"kind": "task", "title": "Throwaway"},
     )
     proposal_id = staged.json()["id"]
     rejected = client.post(
-        f"/items/proposals/{proposal_id}/reject",
+        f"/api/items/proposals/{proposal_id}/reject",
         headers=AUTH_HEADERS,
     )
     assert rejected.status_code == 204
     # Second reject should 404 — the proposal is gone.
     follow_up = client.post(
-        f"/items/proposals/{proposal_id}/reject",
+        f"/api/items/proposals/{proposal_id}/reject",
         headers=AUTH_HEADERS,
     )
     assert follow_up.status_code == 404
@@ -91,7 +91,7 @@ def test_create_reject_discards_proposal(client: TestClient) -> None:
 
 def test_create_confirm_unknown_proposal_returns_404(client: TestClient) -> None:
     resp = client.post(
-        "/items/proposals/does-not-exist/confirm",
+        "/api/items/proposals/does-not-exist/confirm",
         headers=AUTH_HEADERS,
     )
     assert resp.status_code == 404
@@ -102,7 +102,7 @@ def test_create_confirm_unknown_proposal_returns_404(client: TestClient) -> None
 
 def test_propose_transition_and_confirm(client: TestClient, env: ApiEnv) -> None:
     propose = client.post(
-        "/items/S-1/mutations/transition/propose",
+        "/api/items/S-1/mutations/transition/propose",
         headers=AUTH_HEADERS,
         json={"intent": "start_work"},
     )
@@ -110,38 +110,38 @@ def test_propose_transition_and_confirm(client: TestClient, env: ApiEnv) -> None
     proposal_id = propose.json()["id"]
 
     # GET it back
-    fetched = client.get(f"/items/S-1/mutations/{proposal_id}", headers=AUTH_HEADERS)
+    fetched = client.get(f"/api/items/S-1/mutations/{proposal_id}", headers=AUTH_HEADERS)
     assert fetched.status_code == 200
 
-    confirm = client.post(f"/items/S-1/mutations/{proposal_id}/confirm", headers=AUTH_HEADERS)
+    confirm = client.post(f"/api/items/S-1/mutations/{proposal_id}/confirm", headers=AUTH_HEADERS)
     assert confirm.status_code == 200
     assert confirm.json()["item"]["state"] == "active"
     # Provider now reports active too
     assert env.provider.get_item("S-1").state == ItemState.ACTIVE
 
     # Second confirm → 404 (consumed)
-    again = client.post(f"/items/S-1/mutations/{proposal_id}/confirm", headers=AUTH_HEADERS)
+    again = client.post(f"/api/items/S-1/mutations/{proposal_id}/confirm", headers=AUTH_HEADERS)
     assert again.status_code == 404
 
 
 def test_reject_discards_proposal(client: TestClient) -> None:
     propose = client.post(
-        "/items/S-1/mutations/description/propose",
+        "/api/items/S-1/mutations/description/propose",
         headers=AUTH_HEADERS,
         json={"new_description_md": "New body."},
     )
     proposal_id = propose.json()["id"]
-    reject = client.post(f"/items/S-1/mutations/{proposal_id}/reject", headers=AUTH_HEADERS)
+    reject = client.post(f"/api/items/S-1/mutations/{proposal_id}/reject", headers=AUTH_HEADERS)
     assert reject.status_code == 204
     # Gone
-    again = client.post(f"/items/S-1/mutations/{proposal_id}/confirm", headers=AUTH_HEADERS)
+    again = client.post(f"/api/items/S-1/mutations/{proposal_id}/confirm", headers=AUTH_HEADERS)
     assert again.status_code == 404
 
 
 def test_attachment_propose_accepts_base64(client: TestClient, env: ApiEnv) -> None:
     content = b"# transcript\n"
     propose = client.post(
-        "/items/S-1/mutations/attachment/propose",
+        "/api/items/S-1/mutations/attachment/propose",
         headers=AUTH_HEADERS,
         json={
             "filename": "convo-001.md",
@@ -150,7 +150,7 @@ def test_attachment_propose_accepts_base64(client: TestClient, env: ApiEnv) -> N
     )
     assert propose.status_code == 200
     proposal_id = propose.json()["id"]
-    confirm = client.post(f"/items/S-1/mutations/{proposal_id}/confirm", headers=AUTH_HEADERS)
+    confirm = client.post(f"/api/items/S-1/mutations/{proposal_id}/confirm", headers=AUTH_HEADERS)
     assert confirm.status_code == 200
     assert confirm.json()["attachment_url"].endswith("convo-001.md")
     assert env.provider.uploaded[0] == ("S-1", "convo-001.md", content)
@@ -158,7 +158,7 @@ def test_attachment_propose_accepts_base64(client: TestClient, env: ApiEnv) -> N
 
 def test_attachment_rejects_bad_base64(client: TestClient) -> None:
     resp = client.post(
-        "/items/S-1/mutations/attachment/propose",
+        "/api/items/S-1/mutations/attachment/propose",
         headers=AUTH_HEADERS,
         json={"filename": "x.md", "content_base64": "not-base64!"},
     )
@@ -167,7 +167,7 @@ def test_attachment_rejects_bad_base64(client: TestClient) -> None:
 
 def test_propose_comment_and_confirm(client: TestClient, env: ApiEnv) -> None:
     propose = client.post(
-        "/items/S-1/mutations/comment/propose",
+        "/api/items/S-1/mutations/comment/propose",
         headers=AUTH_HEADERS,
         json={"body_md": "Looks good."},
     )
@@ -178,21 +178,21 @@ def test_propose_comment_and_confirm(client: TestClient, env: ApiEnv) -> None:
     assert "Looks good." in body["diff"]
 
     proposal_id = body["id"]
-    confirm = client.post(f"/items/S-1/mutations/{proposal_id}/confirm", headers=AUTH_HEADERS)
+    confirm = client.post(f"/api/items/S-1/mutations/{proposal_id}/confirm", headers=AUTH_HEADERS)
     assert confirm.status_code == 200, confirm.text
     payload = confirm.json()
     assert payload["comment"]["body_md"] == "Looks good."
     assert payload["comment"]["item_id"] == "S-1"
     assert env.provider.comments["S-1"][-1].body_md == "Looks good."
 
-    listed = client.get("/items/S-1/comments", headers=AUTH_HEADERS)
+    listed = client.get("/api/items/S-1/comments", headers=AUTH_HEADERS)
     assert listed.status_code == 200
     assert [c["body_md"] for c in listed.json()] == ["Looks good."]
 
 
 def test_propose_comment_rejects_empty_body(client: TestClient) -> None:
     resp = client.post(
-        "/items/S-1/mutations/comment/propose",
+        "/api/items/S-1/mutations/comment/propose",
         headers=AUTH_HEADERS,
         json={"body_md": "   \n  "},
     )
@@ -201,7 +201,7 @@ def test_propose_comment_rejects_empty_body(client: TestClient) -> None:
 
 def test_propose_comment_unknown_item_returns_404(client: TestClient) -> None:
     resp = client.post(
-        "/items/UNKNOWN/mutations/comment/propose",
+        "/api/items/UNKNOWN/mutations/comment/propose",
         headers=AUTH_HEADERS,
         json={"body_md": "hi"},
     )

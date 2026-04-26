@@ -68,7 +68,7 @@ def _pid() -> str:
 
 def _seed_project(client: TestClient) -> None:
     """Populate `projects` table by hitting the activate endpoint."""
-    resp = client.get("/projects/active", headers=AUTH_HEADERS)
+    resp = client.get("/api/projects/active", headers=AUTH_HEADERS)
     assert resp.status_code == 200, resp.text
 
 
@@ -76,7 +76,7 @@ def test_create_memory_round_trips(client: TestClient) -> None:
     _seed_project(client)
     pid = _pid()
     resp = client.post(
-        f"/projects/{pid}/memory",
+        f"/api/projects/{pid}/memory",
         json={"title": "Glossary", "body_md": "**ALM**: …", "tags": ["ref"]},
         headers=AUTH_HEADERS,
     )
@@ -88,12 +88,12 @@ def test_create_memory_round_trips(client: TestClient) -> None:
     memory_id = body["id"]
 
     # GET single
-    one = client.get(f"/memory/{memory_id}", headers=AUTH_HEADERS)
+    one = client.get(f"/api/memory/{memory_id}", headers=AUTH_HEADERS)
     assert one.status_code == 200
     assert one.json()["body_md"] == "**ALM**: …"
 
     # LIST
-    lst = client.get(f"/projects/{pid}/memory", headers=AUTH_HEADERS)
+    lst = client.get(f"/api/projects/{pid}/memory", headers=AUTH_HEADERS)
     assert lst.status_code == 200
     body = lst.json()
     assert body["project_id"] == pid
@@ -104,12 +104,12 @@ def test_patch_memory_updates_fields(client: TestClient) -> None:
     _seed_project(client)
     pid = _pid()
     created = client.post(
-        f"/projects/{pid}/memory",
+        f"/api/projects/{pid}/memory",
         json={"title": "Old", "body_md": "x", "tags": []},
         headers=AUTH_HEADERS,
     ).json()
     resp = client.patch(
-        f"/memory/{created['id']}",
+        f"/api/memory/{created['id']}",
         json={"title": "New"},
         headers=AUTH_HEADERS,
     )
@@ -123,12 +123,12 @@ def test_patch_memory_requires_at_least_one_field(client: TestClient) -> None:
     _seed_project(client)
     pid = _pid()
     created = client.post(
-        f"/projects/{pid}/memory",
+        f"/api/projects/{pid}/memory",
         json={"title": "x", "body_md": "y"},
         headers=AUTH_HEADERS,
     ).json()
     resp = client.patch(
-        f"/memory/{created['id']}",
+        f"/api/memory/{created['id']}",
         json={},
         headers=AUTH_HEADERS,
     )
@@ -139,39 +139,39 @@ def test_delete_memory(client: TestClient) -> None:
     _seed_project(client)
     pid = _pid()
     created = client.post(
-        f"/projects/{pid}/memory",
+        f"/api/projects/{pid}/memory",
         json={"title": "Tmp", "body_md": ""},
         headers=AUTH_HEADERS,
     ).json()
-    resp = client.delete(f"/memory/{created['id']}", headers=AUTH_HEADERS)
+    resp = client.delete(f"/api/memory/{created['id']}", headers=AUTH_HEADERS)
     assert resp.status_code == 204
-    assert client.get(f"/memory/{created['id']}", headers=AUTH_HEADERS).status_code == 404
+    assert client.get(f"/api/memory/{created['id']}", headers=AUTH_HEADERS).status_code == 404
 
 
 def test_search_memory(client: TestClient) -> None:
     _seed_project(client)
     pid = _pid()
     client.post(
-        f"/projects/{pid}/memory",
+        f"/api/projects/{pid}/memory",
         json={"title": "Auth", "body_md": "OAuth tokens"},
         headers=AUTH_HEADERS,
     )
     client.post(
-        f"/projects/{pid}/memory",
+        f"/api/projects/{pid}/memory",
         json={"title": "Other", "body_md": "unrelated"},
         headers=AUTH_HEADERS,
     )
-    resp = client.get(f"/projects/{pid}/memory/search", params={"q": "OAuth"}, headers=AUTH_HEADERS)
+    resp = client.get(f"/api/projects/{pid}/memory/search", params={"q": "OAuth"}, headers=AUTH_HEADERS)
     assert resp.status_code == 200
     body = resp.json()
     assert [e["title"] for e in body["entries"]] == ["Auth"]
 
 
 def test_unknown_project_returns_404(client: TestClient) -> None:
-    resp = client.get("/projects/ghost/memory", headers=AUTH_HEADERS)
+    resp = client.get("/api/projects/ghost/memory", headers=AUTH_HEADERS)
     assert resp.status_code == 404
 
 
 def test_memory_routes_require_auth(client: TestClient) -> None:
     pid = _pid()
-    assert client.get(f"/projects/{pid}/memory").status_code == 401
+    assert client.get(f"/api/projects/{pid}/memory").status_code == 401

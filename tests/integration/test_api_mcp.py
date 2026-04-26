@@ -106,7 +106,7 @@ def _server_payload(*, enabled: bool = True) -> dict[str, object]:
 
 def test_list_when_empty(client: TestClient) -> None:
     pid = _pid()
-    resp = client.get(f"/projects/{pid}/mcp", headers=AUTH_HEADERS)
+    resp = client.get(f"/api/projects/{pid}/mcp", headers=AUTH_HEADERS)
     assert resp.status_code == 200
     body = resp.json()
     assert body["project_id"] == pid
@@ -115,30 +115,30 @@ def test_list_when_empty(client: TestClient) -> None:
 
 def test_create_then_get_round_trips(client: TestClient) -> None:
     pid = _pid()
-    resp = client.post(f"/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
+    resp = client.post(f"/api/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
     assert resp.status_code == 201, resp.text
     body = resp.json()
     assert body["name"] == "fake"
     assert body["command"] == sys.executable
     assert body["args"] == ["-m", "tests.fakes.mcp_server"]
 
-    one = client.get(f"/projects/{pid}/mcp/fake", headers=AUTH_HEADERS)
+    one = client.get(f"/api/projects/{pid}/mcp/fake", headers=AUTH_HEADERS)
     assert one.status_code == 200
     assert one.json()["startup_timeout_seconds"] == 15.0
 
 
 def test_create_duplicate_is_409(client: TestClient) -> None:
     pid = _pid()
-    client.post(f"/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
-    again = client.post(f"/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
+    client.post(f"/api/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
+    again = client.post(f"/api/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
     assert again.status_code == 409
 
 
 def test_patch_updates_specific_fields(client: TestClient) -> None:
     pid = _pid()
-    client.post(f"/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
+    client.post(f"/api/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
     resp = client.patch(
-        f"/projects/{pid}/mcp/fake",
+        f"/api/projects/{pid}/mcp/fake",
         json={"enabled": False, "startup_timeout_seconds": 7.0},
         headers=AUTH_HEADERS,
     )
@@ -152,23 +152,23 @@ def test_patch_updates_specific_fields(client: TestClient) -> None:
 
 def test_patch_requires_at_least_one_field(client: TestClient) -> None:
     pid = _pid()
-    client.post(f"/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
-    resp = client.patch(f"/projects/{pid}/mcp/fake", json={}, headers=AUTH_HEADERS)
+    client.post(f"/api/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
+    resp = client.patch(f"/api/projects/{pid}/mcp/fake", json={}, headers=AUTH_HEADERS)
     assert resp.status_code == 400
 
 
 def test_delete_removes_entry(client: TestClient) -> None:
     pid = _pid()
-    client.post(f"/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
-    resp = client.delete(f"/projects/{pid}/mcp/fake", headers=AUTH_HEADERS)
+    client.post(f"/api/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
+    resp = client.delete(f"/api/projects/{pid}/mcp/fake", headers=AUTH_HEADERS)
     assert resp.status_code == 204
-    assert client.get(f"/projects/{pid}/mcp/fake", headers=AUTH_HEADERS).status_code == 404
+    assert client.get(f"/api/projects/{pid}/mcp/fake", headers=AUTH_HEADERS).status_code == 404
 
 
 def test_test_endpoint_starts_real_server(client: TestClient) -> None:
     pid = _pid()
-    client.post(f"/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
-    resp = client.post(f"/projects/{pid}/mcp/fake/test", headers=AUTH_HEADERS)
+    client.post(f"/api/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
+    resp = client.post(f"/api/projects/{pid}/mcp/fake/test", headers=AUTH_HEADERS)
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["ok"] is True
@@ -182,7 +182,7 @@ def test_test_endpoint_starts_real_server(client: TestClient) -> None:
 def test_draft_test_endpoint_validates_without_persisting(client: TestClient) -> None:
     pid = _pid()
     resp = client.post(
-        f"/projects/{pid}/mcp/draft/test",
+        f"/api/projects/{pid}/mcp/draft/test",
         json=_server_payload(),
         headers=AUTH_HEADERS,
     )
@@ -190,7 +190,7 @@ def test_draft_test_endpoint_validates_without_persisting(client: TestClient) ->
     body = resp.json()
     assert body["ok"] is True
     assert "mcp__draft__echo" in body["tools"]
-    listed = client.get(f"/projects/{pid}/mcp", headers=AUTH_HEADERS)
+    listed = client.get(f"/api/projects/{pid}/mcp", headers=AUTH_HEADERS)
     assert listed.json()["entries"] == []
 
 
@@ -204,8 +204,8 @@ def test_test_endpoint_reports_failure_for_broken_command(client: TestClient) ->
         "enabled": True,
         "startup_timeout_seconds": 2.0,
     }
-    client.post(f"/projects/{pid}/mcp/broken", json=payload, headers=AUTH_HEADERS)
-    resp = client.post(f"/projects/{pid}/mcp/broken/test", headers=AUTH_HEADERS)
+    client.post(f"/api/projects/{pid}/mcp/broken", json=payload, headers=AUTH_HEADERS)
+    resp = client.post(f"/api/projects/{pid}/mcp/broken/test", headers=AUTH_HEADERS)
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["ok"] is False
@@ -216,7 +216,7 @@ def test_draft_test_endpoint_reports_invalid_transport(client: TestClient) -> No
     pid = _pid()
     payload = _server_payload()
     payload["transport"] = "sse"
-    resp = client.post(f"/projects/{pid}/mcp/draft/test", json=payload, headers=AUTH_HEADERS)
+    resp = client.post(f"/api/projects/{pid}/mcp/draft/test", json=payload, headers=AUTH_HEADERS)
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["ok"] is False
@@ -224,20 +224,20 @@ def test_draft_test_endpoint_reports_invalid_transport(client: TestClient) -> No
 
 
 def test_unknown_project_returns_404(client: TestClient) -> None:
-    resp = client.get("/projects/ghost/mcp", headers=AUTH_HEADERS)
+    resp = client.get("/api/projects/ghost/mcp", headers=AUTH_HEADERS)
     assert resp.status_code == 404
 
 
 def test_unknown_server_returns_404(client: TestClient) -> None:
     pid = _pid()
-    resp = client.get(f"/projects/{pid}/mcp/ghost", headers=AUTH_HEADERS)
+    resp = client.get(f"/api/projects/{pid}/mcp/ghost", headers=AUTH_HEADERS)
     assert resp.status_code == 404
 
 
 def test_routes_require_auth(client: TestClient) -> None:
     pid = _pid()
-    assert client.get(f"/projects/{pid}/mcp").status_code == 401
-    assert client.post(f"/projects/{pid}/mcp/draft/test", json=_server_payload()).status_code == 401
+    assert client.get(f"/api/projects/{pid}/mcp").status_code == 401
+    assert client.post(f"/api/projects/{pid}/mcp/draft/test", json=_server_payload()).status_code == 401
 
 
 def test_create_rebinds_active_runtime_manager(client: TestClient) -> None:
@@ -245,7 +245,7 @@ def test_create_rebinds_active_runtime_manager(client: TestClient) -> None:
     pid = _pid()
     manager = _manager(client)
     assert manager.clients == {}
-    resp = client.post(f"/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
+    resp = client.post(f"/api/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
     assert resp.status_code == 201, resp.text
     assert "fake" in manager.clients
     assert manager.active_project_id == pid
@@ -255,7 +255,7 @@ def test_create_rejects_unsupported_transport(client: TestClient) -> None:
     pid = _pid()
     payload = _server_payload()
     payload["transport"] = "sse"
-    resp = client.post(f"/projects/{pid}/mcp/fake", json=payload, headers=AUTH_HEADERS)
+    resp = client.post(f"/api/projects/{pid}/mcp/fake", json=payload, headers=AUTH_HEADERS)
     assert resp.status_code == 400
     assert "Only 'stdio' is supported" in resp.text
 
@@ -263,9 +263,9 @@ def test_create_rejects_unsupported_transport(client: TestClient) -> None:
 def test_disable_via_patch_drops_running_client(client: TestClient) -> None:
     pid = _pid()
     manager = _manager(client)
-    client.post(f"/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
+    client.post(f"/api/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
     assert "fake" in manager.clients
-    resp = client.patch(f"/projects/{pid}/mcp/fake", json={"enabled": False}, headers=AUTH_HEADERS)
+    resp = client.patch(f"/api/projects/{pid}/mcp/fake", json={"enabled": False}, headers=AUTH_HEADERS)
     assert resp.status_code == 200, resp.text
     assert manager.clients == {}
 
@@ -273,9 +273,9 @@ def test_disable_via_patch_drops_running_client(client: TestClient) -> None:
 def test_delete_drops_running_client(client: TestClient) -> None:
     pid = _pid()
     manager = _manager(client)
-    client.post(f"/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
+    client.post(f"/api/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
     assert "fake" in manager.clients
-    resp = client.delete(f"/projects/{pid}/mcp/fake", headers=AUTH_HEADERS)
+    resp = client.delete(f"/api/projects/{pid}/mcp/fake", headers=AUTH_HEADERS)
     assert resp.status_code == 204
     assert manager.clients == {}
 
@@ -299,13 +299,13 @@ def test_inactive_project_writes_persist_but_do_not_rebind(
 
     manager = _manager(client)
     resp = client.post(
-        f"/projects/{other_pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS
+        f"/api/projects/{other_pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS
     )
     assert resp.status_code == 201, resp.text
     # Active project hasn't changed → live manager unchanged.
     assert manager.clients == {}
     # Confirmed the entry actually persisted on the targeted (inactive) project.
-    listed = client.get(f"/projects/{other_pid}/mcp", headers=AUTH_HEADERS)
+    listed = client.get(f"/api/projects/{other_pid}/mcp", headers=AUTH_HEADERS)
     assert [e["name"] for e in listed.json()["entries"]] == ["fake"]
 
 
@@ -317,13 +317,13 @@ def test_get_does_not_require_runtime(client: TestClient) -> None:
     cfg = client.app.state.config
     cfg.projects[pid].mcp["plain"] = MCPServerEntry(command="/bin/true")
     save_config(resolve_paths(), cfg)
-    resp = client.get(f"/projects/{pid}/mcp/plain", headers=AUTH_HEADERS)
+    resp = client.get(f"/api/projects/{pid}/mcp/plain", headers=AUTH_HEADERS)
     assert resp.status_code == 200
     assert resp.json()["command"] == "/bin/true"
 
 
 def test_list_presets_includes_github(client: TestClient) -> None:
-    resp = client.get("/mcp/presets", headers=AUTH_HEADERS)
+    resp = client.get("/api/mcp/presets", headers=AUTH_HEADERS)
     assert resp.status_code == 200, resp.text
     body = resp.json()
     ids = [p["id"] for p in body["presets"]]
@@ -339,7 +339,7 @@ def test_apply_preset_github_creates_server_and_rebinds(client: TestClient) -> N
     pid = _pid()
     manager = _manager(client)
     resp = client.post(
-        f"/projects/{pid}/mcp/presets/github/apply",
+        f"/api/projects/{pid}/mcp/presets/github/apply",
         json={"env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_fake"}},
         headers=AUTH_HEADERS,
     )
@@ -348,7 +348,7 @@ def test_apply_preset_github_creates_server_and_rebinds(client: TestClient) -> N
     # persistence side must have worked.
     assert resp.status_code == 201, resp.text
     assert resp.json()["name"] == "github"
-    listed = client.get(f"/projects/{pid}/mcp", headers=AUTH_HEADERS).json()
+    listed = client.get(f"/api/projects/{pid}/mcp", headers=AUTH_HEADERS).json()
     assert [e["name"] for e in listed["entries"]] == ["github"]
     # `active_project_id` flips regardless of whether the client started.
     assert manager.active_project_id == pid
@@ -357,7 +357,7 @@ def test_apply_preset_github_creates_server_and_rebinds(client: TestClient) -> N
 def test_apply_preset_rejects_missing_env(client: TestClient) -> None:
     pid = _pid()
     resp = client.post(
-        f"/projects/{pid}/mcp/presets/github/apply",
+        f"/api/projects/{pid}/mcp/presets/github/apply",
         json={"env": {}},
         headers=AUTH_HEADERS,
     )
@@ -368,7 +368,7 @@ def test_apply_preset_rejects_missing_env(client: TestClient) -> None:
 def test_apply_preset_unknown_id_is_404(client: TestClient) -> None:
     pid = _pid()
     resp = client.post(
-        f"/projects/{pid}/mcp/presets/nonexistent/apply",
+        f"/api/projects/{pid}/mcp/presets/nonexistent/apply",
         json={"env": {"FOO": "bar"}},
         headers=AUTH_HEADERS,
     )
@@ -378,7 +378,7 @@ def test_apply_preset_unknown_id_is_404(client: TestClient) -> None:
 def test_apply_preset_requires_auth(client: TestClient) -> None:
     pid = _pid()
     resp = client.post(
-        f"/projects/{pid}/mcp/presets/github/apply",
+        f"/api/projects/{pid}/mcp/presets/github/apply",
         json={"env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_fake"}},
     )
     assert resp.status_code == 401

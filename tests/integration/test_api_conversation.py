@@ -33,7 +33,7 @@ def client(env: ApiEnv) -> TestClient:
 
 
 def test_conversation_history_empty_when_no_thread(client: TestClient) -> None:
-    resp = client.get("/items/S-1/conversation", headers=AUTH_HEADERS)
+    resp = client.get("/api/items/S-1/conversation", headers=AUTH_HEADERS)
     assert resp.status_code == 200
     body = resp.json()
     assert body["conversation"] is None
@@ -42,7 +42,7 @@ def test_conversation_history_empty_when_no_thread(client: TestClient) -> None:
 
 def test_conversation_requires_llm(client: TestClient) -> None:
     resp = client.post(
-        "/items/S-1/conversation/messages",
+        "/api/items/S-1/conversation/messages",
         headers=AUTH_HEADERS,
         json={"text": "hi"},
     )
@@ -55,7 +55,7 @@ def test_sse_streams_delta_and_done(env: ApiEnv) -> None:
 
     with client.stream(
         "POST",
-        "/items/S-1/conversation/messages",
+        "/api/items/S-1/conversation/messages",
         headers=AUTH_HEADERS,
         json={"text": "summarize"},
     ) as resp:
@@ -82,7 +82,7 @@ def test_sse_emits_proposal_event_when_agent_stages_mutation(env: ApiEnv) -> Non
 
     with client.stream(
         "POST",
-        "/items/S-1/conversation/messages",
+        "/api/items/S-1/conversation/messages",
         headers=AUTH_HEADERS,
         json={"text": "start work"},
     ) as resp:
@@ -96,7 +96,7 @@ def test_sse_emits_proposal_event_when_agent_stages_mutation(env: ApiEnv) -> Non
     assert payload["item_id"] == "S-1"
     # The proposal is now confirmable via the REST endpoint.
     pid = payload["id"]
-    confirm = client.post(f"/items/S-1/mutations/{pid}/confirm", headers=AUTH_HEADERS)
+    confirm = client.post(f"/api/items/S-1/mutations/{pid}/confirm", headers=AUTH_HEADERS)
     assert confirm.status_code == 200
 
 
@@ -107,16 +107,16 @@ def test_new_thread_archives_previous(env: ApiEnv) -> None:
     # Seed a conversation.
     with client.stream(
         "POST",
-        "/items/S-1/conversation/messages",
+        "/api/items/S-1/conversation/messages",
         headers=AUTH_HEADERS,
         json={"text": "hi"},
     ) as r:
         list(r.iter_lines())
 
-    new = client.post("/items/S-1/conversation/thread", headers=AUTH_HEADERS)
+    new = client.post("/api/items/S-1/conversation/thread", headers=AUTH_HEADERS)
     assert new.status_code == 200
     # History is now empty against the new thread.
-    history = client.get("/items/S-1/conversation", headers=AUTH_HEADERS).json()
+    history = client.get("/api/items/S-1/conversation", headers=AUTH_HEADERS).json()
     assert history["messages"] == []
 
 
@@ -145,7 +145,7 @@ def test_sse_emits_question_event_when_agent_calls_ask_user(env: ApiEnv) -> None
 
     with client.stream(
         "POST",
-        "/items/S-1/conversation/messages",
+        "/api/items/S-1/conversation/messages",
         headers=AUTH_HEADERS,
         json={"text": "should I do X?"},
     ) as resp:
@@ -178,7 +178,7 @@ def test_answer_endpoint_resumes_conversation(env: ApiEnv) -> None:
 
     with client.stream(
         "POST",
-        "/items/S-1/conversation/messages",
+        "/api/items/S-1/conversation/messages",
         headers=AUTH_HEADERS,
         json={"text": "advise me"},
     ) as resp:
@@ -187,7 +187,7 @@ def test_answer_endpoint_resumes_conversation(env: ApiEnv) -> None:
 
     with client.stream(
         "POST",
-        "/items/S-1/conversation/answer",
+        "/api/items/S-1/conversation/answer",
         headers=AUTH_HEADERS,
         json={
             "question_id": qid,
@@ -209,14 +209,14 @@ def test_answer_endpoint_rejects_unknown_id(env: ApiEnv) -> None:
 
     with client.stream(
         "POST",
-        "/items/S-1/conversation/messages",
+        "/api/items/S-1/conversation/messages",
         headers=AUTH_HEADERS,
         json={"text": "?"},
     ) as resp:
         list(resp.iter_lines())
 
     resp = client.post(
-        "/items/S-1/conversation/answer",
+        "/api/items/S-1/conversation/answer",
         headers=AUTH_HEADERS,
         json={
             "question_id": "no-such-question",
@@ -232,7 +232,7 @@ def test_answer_endpoint_rejects_wrong_arity(env: ApiEnv) -> None:
 
     with client.stream(
         "POST",
-        "/items/S-1/conversation/messages",
+        "/api/items/S-1/conversation/messages",
         headers=AUTH_HEADERS,
         json={"text": "?"},
     ) as resp:
@@ -240,7 +240,7 @@ def test_answer_endpoint_rejects_wrong_arity(env: ApiEnv) -> None:
     qid = json.loads(next(e for e in events if e["event"] == "question")["data"])["id"]
 
     resp = client.post(
-        "/items/S-1/conversation/answer",
+        "/api/items/S-1/conversation/answer",
         headers=AUTH_HEADERS,
         json={
             "question_id": qid,

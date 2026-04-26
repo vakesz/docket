@@ -63,7 +63,7 @@ def client(tmp_xdg: Path, make_item: MakeItem) -> TestClient:
 
 
 def test_active_project_seeds_a_default_entry(client: TestClient) -> None:
-    resp = client.get("/projects/active", headers=AUTH_HEADERS)
+    resp = client.get("/api/projects/active", headers=AUTH_HEADERS)
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["active"] is True
@@ -75,8 +75,8 @@ def test_active_project_seeds_a_default_entry(client: TestClient) -> None:
 
 def test_list_projects_returns_active_flag(client: TestClient) -> None:
     # Force a row to exist
-    client.get("/projects/active", headers=AUTH_HEADERS)
-    resp = client.get("/projects", headers=AUTH_HEADERS)
+    client.get("/api/projects/active", headers=AUTH_HEADERS)
+    resp = client.get("/api/projects", headers=AUTH_HEADERS)
     assert resp.status_code == 200, resp.text
     rows = resp.json()
     assert len(rows) == 1
@@ -86,9 +86,9 @@ def test_list_projects_returns_active_flag(client: TestClient) -> None:
 def test_patch_project_persists_to_config(client: TestClient) -> None:
     pid = project_id_for("main")
     # Seed the entry first.
-    client.get("/projects/active", headers=AUTH_HEADERS)
+    client.get("/api/projects/active", headers=AUTH_HEADERS)
     resp = client.patch(
-        f"/projects/{pid}",
+        f"/api/projects/{pid}",
         json={"name": "Renamed", "description": "Triage queue"},
         headers=AUTH_HEADERS,
     )
@@ -98,10 +98,10 @@ def test_patch_project_persists_to_config(client: TestClient) -> None:
     assert body["description"] == "Triage queue"
 
     # Re-read via GET
-    resp2 = client.get(f"/projects/{pid}", headers=AUTH_HEADERS)
+    resp2 = client.get(f"/api/projects/{pid}", headers=AUTH_HEADERS)
     assert resp2.json()["name"] == "Renamed"
 
 
 def test_get_unknown_project_returns_404(client: TestClient) -> None:
-    resp = client.get("/projects/nope", headers=AUTH_HEADERS)
+    resp = client.get("/api/projects/nope", headers=AUTH_HEADERS)
     assert resp.status_code == 404

@@ -68,7 +68,7 @@ def _pid() -> str:
 
 def _seed_project(client: TestClient) -> None:
     """Populate `projects` table by hitting the activate endpoint."""
-    resp = client.get("/projects/active", headers=AUTH_HEADERS)
+    resp = client.get("/api/projects/active", headers=AUTH_HEADERS)
     assert resp.status_code == 200, resp.text
 
 
@@ -76,7 +76,7 @@ def test_create_source_round_trips(client: TestClient) -> None:
     _seed_project(client)
     pid = _pid()
     resp = client.post(
-        f"/projects/{pid}/sources",
+        f"/api/projects/{pid}/sources",
         json={
             "title": "Login spec",
             "body_md": "## Goals\nAuth via OAuth.",
@@ -93,11 +93,11 @@ def test_create_source_round_trips(client: TestClient) -> None:
     assert body["uri"] == "https://example.test/spec"
     source_id = body["id"]
 
-    one = client.get(f"/sources/{source_id}", headers=AUTH_HEADERS)
+    one = client.get(f"/api/sources/{source_id}", headers=AUTH_HEADERS)
     assert one.status_code == 200
     assert one.json()["body_md"].startswith("## Goals")
 
-    lst = client.get(f"/projects/{pid}/sources", headers=AUTH_HEADERS)
+    lst = client.get(f"/api/projects/{pid}/sources", headers=AUTH_HEADERS)
     assert lst.status_code == 200
     body = lst.json()
     assert body["project_id"] == pid
@@ -109,17 +109,17 @@ def test_list_sources_kind_filter(client: TestClient) -> None:
     _seed_project(client)
     pid = _pid()
     client.post(
-        f"/projects/{pid}/sources",
+        f"/api/projects/{pid}/sources",
         json={"title": "A", "body_md": "x", "kind": "design"},
         headers=AUTH_HEADERS,
     )
     client.post(
-        f"/projects/{pid}/sources",
+        f"/api/projects/{pid}/sources",
         json={"title": "B", "body_md": "y", "kind": "runbook"},
         headers=AUTH_HEADERS,
     )
     resp = client.get(
-        f"/projects/{pid}/sources",
+        f"/api/projects/{pid}/sources",
         params={"kind": "design"},
         headers=AUTH_HEADERS,
     )
@@ -132,12 +132,12 @@ def test_patch_source_updates_fields(client: TestClient) -> None:
     _seed_project(client)
     pid = _pid()
     created = client.post(
-        f"/projects/{pid}/sources",
+        f"/api/projects/{pid}/sources",
         json={"title": "Old", "body_md": "x"},
         headers=AUTH_HEADERS,
     ).json()
     resp = client.patch(
-        f"/sources/{created['id']}",
+        f"/api/sources/{created['id']}",
         json={"title": "New"},
         headers=AUTH_HEADERS,
     )
@@ -151,12 +151,12 @@ def test_patch_source_requires_at_least_one_field(client: TestClient) -> None:
     _seed_project(client)
     pid = _pid()
     created = client.post(
-        f"/projects/{pid}/sources",
+        f"/api/projects/{pid}/sources",
         json={"title": "x", "body_md": "y"},
         headers=AUTH_HEADERS,
     ).json()
     resp = client.patch(
-        f"/sources/{created['id']}",
+        f"/api/sources/{created['id']}",
         json={},
         headers=AUTH_HEADERS,
     )
@@ -167,30 +167,30 @@ def test_delete_source(client: TestClient) -> None:
     _seed_project(client)
     pid = _pid()
     created = client.post(
-        f"/projects/{pid}/sources",
+        f"/api/projects/{pid}/sources",
         json={"title": "Tmp", "body_md": ""},
         headers=AUTH_HEADERS,
     ).json()
-    resp = client.delete(f"/sources/{created['id']}", headers=AUTH_HEADERS)
+    resp = client.delete(f"/api/sources/{created['id']}", headers=AUTH_HEADERS)
     assert resp.status_code == 204
-    assert client.get(f"/sources/{created['id']}", headers=AUTH_HEADERS).status_code == 404
+    assert client.get(f"/api/sources/{created['id']}", headers=AUTH_HEADERS).status_code == 404
 
 
 def test_search_sources(client: TestClient) -> None:
     _seed_project(client)
     pid = _pid()
     client.post(
-        f"/projects/{pid}/sources",
+        f"/api/projects/{pid}/sources",
         json={"title": "Auth", "body_md": "OAuth tokens"},
         headers=AUTH_HEADERS,
     )
     client.post(
-        f"/projects/{pid}/sources",
+        f"/api/projects/{pid}/sources",
         json={"title": "Other", "body_md": "unrelated"},
         headers=AUTH_HEADERS,
     )
     resp = client.get(
-        f"/projects/{pid}/sources/search",
+        f"/api/projects/{pid}/sources/search",
         params={"q": "OAuth"},
         headers=AUTH_HEADERS,
     )
@@ -200,10 +200,10 @@ def test_search_sources(client: TestClient) -> None:
 
 
 def test_unknown_project_returns_404(client: TestClient) -> None:
-    resp = client.get("/projects/ghost/sources", headers=AUTH_HEADERS)
+    resp = client.get("/api/projects/ghost/sources", headers=AUTH_HEADERS)
     assert resp.status_code == 404
 
 
 def test_source_routes_require_auth(client: TestClient) -> None:
     pid = _pid()
-    assert client.get(f"/projects/{pid}/sources").status_code == 401
+    assert client.get(f"/api/projects/{pid}/sources").status_code == 401

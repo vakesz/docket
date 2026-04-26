@@ -31,24 +31,24 @@ def client(env: ApiEnv) -> TestClient:
 
 
 def test_missing_bearer_returns_401(client: TestClient) -> None:
-    resp = client.get("/items")
+    resp = client.get("/api/items")
     assert resp.status_code == 401
 
 
 def test_wrong_bearer_returns_401(client: TestClient) -> None:
-    resp = client.get("/items", headers={"Authorization": "Bearer nope"})
+    resp = client.get("/api/items", headers={"Authorization": "Bearer nope"})
     assert resp.status_code == 401
 
 
 def test_health_is_unauthenticated(client: TestClient) -> None:
-    resp = client.get("/health")
+    resp = client.get("/api/health")
     assert resp.status_code == 200
     assert resp.json() == {"status": "ok"}
 
 
 def test_whoami_requires_auth(client: TestClient) -> None:
-    assert client.get("/whoami").status_code == 401
-    resp = client.get("/whoami", headers=AUTH_HEADERS)
+    assert client.get("/api/whoami").status_code == 401
+    resp = client.get("/api/whoami", headers=AUTH_HEADERS)
     assert resp.status_code == 200
     assert resp.json()["app"] == "docket"
 

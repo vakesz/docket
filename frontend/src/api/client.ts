@@ -1,15 +1,28 @@
 /**
  * Typed fetch client for the Docket HTTP surface.
  *
- * Routes all browser traffic through `/api/*` (a server-side proxy that
- * attaches the bearer token). This module exposes `api.get/post/put/patch/delete`
- * and `api.stream` — the latter for SSE endpoints.
+ * Same-origin `/api/*` calls. The bearer token is injected into the page as
+ * `window.__DOCKET_TOKEN__` (by `docket serve` in prod, vite plugin in dev),
+ * and we attach it on every request — so the token never leaves the local
+ * box but the request flow is identical in both modes.
  */
 import type { components } from "./schema";
 
 export type DTO = components["schemas"];
 
 const BASE = "/api";
+
+declare global {
+  interface Window {
+    __DOCKET_TOKEN__?: string;
+  }
+}
+
+function authHeader(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  const token = window.__DOCKET_TOKEN__;
+  return token ? { authorization: `Bearer ${token}` } : {};
+}
 
 export class ApiError extends Error {
   readonly status: number;
@@ -44,7 +57,7 @@ async function request<T>(
     }
   }
 
-  const headers: Record<string, string> = { accept: "application/json" };
+  const headers: Record<string, string> = { accept: "application/json", ...authHeader() };
   let body: BodyInit | undefined;
   if (init.body !== undefined) {
     headers["content-type"] = "application/json";
@@ -94,7 +107,11 @@ export const api = {
   ): AsyncGenerator<{ event: string; data: string }, void, void> {
     const res = await fetch(`${BASE}${path}`, {
       method: "POST",
-      headers: { "content-type": "application/json", accept: "text/event-stream" },
+      headers: {
+        "content-type": "application/json",
+        accept: "text/event-stream",
+        ...authHeader(),
+      },
       body: JSON.stringify(body),
       signal,
     });

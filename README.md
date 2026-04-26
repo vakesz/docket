@@ -90,11 +90,15 @@ make env       # mint a DOCKET_API_TOKEN into .env (one-time, dev only)
 make dev       # run `docket serve` + vite dev server together
 ```
 
-Backend on `http://127.0.0.1:8765`, dev frontend on `http://localhost:3000`. The frontend's Bun server proxies `/api/*` to the backend with a bearer header attached server-side; the token never reaches the browser. Production: `make frontend-build` then `make frontend-start`.
+Dev: backend on `http://127.0.0.1:8765`, vite dev server (HMR) on `http://localhost:3000` proxying `/api/*` to the backend. The bearer token is injected into the page as `window.__DOCKET_TOKEN__` and the browser attaches it; the token never leaves the local box.
 
-Regenerate the OpenAPI client with `make gen-api` while the backend is running.
+Production: `make serve` (runs `bun run build` then `docket serve`). The Python backend serves the built SPA from `frontend/dist/` directly at `http://127.0.0.1:8765` — single process, single origin. The optional `make dev` flow stays useful for HMR during frontend work.
 
-Stack: React 19, TanStack Start (SSR) + Router + Query, Vite, Tailwind 4, CodeMirror, Biome, Bun.
+To ship a single artifact: `make wheel` runs `bundle-spa` (copies `frontend/dist/` into `src/docket/frontend_dist/`) and then `uv build --wheel`, producing one installable wheel that includes the SPA.
+
+All backend routes live under `/api/*` — anything outside that prefix is claimed by the SPA catch-all. Regenerate the OpenAPI client with `make gen-api` while the backend is running (it pulls from `/api/openapi.json`).
+
+Stack: React 19, TanStack Router + Query, Vite, Tailwind 4, CodeMirror, Biome, Bun (dev tooling only).
 
 ---
 
@@ -156,7 +160,7 @@ For the full contract see [AGENTS.md](AGENTS.md).
 
 ```bash
 uv run pytest                                           # full suite, async auto-mode
-uv run pytest tests/integration/test_api.py             # one file
+uv run pytest tests/integration/test_api_items.py       # one file
 uv run pytest -k "pattern"                              # by name
 uv run ruff check . && uv run ruff format .
 uv run mypy src                                         # strict
@@ -164,6 +168,7 @@ make check                                              # lint + typecheck + tes
 ```
 
 - `tests/unit/` (pure Python + architectural guards), `tests/integration/` (DB / FastAPI / Typer / services), `tests/pilot/` (Textual `run_test()`).
+- **API tests are split per route module** — `test_api_items.py`, `test_api_conversation.py`, `test_api_mutations.py`, `test_api_spa.py`, etc. Shared fixtures live in `tests/integration/_api_fixtures.py`.
 - **TUI tests are pilot-style** — mount `DocketApp` with a `FakeProvider` via `app.run_test()` and drive with `pilot.press(...)`.
 - **`tmp_xdg` fixture** in `conftest.py` sandboxes XDG paths into a temp root.
 - **VCR cassettes** under `tests/fixtures/cassettes/` back live `AzureDevOpsProvider` tests.

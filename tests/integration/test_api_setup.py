@@ -69,7 +69,7 @@ def test_bootstrap_app_requires_setup_token(tmp_path: Path) -> None:
 def test_bootstrap_status_no_auth(tmp_path: Path) -> None:
     paths = _mk_paths(tmp_path)
     client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
-    r = client.get("/setup/status")
+    r = client.get("/api/setup/status")
     assert r.status_code == 200
     body = r.json()
     assert body["needs_setup"] is True
@@ -81,15 +81,15 @@ def test_bootstrap_status_no_auth(tmp_path: Path) -> None:
 def test_bootstrap_health_works(tmp_path: Path) -> None:
     paths = _mk_paths(tmp_path)
     client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
-    r = client.get("/health")
+    r = client.get("/api/health")
     assert r.status_code == 200
 
 
 def test_bootstrap_provider_types_requires_auth(tmp_path: Path) -> None:
     paths = _mk_paths(tmp_path)
     client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
-    assert client.get("/setup/providers/types").status_code == 401
-    r = client.get("/setup/providers/types", headers=SETUP_AUTH)
+    assert client.get("/api/setup/providers/types").status_code == 401
+    r = client.get("/api/setup/providers/types", headers=SETUP_AUTH)
     assert r.status_code == 200
     ids = {t["id"] for t in r.json()}
     assert {"azure_devops", "github", "github_stub"}.issubset(ids)
@@ -99,7 +99,7 @@ def test_bootstrap_provider_types_wrong_token_rejected(tmp_path: Path) -> None:
     paths = _mk_paths(tmp_path)
     client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
     r = client.get(
-        "/setup/providers/types",
+        "/api/setup/providers/types",
         headers={"Authorization": "Bearer wrong-token"},
     )
     assert r.status_code == 401
@@ -109,7 +109,7 @@ def test_bootstrap_test_provider_github_stub_ok(tmp_path: Path) -> None:
     paths = _mk_paths(tmp_path)
     client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
     r = client.post(
-        "/setup/test-provider",
+        "/api/setup/test-provider",
         headers=SETUP_AUTH,
         json={"type": "github_stub", "config": {"default_repo": "demo/repo"}},
     )
@@ -121,7 +121,7 @@ def test_bootstrap_test_provider_unknown_type_reports_error(tmp_path: Path) -> N
     paths = _mk_paths(tmp_path)
     client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
     r = client.post(
-        "/setup/test-provider",
+        "/api/setup/test-provider",
         headers=SETUP_AUTH,
         json={"type": "nonexistent", "config": {}},
     )
@@ -135,7 +135,7 @@ def test_bootstrap_test_provider_azure_devops_missing_fields(tmp_path: Path) -> 
     paths = _mk_paths(tmp_path)
     client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
     r = client.post(
-        "/setup/test-provider",
+        "/api/setup/test-provider",
         headers=SETUP_AUTH,
         json={"type": "azure_devops", "config": {}},
     )
@@ -148,7 +148,7 @@ def test_bootstrap_test_llm_missing_credentials(tmp_path: Path) -> None:
     paths = _mk_paths(tmp_path)
     client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
     r = client.post(
-        "/setup/test-llm",
+        "/api/setup/test-llm",
         headers=SETUP_AUTH,
         json={"endpoint": "", "api_key": ""},
     )
@@ -178,7 +178,7 @@ def test_bootstrap_complete_writes_config_and_runs_sync(tmp_path: Path) -> None:
         "telemetry_enabled": False,
         "run_initial_sync": True,
     }
-    r = client.post("/setup/complete", headers=SETUP_AUTH, json=payload)
+    r = client.post("/api/setup/complete", headers=SETUP_AUTH, json=payload)
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["ok"] is True
@@ -222,7 +222,7 @@ def test_bootstrap_complete_uses_provided_token(tmp_path: Path) -> None:
         "http_token": "operator-supplied-token-123",
         "run_initial_sync": False,
     }
-    r = client.post("/setup/complete", headers=SETUP_AUTH, json=payload)
+    r = client.post("/api/setup/complete", headers=SETUP_AUTH, json=payload)
     assert r.status_code == 200
     assert r.json()["http_token"] == "operator-supplied-token-123"
 
@@ -240,7 +240,7 @@ def test_bootstrap_complete_rejects_mismatched_active_provider(tmp_path: Path) -
         "active_provider": "missing",
         "run_initial_sync": False,
     }
-    r = client.post("/setup/complete", headers=SETUP_AUTH, json=payload)
+    r = client.post("/api/setup/complete", headers=SETUP_AUTH, json=payload)
     assert r.status_code == 422
     assert "active_provider" in r.text
 
@@ -249,7 +249,7 @@ def test_bootstrap_complete_rejects_empty_providers(tmp_path: Path) -> None:
     paths = _mk_paths(tmp_path)
     client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
     r = client.post(
-        "/setup/complete",
+        "/api/setup/complete",
         headers=SETUP_AUTH,
         json={"providers": {}, "active_provider": "x", "run_initial_sync": False},
     )
@@ -277,7 +277,7 @@ def test_bootstrap_complete_llm_persists_api_key_to_env_file(
         "http_token": "token-1",
         "run_initial_sync": False,
     }
-    r = client.post("/setup/complete", headers=SETUP_AUTH, json=payload)
+    r = client.post("/api/setup/complete", headers=SETUP_AUTH, json=payload)
     assert r.status_code == 200, r.text
     env_path = paths.env_file
     assert env_path.exists()
@@ -330,7 +330,7 @@ def _full_app_client(tmp_path: Path) -> TestClient:
 
 def test_full_app_setup_status_reports_configured(tmp_path: Path) -> None:
     client = _full_app_client(tmp_path)
-    r = client.get("/setup/status")
+    r = client.get("/api/setup/status")
     assert r.status_code == 200
     body = r.json()
     assert body["needs_setup"] is False
@@ -342,7 +342,7 @@ def test_full_app_setup_status_reports_configured(tmp_path: Path) -> None:
 def test_full_app_setup_accepts_regular_bearer_token(tmp_path: Path) -> None:
     client = _full_app_client(tmp_path)
     r = client.get(
-        "/setup/providers/types",
+        "/api/setup/providers/types",
         headers={"Authorization": f"Bearer {BEARER_TOKEN}"},
     )
     assert r.status_code == 200
@@ -350,13 +350,13 @@ def test_full_app_setup_accepts_regular_bearer_token(tmp_path: Path) -> None:
 
 def test_full_app_setup_accepts_setup_token(tmp_path: Path) -> None:
     client = _full_app_client(tmp_path)
-    r = client.get("/setup/providers/types", headers=SETUP_AUTH)
+    r = client.get("/api/setup/providers/types", headers=SETUP_AUTH)
     assert r.status_code == 200
 
 
 def test_full_app_setup_rejects_unknown_token(tmp_path: Path) -> None:
     client = _full_app_client(tmp_path)
-    r = client.get("/setup/providers/types", headers={"Authorization": "Bearer nope"})
+    r = client.get("/api/setup/providers/types", headers={"Authorization": "Bearer nope"})
     assert r.status_code == 401
 
 
@@ -418,7 +418,7 @@ def test_setup_complete_preserves_existing_scopes_and_active_slot(tmp_path: Path
         "http_token": BEARER_TOKEN,
         "run_initial_sync": False,
     }
-    r = client.post("/setup/complete", headers=SETUP_AUTH, json=payload)
+    r = client.post("/api/setup/complete", headers=SETUP_AUTH, json=payload)
     assert r.status_code == 200, r.text
 
     with paths.config_file.open("rb") as f:
@@ -505,7 +505,7 @@ def test_setup_complete_preserves_non_wizard_fields(tmp_path: Path) -> None:
         "http_token": BEARER_TOKEN,
         "run_initial_sync": False,
     }
-    r = client.post("/setup/complete", headers=SETUP_AUTH, json=payload)
+    r = client.post("/api/setup/complete", headers=SETUP_AUTH, json=payload)
     assert r.status_code == 200, r.text
 
     with paths.config_file.open("rb") as f:
@@ -566,7 +566,7 @@ def test_update_provider_preserves_active_scope_slot(tmp_path: Path) -> None:
     client = TestClient(app)
 
     r = client.put(
-        "/settings/providers/primary",
+        "/api/settings/providers/primary",
         headers={"Authorization": f"Bearer {BEARER_TOKEN}"},
         json={
             "display_name": "Primary",

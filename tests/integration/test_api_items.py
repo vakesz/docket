@@ -34,7 +34,7 @@ def client(env: ApiEnv) -> TestClient:
 
 
 def test_list_items(client: TestClient) -> None:
-    resp = client.get("/items", headers=AUTH_HEADERS)
+    resp = client.get("/api/items", headers=AUTH_HEADERS)
     assert resp.status_code == 200
     body = resp.json()
     assert len(body) == 1
@@ -55,10 +55,10 @@ def test_list_items_filters_by_state(env: ApiEnv, make_item: MakeItem) -> None:
         ),
     )
     client = build_client(env)
-    resp = client.get("/items?state=new&state=active", headers=AUTH_HEADERS)
+    resp = client.get("/api/items?state=new&state=active", headers=AUTH_HEADERS)
     assert resp.status_code == 200
     assert [i["id"] for i in resp.json()] == ["S-1"]
-    resp_closed = client.get("/items?state=closed", headers=AUTH_HEADERS)
+    resp_closed = client.get("/api/items?state=closed", headers=AUTH_HEADERS)
     assert [i["id"] for i in resp_closed.json()] == ["S-2"]
 
 
@@ -74,7 +74,7 @@ def test_list_items_filters_by_tag(env: ApiEnv, make_item: MakeItem) -> None:
     tagged.tags = ["bug"]
     item_repo.upsert_item(env.conn, tagged)
     client = build_client(env)
-    resp = client.get("/items?tag=bug", headers=AUTH_HEADERS)
+    resp = client.get("/api/items?tag=bug", headers=AUTH_HEADERS)
     assert [i["id"] for i in resp.json()] == ["S-2"]
 
 
@@ -93,7 +93,7 @@ def test_list_items_applies_active_view_assignee_filter(env: ApiEnv, make_item: 
     item_repo.upsert_item(env.conn, other)
     env.runtime.scope_key = "mine"
     client = build_client(env)
-    resp = client.get("/items", headers=AUTH_HEADERS)
+    resp = client.get("/api/items", headers=AUTH_HEADERS)
     assert resp.status_code == 200
     assert [row["id"] for row in resp.json()] == ["S-1"]
 
@@ -113,7 +113,7 @@ def test_list_items_can_disable_active_view_filter(env: ApiEnv, make_item: MakeI
     item_repo.upsert_item(env.conn, other)
     env.runtime.scope_key = "mine"
     client = build_client(env)
-    resp = client.get("/items?apply_view=false", headers=AUTH_HEADERS)
+    resp = client.get("/api/items?apply_view=false", headers=AUTH_HEADERS)
     assert resp.status_code == 200
     assert {row["id"] for row in resp.json()} == {"S-1", "S-2"}
 
@@ -127,33 +127,33 @@ def test_list_items_without_runtime_falls_back_to_unfiltered_listing(env: ApiEnv
             proposals=env.proposals,
         )
     )
-    default_resp = client.get("/items", headers=AUTH_HEADERS)
+    default_resp = client.get("/api/items", headers=AUTH_HEADERS)
     assert default_resp.status_code == 200
     assert [row["id"] for row in default_resp.json()] == ["S-1"]
-    explicit_resp = client.get("/items?apply_view=false", headers=AUTH_HEADERS)
+    explicit_resp = client.get("/api/items?apply_view=false", headers=AUTH_HEADERS)
     assert explicit_resp.status_code == 200
     assert [row["id"] for row in explicit_resp.json()] == ["S-1"]
 
 
 def test_get_item_by_id(client: TestClient) -> None:
-    resp = client.get("/items/S-1", headers=AUTH_HEADERS)
+    resp = client.get("/api/items/S-1", headers=AUTH_HEADERS)
     assert resp.status_code == 200
     assert resp.json()["title"] == "Login"
 
 
 def test_get_item_404(client: TestClient) -> None:
-    resp = client.get("/items/nope", headers=AUTH_HEADERS)
+    resp = client.get("/api/items/nope", headers=AUTH_HEADERS)
     assert resp.status_code == 404
 
 
 def test_linked_delegates_to_provider(client: TestClient) -> None:
-    resp = client.get("/items/S-1/linked", headers=AUTH_HEADERS)
+    resp = client.get("/api/items/S-1/linked", headers=AUTH_HEADERS)
     assert resp.status_code == 200
     assert resp.json() == []
 
 
 def test_search_items_returns_similar(client: TestClient) -> None:
-    resp = client.get("/items/search", params={"q": "login"}, headers=AUTH_HEADERS)
+    resp = client.get("/api/items/search", params={"q": "login"}, headers=AUTH_HEADERS)
     assert resp.status_code == 200
     body = resp.json()
     assert len(body) == 1
@@ -161,13 +161,13 @@ def test_search_items_returns_similar(client: TestClient) -> None:
 
 
 def test_search_items_empty_query(client: TestClient) -> None:
-    resp = client.get("/items/search", params={"q": "  "}, headers=AUTH_HEADERS)
+    resp = client.get("/api/items/search", params={"q": "  "}, headers=AUTH_HEADERS)
     assert resp.status_code == 200
     assert resp.json() == []
 
 
 def test_providers_list_exposes_supported_kinds(client: TestClient) -> None:
-    resp = client.get("/providers", headers=AUTH_HEADERS)
+    resp = client.get("/api/providers", headers=AUTH_HEADERS)
     assert resp.status_code == 200
     body = resp.json()
     assert body, "expected at least one provider"

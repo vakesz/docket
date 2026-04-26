@@ -4,7 +4,7 @@ This file is the load-bearing reference for anyone (or anything) editing the cod
 
 ## Project Snapshot
 
-- Python 3.12+, multi-surface: **Typer CLI** (`src/docket/cli/`), **Textual TUI** (`src/docket/cli/tui/`), **FastAPI HTTP** (`src/docket/api/`), and an optional **React + TanStack Start + Bun** web client in `frontend/` that consumes `/openapi.json`.
+- Python 3.12+, multi-surface: **Typer CLI** (`src/docket/cli/`), **Textual TUI** (`src/docket/cli/tui/`), **FastAPI HTTP** (`src/docket/api/`), and a **React + Vite SPA** in `frontend/` that consumes `/openapi.json`. The backend serves the built SPA from `frontend/dist/` so prod is one process at one origin (`src/docket/api/spa.py`); `bun run dev` is only for HMR during development.
 - Layered ports-and-adapters: surfaces in `cli/` and `api/`, canonical types in `core/`, orchestration in `core/services/` and `agent/`, adapters in `providers/`, `storage/`, `config/`, `telemetry/`.
 - Multi-provider. Built-ins: `azure_devops`, `github`, `github_stub`. Third-party providers register via the `docket.providers` entry-point group (`src/docket/providers/registry.py`).
 - Runtime is **local-first** and **project-scoped**. Items cache in SQLite; project metadata, prompts, and MCP server configs live under XDG-managed paths.
@@ -56,11 +56,15 @@ cd frontend && bun run gen:api     # regenerate OpenAPI types from running backe
 Cross-tree shortcuts (`Makefile`):
 
 ```bash
-make install      # uv sync + bun install
-make env          # mint a DOCKET_API_TOKEN into .env (dev only)
-make dev          # run docket serve + vite together
-make check        # lint + typecheck + test across both trees
-make gen-api      # regenerate frontend OpenAPI types against the running backend
+make install        # uv sync + bun install
+make env            # mint a DOCKET_API_TOKEN into .env (dev only)
+make dev            # run docket serve + vite together (HMR; two origins)
+make serve          # build the SPA, then run backend serving it (one origin)
+make frontend-build # bun run build → frontend/dist/
+make bundle-spa     # copy frontend/dist → src/docket/frontend_dist/ for wheel packaging
+make wheel          # build a single-artifact wheel with the SPA bundled inside
+make check          # lint + typecheck + test across both trees
+make gen-api        # regenerate frontend OpenAPI types against the running backend
 ```
 
 ## Non-Negotiable Rules
@@ -172,6 +176,7 @@ Aspirational direction (consistent with current refactors, not a hard rule):
 - **Source documents are excluded from the always-on prefix.** The agent reads them on demand through tools, so source edits never invalidate the prompt cache (`src/docket/core/services/source_service.py`, `src/docket/storage/repos/source_repo.py`).
 - **MCP server config is per-project**, persisted in `config.toml`. Config edits do not auto-mutate a live manager — surfaces explicitly rebind (`src/docket/core/services/mcp_service.py`, `src/docket/agent/mcp/manager.py`, `src/docket/api/routes/mcp.py`, `src/docket/api/runtime.py:_rebind_mcp_locked`).
 - **Bootstrap HTTP mode** is a separate minimal app exposing only `/health` and `/setup/*` until `config.toml` exists (`src/docket/api/bootstrap_app.py`, `src/docket/api/routes/setup.py`). Setup and live-mode provider routes share DTO assembly via `src/docket/api/_provider_setup.py`.
+- **All backend routes live under `/api/*`** so the SPA catch-all in `src/docket/api/spa.py` can safely return `index.html` for everything else. New routes that aren't under `/api/*` will be shadowed by the SPA. The dist directory is resolved in order: `DOCKET_FRONTEND_DIST` env (tests) → `<docket package>/frontend_dist/` (wheel install, populated by `make bundle-spa`) → `<repo>/frontend/dist/` (dev). The bearer token is injected into `index.html` at request time as `window.__DOCKET_TOKEN__`; cached by mtime, no restart needed after a rebuild.
 - **Telemetry is on by default**, one JSON object per line into `<paths.log_dir>/docket.log` (rotating 1 MB × 3) at `DEBUG`. The on-disk log is the only place some worker-thread tracebacks surface during a TUI session — verbosity is intentional (`src/docket/telemetry/logging.py`, `src/docket/cli/context.py`, `src/docket/config/models.py`).
 
 ## Testing
