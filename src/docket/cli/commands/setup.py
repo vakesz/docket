@@ -49,10 +49,10 @@ def _provider_list() -> None:
 def _provider_add(
     name: str = typer.Argument(..., help="Short id for the new provider entry."),
     type_id: str = typer.Option(
-        "azure_devops",
+        "github",
         "--type",
         "-t",
-        help="Provider type (e.g. azure_devops, github_stub, or any registered via entry point).",
+        help="Provider type (e.g. github, azure_devops, github_stub, or any registered via entry point).",
     ),
     display_name: str | None = typer.Option(
         None,

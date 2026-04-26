@@ -22,6 +22,7 @@ from docket.config.loader import load_config
 from docket.config.paths import Paths
 from docket.core.model import SyncSummary
 from docket.providers.azure_devops.discover import OrgRef, ProjectRef
+from docket.providers.github.discover import HostRef
 
 # ---------- scripted IO ----------
 
@@ -382,3 +383,128 @@ def test_pick_without_allow_any_keeps_first_option_as_default(
     monkeypatch.setattr(setup_wizard.Prompt, "ask", staticmethod(fake_prompt_ask))
     assert setup_utils.pick("Org", ["contoso", "otherco"], allow_custom=True) == 0
     assert captured_default == ["1"]
+
+
+# ---------- github + github_stub end-to-end ----------
+
+
+def _stub_github_infra(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mock the github provider's auth + discovery side effects.
+
+    `pick_github_host` and `pick_github_repo` are imported into
+    `setup_wizard` at module load, so monkeypatching the names there
+    short-circuits the real `gh` calls without touching the system."""
+    monkeypatch.setattr(setup_wizard, "gh_ensure_logged_in", lambda: "user@example.com")
+    monkeypatch.setattr(setup_wizard, "gh_signed_in_email", lambda: "user@example.com")
+    monkeypatch.setattr(
+        setup_wizard,
+        "pick_github_host",
+        lambda: HostRef(hostname="github.com", api_base_url="https://api.github.com"),
+    )
+    monkeypatch.setattr(setup_wizard, "pick_github_repo", lambda host=None: "contoso/example")
+
+
+def test_wizard_github_end_to_end(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Pick the github provider, accept the discovered host+repo, set assignee."""
+    paths = _stub_infra(monkeypatch, tmp_path)
+    _stub_github_infra(monkeypatch)
+
+    _script_prompts(
+        monkeypatch,
+        prompt_answers=[
+            "2",  # provider type → github (alphabetical: ado, github, github_stub)
+            "",  # display-name label → accept the suggested default
+            "2",  # assignee → @me (1=any, 2=@me, 3=signed-in email, 4=custom)
+            "DEBUG",  # telemetry log level
+            "",  # llm endpoint blank → skip chat wiring
+        ],
+        confirm_answers=[True, True],  # telemetry enabled; http enabled
+    )
+
+    setup_wizard.run_wizard()
+
+    cfg = load_config(paths)
+    assert cfg.active_provider == "github"
+    entry = cfg.providers["github"]
+    assert entry.type == "github"
+    assert entry.config["default_repo"] == "contoso/example"
+    # github.com gets the default api base url, which is dropped from the
+    # persisted config (only GHE hosts get an explicit base_url).
+    assert "base_url" not in entry.config
+    scope = entry.scopes["default"]
+    assert scope.team == ""
+    assert scope.area_path == ""
+    assert scope.iteration_path == ""
+    assert scope.assignee == "@me"
+    assert entry.display_name == "GitHub · contoso/example"
+
+
+def test_wizard_github_ghe_persists_base_url(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A non-github.com host (GHE) must persist its api_base_url."""
+    paths = _stub_infra(monkeypatch, tmp_path)
+    monkeypatch.setattr(setup_wizard, "gh_ensure_logged_in", lambda: "user@example.com")
+    monkeypatch.setattr(setup_wizard, "gh_signed_in_email", lambda: "user@example.com")
+    monkeypatch.setattr(
+        setup_wizard,
+        "pick_github_host",
+        lambda: HostRef(
+            hostname="ghe.example.com",
+            api_base_url="https://ghe.example.com/api/v3",
+        ),
+    )
+    monkeypatch.setattr(setup_wizard, "pick_github_repo", lambda host=None: "acme/widgets")
+
+    _script_prompts(
+        monkeypatch,
+        prompt_answers=[
+            "2",  # provider type → github
+            "",  # accept suggested label
+            "1",  # assignee → any
+            "DEBUG",
+            "",  # llm endpoint blank
+        ],
+        confirm_answers=[True, True],
+    )
+
+    setup_wizard.run_wizard()
+
+    cfg = load_config(paths)
+    entry = cfg.providers["github"]
+    assert entry.config["default_repo"] == "acme/widgets"
+    assert entry.config["base_url"] == "https://ghe.example.com/api/v3"
+    # Label suggestion picks up the GHE host as the prefix instead of the
+    # generic "GitHub" — keeps multi-host setups disambiguated in the picker.
+    assert entry.display_name == "ghe.example.com · acme/widgets"
+    assert entry.scopes["default"].assignee == ""
+
+
+def test_wizard_github_stub_end_to_end(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """github_stub has no auth; connection just prompts for a default_repo."""
+    paths = _stub_infra(monkeypatch, tmp_path)
+
+    _script_prompts(
+        monkeypatch,
+        prompt_answers=[
+            "3",  # provider type → github_stub
+            "myorg/myrepo",  # default_repo prompt (no discovery)
+            "",  # accept suggested label
+            "2",  # assignee → @me
+            "DEBUG",
+            "",  # llm endpoint blank
+        ],
+        confirm_answers=[True, True],
+    )
+
+    setup_wizard.run_wizard()
+
+    cfg = load_config(paths)
+    assert cfg.active_provider == "github_stub"
+    entry = cfg.providers["github_stub"]
+    assert entry.type == "github_stub"
+    assert entry.config["default_repo"] == "myorg/myrepo"
+    assert entry.scopes["default"].assignee == "@me"
+    assert entry.display_name == "GitHub (stub) · myorg/myrepo"
