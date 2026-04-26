@@ -55,7 +55,7 @@ def _mk_paths(tmp_path: Path) -> Paths:
 @pytest.fixture(autouse=True)
 def _no_restart(monkeypatch: pytest.MonkeyPatch) -> None:
     """Stub out the SIGTERM-on-self background task."""
-    monkeypatch.setattr(setup_routes, "_schedule_restart", lambda: None)
+    monkeypatch.setattr(setup_routes, "_schedule_restart", lambda app: None)
 
 
 # ---- bootstrap app (no config.toml yet) -------------------------------------

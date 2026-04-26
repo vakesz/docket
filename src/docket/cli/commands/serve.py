@@ -10,7 +10,7 @@ from docket.cli.context import prepare
 from docket.config import ConfigMissingError
 from docket.config.loader import save_config
 from docket.config.models import Config, HttpConfig
-from docket.config.paths import resolve_paths
+from docket.config.paths import Paths, resolve_paths
 from docket.telemetry import init_logging
 
 _VALID_LOG_LEVELS = {"critical", "error", "warning", "info", "debug", "trace"}
@@ -56,29 +56,40 @@ def serve_command(
         )
         raise typer.Exit(code=2)
 
-    try:
-        ctx = prepare()
-    except ConfigMissingError:
-        paths = resolve_paths()
+    def _run_bootstrap(paths: Paths, *, existing_token: str | None) -> bool:
+        """Run the bootstrap server until shutdown.
+
+        Returns True when the wizard finished successfully and the caller
+        should fall through to live mode in the same process. Returns False
+        when the user quit (Ctrl+C) before completing setup."""
         paths.ensure()
         # Bootstrap surface still needs the rotating JSON log so any error
         # raised while finishing setup is captured for operators.
         init_logging(paths)
 
-        # Mint a token, write a stub config.toml, and print the token once.
-        # The wizard will rewrite the rest of config.toml later; until then,
-        # `[http].token` is the only field that exists.
-        bootstrap_token = secrets.token_urlsafe(32)
-        stub = Config(http=HttpConfig(enabled=True, token=bootstrap_token))
-        save_config(paths, stub)
-        console.print("[yellow]No config.toml found — starting setup surface.[/yellow]")
-        console.print("[yellow]Generated bootstrap bearer token (save this):[/yellow]")
+        if existing_token:
+            bootstrap_token = existing_token
+            console.print(
+                "[yellow]Setup not finished (no providers configured) — "
+                "resuming setup surface.[/yellow]"
+            )
+            console.print("[yellow]Reusing existing bootstrap bearer token:[/yellow]")
+        else:
+            # Mint a token, write a stub config.toml, and print the token once.
+            # The wizard will rewrite the rest of config.toml later; until then,
+            # `[http].token` is the only field that exists.
+            bootstrap_token = secrets.token_urlsafe(32)
+            stub = Config(http=HttpConfig(enabled=True, token=bootstrap_token))
+            save_config(paths, stub)
+            console.print("[yellow]No config.toml found — starting setup surface.[/yellow]")
+            console.print("[yellow]Generated bootstrap bearer token (save this):[/yellow]")
         console.print(f"  [cyan]{bootstrap_token}[/cyan]")
 
         bind = host or "127.0.0.1"
         listen_port = port or 8765
         bootstrap_log_level = (log_level or "info").lower()
         app = create_bootstrap_app(paths=paths, setup_token=bootstrap_token)
+        app.state.relaunch_after_setup = False
         from docket.api.spa import resolve_frontend_dist
 
         dist = resolve_frontend_dist()
@@ -94,7 +105,28 @@ def serve_command(
             f"{bootstrap_token} or run `docket setup` in a terminal.[/dim]"
         )
         uvicorn.run(app, host=bind, port=listen_port, log_level=bootstrap_log_level)
-        return
+        return bool(getattr(app.state, "relaunch_after_setup", False))
+
+    while True:
+        try:
+            ctx = prepare()
+        except ConfigMissingError:
+            if not _run_bootstrap(resolve_paths(), existing_token=None):
+                return
+            continue
+
+        if not ctx.config.providers:
+            # Stub config from a previous interrupted bootstrap run: file exists,
+            # `[http].token` is set, but the wizard never landed a provider.
+            # Reuse the token (so any wizard tab the user already opened keeps
+            # working) and stay in bootstrap mode until setup finishes.
+            existing = ctx.config.http.token or None
+            ctx.close()
+            if not _run_bootstrap(resolve_paths(), existing_token=existing):
+                return
+            continue
+
+        break
 
     with ctx:
         if not ctx.config.http.enabled:

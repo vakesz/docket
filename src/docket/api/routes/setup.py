@@ -18,7 +18,7 @@ import signal
 import threading
 import time
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, HTTPException, Request, status
 from pydantic import ValidationError
 
 from docket.agent.prompt import scaffold as scaffold_prompts
@@ -78,7 +78,7 @@ def setup_status(paths: Paths = Depends(get_paths)) -> SetupStatusDTO:
     if cfg is None:
         return SetupStatusDTO(needs_setup=True, config_path=str(paths.config_file))
     return SetupStatusDTO(
-        needs_setup=False,
+        needs_setup=not cfg.providers,
         config_path=str(paths.config_file),
         providers_configured=len(cfg.providers),
         active_provider=cfg.active_provider,
@@ -139,6 +139,7 @@ def test_llm(req: SetupTestLlmRequest) -> SetupTestResultDTO:
 def setup_complete(
     req: SetupCompleteRequest,
     background: BackgroundTasks,
+    request: Request,
     paths: Paths = Depends(get_paths),
 ) -> SetupCompleteDTO:
     if req.active_provider not in req.providers:
@@ -246,7 +247,7 @@ def setup_complete(
         finally:
             conn.close()
 
-    background.add_task(_schedule_restart)
+    background.add_task(_schedule_restart, request.app)
     return SetupCompleteDTO(
         ok=True,
         config_path=str(paths.config_file),
@@ -382,11 +383,14 @@ def probe_scope(req: ProbeScopeRequest) -> ProbeScopeDTO:
     return ProbeScopeDTO(count=count)
 
 
-def _schedule_restart() -> None:
-    """Fire SIGTERM on self after a short delay so the response can flush first.
+def _schedule_restart(app: FastAPI) -> None:
+    """Mark the bootstrap app for relaunch into live mode, then trigger
+    uvicorn's graceful shutdown via SIGTERM.
 
-    The user's `docket serve` process exits and they re-run it with the
-    freshly-written config."""
+    `serve_command` reads `app.state.relaunch_after_setup` once `uvicorn.run`
+    returns and falls through to live mode in the same Python process — no
+    manual `make serve` re-run needed."""
+    app.state.relaunch_after_setup = True
 
     def _die() -> None:
         time.sleep(0.5)
