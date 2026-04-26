@@ -3,7 +3,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ItemState } from "@/core/types";
 import { createCaller } from "@/server/trpc-caller";
+import { ChatPanel } from "@/ui/conversations/chat-panel";
 import { ItemActions } from "@/ui/items/item-actions";
+import { PinButton } from "@/ui/items/pin-button";
 import { RefreshCommentsButton } from "@/ui/items/refresh-comments-button";
 
 export default async function ItemDetailPage({
@@ -35,9 +37,12 @@ export default async function ItemDetailPage({
         </Link>
         <div className="flex items-baseline justify-between gap-3">
           <h1 className="text-2xl font-semibold tracking-tight">{item.title}</h1>
-          <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-xs uppercase tracking-wide text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
-            {item.state}
-          </span>
+          <div className="flex items-center gap-2">
+            <PinButton projectId={projectId} providerItemId={item.providerItemId} />
+            <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-xs uppercase tracking-wide text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+              {item.state}
+            </span>
+          </div>
         </div>
         <div className="flex items-center gap-3 text-xs text-zinc-500">
           <span className="uppercase tracking-wide">{item.kind}</span>
@@ -69,6 +74,8 @@ export default async function ItemDetailPage({
         providerItemId={item.providerItemId}
         state={item.state as ItemState}
       />
+
+      <ChatPanel projectId={projectId} itemId={itemId} />
 
       <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between">

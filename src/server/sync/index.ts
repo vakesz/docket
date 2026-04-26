@@ -18,6 +18,7 @@ import "server-only";
 import type { Item as CanonicalItem } from "@/core/types";
 import type { Prisma } from "@/db/generated/client";
 import type { db as Db } from "@/server/db";
+import { injectExternalChange, materialDiff } from "@/server/inbound-changes/inject";
 import { buildProviderForUser } from "@/server/providers/build";
 
 type ProjectArg = Parameters<typeof buildProviderForUser>[1];
@@ -26,6 +27,8 @@ export type SyncResult = {
   upserted: number;
   archived: number;
   watermark: Date | null;
+  /** Number of (active) conversations that received an inbound-change notice. */
+  inboundConversations: number;
 };
 
 function toItemRow(canonical: CanonicalItem, projectId: string, syncedAt: Date) {
@@ -54,29 +57,54 @@ async function upsertItems(
   projectId: string,
   items: AsyncIterable<CanonicalItem>,
   syncedAt: Date,
-): Promise<{ upserted: number; seenIds: Set<string>; latestUpdatedAt: Date | null }> {
+): Promise<{
+  upserted: number;
+  seenIds: Set<string>;
+  latestUpdatedAt: Date | null;
+  inboundConversations: number;
+}> {
   let upserted = 0;
   let latestUpdatedAt: Date | null = null;
+  let inboundConversations = 0;
   const seenIds = new Set<string>();
   for await (const item of items) {
-    const row = toItemRow(item, projectId, syncedAt);
-    await db.item.upsert({
+    const cached = await db.item.findUnique({
       where: {
-        projectId_providerItemId: {
-          projectId,
-          providerItemId: item.id,
-        },
+        projectId_providerItemId: { projectId, providerItemId: item.id },
+      },
+      select: { id: true, state: true, title: true, descriptionMd: true, assignee: true },
+    });
+
+    const row = toItemRow(item, projectId, syncedAt);
+    const upserted_row = await db.item.upsert({
+      where: {
+        projectId_providerItemId: { projectId, providerItemId: item.id },
       },
       create: row,
       update: { ...row, archived: false },
+      select: { id: true },
     });
+
+    if (cached) {
+      const changes = materialDiff(cached, item);
+      if (changes.length > 0) {
+        const result = await injectExternalChange(db, {
+          projectId,
+          itemId: upserted_row.id,
+          providerItemId: item.id,
+          changes,
+        });
+        inboundConversations += result.injectedInto;
+      }
+    }
+
     upserted += 1;
     seenIds.add(item.id);
     if (item.updatedAt && (!latestUpdatedAt || item.updatedAt > latestUpdatedAt)) {
       latestUpdatedAt = item.updatedAt;
     }
   }
-  return { upserted, seenIds, latestUpdatedAt };
+  return { upserted, seenIds, latestUpdatedAt, inboundConversations };
 }
 
 async function bumpCursor(
@@ -109,7 +137,7 @@ export async function runIncrementalSync(
   const watermark = cursor?.watermark ?? null;
   const syncedAt = new Date();
 
-  const { upserted, latestUpdatedAt } = await upsertItems(
+  const { upserted, latestUpdatedAt, inboundConversations } = await upsertItems(
     db,
     project.id,
     provider.listChangesSince(watermark),
@@ -118,7 +146,7 @@ export async function runIncrementalSync(
 
   const newWatermark = latestUpdatedAt ?? watermark;
   await bumpCursor(db, project.id, newWatermark, null);
-  return { upserted, archived: 0, watermark: newWatermark };
+  return { upserted, archived: 0, watermark: newWatermark, inboundConversations };
 }
 
 export async function runFullSync(
@@ -129,7 +157,7 @@ export async function runFullSync(
   const provider = await buildProviderForUser(db, project, userId);
   const syncedAt = new Date();
 
-  const { upserted, seenIds, latestUpdatedAt } = await upsertItems(
+  const { upserted, seenIds, latestUpdatedAt, inboundConversations } = await upsertItems(
     db,
     project.id,
     provider.listChangesSince(null),
@@ -148,5 +176,10 @@ export async function runFullSync(
   });
 
   await bumpCursor(db, project.id, latestUpdatedAt, syncedAt);
-  return { upserted, archived: archive.count, watermark: latestUpdatedAt };
+  return {
+    upserted,
+    archived: archive.count,
+    watermark: latestUpdatedAt,
+    inboundConversations,
+  };
 }
