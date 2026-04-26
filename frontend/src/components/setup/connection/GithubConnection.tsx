@@ -23,6 +23,7 @@ export function GithubConnection({
   // canonical base_url until the user picks something.
   const [host, setHostState] = useState<string>(() => deriveHost(config.base_url ?? ""));
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: discover.mutate is stable; only host changes need to refire
   useEffect(() => {
     if (!cli?.gh.logged_in) {
       setRepoOptions([]);
@@ -50,8 +51,6 @@ export function GithubConnection({
     return () => {
       cancelled = true;
     };
-    // discover.mutate is stable; only host changes need to refire.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cli?.gh.logged_in, host]);
 
   const apiBaseFor = (hostname: string): string => {

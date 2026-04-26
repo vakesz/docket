@@ -224,6 +224,10 @@ function DisplayNameField({
   const suggest = useSuggestLabel();
 
   // Auto-fill the display name from provider config until the user touches it.
+  // Only refire on config-relevant changes — adding draft.display_name_dirty,
+  // suggest.mutate, draft.config, or setDraft would re-suggest on every keystroke
+  // or every render and clobber the user's edit.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional narrow deps
   useEffect(() => {
     if (draft.display_name_dirty || !draft.type) return;
     suggest.mutate(
@@ -237,8 +241,6 @@ function DisplayNameField({
         },
       },
     );
-    // Only refire on config-relevant changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     draft.type,
     draft.config.organization,

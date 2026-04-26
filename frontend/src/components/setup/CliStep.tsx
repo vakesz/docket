@@ -73,7 +73,7 @@ export function CliStep({ onBack, onNext }: { onBack: () => void; onNext: () => 
         </div>
       )}
 
-      {data && data.gh_hosts && data.gh_hosts.length > 0 && (
+      {data?.gh_hosts && data.gh_hosts.length > 0 && (
         <section className="flex flex-col gap-1">
           <span className={metaLabelClass}>Authenticated GitHub hosts</span>
           <ul className="font-mono text-[11px] text-fg-muted">

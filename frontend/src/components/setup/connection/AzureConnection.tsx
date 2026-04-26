@@ -19,6 +19,7 @@ export function AzureConnection({
   const [orgError, setOrgError] = useState("");
   const [projectError, setProjectError] = useState("");
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: discover.mutate is stable
   useEffect(() => {
     if (!cli?.az.logged_in) {
       setOrgOptions([]);
@@ -43,9 +44,9 @@ export function AzureConnection({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cli?.az.logged_in]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: discover.mutate is stable
   useEffect(() => {
     const org = config.organization;
     if (!org || !cli?.az.logged_in) {
@@ -71,7 +72,6 @@ export function AzureConnection({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cli?.az.logged_in, config.organization]);
 
   return (
