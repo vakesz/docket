@@ -167,6 +167,8 @@ Aspirational direction (consistent with current refactors, not a hard rule):
 - Runtime rebind, config writes, and project-scoped admin live in shared services so TUI and HTTP can't drift.
 - `config/` stays file/path primitives + schemas + setup orchestration; not a dumping ground.
 
+> **Adding a new provider?** See **[.docs/ADDING_A_PROVIDER.md](.docs/ADDING_A_PROVIDER.md)** for the full authoring walkthrough — package layout, the `WorkItemProvider` Protocol, `ProviderSpec` fields (scope axes, axis matchers, label templates), wizard hooks, registration options (in-tree vs `docket.providers` entry-point), and the testing checklist.
+
 ## Global Invariants
 
 - **Prompt hot reload is mtime-keyed.** Edits to `prompts/system_base.md` or `prompts/kind_<kind>.md` apply on the next turn (`src/docket/agent/prompt.py`, `src/docket/agent/prompt_templates.py`).

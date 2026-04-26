@@ -126,6 +126,8 @@ Stack: React 19, TanStack Router + Query, Vite, Tailwind 4, CodeMirror, Biome, B
 
 To add Jira, Linear, or anything else: implement the `WorkItemProvider` Protocol in `src/docket/providers/base.py` (`fetch_list`, `fetch_detail`, `transition`, `patch_description`, `upload_attachment`, `create_item`) plus a state-map module that translates native states to canonical `ItemState` / `TransitionIntent`. Register via `register(...)` in `src/docket/providers/registry.py`, or ship as a separate package with a `docket.providers` entry-point.
 
+For a step-by-step walkthrough — package layout, `ProviderSpec` fields (including per-provider scope axes and discovery hooks), wizard hooks, registration options, and the testing checklist — see **[.docs/ADDING_A_PROVIDER.md](.docs/ADDING_A_PROVIDER.md)**.
+
 ---
 
 ## Configuration

@@ -388,7 +388,7 @@ and `/setup/github/discover` with one route.
 
 ---
 
-## Phase 6 — `.docs/ADDING_A_PROVIDER.md`
+## Phase 6 — `.docs/ADDING_A_PROVIDER.md` ✅ landed
 
 **Goal:** document the additive path so future-us (or a contributor) can
 add Jira / Linear / etc. without re-deriving the architecture.
