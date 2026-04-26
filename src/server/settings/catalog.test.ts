@@ -51,4 +51,12 @@ describe("settings catalog", () => {
     expect(decodeSettingValue("app.read-only", null)).toBe(false);
     expect(decodeSettingValue("app.read-only", JSON.stringify(true))).toBe(true);
   });
+
+  it("setup.complete is global-scoped and defaults to false", () => {
+    const def = getSettingDef("setup.complete");
+    expect(def.scope).toBe("global");
+    expect(def.default).toBe(false);
+    expect(decodeSettingValue("setup.complete", null)).toBe(false);
+    expect(decodeSettingValue("setup.complete", JSON.stringify(true))).toBe(true);
+  });
 });

@@ -61,6 +61,15 @@ export const SETTINGS_CATALOG = {
     description:
       "When on, every mutation route — including proposal confirms — is blocked. Reads stay open. Flip on for maintenance windows.",
   },
+  "setup.complete": {
+    key: "setup.complete",
+    scope: "global",
+    schema: BoolSchema,
+    default: false,
+    label: "Initial setup complete",
+    description:
+      "Sticky bit flipped on the first request that observes at least one LLM provider and at least one OAuth provider. Middleware uses it to decide whether to redirect to /admin/setup. Manually toggle off only when reverting after a destructive admin operation.",
+  },
 } as const satisfies Record<string, SettingDef<z.ZodTypeAny>>;
 
 export type SettingKey = keyof typeof SETTINGS_CATALOG;
