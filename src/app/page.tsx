@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { auth } from "@/server/auth";
+import { requireSetupComplete } from "@/server/setup/guard";
 import { createCaller } from "@/server/trpc-caller";
 import { CreateProjectForm } from "@/ui/projects/create-project-form";
 import { SignInWithGitHubButton } from "@/ui/shell/sign-in-button";
 import { SignOutButton } from "@/ui/shell/sign-out-button";
 
 export default async function Home() {
+  await requireSetupComplete();
   const session = await auth();
 
   if (!session?.user) {

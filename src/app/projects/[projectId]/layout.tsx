@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { auth } from "@/server/auth";
+import { requireSetupComplete } from "@/server/setup/guard";
 import { createCaller } from "@/server/trpc-caller";
 import { ProjectSwitcher } from "@/ui/shell/project-switcher";
 import { SignOutButton } from "@/ui/shell/sign-out-button";
@@ -14,6 +15,7 @@ export default async function ProjectLayout({
   children: ReactNode;
   params: Promise<{ projectId: string }>;
 }) {
+  await requireSetupComplete();
   const session = await auth();
   if (!session?.user) {
     redirect("/");

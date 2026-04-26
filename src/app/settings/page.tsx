@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/server/auth";
+import { requireSetupComplete } from "@/server/setup/guard";
 import { SettingsForm } from "@/ui/settings/settings-form";
 
 export default async function SettingsPage() {
+  await requireSetupComplete();
   const session = await auth();
   if (!session?.user) {
     redirect("/");
