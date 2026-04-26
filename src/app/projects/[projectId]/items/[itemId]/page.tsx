@@ -1,7 +1,9 @@
 import { TRPCError } from "@trpc/server";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { ItemState } from "@/core/types";
 import { createCaller } from "@/server/trpc-caller";
+import { ItemActions } from "@/ui/items/item-actions";
 import { RefreshCommentsButton } from "@/ui/items/refresh-comments-button";
 
 export default async function ItemDetailPage({
@@ -61,6 +63,12 @@ export default async function ItemDetailPage({
       ) : (
         <p className="text-sm text-zinc-500 italic">(no description)</p>
       )}
+
+      <ItemActions
+        projectId={projectId}
+        providerItemId={item.providerItemId}
+        state={item.state as ItemState}
+      />
 
       <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between">

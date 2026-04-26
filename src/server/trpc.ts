@@ -114,3 +114,41 @@ const enforceProjectMembership = t.middleware(async ({ ctx, getRawInput, next })
 });
 
 export const projectScopedProcedure = protectedProcedure.use(enforceProjectMembership);
+
+/**
+ * Mutating, project-scoped procedure. Owners always pass; non-owner members
+ * must have a role other than `viewer`. Phase 10 layers the system-wide
+ * read-only gate on top of this same middleware.
+ *
+ * The upstream `enforceProjectMembership` already injected `ctx.project`
+ * (with `ownerUserId`) and verified the caller is the owner or a member;
+ * we just re-look-up the membership row to read its `role` for non-owners.
+ */
+const rejectViewerRole = t.middleware(async ({ ctx, next }) => {
+  const projectScopedCtx = ctx as Context & {
+    project?: { id: string; ownerUserId: string };
+  };
+  const project = projectScopedCtx.project;
+  const userId = ctx.session?.user?.id;
+  if (!project || !userId) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "rejectViewerRole requires projectScopedProcedure upstream",
+    });
+  }
+  if (project.ownerUserId !== userId) {
+    const membership = await ctx.db.projectMembership.findUnique({
+      where: { projectId_userId: { projectId: project.id, userId } },
+      select: { role: true },
+    });
+    if (membership?.role === "viewer") {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "viewers cannot perform mutations on this project",
+      });
+    }
+  }
+  return next();
+});
+
+export const projectScopedMutationProcedure = projectScopedProcedure.use(rejectViewerRole);
