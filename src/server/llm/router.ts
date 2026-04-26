@@ -73,6 +73,17 @@ export const llmProvidersRouter = router({
       return { ok: true } as const;
     }),
 
+  /** Toggle the row's enabled flag — pulls the adapter out of rotation without losing config. */
+  setEnabled: mutationProcedure
+    .input(z.object({ id: z.string().min(1), enabled: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.db.llmProvider.update({
+        where: { id: input.id },
+        data: { enabled: input.enabled },
+      });
+      return { ok: true } as const;
+    }),
+
   delete: mutationProcedure
     .input(z.object({ id: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
