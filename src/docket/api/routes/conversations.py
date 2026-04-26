@@ -239,6 +239,18 @@ async def answer_question(
 # -- streaming plumbing -----------------------------------------------------
 
 
+def _llm_prices(request: Request) -> tuple[float | None, float | None]:
+    """Read live per-1M-token prices from `runtime.config.llm`.
+
+    Settings PATCH replaces `runtime.config`, so reading at turn time picks
+    up edits without a restart."""
+    runtime = getattr(request.app.state, "runtime", None)
+    if runtime is None:
+        return (None, None)
+    llm = runtime.config.llm
+    return (llm.price_input_per_1m, llm.price_output_per_1m)
+
+
 def _make_callbacks(
     *,
     put: Callable[[ServerSentEvent | None], None],
@@ -365,6 +377,7 @@ async def _stream_turn(
     provider_key: str,
 ) -> AsyncIterator[ServerSentEvent]:
     threshold = getattr(request.app.state, "compaction_threshold_tokens", 0) or None
+    price_in, price_out = _llm_prices(request)
 
     def work(
         on_delta: Callable[[StreamDelta], None],
@@ -378,6 +391,8 @@ async def _stream_turn(
             on_delta=on_delta,
             on_message=on_message,
             compaction_threshold_tokens=threshold,
+            price_input_per_1m=price_in,
+            price_output_per_1m=price_out,
             provider_key=provider_key,
             question_store=questions,
         )
@@ -410,6 +425,7 @@ async def _stream_answer(
     worker resumes the loop via `submit_question_answer` instead of starting a
     fresh user turn."""
     threshold = getattr(request.app.state, "compaction_threshold_tokens", 0) or None
+    price_in, price_out = _llm_prices(request)
 
     def work(
         on_delta: Callable[[StreamDelta], None],
@@ -424,6 +440,8 @@ async def _stream_answer(
             on_delta=on_delta,
             on_message=on_message,
             compaction_threshold_tokens=threshold,
+            price_input_per_1m=price_in,
+            price_output_per_1m=price_out,
             provider_key=provider_key,
             project_id=project_id,
             question_store=questions,

@@ -6,7 +6,6 @@ from textual.message import Message
 from textual.widgets import Button, Checkbox, Input, Markdown, Static
 
 from docket.agent.types import ChatMessage, StreamDelta, Usage
-from docket.config.env import get_price_input_per_1m, get_price_output_per_1m
 from docket.core.acceptance import AcceptanceCriterion, extract_acceptance_criteria
 from docket.core.model import Item
 from docket.core.question import Question, QuestionAnswer
@@ -25,7 +24,8 @@ class TurnFinished(Message):
     """Posted after a chat turn's usage/cost have been computed.
 
     The app listens so it can roll the per-turn cost into the status-bar
-    conversation-total counter. `cost_cents` is 0 when no pricing env is set."""
+    conversation-total counter. `cost_cents` is 0 when pricing is not
+    configured in `[llm]` (price_input_per_1m / price_output_per_1m)."""
 
     def __init__(self, usage: Usage, cost_cents: int) -> None:
         super().__init__()
@@ -484,18 +484,23 @@ class ChatPane(Vertical):
         self._active_assistant = None
         self._active_text = ""
 
-    def finish_turn(self, usage: Usage) -> None:
+    def finish_turn(
+        self,
+        usage: Usage,
+        price_input_per_1m: float | None = None,
+        price_output_per_1m: float | None = None,
+    ) -> None:
         self._finalize_active_assistant()
         self.set_thinking(False)
         line = f"tokens in: {usage.tokens_in}  out: {usage.tokens_out}"
         cost_cents = 0
-        price_in = get_price_input_per_1m()
-        price_out = get_price_output_per_1m()
-        if price_in is not None and price_out is not None:
+        if price_input_per_1m is not None and price_output_per_1m is not None:
             # Cached input bills at a much lower rate than fresh input, so
             # subtract it from the full `tokens_in` bucket before pricing.
             fresh_in = max(0, usage.tokens_in - usage.cached_tokens_in)
-            cost = (fresh_in * price_in + usage.tokens_out * price_out) / 1_000_000
+            cost = (
+                fresh_in * price_input_per_1m + usage.tokens_out * price_output_per_1m
+            ) / 1_000_000
             line = f"{line}  ${cost:.4f}"
             cost_cents = round(cost * 100)
         self.query_one("#ledger", Static).update(line)

@@ -59,6 +59,20 @@ def _format_map(raw: dict[str, float] | dict[str, int]) -> str:
     return ", ".join(f"{key}={value}" for key, value in raw.items())
 
 
+def _format_optional_float(value: float | None) -> str:
+    return "" if value is None else f"{value}"
+
+
+def _parse_optional_float(raw: str, *, field_name: str) -> float | None:
+    text = raw.strip()
+    if not text:
+        return None
+    try:
+        return float(text)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be a number or blank.") from exc
+
+
 class SettingsModal(ModalScreen[Config | None]):
     DEFAULT_CSS = """
     SettingsModal { align: center middle; }
@@ -238,6 +252,18 @@ class SettingsModal(ModalScreen[Config | None]):
                     value=self._config.llm.deployment,
                     placeholder="gpt-5",
                     id="llm-deployment",
+                )
+                yield Static("Input price per 1M tokens (USD)", classes="field-label")
+                yield Input(
+                    value=_format_optional_float(self._config.llm.price_input_per_1m),
+                    placeholder="blank to hide cost",
+                    id="llm-price-input",
+                )
+                yield Static("Output price per 1M tokens (USD)", classes="field-label")
+                yield Input(
+                    value=_format_optional_float(self._config.llm.price_output_per_1m),
+                    placeholder="blank to hide cost",
+                    id="llm-price-output",
                 )
 
                 yield Static("Behavior", classes="section")
@@ -427,6 +453,14 @@ class SettingsModal(ModalScreen[Config | None]):
 
         raw["llm"]["endpoint"] = self.query_one("#llm-endpoint", Input).value.strip() or None
         raw["llm"]["deployment"] = self.query_one("#llm-deployment", Input).value.strip()
+        raw["llm"]["price_input_per_1m"] = _parse_optional_float(
+            self.query_one("#llm-price-input", Input).value,
+            field_name="Input price per 1M",
+        )
+        raw["llm"]["price_output_per_1m"] = _parse_optional_float(
+            self.query_one("#llm-price-output", Input).value,
+            field_name="Output price per 1M",
+        )
         raw["http"]["enabled"] = self.query_one("#http-enabled", Checkbox).value
         raw["http"]["bind"] = self.query_one("#http-bind", Input).value.strip()
         raw["http"]["port"] = _parse_scalar(

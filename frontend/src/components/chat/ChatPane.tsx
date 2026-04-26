@@ -114,6 +114,15 @@ export function ChatPane({ itemId }: { itemId: string }) {
         >
           New thread
         </button>
+        <button
+          type="button"
+          onClick={() => chatController.setOpen(false)}
+          title="Close chat"
+          aria-label="Close chat"
+          className={microCapsButtonClass}
+        >
+          Close
+        </button>
       </header>
 
       <div ref={scrollRef} className="flex-1 overflow-auto px-3 py-3">

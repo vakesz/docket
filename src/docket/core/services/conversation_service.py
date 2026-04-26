@@ -180,6 +180,8 @@ def send_user_message(
     on_delta: Callable[[StreamDelta], None] | None = None,
     on_message: Callable[[ChatMessage], None] | None = None,
     compaction_threshold_tokens: int | None = None,
+    price_input_per_1m: float | None = None,
+    price_output_per_1m: float | None = None,
     provider_key: str = "",
     project_id: str = "",
     question_store: QuestionStore | None = None,
@@ -210,6 +212,8 @@ def send_user_message(
                 on_delta=on_delta,
                 on_message=on_message,
                 compaction_threshold_tokens=compaction_threshold_tokens,
+                price_input_per_1m=price_input_per_1m,
+                price_output_per_1m=price_output_per_1m,
                 provider_key=provider_key,
                 project_id=project_id,
                 question_store=question_store,
@@ -246,6 +250,8 @@ def send_user_message(
         provider_key=provider_key,
         project_id=project_id,
         question_store=question_store,
+        price_input_per_1m=price_input_per_1m,
+        price_output_per_1m=price_output_per_1m,
     )
 
     # Re-read so tokens counters reflect the update.
@@ -269,6 +275,8 @@ def submit_question_answer(
     on_delta: Callable[[StreamDelta], None] | None = None,
     on_message: Callable[[ChatMessage], None] | None = None,
     compaction_threshold_tokens: int | None = None,
+    price_input_per_1m: float | None = None,
+    price_output_per_1m: float | None = None,
     provider_key: str = "",
     project_id: str = "",
     question_store: QuestionStore,
@@ -343,6 +351,8 @@ def submit_question_answer(
         provider_key=provider_key,
         project_id=project_id,
         question_store=question_store,
+        price_input_per_1m=price_input_per_1m,
+        price_output_per_1m=price_output_per_1m,
     )
 
     refreshed = conversation_repo.get(conn, convo.id) or convo
@@ -363,6 +373,8 @@ def _persist_turn(
     provider_key: str,
     project_id: str,
     question_store: QuestionStore | None,
+    price_input_per_1m: float | None = None,
+    price_output_per_1m: float | None = None,
 ) -> Question | None:
     """Persist all new messages from a turn, marking the trailing tool-result
     as `pending=1` when the turn ended on an `ask_user` call. Returns the
@@ -394,8 +406,23 @@ def _persist_turn(
             convo_id,
             tokens_in=turn.usage.tokens_in,
             tokens_out=turn.usage.tokens_out,
+            cost_cents=compute_cost_cents(turn.usage, price_input_per_1m, price_output_per_1m),
         )
     return pending_question
+
+
+def compute_cost_cents(
+    usage: Usage,
+    price_input_per_1m: float | None,
+    price_output_per_1m: float | None,
+) -> int:
+    """Per-million-token pricing → cost in cents. Either price unset = 0."""
+    if price_input_per_1m is None or price_output_per_1m is None:
+        return 0
+    # Cached input bills at a much lower rate; subtract before pricing.
+    fresh_in = max(0, usage.tokens_in - usage.cached_tokens_in)
+    cost = (fresh_in * price_input_per_1m + usage.tokens_out * price_output_per_1m) / 1_000_000
+    return round(cost * 100)
 
 
 def _build_prefix(

@@ -111,6 +111,11 @@ class LlmConfig(BaseModel):
     deployment: str = "gpt-5"
     compaction_threshold_tokens: int = 60000
     external_watch_interval_seconds: float = 60.0  # 0 disables the watcher
+    # Per-million-token prices used to render the chat ledger ($X.XXXX) and
+    # to accumulate `conversations.cost_cents`. Both unset = no cost shown.
+    # Cached input bills off the input rate after subtracting cached_tokens_in.
+    price_input_per_1m: float | None = None
+    price_output_per_1m: float | None = None
 
 
 class HttpConfig(BaseModel):
@@ -237,6 +242,8 @@ def compose_setup_config(
     http_token: str,
     llm_endpoint: str | None,
     llm_deployment: str,
+    price_input_per_1m: float | None = None,
+    price_output_per_1m: float | None = None,
 ) -> Config:
     """Merge wizard output onto an optional existing `Config`.
 
@@ -263,7 +270,12 @@ def compose_setup_config(
         return Config(
             providers=providers,
             active_provider=active_provider,
-            llm=LlmConfig(endpoint=endpoint, deployment=llm_deployment),
+            llm=LlmConfig(
+                endpoint=endpoint,
+                deployment=llm_deployment,
+                price_input_per_1m=price_input_per_1m,
+                price_output_per_1m=price_output_per_1m,
+            ),
             http=http,
             telemetry=telemetry,
         )
@@ -274,7 +286,12 @@ def compose_setup_config(
             "telemetry": telemetry,
             "http": http,
             "llm": existing.llm.model_copy(
-                update={"endpoint": endpoint, "deployment": llm_deployment}
+                update={
+                    "endpoint": endpoint,
+                    "deployment": llm_deployment,
+                    "price_input_per_1m": price_input_per_1m,
+                    "price_output_per_1m": price_output_per_1m,
+                }
             ),
         }
     )

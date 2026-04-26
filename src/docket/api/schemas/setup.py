@@ -71,6 +71,8 @@ class SetupLlmEntry(BaseModel):
     api_key: str
     deployment: str = "gpt-5"
     api_version: str | None = None
+    price_input_per_1m: float | None = None
+    price_output_per_1m: float | None = None
 
 
 class SetupCompleteRequest(BaseModel):

@@ -86,9 +86,9 @@ def get_llm_api_version() -> str | None:
     return os.environ.get("AZURE_OPENAI_API_VERSION") or None
 
 
-# Per-1M-token pricing is user-supplied — no hardcoded fallback, since rates
-# vary by deployment (GPT-5 vs mini vs nano vs Pro), region, and enterprise
-# contract. When either env var is unset the TUI ledger just omits the price.
+# Per-1M-token pricing lives in `config.toml` ([llm] price_input_per_1m /
+# price_output_per_1m). These env getters exist only as wizard-prefill defaults
+# on first run — runtime cost calc reads from `LlmConfig`, not env.
 def _float_env(key: str) -> float | None:
     raw = os.environ.get(key)
     if raw is None or raw.strip() == "":

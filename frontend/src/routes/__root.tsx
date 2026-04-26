@@ -23,7 +23,7 @@ interface RouterContext {
 // and `ADAPTIVE_VARIANTS` in lib/theme.ts.
 const THEME_BOOTSTRAP = `(() => {
   try {
-    var DARK = ["dark","nord","dracula","gruvbox-dark","tokyo-night","monokai","catppuccin-mocha","catppuccin-frappe","catppuccin-macchiato","solarized-dark","rose-pine","rose-pine-moon","atom-one-dark","flexoki-dark"];
+    var DARK = ["dark","nord","dracula","gruvbox-dark","tokyo-night","monokai","catppuccin-mocha","catppuccin-frappe","catppuccin-macchiato","solarized-dark","rose-pine","rose-pine-moon","atom-one-dark","flexoki-dark","github-dark","ayu-dark","everforest-dark"];
     var ADAPTIVE = {
       "system": ["light","dark"],
       "catppuccin": ["catppuccin-latte","catppuccin-mocha"],
@@ -31,9 +31,12 @@ const THEME_BOOTSTRAP = `(() => {
       "solarized": ["solarized-light","solarized-dark"],
       "rose-pine-auto": ["rose-pine-dawn","rose-pine"],
       "atom-one": ["atom-one-light","atom-one-dark"],
-      "flexoki": ["flexoki-light","flexoki-dark"]
+      "flexoki": ["flexoki-light","flexoki-dark"],
+      "github": ["github-light","github-dark"],
+      "ayu": ["ayu-light","ayu-dark"],
+      "everforest": ["everforest-light","everforest-dark"]
     };
-    var VALID = ["system","catppuccin","gruvbox","solarized","rose-pine-auto","atom-one","flexoki","light","gruvbox-light","catppuccin-latte","solarized-light","rose-pine-dawn","atom-one-light","flexoki-light","dark","nord","dracula","gruvbox-dark","tokyo-night","monokai","catppuccin-mocha","catppuccin-frappe","catppuccin-macchiato","solarized-dark","rose-pine","rose-pine-moon","atom-one-dark","flexoki-dark"];
+    var VALID = ["system","catppuccin","gruvbox","solarized","rose-pine-auto","atom-one","flexoki","github","ayu","everforest","light","gruvbox-light","catppuccin-latte","solarized-light","rose-pine-dawn","atom-one-light","flexoki-light","github-light","ayu-light","everforest-light","dark","nord","dracula","gruvbox-dark","tokyo-night","monokai","catppuccin-mocha","catppuccin-frappe","catppuccin-macchiato","solarized-dark","rose-pine","rose-pine-moon","atom-one-dark","flexoki-dark","github-dark","ayu-dark","everforest-dark"];
     var s = localStorage.getItem("docket.theme");
     var id = (s && VALID.indexOf(s) !== -1) ? s : "system";
     var resolved;

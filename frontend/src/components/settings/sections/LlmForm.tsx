@@ -19,6 +19,8 @@ export function LlmForm({
   const deployment = getString(value, "deployment") ?? "";
   const compaction = getNumberValue(value, "compaction_threshold_tokens");
   const watch = getNumberValue(value, "external_watch_interval_seconds");
+  const priceInput = getNumberValue(value, "price_input_per_1m");
+  const priceOutput = getNumberValue(value, "price_output_per_1m");
 
   return (
     <>
@@ -38,6 +40,33 @@ export function LlmForm({
           placeholder="gpt-5"
         />
       </FormField>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <FormField
+          label="Input price per 1M tokens (USD)"
+          help="Used to compute chat cost. Clear to hide cost in the ledger."
+        >
+          <NumberInput
+            value={priceInput}
+            min={0}
+            step={0.01}
+            onChange={(v) => onChange((cur) => ({ ...cur, price_input_per_1m: v }))}
+            suffix="$"
+          />
+        </FormField>
+        <FormField
+          label="Output price per 1M tokens (USD)"
+          help="Used to compute chat cost. Clear to hide cost in the ledger."
+        >
+          <NumberInput
+            value={priceOutput}
+            min={0}
+            step={0.01}
+            onChange={(v) => onChange((cur) => ({ ...cur, price_output_per_1m: v }))}
+            suffix="$"
+          />
+        </FormField>
+      </div>
 
       <LlmKeyRotation />
 

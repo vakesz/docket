@@ -404,6 +404,12 @@ class DocketApp(App[None]):
         with contextlib.suppress(Exception):
             self.query_one(ChatPane).set_thinking(value)
 
+    def _llm_prices(self) -> tuple[float | None, float | None]:
+        cfg = self.tui_ctx.config
+        if cfg is None:
+            return (None, None)
+        return (cfg.llm.price_input_per_1m, cfg.llm.price_output_per_1m)
+
     def _resolve_project_name(self) -> str:
         cfg = self.tui_ctx.config
         if cfg is None:
@@ -561,6 +567,7 @@ class DocketApp(App[None]):
         # Begin the assistant bubble before deltas arrive.
         self.call_from_thread(chat.begin_assistant)
         self.call_from_thread(self._set_thinking, True)
+        price_in, price_out = self._llm_prices()
         try:
             result = conversation_service.send_user_message(
                 self.tui_ctx.conn,
@@ -570,6 +577,8 @@ class DocketApp(App[None]):
                 on_delta=on_delta,
                 on_message=on_message,
                 compaction_threshold_tokens=self.tui_ctx.compaction_threshold_tokens or None,
+                price_input_per_1m=price_in,
+                price_output_per_1m=price_out,
                 provider_key=self.tui_ctx.provider_key,
                 project_id=project_id_for(self.tui_ctx.provider_key),
                 question_store=self._questions,
@@ -584,7 +593,7 @@ class DocketApp(App[None]):
             )
             self.call_from_thread(self._set_thinking, False)
             return
-        self.call_from_thread(chat.finish_turn, result.usage)
+        self.call_from_thread(chat.finish_turn, result.usage, price_in, price_out)
         self.call_from_thread(self._set_thinking, False)
         if result.pending_question is not None:
             self.call_from_thread(chat.show_question, result.pending_question)
@@ -622,6 +631,7 @@ class DocketApp(App[None]):
 
         self.call_from_thread(chat.begin_assistant)
         self.call_from_thread(self._set_thinking, True)
+        price_in, price_out = self._llm_prices()
         try:
             result = conversation_service.submit_question_answer(
                 self.tui_ctx.conn,
@@ -632,6 +642,8 @@ class DocketApp(App[None]):
                 on_delta=on_delta,
                 on_message=on_message,
                 compaction_threshold_tokens=self.tui_ctx.compaction_threshold_tokens or None,
+                price_input_per_1m=price_in,
+                price_output_per_1m=price_out,
                 provider_key=self.tui_ctx.provider_key,
                 project_id=project_id_for(self.tui_ctx.provider_key),
                 question_store=self._questions,
@@ -647,7 +659,7 @@ class DocketApp(App[None]):
             self.call_from_thread(chat.clear_question)
             self.call_from_thread(self._set_thinking, False)
             return
-        self.call_from_thread(chat.finish_turn, result.usage)
+        self.call_from_thread(chat.finish_turn, result.usage, price_in, price_out)
         self.call_from_thread(self._set_thinking, False)
         if result.pending_question is not None:
             self.call_from_thread(chat.show_question, result.pending_question)

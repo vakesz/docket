@@ -26,6 +26,8 @@ interface LlmDraft {
   api_key: string;
   deployment: string;
   api_version: string;
+  price_input_per_1m: string;
+  price_output_per_1m: string;
   skip: boolean;
 }
 
@@ -45,6 +47,8 @@ export function SetupWizard() {
     api_key: "",
     deployment: "gpt-5",
     api_version: "2025-01-01-preview",
+    price_input_per_1m: "",
+    price_output_per_1m: "",
     skip: false,
   });
 
@@ -324,6 +328,25 @@ function LlmStep({
               />
             </div>
           </section>
+          <section className="grid gap-2 sm:grid-cols-2">
+            <div className="flex flex-col gap-2">
+              <Label>Input price per 1M tokens (USD)</Label>
+              <TextInput
+                value={draft.price_input_per_1m}
+                onChange={(v) => setDraft((d) => ({ ...d, price_input_per_1m: v }))}
+                placeholder="e.g. 1.25"
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label>Output price per 1M tokens (USD)</Label>
+              <TextInput
+                value={draft.price_output_per_1m}
+                onChange={(v) => setDraft((d) => ({ ...d, price_output_per_1m: v }))}
+                placeholder="e.g. 10.00"
+              />
+            </div>
+          </section>
+          <HelpText>Leave both blank to skip cost display in the chat ledger.</HelpText>
           <section className="flex items-center gap-2 border-t border-border pt-3">
             <button
               type="button"
@@ -364,6 +387,13 @@ function LlmStep({
   );
 }
 
+function parseOptionalFloat(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const n = Number(trimmed);
+  return Number.isFinite(n) ? n : null;
+}
+
 function ReviewStep({
   provider,
   llm,
@@ -392,6 +422,8 @@ function ReviewStep({
             api_key: llm.api_key,
             deployment: llm.deployment,
             api_version: llm.api_version,
+            price_input_per_1m: parseOptionalFloat(llm.price_input_per_1m),
+            price_output_per_1m: parseOptionalFloat(llm.price_output_per_1m),
           },
       http_bind: "0.0.0.0",
       http_port: 8765,

@@ -161,6 +161,8 @@ def setup_complete(
 
     llm_endpoint = req.llm.endpoint if req.llm is not None else None
     llm_deployment = req.llm.deployment if req.llm is not None else "gpt-5"
+    price_input = req.llm.price_input_per_1m if req.llm is not None else None
+    price_output = req.llm.price_output_per_1m if req.llm is not None else None
     try:
         cfg = compose_setup_config(
             existing_cfg,
@@ -174,6 +176,8 @@ def setup_complete(
             http_token=http_token,
             llm_endpoint=llm_endpoint,
             llm_deployment=llm_deployment,
+            price_input_per_1m=price_input,
+            price_output_per_1m=price_output,
         )
     except ValidationError as e:
         raise HTTPException(

@@ -2138,6 +2138,10 @@ export interface components {
             deployment: string;
             /** Api Version */
             api_version?: string | null;
+            /** Price Input Per 1M */
+            price_input_per_1m?: number | null;
+            /** Price Output Per 1M */
+            price_output_per_1m?: number | null;
         };
         /** SetupProviderEntry */
         SetupProviderEntry: {

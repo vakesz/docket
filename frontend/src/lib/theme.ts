@@ -34,7 +34,13 @@ export type ConcreteThemeId =
   | "atom-one-dark"
   | "atom-one-light"
   | "flexoki-dark"
-  | "flexoki-light";
+  | "flexoki-light"
+  | "github-light"
+  | "github-dark"
+  | "ayu-light"
+  | "ayu-dark"
+  | "everforest-light"
+  | "everforest-dark";
 
 export type AdaptiveThemeId =
   | "system"
@@ -43,7 +49,10 @@ export type AdaptiveThemeId =
   | "solarized"
   | "rose-pine-auto"
   | "atom-one"
-  | "flexoki";
+  | "flexoki"
+  | "github"
+  | "ayu"
+  | "everforest";
 
 export type ThemeId = ConcreteThemeId | AdaptiveThemeId;
 
@@ -66,6 +75,9 @@ export const THEMES: readonly Theme[] = [
   { id: "rose-pine-auto", label: "Rosé Pine (Auto)", category: "adaptive", dark: false },
   { id: "atom-one", label: "Atom One (Auto)", category: "adaptive", dark: false },
   { id: "flexoki", label: "Flexoki (Auto)", category: "adaptive", dark: false },
+  { id: "github", label: "GitHub (Auto)", category: "adaptive", dark: false },
+  { id: "ayu", label: "Ayu (Auto)", category: "adaptive", dark: false },
+  { id: "everforest", label: "Everforest (Auto)", category: "adaptive", dark: false },
 
   // Light
   { id: "light", label: "Light", category: "light", dark: false },
@@ -75,6 +87,9 @@ export const THEMES: readonly Theme[] = [
   { id: "rose-pine-dawn", label: "Rosé Pine Dawn", category: "light", dark: false },
   { id: "atom-one-light", label: "Atom One Light", category: "light", dark: false },
   { id: "flexoki-light", label: "Flexoki Light", category: "light", dark: false },
+  { id: "github-light", label: "GitHub Light", category: "light", dark: false },
+  { id: "ayu-light", label: "Ayu Light", category: "light", dark: false },
+  { id: "everforest-light", label: "Everforest Light", category: "light", dark: false },
 
   // Dark
   { id: "dark", label: "Dark", category: "dark", dark: true },
@@ -91,6 +106,9 @@ export const THEMES: readonly Theme[] = [
   { id: "rose-pine-moon", label: "Rosé Pine Moon", category: "dark", dark: true },
   { id: "atom-one-dark", label: "Atom One Dark", category: "dark", dark: true },
   { id: "flexoki-dark", label: "Flexoki Dark", category: "dark", dark: true },
+  { id: "github-dark", label: "GitHub Dark", category: "dark", dark: true },
+  { id: "ayu-dark", label: "Ayu Dark", category: "dark", dark: true },
+  { id: "everforest-dark", label: "Everforest Dark", category: "dark", dark: true },
 ];
 
 /** Light+dark variant for each adaptive theme. */
@@ -105,6 +123,9 @@ export const ADAPTIVE_VARIANTS: Record<
   "rose-pine-auto": { light: "rose-pine-dawn", dark: "rose-pine" },
   "atom-one": { light: "atom-one-light", dark: "atom-one-dark" },
   flexoki: { light: "flexoki-light", dark: "flexoki-dark" },
+  github: { light: "github-light", dark: "github-dark" },
+  ayu: { light: "ayu-light", dark: "ayu-dark" },
+  everforest: { light: "everforest-light", dark: "everforest-dark" },
 };
 
 export const STORAGE_KEY = "docket.theme";

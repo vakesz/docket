@@ -33,6 +33,7 @@ from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 
 from docket.agent.prompt import scaffold as scaffold_prompts
+from docket.config.env import get_price_input_per_1m, get_price_output_per_1m
 from docket.config.loader import load_config, save_config
 from docket.config.models import (
     Config,
@@ -111,6 +112,8 @@ class WizardState:
     http_token: str = ""
     llm_endpoint: str = ""
     llm_deployment: str = "gpt-5"
+    llm_price_input_per_1m: float | None = None
+    llm_price_output_per_1m: float | None = None
     # Discovered hints (used to pre-populate assignee pickers).
     signed_in_email: str | None = None
     # gh host picked during the GitHub connection step. Feeds the label
@@ -201,6 +204,8 @@ def _load_existing_state(paths: Paths) -> WizardState:
     state.http_token = cfg.http.token
     state.llm_endpoint = str(cfg.llm.endpoint) if cfg.llm.endpoint else ""
     state.llm_deployment = cfg.llm.deployment
+    state.llm_price_input_per_1m = cfg.llm.price_input_per_1m
+    state.llm_price_output_per_1m = cfg.llm.price_output_per_1m
     key = cfg.active_provider or next(iter(cfg.providers), "")
     entry = cfg.providers.get(key) if key else None
     if entry is not None:
@@ -723,6 +728,17 @@ def _step_llm(state: WizardState) -> None:
         Prompt.ask("Deployment name", default=deployment_default).strip() or deployment_default
     )
 
+    state.llm_price_input_per_1m = _ask_price(
+        "Input price per 1M tokens (USD, blank to skip cost display)",
+        current=state.llm_price_input_per_1m,
+        env_default=get_price_input_per_1m(),
+    )
+    state.llm_price_output_per_1m = _ask_price(
+        "Output price per 1M tokens (USD, blank to skip cost display)",
+        current=state.llm_price_output_per_1m,
+        env_default=get_price_output_per_1m(),
+    )
+
     if os.environ.get("AZURE_OPENAI_API_KEY", "").strip():
         console.print("[green]✓ AZURE_OPENAI_API_KEY detected in the environment.[/green]")
     else:
@@ -730,6 +746,24 @@ def _step_llm(state: WizardState) -> None:
             "[yellow]Heads up[/yellow]: AZURE_OPENAI_API_KEY is not set. "
             "Add it to your .env before `docket serve` to enable chat."
         )
+
+
+def _ask_price(prompt: str, *, current: float | None, env_default: float | None) -> float | None:
+    """Prompt for an optional float, prefilled from current → env → blank.
+
+    Returns None when the user clears the field (literal "none"/"" reply)."""
+    default_value = current if current is not None else env_default
+    default_str = f"{default_value}" if default_value is not None else ""
+    if env_default is not None and current is None:
+        console.print(f"[dim]Pre-filled from env ({env_default}).[/dim]")
+    while True:
+        raw = Prompt.ask(prompt, default=default_str).strip().lower()
+        if raw == "" or raw == "none":
+            return None
+        try:
+            return float(raw)
+        except ValueError:
+            console.print("[red]Not a number — try again or leave blank.[/red]")
 
 
 # ---- step 8: prompts --------------------------------------------------------
@@ -829,4 +863,6 @@ def _build_config_from_state(state: WizardState) -> Config:
         http_token=state.http_token,
         llm_endpoint=state.llm_endpoint or None,
         llm_deployment=state.llm_deployment,
+        price_input_per_1m=state.llm_price_input_per_1m,
+        price_output_per_1m=state.llm_price_output_per_1m,
     )
