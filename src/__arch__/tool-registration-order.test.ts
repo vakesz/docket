@@ -17,10 +17,15 @@ import { describe, expect, it } from "vitest";
 import { buildToolRegistry, TOOL_ORDER } from "@/agent/tools/registry";
 import type { ToolContext } from "@/agent/tools/types";
 
+// Tool factories don't dispatch on db at construction time — they only
+// call db inside handlers. A typed-null keeps the test pure for the core
+// slots. The MCP slot reads the db at registry-build time; we stub the
+// one method it touches to return zero servers (default test posture: no
+// MCP configured).
 const fakeCtx: ToolContext = {
-  // The factories don't dispatch on db at construction time — they only
-  // call db inside handlers. A `null as any` keeps the test pure.
-  db: null as unknown as ToolContext["db"],
+  db: {
+    mcpServerConfig: { findMany: async () => [] },
+  } as unknown as ToolContext["db"],
   projectId: "proj_arch_test",
   userId: "user_arch_test",
   itemId: null,
@@ -28,14 +33,14 @@ const fakeCtx: ToolContext = {
 };
 
 describe("arch: agent tool registration order", () => {
-  it("buildToolRegistry (read/write) emits tools in the exact pinned order", () => {
-    const tools = buildToolRegistry(fakeCtx, { readOnly: false });
+  it("buildToolRegistry (read/write) emits the core tools in the exact pinned order", async () => {
+    const tools = await buildToolRegistry(fakeCtx, { readOnly: false });
     const names = tools.map((t) => t.def.name);
     expect(names).toEqual([...TOOL_ORDER]);
   });
 
-  it("buildToolRegistry (read-only) strips mutating provider + memory tools but keeps the rest in order", () => {
-    const tools = buildToolRegistry(fakeCtx, { readOnly: true });
+  it("buildToolRegistry (read-only) strips mutating provider + memory + MCP tools but keeps the rest in order", async () => {
+    const tools = await buildToolRegistry(fakeCtx, { readOnly: true });
     const names = tools.map((t) => t.def.name);
     const STRIPPED_IN_READ_ONLY = new Set([
       "propose_transition",
@@ -49,8 +54,8 @@ describe("arch: agent tool registration order", () => {
     expect(names).toEqual(stripped);
   });
 
-  it("every tool name is unique", () => {
-    const tools = buildToolRegistry(fakeCtx, { readOnly: false });
+  it("every tool name is unique", async () => {
+    const tools = await buildToolRegistry(fakeCtx, { readOnly: false });
     const names = tools.map((t) => t.def.name);
     expect(new Set(names).size).toBe(names.length);
   });

@@ -1,6 +1,7 @@
 import { conversationsRouter } from "@/server/conversations/router";
 import { itemsRouter } from "@/server/items/router";
 import { llmProvidersRouter } from "@/server/llm/router";
+import { mcpRouter } from "@/server/mcp/router";
 import { memoryRouter } from "@/server/memory/router";
 import { projectsRouter } from "@/server/projects/router";
 import { proposalsRouter } from "@/server/proposals/router";
@@ -19,6 +20,7 @@ export const appRouter = router({
   watchlist: watchlistRouter,
   memory: memoryRouter,
   sources: sourcesRouter,
+  mcp: mcpRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -123,6 +123,11 @@ function makeStubDb(): {
     item: {
       findUnique: async () => null,
     },
+    mcpServerConfig: {
+      // No MCP servers in tests — keep the slot 5 builder a no-op so the
+      // loop tests don't have to care about remote tool fan-out.
+      findMany: async () => [] as unknown[],
+    },
   };
   return {
     db: fake as unknown as Database,

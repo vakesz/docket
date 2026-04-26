@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createCaller } from "@/server/trpc-caller";
+import { McpPane } from "@/ui/mcp/mcp-pane";
 import { MemoryPane } from "@/ui/memory/memory-pane";
 import { SourcesPane } from "@/ui/sources/sources-pane";
 
@@ -54,6 +55,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
         <MemoryPane projectId={projectId} />
         <SourcesPane projectId={projectId} />
       </div>
+
+      <McpPane projectId={projectId} />
     </div>
   );
 }

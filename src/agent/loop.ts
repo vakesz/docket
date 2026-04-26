@@ -119,7 +119,7 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
         )?.providerItemId ?? null)
       : null,
   };
-  const tools = buildToolRegistry(toolCtx, { readOnly });
+  const tools = await buildToolRegistry(toolCtx, { readOnly });
 
   const toolByName = new Map<string, AgentTool>();
   for (const t of tools) toolByName.set(t.def.name, t);

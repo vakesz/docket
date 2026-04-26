@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@auth/prisma-adapter": "2.11.2",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@octokit/rest": "^22.0.1",
     "@prisma/adapter-pg": "7.8.0",
     "@prisma/client": "7.8.0",

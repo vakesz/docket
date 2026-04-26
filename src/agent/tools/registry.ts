@@ -23,6 +23,7 @@
  */
 
 import "server-only";
+import { mcpTools } from "@/agent/mcp/tools";
 import { linkTools } from "@/agent/tools/links";
 import { memoryReadonlyTools } from "@/agent/tools/memory";
 import { memoryMutatingTools } from "@/agent/tools/memory-mutating";
@@ -37,10 +38,13 @@ export type ToolRegistryOptions = {
 };
 
 /**
- * Stable tool name list, in registration order. Used by the arch test to
- * detect silent reorders. Tools that haven't shipped yet (Phase 8 MCP)
- * are intentionally absent — when they land, append them at their pinned
- * position and update this list.
+ * Stable tool name list — the *core* (non-MCP) tools, in registration
+ * order. Used by the arch test to detect silent reorders. MCP tools land
+ * dynamically at slot 5 between source-readonly and provider mutating
+ * (one tool per remote tool, namespaced `${serverName}__${toolName}`),
+ * so they're not enumerated here. The arch test asserts that
+ * non-MCP names appear in this exact order regardless of how many MCP
+ * tools sit between source-readonly and provider mutating.
  */
 export const TOOL_ORDER = [
   // (1) readonly: items → PRs → commits/CI
@@ -58,7 +62,7 @@ export const TOOL_ORDER = [
   "list_sources",
   "read_source",
   "search_sources",
-  // (5) MCP — Phase 8
+  // (5) MCP — populated dynamically; tool names depend on configured servers.
   // (6) mutating provider tools (stripped in read-only)
   "propose_transition",
   "propose_description_patch",
@@ -74,10 +78,10 @@ export const TOOL_ORDER = [
 
 export type RegisteredToolName = (typeof TOOL_ORDER)[number];
 
-export function buildToolRegistry(
+export async function buildToolRegistry(
   ctx: ToolContext,
   opts: ToolRegistryOptions = { readOnly: false },
-): readonly AgentTool[] {
+): Promise<readonly AgentTool[]> {
   const tools: AgentTool[] = [];
   // (1)
   tools.push(...readonlyTools(ctx));
@@ -87,7 +91,12 @@ export function buildToolRegistry(
   tools.push(...memoryReadonlyTools(ctx));
   // (4)
   tools.push(...sourceReadonlyTools(ctx));
-  // (5) — MCP, Phase 8
+  // (5) MCP — stripped in read-only (a remote MCP tool can mutate arbitrary
+  // external state and we have no way to reason about whether a given
+  // tool is read-only). Same risk model as provider mutating tools.
+  if (!opts.readOnly) {
+    tools.push(...(await mcpTools(ctx)));
+  }
   // (6) — mutating provider tools
   if (!opts.readOnly) {
     tools.push(...mutatingTools(ctx));
