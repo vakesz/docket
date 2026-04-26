@@ -20,10 +20,8 @@ router = APIRouter(prefix="/scopes", tags=["scopes"])
 def _scope_dto(name: str, sf: ScopeFilter, *, active: bool) -> ScopeDTO:
     return ScopeDTO(
         name=name,
-        team=sf.team,
-        area_path=sf.area_path,
-        iteration_path=sf.iteration_path,
         assignee=sf.assignee,
+        axes=dict(sf.axes),
         active=active,
     )
 

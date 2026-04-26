@@ -73,7 +73,8 @@ from docket.core.services import (
 )
 from docket.core.services.proposal_store import PendingProposal, ProposalStore
 from docket.core.services.question_store import QuestionStore
-from docket.providers.base import GroupingStrategy, WorkItemProvider
+from docket.providers import registry
+from docket.providers.base import GroupingStrategy, ProviderSpec, WorkItemProvider
 from docket.storage.repos import conversation_repo
 
 log = logging.getLogger(__name__)
@@ -269,7 +270,18 @@ class DocketApp(App[None]):
             )
 
     def _active_view_filter(self) -> visual_filter.ResolvedFilter:
-        return visual_filter.resolve(self.tui_ctx.scope, self.tui_ctx.provider)
+        spec = self._active_provider_spec()
+        return visual_filter.resolve(self.tui_ctx.scope, self.tui_ctx.provider, spec)
+
+    def _active_provider_spec(self) -> ProviderSpec | None:
+        config = self.tui_ctx.config
+        key = self.tui_ctx.provider_key
+        if config is None or not key:
+            return None
+        entry = config.providers.get(key)
+        if entry is None:
+            return None
+        return registry.spec(entry.type)
 
     def _provider_display_key(self) -> str:
         # Per-provider override dicts (stale threshold, sync floor) are keyed

@@ -168,9 +168,9 @@ def test_wizard_uses_discovery_selections_end_to_end(
     assert str(entry.config["organization"]).rstrip("/") == "https://dev.azure.com/contoso"
     assert entry.config["project"] == "platform"
     scope = entry.scopes["default"]
-    assert scope.team == "Alpha"
-    assert scope.area_path == "platform"
-    assert scope.iteration_path == "platform\\Sprint 42"
+    assert scope.axes["team"] == "Alpha"
+    assert scope.axes["area_path"] == "platform"
+    assert scope.axes["iteration_path"] == "platform\\Sprint 42"
     assert scope.assignee == "@me"
 
 
@@ -215,9 +215,7 @@ def test_wizard_falls_back_when_discovery_fails(
     assert str(entry.config["organization"]).rstrip("/") == "https://dev.azure.com/contoso"
     assert entry.config["project"] == "platform"
     scope = entry.scopes["default"]
-    assert scope.team == ""
-    assert scope.area_path == ""
-    assert scope.iteration_path == ""
+    assert scope.axes == {}
     assert scope.assignee == "@me"
 
 
@@ -439,9 +437,7 @@ def test_wizard_github_end_to_end(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
     # persisted config (only GHE hosts get an explicit base_url).
     assert "base_url" not in entry.config
     scope = entry.scopes["default"]
-    assert scope.team == ""
-    assert scope.area_path == ""
-    assert scope.iteration_path == ""
+    assert scope.axes == {}
     assert scope.assignee == "@me"
     assert entry.display_name == "GitHub · contoso/example"
 

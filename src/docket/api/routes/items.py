@@ -28,6 +28,7 @@ from docket.core.model import Item, ItemKind, ItemState
 from docket.core.mutation import ItemCreate
 from docket.core.services import mutation_service, visual_filter
 from docket.core.services.proposal_store import ProposalStore
+from docket.providers import registry
 from docket.providers.base import WorkItemProvider
 from docket.storage.repos import comment_repo, item_repo, search_repo
 
@@ -83,11 +84,11 @@ def list_items(
     provider_key: str = Depends(get_active_provider_key),
     runtime: RuntimeState | None = Depends(get_runtime_optional),
 ) -> list[ItemDTO]:
-    resolved = (
-        visual_filter.resolve(runtime.scope, provider)
-        if apply_view and runtime is not None
-        else visual_filter.ResolvedFilter()
-    )
+    if apply_view and runtime is not None:
+        spec = registry.spec(runtime.config.providers[runtime.provider_key].type)
+        resolved = visual_filter.resolve(runtime.scope, provider, spec)
+    else:
+        resolved = visual_filter.ResolvedFilter()
     items = item_repo.list_items(
         conn,
         kind=kind,

@@ -35,11 +35,27 @@ class SetupProviderFieldDTO(BaseModel):
     help: str = ""
 
 
+class SetupProviderScopeAxisDTO(BaseModel):
+    """One provider-declared narrowing axis the visual filter exposes.
+
+    `key` is the wire identifier persisted under `ScopeFilter.axes`;
+    `label` is rendered to humans. `discovery_stage`, when present, names
+    the `discover` stage the SPA can hit to populate a datalist of
+    candidate values; the SPA falls back to a free-form input when it's
+    `None`. Assignee is intentionally not modeled here — it's a separate
+    first-class field on every scope."""
+
+    key: str
+    label: str
+    discovery_stage: str | None = None
+
+
 class SetupProviderTypeDTO(BaseModel):
     id: str
     display: str
     requires_cli: list[str] = Field(default_factory=list)
     fields: list[SetupProviderFieldDTO] = Field(default_factory=list)
+    scope_axes: list[SetupProviderScopeAxisDTO] = Field(default_factory=list)
 
 
 class SetupTestProviderRequest(BaseModel):

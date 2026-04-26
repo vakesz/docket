@@ -25,12 +25,16 @@ class TelemetryLevel(StrEnum):
 
 
 class ScopeFilter(BaseModel):
-    """A named scope filter for work-item sync."""
+    """A named scope filter for work-item sync.
 
-    team: str = ""
-    area_path: str = ""
-    iteration_path: str = ""
+    `assignee` is always present (every provider with assignment supports
+    it). `axes` carries the provider-declared narrowing values — keyed by
+    `ProviderSpec.scope_axes[*].key` — so adding a third-party provider
+    with its own axes does not require schema churn here. Empty values
+    mean the axis is unconstrained."""
+
     assignee: str = "@me"
+    axes: dict[str, str] = Field(default_factory=dict)
 
     def to_core(self) -> ScopeFilters:
         """Convert to the core-layer filter (same shape, different layer).
@@ -38,12 +42,7 @@ class ScopeFilter(BaseModel):
         Providers and services accept `core.model.ScopeFilters`; `ScopeFilter`
         is the pydantic config model. Keep the two separate so core has no
         pydantic dependency, but offer the obvious conversion here."""
-        return ScopeFilters(
-            team=self.team,
-            area_path=self.area_path,
-            iteration_path=self.iteration_path,
-            assignee=self.assignee,
-        )
+        return ScopeFilters(assignee=self.assignee, axes=dict(self.axes))
 
 
 class ProviderEntry(BaseModel):

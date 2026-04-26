@@ -59,7 +59,7 @@ def _mk_config() -> Config:
                 config={"default_repo": "example/primary"},
                 scopes={
                     "default": ScopeFilter(assignee="@me"),
-                    "team": ScopeFilter(team="core", assignee="@me"),
+                    "team": ScopeFilter(assignee="@me", axes={"team": "core"}),
                 },
                 active_scope="default",
             ),
@@ -437,7 +437,7 @@ def test_update_provider_preserves_existing_scope_when_omitted(client: TestClien
     after = dict(env["runtime"].config.providers["primary"].scopes)
     # Both 'default' and 'team' scopes survive a config-only update.
     assert set(after.keys()) == set(before.keys())
-    assert after["team"].team == before["team"].team
+    assert after["team"].axes == before["team"].axes
 
 
 def test_update_provider_unknown_returns_404(client: TestClient) -> None:

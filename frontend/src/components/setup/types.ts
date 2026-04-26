@@ -7,9 +7,10 @@
 import type { DTO } from "~/api/client";
 
 export interface ScopeDraft {
-  team: string;
-  area_path: string;
-  iteration_path: string;
+  /** Provider-declared narrowing axes keyed by `ProviderSpec.scope_axes[*].key`.
+   * Empty values mean the axis is unconstrained — same UX as the CLI's
+   * "blank for any". */
+  axes: Record<string, string>;
   assignee: string;
 }
 
@@ -56,19 +57,19 @@ export function defaultPricesFor(deployment: string): { input: string; output: s
 }
 
 export function emptyScope(): ScopeDraft {
-  return { team: "", area_path: "", iteration_path: "", assignee: "" };
+  return { axes: {}, assignee: "" };
 }
 
 /** Convert a ScopeDraft to the wire shape consumed by `SetupCompleteRequest`.
- * Empty strings become absent so ScopeFilter validation treats each axis as
+ * Empty axis values are dropped so ScopeFilter validation treats them as
  * unconstrained — matches the CLI wizard's "blank for any" UX. */
-export function scopeToWire(scope: ScopeDraft, type: string): Record<string, unknown> {
+export function scopeToWire(scope: ScopeDraft): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  if (type === "azure_devops") {
-    if (scope.team) out.team = scope.team;
-    if (scope.area_path) out.area_path = scope.area_path;
-    if (scope.iteration_path) out.iteration_path = scope.iteration_path;
+  const axes: Record<string, string> = {};
+  for (const [key, value] of Object.entries(scope.axes)) {
+    if (value) axes[key] = value;
   }
+  if (Object.keys(axes).length > 0) out.axes = axes;
   if (scope.assignee) out.assignee = scope.assignee;
   return out;
 }

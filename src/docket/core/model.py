@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
+from types import MappingProxyType
 from typing import Any
+
+_EMPTY_AXES: Mapping[str, str] = MappingProxyType({})
 
 
 class ItemKind(StrEnum):
@@ -40,15 +44,20 @@ class ScopeFilters:
     Sync always pulls every item a provider exposes (so child items of
     something assigned to the user are still in the cache). These fields
     narrow the view at render time: the TUI list, CLI `list`, and HTTP
-    `/items` apply them post-cache. Empty string means "don't filter on
-    this axis"; assignee `"@me"` means the cached `assignee` column must
-    match the provider's current-user identity (empty string is taken as
-    "any" in line with the config default)."""
+    `/items` apply them post-cache.
 
-    team: str = ""
-    area_path: str = ""
-    iteration_path: str = ""
+    `assignee` is always available: empty string means "any", `"@me"` is
+    resolved against the provider's `current_user_identity`, and any other
+    value is matched literally against the cached `Item.assignee` column.
+
+    `axes` carries provider-defined narrowing values — Azure DevOps
+    declares `team`, `area_path`, `iteration_path`; GitHub declares none.
+    Keys absent (or values empty) mean the axis is unconstrained. The
+    matcher implementation lives on the provider's `ProviderSpec.axis_matcher`
+    so `core/` stays provider-agnostic."""
+
     assignee: str = "@me"
+    axes: Mapping[str, str] = _EMPTY_AXES
 
 
 @dataclass(frozen=True)

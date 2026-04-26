@@ -14,6 +14,16 @@ from docket.core.model import (
     TransitionIntent,
 )
 
+AxisMatcher = Callable[[Item, str, str], bool]
+"""View-time matcher for a single scope-axis value against a cached item.
+
+Receives `(item, axis_key, expected)` and returns True when the item should
+be included. Providers register one matcher per spec covering every axis they
+declare in `scope_axes`; the visual-filter layer iterates declared axes and
+calls the matcher for whichever ones the user constrained. Empty string is
+treated as "don't filter" before the matcher is invoked, so matchers can
+assume `expected` is a concrete value."""
+
 
 class ProviderError(Exception):
     """Base class for provider-layer errors surfaced to core."""
@@ -122,6 +132,27 @@ _ALL_KINDS: tuple[ItemKind, ...] = tuple(ItemKind)
 
 
 @dataclass(frozen=True)
+class ScopeAxis:
+    """One provider-defined axis for the visual scope filter.
+
+    `key` is the wire/storage identifier persisted in `ScopeFilter.axes`
+    (e.g. `"area_path"`). `label` is rendered to humans in the wizard,
+    settings modal, and SPA. `discovery_stage` — when set — names the
+    `WizardHooks.discover` stage that lists candidate values for this axis;
+    callers use it to wire datalist/combobox autocomplete against the
+    `/setup/providers/{type_id}/discover` endpoint. Leave it `None` for
+    free-form axes the provider can't enumerate.
+
+    Assignee is intentionally NOT modeled as an axis — it has special `@me`
+    resolution against `WorkItemProvider.current_user_identity` and matches
+    the dedicated `Item.assignee` column rather than `provider_raw`."""
+
+    key: str
+    label: str
+    discovery_stage: str | None = None
+
+
+@dataclass(frozen=True)
 class ProviderSpec:
     """Static description of a provider type — what the registry knows about it.
 
@@ -137,7 +168,14 @@ class ProviderSpec:
     `supported_kinds` is the ordered set of kinds this provider can create.
     Surfaces render it as the choices in the new-item picker; it does not gate
     reads (cached items already carry a translated `ItemKind`). Defaults to all
-    canonical kinds so non-overriding specs keep full-range behavior."""
+    canonical kinds so non-overriding specs keep full-range behavior.
+
+    `scope_axes` declares the provider-defined narrowing axes the visual
+    filter exposes (in addition to the always-on `assignee` axis). Empty
+    `()` means assignee is the only axis — the GitHub default. `axis_matcher`
+    is the view-time predicate the visual filter calls for each constrained
+    axis; it must be set whenever `scope_axes` is non-empty so cached rows
+    can be filtered without touching the provider."""
 
     type_id: str
     display_name: str
@@ -148,3 +186,5 @@ class ProviderSpec:
     supported_kinds: tuple[ItemKind, ...] = _ALL_KINDS
     normalize_config: ProviderConfigNormalizer | None = None
     label_template: LabelTemplate | None = None
+    scope_axes: tuple[ScopeAxis, ...] = field(default_factory=tuple)
+    axis_matcher: AxisMatcher | None = None

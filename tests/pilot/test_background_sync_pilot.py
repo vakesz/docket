@@ -143,14 +143,14 @@ async def test_status_bar_shows_active_view_and_next_sync(
     item = make_item(title="A story", description_md="")
     item_repo.upsert_item(conn, item)
     cfg = _single_provider_cfg(
-        scopes={"default": ScopeFilter(), "my-team": ScopeFilter(team="Team A")},
+        scopes={"default": ScopeFilter(), "my-team": ScopeFilter(axes={"team": "Team A"})},
         active_scope="my-team",
     )
     ctx = TuiContext(
         conn=conn,
         provider=FakeProvider(items=[item]),
         provider_key="azure_devops",
-        scope=ScopeFilters(team="Team A"),
+        scope=ScopeFilters(axes={"team": "Team A"}),
         scope_key="my-team",
         background_sync_interval_seconds=300.0,
         config=cfg,
@@ -178,7 +178,7 @@ async def test_switch_view_reloads_tree_with_new_scope(tmp_path: Path, make_item
     cfg = _single_provider_cfg(
         scopes={
             "default": ScopeFilter(),
-            "blocked": ScopeFilter(area_path="Blocked"),
+            "blocked": ScopeFilter(axes={"area_path": "Blocked"}),
         },
     )
     ctx = TuiContext(
@@ -196,7 +196,7 @@ async def test_switch_view_reloads_tree_with_new_scope(tmp_path: Path, make_item
             await app.run_action("switch_view('blocked')")
             await pilot.pause()
             assert ctx.scope_key == "blocked"
-            assert ctx.scope.area_path == "Blocked"
+            assert ctx.scope.axes["area_path"] == "Blocked"
             bar = app.query_one(StatusBar)
             assert bar.scope_label == "blocked"
             assert bar.active_view == "blocked"

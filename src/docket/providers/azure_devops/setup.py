@@ -78,28 +78,28 @@ def step_scope(state: WizardState) -> None:
         team = _pick_optional(
             "Team",
             fetch=lambda: discover.list_teams(org, project),
-            current=state.scope.team,
+            current=state.scope.axes.get("team", ""),
         )
         area = _pick_optional(
             "Area path",
             fetch=lambda: discover.list_area_paths(org, project),
-            current=state.scope.area_path,
+            current=state.scope.axes.get("area_path", ""),
         )
         iteration = _pick_optional(
             "Iteration path",
             fetch=lambda: discover.list_iteration_paths(org, project),
-            current=state.scope.iteration_path,
+            current=state.scope.axes.get("iteration_path", ""),
         )
         assignee = pick_assignee(
             signed_in_email=state.signed_in_email,
             current_assignee=state.scope.assignee,
         )
-        scope = ScopeFilter(
-            team=team,
-            area_path=area,
-            iteration_path=iteration,
-            assignee=assignee,
-        )
+        axes = {
+            k: v
+            for k, v in (("team", team), ("area_path", area), ("iteration_path", iteration))
+            if v
+        }
+        scope = ScopeFilter(assignee=assignee, axes=axes)
 
         count = _count_items(org, project, scope)
         if count is None:

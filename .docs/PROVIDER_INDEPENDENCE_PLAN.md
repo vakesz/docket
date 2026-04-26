@@ -331,7 +331,7 @@ and `/setup/github/discover` with one route.
 
 ---
 
-## Phase 5 — per-provider scope axes
+## Phase 5 — per-provider scope axes ✅ landed
 
 **Goal:** kill the deepest leak — `ScopeFilters` in
 `src/docket/core/model.py` is ADO-shaped (`team`, `area_path`,

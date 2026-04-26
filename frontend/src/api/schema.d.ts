@@ -2212,30 +2212,26 @@ export interface components {
              */
             description: string;
         };
-        /** ScopeDTO */
+        /**
+         * ScopeDTO
+         * @description A saved view exposed over HTTP.
+         *
+         *     `axes` carries the provider-declared narrowing values keyed by
+         *     `ProviderSpec.scope_axes[*].key`. The frontend looks up labels via the
+         *     matching `SetupProviderTypeDTO.scope_axes` entry.
+         */
         ScopeDTO: {
             /** Name */
             name: string;
-            /**
-             * Team
-             * @default
-             */
-            team: string;
-            /**
-             * Area Path
-             * @default
-             */
-            area_path: string;
-            /**
-             * Iteration Path
-             * @default
-             */
-            iteration_path: string;
             /**
              * Assignee
              * @default @me
              */
             assignee: string;
+            /** Axes */
+            axes?: {
+                [key: string]: string;
+            };
             /**
              * Active
              * @default false
@@ -2513,6 +2509,25 @@ export interface components {
              */
             help: string;
         };
+        /**
+         * SetupProviderScopeAxisDTO
+         * @description One provider-declared narrowing axis the visual filter exposes.
+         *
+         *     `key` is the wire identifier persisted under `ScopeFilter.axes`;
+         *     `label` is rendered to humans. `discovery_stage`, when present, names
+         *     the `discover` stage the SPA can hit to populate a datalist of
+         *     candidate values; the SPA falls back to a free-form input when it's
+         *     `None`. Assignee is intentionally not modeled here — it's a separate
+         *     first-class field on every scope.
+         */
+        SetupProviderScopeAxisDTO: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Discovery Stage */
+            discovery_stage?: string | null;
+        };
         /** SetupProviderTypeDTO */
         SetupProviderTypeDTO: {
             /** Id */
@@ -2523,6 +2538,8 @@ export interface components {
             requires_cli?: string[];
             /** Fields */
             fields?: components["schemas"]["SetupProviderFieldDTO"][];
+            /** Scope Axes */
+            scope_axes?: components["schemas"]["SetupProviderScopeAxisDTO"][];
         };
         /**
          * SetupStatusDTO

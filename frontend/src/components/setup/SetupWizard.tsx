@@ -72,6 +72,8 @@ export function SetupWizard() {
     run_initial_sync: true,
   });
 
+  const activeSpec = (types.data ?? []).find((t) => t.id === provider.type) ?? null;
+
   return (
     <div className="flex min-h-screen flex-col bg-bg">
       <header className="border-b border-border bg-surface px-6 py-4">
@@ -119,6 +121,7 @@ export function SetupWizard() {
               <ScopeStep
                 draft={provider}
                 setDraft={setProvider}
+                spec={activeSpec}
                 onBack={() => setStep("provider")}
                 onNext={() => setStep("llm")}
               />
@@ -142,6 +145,7 @@ export function SetupWizard() {
             {step === "review" && (
               <ReviewStep
                 provider={provider}
+                spec={activeSpec}
                 llm={llm}
                 settings={settings}
                 onBack={() => setStep("settings")}

@@ -1,9 +1,11 @@
 /**
  * Scope filter step — web equivalent of `_step_provider_scope`.
  *
- *  - azure_devops : team / area_path / iteration_path / assignee
- *  - github       : assignee only (team/area/iteration don't apply)
- *  - other        : skipped — empty scope sent to backend
+ * Spec-driven: we render one input per `SetupProviderTypeDTO.scope_axes`,
+ * with a datalist sourced from the axis's `discovery_stage` when present.
+ * Providers that declare zero axes (e.g. github_stub) collapse to just the
+ * assignee field — same UX as the CLI's "this provider doesn't surface
+ * scope axes" path.
  *
  * Match-count preview uses `/setup/probe-scope`, mirroring the CLI's
  * "→ N item(s) match this scope" line. Failure renders "could not count"
@@ -21,40 +23,23 @@ import {
   setupCardClass,
   xsBorderButtonClass,
 } from "~/lib/formClasses";
-import type { ProviderDraft, ScopeDraft } from "./types";
+import type { ProviderDraft } from "./types";
 import { scopeToWire } from "./types";
+
+type ScopeAxisDTO = DTO["SetupProviderScopeAxisDTO"];
+type ProviderTypeDTO = DTO["SetupProviderTypeDTO"];
 
 interface Props {
   draft: ProviderDraft;
   setDraft: React.Dispatch<React.SetStateAction<ProviderDraft>>;
+  spec: ProviderTypeDTO | null;
   onBack: () => void;
   onNext: () => void;
 }
 
-export function ScopeStep({ draft, setDraft, onBack, onNext }: Props) {
-  const isAdo = draft.type === "azure_devops";
-  const isGithub = draft.type === "github" || draft.type === "github_stub";
-
-  if (!isAdo && !isGithub) {
-    // Third-party providers don't surface scope axes via the wizard.
-    return (
-      <div className={setupCardClass}>
-        <p>This provider type doesn't expose scope filters in the wizard.</p>
-        <p className="text-fg-muted">
-          You can still configure scopes later from the in-app settings page or by editing{" "}
-          <code className="rounded bg-surface-alt px-1 text-fg">config.toml</code> directly.
-        </p>
-        <div className="flex justify-between">
-          <button type="button" onClick={onBack} className="text-xs text-fg-muted hover:text-fg">
-            ← Back
-          </button>
-          <button type="button" onClick={onNext} className={primaryButtonClass}>
-            Skip
-          </button>
-        </div>
-      </div>
-    );
-  }
+export function ScopeStep({ draft, setDraft, spec, onBack, onNext }: Props) {
+  const axes = spec?.scope_axes ?? [];
+  const hasAxes = axes.length > 0;
 
   return (
     <div className={setupCardClass}>
@@ -63,7 +48,22 @@ export function ScopeStep({ draft, setDraft, onBack, onNext }: Props) {
         everything.
       </p>
 
-      {isAdo && <AdoScopeFields draft={draft} setDraft={setDraft} />}
+      {hasAxes &&
+        axes.map((axis) => (
+          <AxisField
+            key={axis.key}
+            axis={axis}
+            providerType={draft.type}
+            config={draft.config}
+            value={draft.scope.axes[axis.key] ?? ""}
+            onChange={(v) =>
+              setDraft((d) => ({
+                ...d,
+                scope: { ...d.scope, axes: { ...d.scope.axes, [axis.key]: v } },
+              }))
+            }
+          />
+        ))}
 
       <AssigneeField draft={draft} setDraft={setDraft} />
 
@@ -81,82 +81,38 @@ export function ScopeStep({ draft, setDraft, onBack, onNext }: Props) {
   );
 }
 
-function AdoScopeFields({
-  draft,
-  setDraft,
-}: {
-  draft: ProviderDraft;
-  setDraft: React.Dispatch<React.SetStateAction<ProviderDraft>>;
-}) {
-  const setScope = (patch: Partial<ScopeDraft>) =>
-    setDraft((d) => ({ ...d, scope: { ...d.scope, ...patch } }));
-
-  const org = draft.config.organization ?? "";
-  const project = draft.config.project ?? "";
-  const enabled = !!org && !!project;
-
-  return (
-    <>
-      <AdoAxisField
-        label="Team"
-        stage="teams"
-        org={org}
-        project={project}
-        enabled={enabled}
-        value={draft.scope.team}
-        onChange={(v) => setScope({ team: v })}
-      />
-      <AdoAxisField
-        label="Area path"
-        stage="areas"
-        org={org}
-        project={project}
-        enabled={enabled}
-        value={draft.scope.area_path}
-        onChange={(v) => setScope({ area_path: v })}
-      />
-      <AdoAxisField
-        label="Iteration path"
-        stage="iterations"
-        org={org}
-        project={project}
-        enabled={enabled}
-        value={draft.scope.iteration_path}
-        onChange={(v) => setScope({ iteration_path: v })}
-      />
-    </>
-  );
-}
-
-function AdoAxisField({
-  label,
-  stage,
-  org,
-  project,
-  enabled,
+function AxisField({
+  axis,
+  providerType,
+  config,
   value,
   onChange,
 }: {
-  label: string;
-  stage: "teams" | "areas" | "iterations";
-  org: string;
-  project: string;
-  enabled: boolean;
+  axis: ScopeAxisDTO;
+  providerType: string;
+  config: Record<string, string>;
   value: string;
   onChange: (v: string) => void;
 }) {
-  const discover = useProviderDiscover("azure_devops");
+  const stage = axis.discovery_stage;
+  const discover = useProviderDiscover(providerType);
   const [options, setOptions] = useState<string[]>([]);
   const [error, setError] = useState("");
 
+  // Re-run discovery whenever the provider config changes — payload keys
+  // are provider-defined so we just forward the whole config. The stringified
+  // form keys the effect (mutate is stable; config object identity isn't).
+  const configKey = JSON.stringify(config);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: configKey covers config; mutate is stable.
   useEffect(() => {
-    if (!enabled) {
+    if (!stage) {
       setOptions([]);
       return;
     }
     let cancelled = false;
     discover.mutate(
-      { stage, payload: { org, project } },
+      { stage, payload: config },
       {
         onSuccess: (res) => {
           if (cancelled) return;
@@ -176,16 +132,18 @@ function AdoAxisField({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, org, project, stage]);
+  }, [stage, configKey]);
 
-  const id = useMemo(() => `axis-${stage}-${Math.random().toString(36).slice(2, 7)}`, [stage]);
+  const id = useMemo(
+    () => `axis-${axis.key}-${Math.random().toString(36).slice(2, 7)}`,
+    [axis.key],
+  );
 
   return (
     <section className="flex flex-col gap-2">
-      <Label>{label}</Label>
+      <Label>{axis.label}</Label>
       <input
-        list={id}
+        list={stage ? id : undefined}
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -195,11 +153,13 @@ function AdoAxisField({
           "focus:border-accent focus:outline-none",
         )}
       />
-      <datalist id={id}>
-        {options.map((opt) => (
-          <option key={opt} value={opt} />
-        ))}
-      </datalist>
+      {stage && (
+        <datalist id={id}>
+          {options.map((opt) => (
+            <option key={opt} value={opt} />
+          ))}
+        </datalist>
+      )}
       {error && <HelpText>Discovery failed ({error}); enter manually.</HelpText>}
     </section>
   );
@@ -247,7 +207,7 @@ function AssigneeField({
 
 function ScopeProbe({ draft }: { draft: ProviderDraft }) {
   const probe = useProbeScope();
-  const wire = useMemo(() => scopeToWire(draft.scope, draft.type), [draft.scope, draft.type]);
+  const wire = useMemo(() => scopeToWire(draft.scope), [draft.scope]);
   const stableKey = `${draft.type}|${JSON.stringify(draft.config)}|${JSON.stringify(wire)}`;
   const [lastResult, setLastResult] = useState<DTO["ProbeScopeDTO"] | null>(null);
   const [lastKey, setLastKey] = useState<string>("");

@@ -69,7 +69,7 @@ async def test_settings_modal_persists_and_updates_runtime(
         modal = app.screen
         modal.query_one("#scope-name").value = "focused"
         modal.query_one("#scope-default").value = True
-        modal.query_one("#scope-team").value = "Platform"
+        modal.query_one("#scope-axis-team").value = "Platform"
         modal.query_one("#ui-show-criteria").value = False
         modal.query_one("#ui-default-kind").value = "bug"
         modal.query_one("#stale-threshold").value = "3"
@@ -82,7 +82,7 @@ async def test_settings_modal_persists_and_updates_runtime(
     reloaded = load_config(paths)
     azure_devops_entry = reloaded.providers["azure_devops"]
     assert azure_devops_entry.active_scope == "focused"
-    assert azure_devops_entry.scopes["focused"].team == "Platform"
+    assert azure_devops_entry.scopes["focused"].axes["team"] == "Platform"
     assert reloaded.ui.default_new_item_kind == "bug"
     assert reloaded.ui.show_acceptance_criteria is False
     assert reloaded.stale.threshold_days == 3

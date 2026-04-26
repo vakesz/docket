@@ -189,22 +189,14 @@ class SettingsModal(ModalScreen[Config | None]):
                 )
                 default_checkbox.tooltip = "When enabled, Docket opens this view by default."
                 yield default_checkbox
-                yield Static("team", classes="field-label")
-                yield Input(
-                    value=current_scope.team, placeholder="team (optional)", id="scope-team"
-                )
-                yield Static("area path", classes="field-label")
-                yield Input(
-                    value=current_scope.area_path,
-                    placeholder="Project\\Area (optional)",
-                    id="scope-area",
-                )
-                yield Static("iteration path", classes="field-label")
-                yield Input(
-                    value=current_scope.iteration_path,
-                    placeholder="Project\\Iteration (optional)",
-                    id="scope-iteration",
-                )
+                if provider_spec is not None:
+                    for axis in provider_spec.scope_axes:
+                        yield Static(axis.label.lower(), classes="field-label")
+                        yield Input(
+                            value=current_scope.axes.get(axis.key, ""),
+                            placeholder=f"{axis.label} (optional)",
+                            id=f"scope-axis-{axis.key}",
+                        )
                 yield Static("assignee", classes="field-label")
                 yield Input(
                     value=current_scope.assignee,
@@ -391,9 +383,13 @@ class SettingsModal(ModalScreen[Config | None]):
             name_input.value = selected
             current_active = entry.active_scope if entry is not None else ""
             default_checkbox.value = current_active == selected
-        self.query_one("#scope-team", Input).value = scope.team
-        self.query_one("#scope-area", Input).value = scope.area_path
-        self.query_one("#scope-iteration", Input).value = scope.iteration_path
+        provider_spec = registry.spec(entry.type) if entry is not None else None
+        if provider_spec is not None:
+            for axis in provider_spec.scope_axes:
+                widget_id = f"#scope-axis-{axis.key}"
+                widgets = self.query(widget_id).results(Input)
+                for widget in widgets:
+                    widget.value = scope.axes.get(axis.key, "")
         self.query_one("#scope-assignee", Input).value = scope.assignee
 
     def action_save(self) -> None:
@@ -422,11 +418,17 @@ class SettingsModal(ModalScreen[Config | None]):
 
         provider_raw = raw["providers"].setdefault(provider_key, {})
         provider_raw.setdefault("scopes", {})
+        provider_spec = registry.spec(entry.type)
+        axes: dict[str, str] = {}
+        if provider_spec is not None:
+            for axis in provider_spec.scope_axes:
+                widget = self.query_one(f"#scope-axis-{axis.key}", Input)
+                value = widget.value.strip()
+                if value:
+                    axes[axis.key] = value
         provider_raw["scopes"][scope_name] = {
-            "team": self.query_one("#scope-team", Input).value.strip(),
-            "area_path": self.query_one("#scope-area", Input).value.strip(),
-            "iteration_path": self.query_one("#scope-iteration", Input).value.strip(),
             "assignee": self.query_one("#scope-assignee", Input).value.strip(),
+            "axes": axes,
         }
         if self.query_one("#scope-default", Checkbox).value:
             provider_raw["active_scope"] = scope_name
@@ -435,7 +437,6 @@ class SettingsModal(ModalScreen[Config | None]):
         if display:
             provider_raw["display_name"] = display
 
-        provider_spec = registry.spec(entry.type)
         if provider_spec is not None and provider_spec.setup_fields:
             cfg: dict[str, Any] = dict(provider_raw.get("config", {}))
             for setup_field in provider_spec.setup_fields:

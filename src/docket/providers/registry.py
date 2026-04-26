@@ -20,7 +20,13 @@ from urllib.parse import urlparse
 from pydantic import HttpUrl, ValidationError
 
 from docket.core.model import ItemKind
-from docket.providers.base import ProviderFactory, ProviderSpec, SetupField, WorkItemProvider
+from docket.providers.base import (
+    ProviderFactory,
+    ProviderSpec,
+    ScopeAxis,
+    SetupField,
+    WorkItemProvider,
+)
 from docket.telemetry.logging import get_logger
 
 _log = get_logger(__name__)
@@ -118,6 +124,7 @@ def _register_builtins() -> None:
     module import so the registry is populated even without entry-point
     discovery."""
     from docket.providers.azure_devops.provider import AzureDevOpsProvider
+    from docket.providers.azure_devops.scope import axis_matcher as azure_devops_axis_matcher
     from docket.providers.azure_devops.setup import register as register_ado_hooks
     from docket.providers.github.provider import GitHubProvider
     from docket.providers.github.setup import register as register_github_hooks
@@ -213,6 +220,16 @@ def _register_builtins() -> None:
             ),
             normalize_config=_azure_devops_normalize,
             label_template=_azure_devops_label,
+            scope_axes=(
+                ScopeAxis(key="team", label="Team", discovery_stage="teams"),
+                ScopeAxis(key="area_path", label="Area path", discovery_stage="areas"),
+                ScopeAxis(
+                    key="iteration_path",
+                    label="Iteration path",
+                    discovery_stage="iterations",
+                ),
+            ),
+            axis_matcher=azure_devops_axis_matcher,
         )
     )
     register(

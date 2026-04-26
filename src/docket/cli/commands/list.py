@@ -7,6 +7,7 @@ from docket._console import console
 from docket.cli.context import prepare_or_wizard
 from docket.core.model import ItemKind
 from docket.core.services import visual_filter
+from docket.providers import registry
 from docket.storage.repos import item_repo
 
 
@@ -19,7 +20,8 @@ def list_command(
     """List items from the local cache."""
     with prepare_or_wizard() as ctx:
         kind_filter = ItemKind(kind) if kind else None
-        resolved = visual_filter.resolve(ctx.scope_filters(), ctx.provider)
+        spec = registry.spec(ctx.config.providers[ctx.active_provider].type)
+        resolved = visual_filter.resolve(ctx.scope_filters(), ctx.provider, spec)
         items = item_repo.list_items(
             ctx.conn,
             kind=kind_filter,

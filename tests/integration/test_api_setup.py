@@ -384,8 +384,8 @@ def test_setup_complete_preserves_existing_scopes_and_active_slot(tmp_path: Path
                 config={"default_repo": "example/primary"},
                 scopes={
                     "default": ScopeFilter(),
-                    "my-team": ScopeFilter(team="Team A"),
-                    "blocked": ScopeFilter(area_path="Blocked"),
+                    "my-team": ScopeFilter(axes={"team": "Team A"}),
+                    "blocked": ScopeFilter(axes={"area_path": "Blocked"}),
                 },
                 active_scope="my-team",
             )
@@ -420,7 +420,7 @@ def test_setup_complete_preserves_existing_scopes_and_active_slot(tmp_path: Path
                 "type": "github_stub",
                 "display_name": "Primary",
                 "config": {"default_repo": "example/primary"},
-                "scope": {"team": "Team B"},
+                "scope": {"axes": {"team": "Team B"}},
             }
         },
         "active_provider": "primary",
@@ -437,10 +437,10 @@ def test_setup_complete_preserves_existing_scopes_and_active_slot(tmp_path: Path
     # active_scope preserved at "my-team" (not silently reset to "default").
     assert entry["active_scope"] == "my-team"
     # The user's incoming edit landed in the my-team slot.
-    assert entry["scopes"]["my-team"]["team"] == "Team B"
+    assert entry["scopes"]["my-team"]["axes"]["team"] == "Team B"
     # Extra scopes ("default", "blocked") are still present and unchanged.
-    assert entry["scopes"]["default"]["team"] == ""
-    assert entry["scopes"]["blocked"]["area_path"] == "Blocked"
+    assert entry["scopes"]["default"]["axes"] == {}
+    assert entry["scopes"]["blocked"]["axes"]["area_path"] == "Blocked"
 
 
 def test_setup_complete_preserves_non_wizard_fields(tmp_path: Path) -> None:
@@ -503,7 +503,7 @@ def test_setup_complete_preserves_non_wizard_fields(tmp_path: Path) -> None:
                 "type": "github_stub",
                 "display_name": "Primary",
                 "config": {"default_repo": "example/primary"},
-                "scope": {"team": "Team C"},
+                "scope": {"axes": {"team": "Team C"}},
             }
         },
         "active_provider": "primary",
@@ -546,7 +546,7 @@ def test_update_provider_preserves_active_scope_slot(tmp_path: Path) -> None:
                 config={"default_repo": "example/primary"},
                 scopes={
                     "default": ScopeFilter(),
-                    "my-team": ScopeFilter(team="Team A"),
+                    "my-team": ScopeFilter(axes={"team": "Team A"}),
                 },
                 active_scope="my-team",
             )
@@ -581,7 +581,7 @@ def test_update_provider_preserves_active_scope_slot(tmp_path: Path) -> None:
         json={
             "display_name": "Primary",
             "config": {"default_repo": "example/primary"},
-            "scope": {"team": "Team B"},
+            "scope": {"axes": {"team": "Team B"}},
         },
     )
     assert r.status_code == 200, r.text
@@ -590,9 +590,9 @@ def test_update_provider_preserves_active_scope_slot(tmp_path: Path) -> None:
         raw = tomllib.load(f)
     entry = raw["providers"]["primary"]
     assert entry["active_scope"] == "my-team"
-    assert entry["scopes"]["my-team"]["team"] == "Team B"
+    assert entry["scopes"]["my-team"]["axes"]["team"] == "Team B"
     # The other named scope is untouched.
-    assert entry["scopes"]["default"]["team"] == ""
+    assert entry["scopes"]["default"]["axes"] == {}
 
 
 # ---- discovery + helper endpoints (web-wizard parity with `docket setup`) ----
@@ -1110,7 +1110,7 @@ def test_probe_scope_reports_invalid_scope(tmp_path: Path) -> None:
         json={
             "type": "github_stub",
             "config": {"default_repo": "contoso/alpha"},
-            "scope": {"team": 12345},  # team must be a string
+            "scope": {"axes": {"team": 12345}},  # axis values must be strings
         },
     )
     body = r.json()
@@ -1135,7 +1135,7 @@ def test_setup_complete_scope_round_trips_into_default_slot(tmp_path: Path) -> N
                 "type": "github_stub",
                 "display_name": "Demo",
                 "config": {"default_repo": "contoso/alpha"},
-                "scope": {"assignee": "@me", "team": "Team Z"},
+                "scope": {"assignee": "@me", "axes": {"team": "Team Z"}},
             }
         },
         "active_provider": "demo",
@@ -1151,7 +1151,7 @@ def test_setup_complete_scope_round_trips_into_default_slot(tmp_path: Path) -> N
     entry = raw["providers"]["demo"]
     assert entry["active_scope"] == "default"
     assert entry["scopes"]["default"]["assignee"] == "@me"
-    assert entry["scopes"]["default"]["team"] == "Team Z"
+    assert entry["scopes"]["default"]["axes"]["team"] == "Team Z"
 
 
 # ---- bootstrap SPA: setup wizard is reachable from the same origin --------

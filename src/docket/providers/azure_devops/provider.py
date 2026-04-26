@@ -324,10 +324,12 @@ class AzureDevOpsProvider:
         if watermark is not None:
             iso = watermark.isoformat().replace("+00:00", "Z")
             clauses.append(f"[System.ChangedDate] >= '{iso}'")
-        if filters.area_path:
-            clauses.append(f"[System.AreaPath] UNDER '{_escape(filters.area_path)}'")
-        if filters.iteration_path:
-            clauses.append(f"[System.IterationPath] UNDER '{_escape(filters.iteration_path)}'")
+        area_path = filters.axes.get("area_path", "")
+        if area_path:
+            clauses.append(f"[System.AreaPath] UNDER '{_escape(area_path)}'")
+        iteration_path = filters.axes.get("iteration_path", "")
+        if iteration_path:
+            clauses.append(f"[System.IterationPath] UNDER '{_escape(iteration_path)}'")
         if filters.assignee == "@me":
             clauses.append("[System.AssignedTo] = @Me")
         elif filters.assignee:

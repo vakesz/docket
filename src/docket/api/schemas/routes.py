@@ -51,11 +51,15 @@ class PromptUpdateRequest(BaseModel):
 
 
 class ScopeDTO(BaseModel):
+    """A saved view exposed over HTTP.
+
+    `axes` carries the provider-declared narrowing values keyed by
+    `ProviderSpec.scope_axes[*].key`. The frontend looks up labels via the
+    matching `SetupProviderTypeDTO.scope_axes` entry."""
+
     name: str
-    team: str = ""
-    area_path: str = ""
-    iteration_path: str = ""
     assignee: str = "@me"
+    axes: dict[str, str] = Field(default_factory=dict)
     active: bool = False
 
 

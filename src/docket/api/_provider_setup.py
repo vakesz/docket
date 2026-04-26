@@ -17,6 +17,7 @@ from pydantic import ValidationError
 from docket.api.runtime import RuntimeState
 from docket.api.schemas import (
     SetupProviderFieldDTO,
+    SetupProviderScopeAxisDTO,
     SetupProviderTypeDTO,
     SetupTestResultDTO,
 )
@@ -65,6 +66,14 @@ def provider_type_dtos() -> list[SetupProviderTypeDTO]:
                     help=f.help,
                 )
                 for f in spec.setup_fields
+            ],
+            scope_axes=[
+                SetupProviderScopeAxisDTO(
+                    key=axis.key,
+                    label=axis.label,
+                    discovery_stage=axis.discovery_stage,
+                )
+                for axis in spec.scope_axes
             ],
         )
         for spec in provider_specs()

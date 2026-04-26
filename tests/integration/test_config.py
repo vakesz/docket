@@ -34,7 +34,7 @@ def test_config_roundtrip(tmp_xdg: Path) -> None:
                 display_name="Azure DevOps",
                 config={"organization": "https://dev.azure.com/example", "project": "Demo"},
                 scopes={
-                    "default": ScopeFilter(area_path="Demo\\Team A", assignee="@me"),
+                    "default": ScopeFilter(axes={"area_path": "Demo\\Team A"}, assignee="@me"),
                     "alt": ScopeFilter(assignee="alice@example.com"),
                 },
                 active_scope="default",
@@ -48,7 +48,7 @@ def test_config_roundtrip(tmp_xdg: Path) -> None:
     entry = loaded.providers["azure_devops"]
     assert entry.type == "azure_devops"
     assert entry.config["project"] == "Demo"
-    assert entry.scopes["default"].area_path == "Demo\\Team A"
+    assert entry.scopes["default"].axes["area_path"] == "Demo\\Team A"
     assert entry.scopes["alt"].assignee == "alice@example.com"
     assert loaded.telemetry.enabled is True  # default
 

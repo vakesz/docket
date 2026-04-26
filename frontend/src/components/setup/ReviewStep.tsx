@@ -23,13 +23,14 @@ function parseOptionalFloat(raw: string): number | null {
 
 interface Props {
   provider: ProviderDraft;
+  spec: DTO["SetupProviderTypeDTO"] | null;
   llm: LlmDraft;
   settings: SettingsDraft;
   onBack: () => void;
   onCompleted: (result: DTO["SetupCompleteDTO"]) => void;
 }
 
-export function ReviewStep({ provider, llm, settings, onBack, onCompleted }: Props) {
+export function ReviewStep({ provider, spec, llm, settings, onBack, onCompleted }: Props) {
   const complete = useCompleteSetup();
 
   const submit = () => {
@@ -39,7 +40,7 @@ export function ReviewStep({ provider, llm, settings, onBack, onCompleted }: Pro
           type: provider.type,
           display_name: provider.display_name || provider.type,
           config: { ...provider.config },
-          scope: scopeToWire(provider.scope, provider.type),
+          scope: scopeToWire(provider.scope),
         },
       },
       active_provider: provider.key,
@@ -65,7 +66,7 @@ export function ReviewStep({ provider, llm, settings, onBack, onCompleted }: Pro
     });
   };
 
-  const scopeChips = scopeChipsFor(provider);
+  const scopeChips = scopeChipsFor(provider, spec);
 
   return (
     <div className={setupCardClass}>
@@ -126,12 +127,14 @@ export function ReviewStep({ provider, llm, settings, onBack, onCompleted }: Pro
   );
 }
 
-function scopeChipsFor(provider: ProviderDraft): string[] {
+function scopeChipsFor(
+  provider: ProviderDraft,
+  spec: DTO["SetupProviderTypeDTO"] | null,
+): string[] {
   const chips: string[] = [];
-  if (provider.type === "azure_devops") {
-    if (provider.scope.team) chips.push(`team: ${provider.scope.team}`);
-    if (provider.scope.area_path) chips.push(`area: ${provider.scope.area_path}`);
-    if (provider.scope.iteration_path) chips.push(`iter: ${provider.scope.iteration_path}`);
+  for (const axis of spec?.scope_axes ?? []) {
+    const value = provider.scope.axes[axis.key];
+    if (value) chips.push(`${axis.label}: ${value}`);
   }
   if (provider.scope.assignee) chips.push(`assignee: ${provider.scope.assignee}`);
   if (chips.length === 0) chips.push("scope: any");
