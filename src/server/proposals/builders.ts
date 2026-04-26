@@ -20,6 +20,8 @@ import type {
   CommentAddProposal,
   DescriptionPatchProposal,
   ItemCreateProposal,
+  MemoryDeleteProposal,
+  MemoryWriteProposal,
   Proposal,
   StateChangeProposal,
 } from "@/core/proposal-types";
@@ -133,6 +135,77 @@ export async function proposeNewItem(
     kind: "item_create",
     itemKind: args.itemKind,
     fields: args.fields,
+  };
+  return persist(ctx, draft, null);
+}
+
+export async function proposeMemoryWrite(
+  ctx: ProposalContext,
+  args: {
+    title: string;
+    bodyMd: string;
+    tags?: readonly string[];
+    source?: "user" | "agent";
+    memoryId?: string | null;
+  },
+): Promise<ProposalRow> {
+  const title = args.title.trim();
+  if (!title) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "memory title is required" });
+  }
+  let previousTitle = "";
+  let previousBodyMd = "";
+  if (args.memoryId) {
+    const existing = await ctx.db.memoryEntry.findFirst({
+      where: { id: args.memoryId, projectId: ctx.projectId },
+    });
+    if (!existing) {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: `memory entry '${args.memoryId}' not found`,
+      });
+    }
+    previousTitle = existing.title;
+    previousBodyMd = existing.bodyMd;
+    if (existing.title === title && existing.bodyMd === args.bodyMd) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "memory_write is a no-op (title and body unchanged)",
+      });
+    }
+  }
+  const draft: Omit<MemoryWriteProposal, "id"> = {
+    kind: "memory_write",
+    projectId: ctx.projectId,
+    title,
+    bodyMd: args.bodyMd,
+    tags: args.tags ?? [],
+    source: args.source ?? "user",
+    memoryId: args.memoryId ?? null,
+    previousTitle,
+    previousBodyMd,
+  };
+  return persist(ctx, draft, null);
+}
+
+export async function proposeMemoryDelete(
+  ctx: ProposalContext,
+  args: { memoryId: string },
+): Promise<ProposalRow> {
+  const existing = await ctx.db.memoryEntry.findFirst({
+    where: { id: args.memoryId, projectId: ctx.projectId },
+  });
+  if (!existing) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: `memory entry '${args.memoryId}' not found`,
+    });
+  }
+  const draft: Omit<MemoryDeleteProposal, "id"> = {
+    kind: "memory_delete",
+    projectId: ctx.projectId,
+    memoryId: existing.id,
+    title: existing.title,
   };
   return persist(ctx, draft, null);
 }

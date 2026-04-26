@@ -25,6 +25,7 @@
 import "server-only";
 import { linkTools } from "@/agent/tools/links";
 import { memoryReadonlyTools } from "@/agent/tools/memory";
+import { memoryMutatingTools } from "@/agent/tools/memory-mutating";
 import { mutatingTools } from "@/agent/tools/mutating";
 import { questionTools } from "@/agent/tools/question";
 import { readonlyTools } from "@/agent/tools/readonly";
@@ -37,9 +38,9 @@ export type ToolRegistryOptions = {
 
 /**
  * Stable tool name list, in registration order. Used by the arch test to
- * detect silent reorders. Tools that haven't shipped yet (Phase 7
- * memory mutations, Phase 8 MCP) are intentionally absent — when they
- * land, append them at their pinned position and update this list.
+ * detect silent reorders. Tools that haven't shipped yet (Phase 8 MCP)
+ * are intentionally absent — when they land, append them at their pinned
+ * position and update this list.
  */
 export const TOOL_ORDER = [
   // (1) readonly: items → PRs → commits/CI
@@ -63,7 +64,9 @@ export const TOOL_ORDER = [
   "propose_description_patch",
   "propose_comment",
   "propose_new_item",
-  // (7) memory mutations — Phase 7
+  // (7) memory mutations (stripped in read-only)
+  "propose_memory_write",
+  "propose_memory_delete",
   // out-of-band: ask_user_question (the loop dispatches it specially, but
   // we still expose the tool so the model can request it like any other)
   "ask_user_question",
@@ -89,7 +92,10 @@ export function buildToolRegistry(
   if (!opts.readOnly) {
     tools.push(...mutatingTools(ctx));
   }
-  // (7) — memory mutations, Phase 7
+  // (7) — memory mutations
+  if (!opts.readOnly) {
+    tools.push(...memoryMutatingTools(ctx));
+  }
   // ask_user_question stays available in both modes; it never writes.
   tools.push(...questionTools(ctx));
   return tools;

@@ -2,6 +2,8 @@ import { TRPCError } from "@trpc/server";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createCaller } from "@/server/trpc-caller";
+import { MemoryPane } from "@/ui/memory/memory-pane";
+import { SourcesPane } from "@/ui/sources/sources-pane";
 
 export default async function ProjectPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
@@ -46,10 +48,12 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
             </Link>
           </li>
         </ul>
-        <p className="text-xs text-zinc-500">
-          Phase 5 adds conversations and the watchlist. Phase 6 brings the agent loop.
-        </p>
       </section>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <MemoryPane projectId={projectId} />
+        <SourcesPane projectId={projectId} />
+      </div>
     </div>
   );
 }

@@ -158,10 +158,32 @@ export async function confirmProposal(
         );
         break;
       case "memory_write":
+        if (proposal.memoryId) {
+          await ctx.db.memoryEntry.update({
+            where: { id: proposal.memoryId },
+            data: {
+              title: proposal.title,
+              bodyMd: proposal.bodyMd,
+              tags: [...proposal.tags],
+              source: proposal.source,
+            },
+          });
+        } else {
+          await ctx.db.memoryEntry.create({
+            data: {
+              projectId: ctx.projectId,
+              title: proposal.title,
+              bodyMd: proposal.bodyMd,
+              tags: [...proposal.tags],
+              source: proposal.source,
+            },
+          });
+        }
+        break;
       case "memory_delete":
-        // Memory mutations don't touch a provider — Phase 7 wires their own
-        // executor path. For now confirming a memory_* proposal is a no-op
-        // beyond stamping it confirmed.
+        await ctx.db.memoryEntry.deleteMany({
+          where: { id: proposal.memoryId, projectId: ctx.projectId },
+        });
         break;
       default: {
         const exhaustive: never = proposal;

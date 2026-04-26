@@ -34,16 +34,18 @@ describe("arch: agent tool registration order", () => {
     expect(names).toEqual([...TOOL_ORDER]);
   });
 
-  it("buildToolRegistry (read-only) strips mutating provider tools but keeps the rest in order", () => {
+  it("buildToolRegistry (read-only) strips mutating provider + memory tools but keeps the rest in order", () => {
     const tools = buildToolRegistry(fakeCtx, { readOnly: true });
     const names = tools.map((t) => t.def.name);
-    const stripped = TOOL_ORDER.filter(
-      (n) =>
-        n !== "propose_transition" &&
-        n !== "propose_description_patch" &&
-        n !== "propose_comment" &&
-        n !== "propose_new_item",
-    );
+    const STRIPPED_IN_READ_ONLY = new Set([
+      "propose_transition",
+      "propose_description_patch",
+      "propose_comment",
+      "propose_new_item",
+      "propose_memory_write",
+      "propose_memory_delete",
+    ]);
+    const stripped = TOOL_ORDER.filter((n) => !STRIPPED_IN_READ_ONLY.has(n));
     expect(names).toEqual(stripped);
   });
 

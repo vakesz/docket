@@ -7,9 +7,10 @@
  * prefix byte-stable (CLAUDE.md invariant 7) while still making the
  * facts reachable.
  *
- * Mutations (memory_write / memory_delete) live in `mutating.ts` so all
- * staged-write tools sit together; the registry interleaves the two
- * halves in the order the prompt-cache test pins.
+ * Mutations (memory_write / memory_delete) live in `memory-mutating.ts` —
+ * a separate registry slot so a future "memory writes allowed but provider
+ * is offline" mode could expose them independently of the provider mutating
+ * group. The pinned tool order keeps both groups discoverable.
  */
 
 import "server-only";
