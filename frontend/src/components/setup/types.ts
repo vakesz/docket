@@ -20,9 +20,6 @@ export interface ProviderDraft {
   display_name_dirty: boolean;
   config: Record<string, string>;
   scope: ScopeDraft;
-  /** Captured during the GH connection step; feeds suggest-label and is not
-   * persisted directly to config.toml — only `default_repo` / `base_url` do. */
-  github_host: string;
 }
 
 export interface LlmDraft {

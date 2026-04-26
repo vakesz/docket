@@ -48,7 +48,6 @@ export function SetupWizard() {
     display_name_dirty: false,
     config: {},
     scope: emptyScope(),
-    github_host: "",
   });
 
   const [llm, setLlm] = useState<LlmDraft>(() => {

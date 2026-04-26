@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { DTO } from "~/api/client";
 import {
   useAddProvider,
+  useCliStatus,
   useSettingsProviderTypes,
   useTestSettingsProvider,
   useUpdateProvider,
@@ -13,6 +14,7 @@ import { Select, TextInput } from "~/components/common/FormInputs";
 import { Modal } from "~/components/common/Modal";
 import { Notice } from "~/components/common/Notice";
 import { Toggle } from "~/components/common/Toggle";
+import { ConnectionFields } from "~/components/setup/connection";
 import {
   dangerTextClass,
   iconCloseButtonClass,
@@ -24,7 +26,6 @@ import { readOnlyFieldClass } from "./_constants";
 import { asRecord, getString } from "./_helpers";
 
 type ProviderTypeDTO = DTO["SetupProviderTypeDTO"];
-type ProviderFieldDTO = DTO["SetupProviderFieldDTO"];
 
 type ProviderModalProps =
   | {
@@ -48,6 +49,7 @@ export function ProviderModal(props: ProviderModalProps) {
   const { mode, existingKeys, onClose, onSaved } = props;
   const isEdit = mode === "edit";
   const types = useSettingsProviderTypes();
+  const cli = useCliStatus();
   const testMutation = useTestSettingsProvider();
   const addMutation = useAddProvider();
   const updateMutation = useUpdateProvider();
@@ -100,14 +102,6 @@ export function ProviderModal(props: ProviderModalProps) {
     while (existingKeys.includes(`${selectedType}-${i}`)) i += 1;
     setKey((prev) => prev || `${selectedType}-${i}`);
   }, [selectedType, existingKeys, key, isEdit]);
-
-  const onField = (k: string, v: string) => {
-    setFieldValuesByType((prev) => ({
-      ...prev,
-      [selectedType]: { ...(prev[selectedType] ?? {}), [k]: v },
-    }));
-    setTestResult(null);
-  };
 
   const missingRequired = useMemo(() => {
     if (!spec) return true;
@@ -246,17 +240,16 @@ export function ProviderModal(props: ProviderModalProps) {
               </Notice>
             )}
 
-            {(spec?.fields ?? []).length > 0 && (
-              <div className="grid gap-4 sm:grid-cols-2">
-                {(spec?.fields ?? []).map((f) => (
-                  <ProviderFieldInput
-                    key={f.key}
-                    field={f}
-                    value={fieldValues[f.key] ?? ""}
-                    onChange={(v) => onField(f.key, v)}
-                  />
-                ))}
-              </div>
+            {spec && (
+              <ConnectionFields
+                spec={spec}
+                config={fieldValues}
+                onChange={(next) => {
+                  setFieldValuesByType((prev) => ({ ...prev, [selectedType]: next }));
+                  setTestResult(null);
+                }}
+                cli={cli.data ?? null}
+              />
             )}
 
             {!isEdit && (
@@ -316,30 +309,5 @@ export function ProviderModal(props: ProviderModalProps) {
         </button>
       </div>
     </Modal>
-  );
-}
-
-function ProviderFieldInput({
-  field,
-  value,
-  onChange,
-}: {
-  field: ProviderFieldDTO;
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  const inputType = field.kind === "secret" ? "password" : field.kind === "url" ? "url" : "text";
-  return (
-    <FormField
-      label={field.label + (field.required ? "" : " (optional)")}
-      help={field.help || undefined}
-    >
-      <TextInput
-        type={inputType}
-        value={value}
-        onChange={onChange}
-        placeholder={field.placeholder || undefined}
-      />
-    </FormField>
   );
 }

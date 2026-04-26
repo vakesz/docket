@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import ClassVar, Literal, overload
+from typing import Any, ClassVar, Literal, overload
 
 from textual.app import ComposeResult
 from textual.binding import Binding, BindingType
@@ -12,6 +12,7 @@ from textual.widgets import Checkbox, Input, Select, Static
 from docket.config.loader import save_config
 from docket.config.models import Config, ProviderEntry, ScopeFilter, TelemetryLevel
 from docket.config.paths import Paths
+from docket.providers import registry
 
 _NEW_SCOPE = "__new__"
 
@@ -154,11 +155,8 @@ class SettingsModal(ModalScreen[Config | None]):
         active_scope_value = active_scope_name if active_scope_name in scopes else _NEW_SCOPE
         current_scope = scopes.get(active_scope_name, ScopeFilter())
 
-        # Per-type defaults so opening settings on a fresh github_stub entry
-        # doesn't show empty Azure DevOps fields.
-        provider_type = entry.type if entry is not None else "azure_devops"
-        azure_devops_org = str(entry.config.get("organization", "")) if entry is not None else ""
-        azure_devops_project = str(entry.config.get("project", "")) if entry is not None else ""
+        provider_type = entry.type if entry is not None else "github"
+        provider_spec = registry.spec(provider_type)
         with Vertical():
             yield Static("Settings", id="title")
             yield Static(
@@ -224,22 +222,21 @@ class SettingsModal(ModalScreen[Config | None]):
                 yield Static("display name", classes="field-label")
                 yield Input(
                     value=entry.display_name if entry is not None else "",
-                    placeholder="Azure DevOps",
+                    placeholder=provider_spec.display_name if provider_spec else "",
                     id="provider-display",
                 )
-                if provider_type == "azure_devops":
-                    yield Static("organization URL", classes="field-label")
-                    yield Input(
-                        value=azure_devops_org,
-                        placeholder="https://dev.azure.com/your-org",
-                        id="azure-devops-org",
-                    )
-                    yield Static("project", classes="field-label")
-                    yield Input(
-                        value=azure_devops_project,
-                        placeholder="project name",
-                        id="azure-devops-project",
-                    )
+                if provider_spec is not None:
+                    for setup_field in provider_spec.setup_fields:
+                        yield Static(setup_field.label, classes="field-label")
+                        current = (
+                            str(entry.config.get(setup_field.key, "")) if entry is not None else ""
+                        )
+                        yield Input(
+                            value=current,
+                            placeholder=setup_field.placeholder,
+                            id=f"provider-cfg-{setup_field.key}",
+                            password=setup_field.kind == "secret",
+                        )
 
                 yield Static("LLM endpoint", classes="field-label")
                 yield Input(
@@ -438,14 +435,17 @@ class SettingsModal(ModalScreen[Config | None]):
         if display:
             provider_raw["display_name"] = display
 
-        if entry.type == "azure_devops":
-            provider_raw.setdefault("config", {})
-            provider_raw["config"]["organization"] = self.query_one(
-                "#azure-devops-org", Input
-            ).value.strip()
-            provider_raw["config"]["project"] = self.query_one(
-                "#azure-devops-project", Input
-            ).value.strip()
+        provider_spec = registry.spec(entry.type)
+        if provider_spec is not None and provider_spec.setup_fields:
+            cfg: dict[str, Any] = dict(provider_raw.get("config", {}))
+            for setup_field in provider_spec.setup_fields:
+                widget = self.query_one(f"#provider-cfg-{setup_field.key}", Input)
+                cfg[setup_field.key] = widget.value.strip()
+            try:
+                cfg = registry.normalize_config(entry.type, cfg)
+            except ValueError as exc:
+                raise ValueError(str(exc)) from exc
+            provider_raw["config"] = cfg
 
         default_kind = self.query_one("#ui-default-kind", Select).value
         if default_kind is Select.BLANK:
