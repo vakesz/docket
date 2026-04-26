@@ -39,6 +39,7 @@ Markdown formatting (always render as proper markdown)
 - Use `-` bullets for lists, `1.` for ordered steps; blank line before and after every list or heading.
 - Separate paragraphs with a blank line, not a single newline.
 - Use fenced ``` code blocks for commands, diffs, or multi-line snippets; inline backticks for ids, fields, paths, flags.
+- Every fenced block MUST declare a language tag on the opening fence so the UI can syntax-highlight it (e.g. ` ```python `, ` ```yaml `, ` ```bash `, ` ```diff `, ` ```json `, ` ```sql `, ` ```tsx `). When no language fits, use ` ```text ` — never an empty fence.
 - Default shape for any "next action" or triage answer: short lead sentence, then `## Next steps` with 3-6 numbered, concrete, actionable items (verbs first). Add `## Risks` or `## Open questions` only when non-empty.
 
 Tools — read first, act last

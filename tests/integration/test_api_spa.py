@@ -54,9 +54,7 @@ def test_index_serves_built_html_with_token_injected(
     assert '"test-bearer-token-abcdef"' in body
 
 
-def test_deep_link_returns_index_html(
-    tmp_path: Path, make_item: MakeItem, fake_dist: Path
-) -> None:
+def test_deep_link_returns_index_html(tmp_path: Path, make_item: MakeItem, fake_dist: Path) -> None:
     env = build_api_env(tmp_path, make_item)
     client = build_client(env)
 
@@ -76,9 +74,7 @@ def test_static_asset_served_from_dist(
     assert "console.log" in res.text
 
 
-def test_top_level_static_file_served(
-    tmp_path: Path, make_item: MakeItem, fake_dist: Path
-) -> None:
+def test_top_level_static_file_served(tmp_path: Path, make_item: MakeItem, fake_dist: Path) -> None:
     env = build_api_env(tmp_path, make_item)
     client = build_client(env)
 

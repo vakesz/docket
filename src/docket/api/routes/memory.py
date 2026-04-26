@@ -4,9 +4,12 @@ Direct user writes (POST/PATCH/DELETE) bypass the proposal flow because the
 human is already in the loop — they made the request. Agent-initiated writes
 flow through the proposal/confirm path under `/proposals/...` instead.
 
-Project ids are composite (e.g. `azure_devops::default`), so the `:path`
-converter is required so `/` and other punctuation in scope keys don't break
-routing."""
+All by-id routes are nested under the owning project (`/projects/{pid}/memory/{id}`)
+so that knowing an entry's id from one project never lets a request scoped
+to another project read or mutate it. The project ids are composite (e.g.
+`azure_devops::default`), so the `:path` converter is required so `/` and
+other punctuation in scope keys don't break routing — FastAPI's `:path`
+greedy match still terminates correctly at the literal `/memory/` segment."""
 
 from __future__ import annotations
 
@@ -17,7 +20,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from docket.api.deps import (
     get_config,
     get_conn,
-    require_by_id,
     require_not_read_only,
     require_patch_not_empty,
     require_project,
@@ -29,9 +31,18 @@ from docket.api.schemas import (
     MemoryUpdateRequest,
 )
 from docket.config.models import Config
+from docket.core.model import MemoryEntry
 from docket.storage.repos import memory_repo
 
 router = APIRouter(tags=["memory"])
+
+
+def _require_in_project(conn: sqlite3.Connection, project_id: str, memory_id: str) -> MemoryEntry:
+    """Fetch a memory entry and ensure it lives in `project_id` or 404."""
+    entry = memory_repo.get(conn, memory_id)
+    if entry is None or entry.project_id != project_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown memory entry '{memory_id}'")
+    return entry
 
 
 @router.get(
@@ -98,26 +109,34 @@ def create_memory(
     return MemoryDTO.from_core(entry)
 
 
-@router.get("/memory/{memory_id}", response_model=MemoryDTO)
+@router.get(
+    "/projects/{project_id:path}/memory/{memory_id}",
+    response_model=MemoryDTO,
+)
 def get_memory(
+    project_id: str,
     memory_id: str,
+    config: Config = Depends(get_config),
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> MemoryDTO:
-    entry = require_by_id(memory_repo.get, conn, memory_id, label="memory entry")
-    return MemoryDTO.from_core(entry)
+    require_project(config, project_id)
+    return MemoryDTO.from_core(_require_in_project(conn, project_id, memory_id))
 
 
 @router.patch(
-    "/memory/{memory_id}",
+    "/projects/{project_id:path}/memory/{memory_id}",
     response_model=MemoryDTO,
     dependencies=[Depends(require_not_read_only)],
 )
 def update_memory(
+    project_id: str,
     memory_id: str,
     payload: MemoryUpdateRequest,
+    config: Config = Depends(get_config),
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> MemoryDTO:
-    require_by_id(memory_repo.get, conn, memory_id, label="memory entry")
+    require_project(config, project_id)
+    _require_in_project(conn, project_id, memory_id)
     require_patch_not_empty(payload, label="memory")
     updated = memory_repo.update(
         conn,
@@ -134,15 +153,18 @@ def update_memory(
 
 
 @router.delete(
-    "/memory/{memory_id}",
+    "/projects/{project_id:path}/memory/{memory_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     dependencies=[Depends(require_not_read_only)],
 )
 def delete_memory(
+    project_id: str,
     memory_id: str,
+    config: Config = Depends(get_config),
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> None:
-    require_by_id(memory_repo.get, conn, memory_id, label="memory entry")
+    require_project(config, project_id)
+    _require_in_project(conn, project_id, memory_id)
     memory_repo.delete(conn, memory_id)
 
 

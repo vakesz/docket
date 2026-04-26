@@ -1,10 +1,12 @@
-import { Braces, FormInput, RotateCcw, Save, Settings2 } from "lucide-react";
+import { Braces, FormInput, RotateCcw, Save } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useManualSync, usePatchSettings, useSettings } from "~/api/hooks";
 import { StatusPill } from "~/components/common/FormInputs";
 import { Notice } from "~/components/common/Notice";
 import { McpPage } from "~/components/mcp/McpPage";
+import { MemoryPage } from "~/components/memory/MemoryPage";
+import { SourcesPage } from "~/components/sources/SourcesPage";
 import { cn } from "~/lib/cn";
 import { outlineButtonClass, primaryButtonClass } from "~/lib/formClasses";
 import { MODE_STORAGE_KEY, SECTIONS } from "./_constants";
@@ -17,7 +19,14 @@ import {
   readPersistedMode,
 } from "./_helpers";
 import { ModeButton, PageState } from "./_shared";
-import type { ConfigMap, Mode, SectionKey, SectionMeta } from "./_types";
+import {
+  type ConfigMap,
+  type Mode,
+  SECTION_GROUPS,
+  type SectionKey,
+  type SectionMeta,
+  VIRTUAL_SECTIONS,
+} from "./_types";
 import { FormPanel } from "./FormPanel";
 import { PromptsPanel } from "./PromptsPanel";
 import { RawEditor } from "./RawEditor";
@@ -33,7 +42,7 @@ export function SettingsPage() {
   );
 
   const [mode, setMode] = useState<Mode>(() => readPersistedMode());
-  const [activeSection, setActiveSection] = useState<SectionKey>("llm");
+  const [activeSection, setActiveSection] = useState<SectionKey>("memory");
 
   // Form state is keyed by section so we can build a minimal patch from only
   // touched sections. `undefined` means "user hasn't edited this section",
@@ -136,8 +145,8 @@ export function SettingsPage() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
-        // The prompts and MCP panels own their own save shortcut.
-        if (activeSection === "prompts" || activeSection === "mcp") return;
+        // Virtual sections (prompts, mcp, memory, sources) own their own save shortcut.
+        if (VIRTUAL_SECTIONS.has(activeSection)) return;
         event.preventDefault();
         if (canSave) save();
       }
@@ -196,59 +205,58 @@ export function SettingsPage() {
 
   return (
     <div className="flex h-full min-h-0 bg-bg">
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)]">
+      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)] xl:grid-cols-[280px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(0,1fr)]">
         <aside className="min-h-0 overflow-auto border-b border-border bg-surface/80 px-3 py-4 lg:border-b-0 lg:border-r">
-          <div className="mb-4 flex items-center gap-2 px-2">
-            <div className="rounded-xl bg-accent/10 p-2 text-accent">
-              <Settings2 className="h-4 w-4" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="truncate text-sm font-semibold text-fg">Settings</h1>
-              <p className="truncate text-[11px] text-fg-muted">
-                Edit your <code>config.toml</code>
-              </p>
-            </div>
-          </div>
-
-          <nav className="flex flex-col gap-1">
-            {SECTIONS.map((section) => {
-              const Icon = section.icon;
-              const isActive = section.key === activeSection;
-              const isDirty = dirtySectionKeys.has(section.key);
-              const needsRestart = restartHintSet.has(section.key);
+          <nav className="flex flex-col gap-4">
+            {SECTION_GROUPS.map((group) => {
+              const sectionsInGroup = SECTIONS.filter((s) => s.group === group.key);
+              if (sectionsInGroup.length === 0) return null;
               return (
-                <button
-                  key={section.key}
-                  type="button"
-                  onClick={() => setActiveSection(section.key)}
-                  className={cn(
-                    "flex items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition-colors",
-                    isActive ? "bg-accent/10 text-accent" : "text-fg hover:bg-surface-alt",
-                  )}
-                >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  <span className="flex-1 truncate font-medium">{section.label}</span>
-                  {isDirty && (
-                    <span
-                      className="h-2 w-2 shrink-0 rounded-full bg-warning"
-                      title="Unsaved changes"
-                    />
-                  )}
-                  {!isDirty && needsRestart && (
-                    <span
-                      className="rounded-full bg-warning-bg px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-warning-fg"
-                      title="Restart required after last save"
-                    >
-                      restart
-                    </span>
-                  )}
-                </button>
+                <div key={group.key} className="flex flex-col gap-1">
+                  <div className="px-3 pb-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-fg-muted">
+                    {group.label}
+                  </div>
+                  {sectionsInGroup.map((section) => {
+                    const Icon = section.icon;
+                    const isActive = section.key === activeSection;
+                    const isDirty = dirtySectionKeys.has(section.key);
+                    const needsRestart = restartHintSet.has(section.key);
+                    return (
+                      <button
+                        key={section.key}
+                        type="button"
+                        onClick={() => setActiveSection(section.key)}
+                        className={cn(
+                          "flex items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition-colors",
+                          isActive ? "bg-accent/10 text-accent" : "text-fg hover:bg-surface-alt",
+                        )}
+                      >
+                        <Icon className="h-4 w-4 shrink-0" />
+                        <span className="flex-1 truncate font-medium">{section.label}</span>
+                        {isDirty && (
+                          <span
+                            className="h-2 w-2 shrink-0 rounded-full bg-warning"
+                            title="Unsaved changes"
+                          />
+                        )}
+                        {!isDirty && needsRestart && (
+                          <span
+                            className="rounded-full bg-warning-bg px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-warning-fg"
+                            title="Restart required after last save"
+                          >
+                            restart
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
               );
             })}
           </nav>
 
           <div className="mt-6 border-t border-border pt-4">
-            <div className="px-2 text-[11px] font-medium uppercase tracking-[0.18em] text-fg-muted">
+            <div className="px-3 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-fg-muted">
               Editor mode
             </div>
             <div className="mt-2 grid grid-cols-2 gap-1 rounded-xl bg-surface-alt p-1">
@@ -256,9 +264,7 @@ export function SettingsPage() {
                 active={mode === "form"}
                 onClick={() => switchMode("form")}
                 disabled={
-                  activeSection === "prompts" ||
-                  activeSection === "mcp" ||
-                  (mode === "raw" && !formCanSwitchToForm)
+                  VIRTUAL_SECTIONS.has(activeSection) || (mode === "raw" && !formCanSwitchToForm)
                 }
                 icon={FormInput}
                 label="Form"
@@ -266,19 +272,17 @@ export function SettingsPage() {
               <ModeButton
                 active={mode === "raw"}
                 onClick={() => switchMode("raw")}
-                disabled={activeSection === "prompts" || activeSection === "mcp"}
+                disabled={VIRTUAL_SECTIONS.has(activeSection)}
                 icon={Braces}
                 label="Raw JSON"
               />
             </div>
-            {activeSection === "prompts" ? (
-              <p className="mt-2 px-2 text-[11px] text-fg-muted">Prompts have their own editor.</p>
-            ) : activeSection === "mcp" ? (
-              <p className="mt-2 px-2 text-[11px] text-fg-muted">
-                MCP servers have their own editor.
+            {VIRTUAL_SECTIONS.has(activeSection) ? (
+              <p className="mt-2 px-3 text-[11px] text-fg-muted">
+                {activeMeta.label} has its own editor.
               </p>
             ) : mode === "raw" && rawParsed.error ? (
-              <p className="mt-2 px-2 text-[11px] text-danger">
+              <p className="mt-2 px-3 text-[11px] text-danger">
                 Fix JSON to switch back to form mode.
               </p>
             ) : null}
@@ -290,6 +294,10 @@ export function SettingsPage() {
             <PromptsPanel />
           ) : activeSection === "mcp" ? (
             <McpPage />
+          ) : activeSection === "memory" ? (
+            <MemoryPage />
+          ) : activeSection === "sources" ? (
+            <SourcesPage />
           ) : (
             <>
               <header className="flex flex-wrap items-center gap-3 border-b border-border bg-surface/70 px-6 py-4 backdrop-blur">
@@ -298,6 +306,14 @@ export function SettingsPage() {
                     <h2 className="text-lg font-semibold text-fg">
                       {mode === "form" ? activeMeta.label : "Raw JSON"}
                     </h2>
+                    {mode === "form" && activeMeta.requiresRestart && (
+                      <span
+                        className="rounded-full bg-surface-alt px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted"
+                        title="Saving fields here typically requires a restart"
+                      >
+                        restart-sensitive
+                      </span>
+                    )}
                     <StatusPill
                       tone={dirty ? "warn" : savedFlash ? "ok" : "muted"}
                       label={dirty ? "Unsaved changes" : savedFlash ? "Saved" : "Up to date"}
@@ -317,6 +333,15 @@ export function SettingsPage() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
+                  {mode === "form" && dirtySectionKeys.has(activeMeta.key) && (
+                    <button
+                      type="button"
+                      onClick={() => resetSection(activeMeta.key)}
+                      className="text-xs text-fg-muted hover:text-fg"
+                    >
+                      Reset section
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={revertAll}
@@ -342,7 +367,7 @@ export function SettingsPage() {
               </header>
 
               <div className="min-h-0 flex-1 overflow-auto px-6 py-6">
-                <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
+                <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
                   {patch.error && (
                     <Notice tone="error" title="Save failed">
                       {patch.error.message}
@@ -359,9 +384,7 @@ export function SettingsPage() {
                       section={activeMeta}
                       initialConfig={initialConfig}
                       draft={formDraft[activeMeta.key]}
-                      isDirty={dirtySectionKeys.has(activeMeta.key)}
                       onChange={(updater) => updateSection(activeMeta.key, updater)}
-                      onResetSection={() => resetSection(activeMeta.key)}
                       onFullSync={() => manualSync.mutate({ full: true })}
                       fullSyncPending={manualSync.isPending}
                       fullSyncError={manualSync.error?.message ?? null}

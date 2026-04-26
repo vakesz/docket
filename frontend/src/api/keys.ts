@@ -54,4 +54,13 @@ export const qk = {
   mcpServer: (projectId: string, name: string) =>
     [...qk.all, "mcp", projectId, "server", name] as const,
   mcpPresets: () => [...qk.all, "mcp", "presets"] as const,
+
+  memoryList: (projectId: string) => [...qk.all, "memory", projectId, "list"] as const,
+  memoryEntry: (projectId: string, memoryId: string) =>
+    [...qk.all, "memory", projectId, "entry", memoryId] as const,
+
+  sourcesList: (projectId: string, kind?: string | null) =>
+    [...qk.all, "sources", projectId, "list", kind ?? null] as const,
+  sourceEntry: (projectId: string, sourceId: string) =>
+    [...qk.all, "sources", projectId, "entry", sourceId] as const,
 };

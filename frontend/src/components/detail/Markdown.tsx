@@ -7,12 +7,24 @@ import remarkGfm from "remark-gfm";
 
 import { cn } from "~/lib/cn";
 import { ISSUE_REF_PATTERN, type IssueLinkContext } from "~/lib/issueLinks";
+import { installHljsTheme } from "./hljsTheme";
+import rehypeHljs from "./rehypeHljs";
+
+// Install the GitHub light/dark hljs stylesheets the first time this module
+// is imported. Markdown is in a lazy chunk, so this only runs when a chat or
+// item-detail view actually mounts.
+installHljsTheme();
 
 /**
  * Allow the small extra HTML surface that GitHub issue/PR bodies often
- * embed (collapsibles, alignment, simple inline elements, image sizing).
- * Anything not in this schema — `<script>`, event handlers, weird URLs —
- * is silently dropped by `rehype-sanitize`.
+ * embed (collapsibles, alignment, simple inline elements, image sizing),
+ * plus the `hljs`/`hljs-*`/`language-*` class names that `rehype-highlight`
+ * stamps on `pre`/`code`/`span`. The default schema's regex on
+ * `code.className` is `/^language-/`, which would otherwise strip the bare
+ * `hljs` token from `class="hljs language-python"`.
+ *
+ * Anything not listed here — `<script>`, event handlers, weird URLs — is
+ * dropped silently by `rehype-sanitize`.
  */
 const sanitizeSchema = {
   ...defaultSchema,
@@ -50,6 +62,9 @@ const sanitizeSchema = {
     video: ["src", "controls", "width", "height", "poster"],
     source: ["src", "type", "media", "srcset"],
     details: ["open"],
+    code: [...(defaultSchema.attributes?.code ?? []), ["className", /^hljs(-|$)/, /^language-/]],
+    span: [...(defaultSchema.attributes?.span ?? []), ["className", /^hljs-/]],
+    pre: [...(defaultSchema.attributes?.pre ?? []), "className"],
   },
 };
 
@@ -73,7 +88,7 @@ export function Markdown({ source, className, issueLinks }: MarkdownProps) {
       className={cn(
         "prose prose-sm max-w-none break-words text-fg dark:prose-invert",
         "prose-headings:font-semibold prose-headings:tracking-tight prose-headings:text-fg",
-        "prose-code:rounded prose-code:bg-surface-alt prose-code:px-1 prose-code:py-0.5 prose-code:text-fg prose-code:before:content-none prose-code:after:content-none",
+        "prose-code:before:content-none prose-code:after:content-none",
         "prose-a:text-accent",
         "prose-img:max-w-full prose-img:rounded",
         className,
@@ -81,7 +96,13 @@ export function Markdown({ source, className, issueLinks }: MarkdownProps) {
     >
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkBreaks]}
-        rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema]]}
+        // Order matters: parse raw HTML into hast first, then highlight (so
+        // raw `<pre><code>` blocks from issue/PR bodies also get tokenized),
+        // then sanitize so the allowlist is the last word.
+        // Order matters: parse raw HTML into hast first, then highlight (so
+        // raw `<pre><code>` blocks from issue/PR bodies also get tokenized),
+        // then sanitize so the allowlist is the last word.
+        rehypePlugins={[rehypeRaw, rehypeHljs, [rehypeSanitize, sanitizeSchema]]}
         components={{
           a: makeAnchorRenderer(issueLinks),
           // react-markdown defaults `text` to a string node; we wrap it so
@@ -89,11 +110,49 @@ export function Markdown({ source, className, issueLinks }: MarkdownProps) {
           p: ({ children, ...rest }) => <p {...rest}>{linkifyChildren(children, issueLinks)}</p>,
           li: ({ children, ...rest }) => <li {...rest}>{linkifyChildren(children, issueLinks)}</li>,
           td: ({ children, ...rest }) => <td {...rest}>{linkifyChildren(children, issueLinks)}</td>,
+          code: CodeRenderer,
+          pre: PreRenderer,
         }}
       >
         {source}
       </ReactMarkdown>
     </div>
+  );
+}
+
+function CodeRenderer({ className, children, ...rest }: ComponentProps<"code">) {
+  // react-markdown 10 exposes block vs inline by whether the parent is `<pre>`.
+  // We detect that via the language class rehype-highlight stamps on block
+  // code (`hljs language-…`) — inline code never carries those.
+  const isBlock = typeof className === "string" && /\bhljs\b/.test(className);
+  if (isBlock) {
+    return (
+      <code {...rest} className={cn(className, "block font-mono text-xs leading-relaxed")}>
+        {children}
+      </code>
+    );
+  }
+  return (
+    <code
+      {...rest}
+      className={cn("rounded bg-surface-alt px-1 py-0.5 font-mono text-[0.9em] text-fg", className)}
+    >
+      {children}
+    </code>
+  );
+}
+
+function PreRenderer({ className, children, ...rest }: ComponentProps<"pre">) {
+  return (
+    <pre
+      {...rest}
+      className={cn(
+        "my-2 overflow-x-auto rounded border border-border bg-surface-alt p-3",
+        className,
+      )}
+    >
+      {children}
+    </pre>
   );
 }
 

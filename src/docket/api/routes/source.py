@@ -5,6 +5,9 @@ the agent can read but not modify. Writes (POST/PATCH/DELETE) come only
 from human users; there is no proposal/confirm path because the agent has
 no `propose_source_*` tool.
 
+All by-id routes are nested under the owning project
+(`/projects/{pid}/sources/{id}`) so that knowing an entry's id from one
+project never lets a request scoped to another project read or mutate it.
 Project ids are composite (e.g. `azure_devops::default`), so the `:path`
 converter is required so `/` and other punctuation in scope keys don't
 break routing. This router must be registered BEFORE the projects router
@@ -19,7 +22,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from docket.api.deps import (
     get_config,
     get_conn,
-    require_by_id,
     require_not_read_only,
     require_patch_not_empty,
     require_project,
@@ -31,9 +33,18 @@ from docket.api.schemas import (
     SourceUpdateRequest,
 )
 from docket.config.models import Config
+from docket.core.model import Source
 from docket.storage.repos import source_repo
 
 router = APIRouter(tags=["sources"])
+
+
+def _require_in_project(conn: sqlite3.Connection, project_id: str, source_id: str) -> Source:
+    """Fetch a source and ensure it lives in `project_id` or 404."""
+    entry = source_repo.get(conn, source_id)
+    if entry is None or entry.project_id != project_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown source '{source_id}'")
+    return entry
 
 
 @router.get(
@@ -103,26 +114,34 @@ def create_source(
     return SourceDTO.from_core(entry)
 
 
-@router.get("/sources/{source_id}", response_model=SourceDTO)
+@router.get(
+    "/projects/{project_id:path}/sources/{source_id}",
+    response_model=SourceDTO,
+)
 def get_source(
+    project_id: str,
     source_id: str,
+    config: Config = Depends(get_config),
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> SourceDTO:
-    entry = require_by_id(source_repo.get, conn, source_id, label="source")
-    return SourceDTO.from_core(entry)
+    require_project(config, project_id)
+    return SourceDTO.from_core(_require_in_project(conn, project_id, source_id))
 
 
 @router.patch(
-    "/sources/{source_id}",
+    "/projects/{project_id:path}/sources/{source_id}",
     response_model=SourceDTO,
     dependencies=[Depends(require_not_read_only)],
 )
 def update_source(
+    project_id: str,
     source_id: str,
     payload: SourceUpdateRequest,
+    config: Config = Depends(get_config),
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> SourceDTO:
-    require_by_id(source_repo.get, conn, source_id, label="source")
+    require_project(config, project_id)
+    _require_in_project(conn, project_id, source_id)
     require_patch_not_empty(payload, label="source")
     updated = source_repo.update(
         conn,
@@ -141,15 +160,18 @@ def update_source(
 
 
 @router.delete(
-    "/sources/{source_id}",
+    "/projects/{project_id:path}/sources/{source_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     dependencies=[Depends(require_not_read_only)],
 )
 def delete_source(
+    project_id: str,
     source_id: str,
+    config: Config = Depends(get_config),
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> None:
-    require_by_id(source_repo.get, conn, source_id, label="source")
+    require_project(config, project_id)
+    _require_in_project(conn, project_id, source_id)
     source_repo.delete(conn, source_id)
 
 

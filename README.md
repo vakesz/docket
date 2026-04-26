@@ -44,8 +44,6 @@ uv run docket          # launch the TUI
 
 First run with no config drops straight into the wizard, so `setup` is optional if you're happy answering at TUI launch.
 
-For the full walkthrough (Azure DevOps + GitHub auth, troubleshooting, where files land), see the **[First-Time Setup Guide](.docs/FIRST_TIME_SETUP.md)**.
-
 ---
 
 ## CLI reference
@@ -87,18 +85,15 @@ Docket ships with a React web client in `frontend/` that consumes the FastAPI su
 ```bash
 make install   # uv sync + bun install (one-time)
 make env       # mint a DOCKET_API_TOKEN into .env (one-time, dev only)
-make dev       # run `docket serve` + vite dev server together
+make serve     # build the SPA and run the backend serving it (single process, single origin at 127.0.0.1:8765)
 ```
 
-Dev: backend on `http://127.0.0.1:8765`, vite dev server (HMR) on `http://localhost:3000` proxying `/api/*` to the backend. The bearer token is injected into the page as `window.__DOCKET_TOKEN__` and the browser attaches it; the token never leaves the local box.
+- **Iterating on the SPA:** re-run `make frontend-build` (or `make serve`) and refresh the browser. Vite emits straight into `src/docket/frontend_dist/`; there is no separate frontend dev server. The bearer is injected into `index.html` at request time as `window.__DOCKET_TOKEN__` and never leaves the local box.
+- **Wheel (`make wheel`):** builds the SPA into the same path, then runs `uv build --wheel`, producing one installable artifact with the SPA bundled inside.
 
-Production: `make serve` (runs `bun run build` then `docket serve`). The Python backend serves the built SPA from `frontend/dist/` directly at `http://127.0.0.1:8765` — single process, single origin. The optional `make dev` flow stays useful for HMR during frontend work.
+All backend routes live under `/api/*` — anything outside that prefix is claimed by the SPA catch-all. Regenerate the OpenAPI client with `cd frontend && bun run gen:api` while the backend is running.
 
-To ship a single artifact: `make wheel` runs `bundle-spa` (copies `frontend/dist/` into `src/docket/frontend_dist/`) and then `uv build --wheel`, producing one installable wheel that includes the SPA.
-
-All backend routes live under `/api/*` — anything outside that prefix is claimed by the SPA catch-all. Regenerate the OpenAPI client with `make gen-api` while the backend is running (it pulls from `/api/openapi.json`).
-
-Stack: React 19, TanStack Router + Query, Vite, Tailwind 4, CodeMirror, Biome, Bun (dev tooling only).
+Stack: React 19, TanStack Router + Query, Vite, Tailwind 4, CodeMirror, Biome, Bun (dev tooling only). See [AGENTS.md](AGENTS.md) for the dist-resolution order and other operational details.
 
 ---
 
@@ -142,36 +137,20 @@ The setup wizard writes `config.toml` atomically after every step; partial runs 
 
 ## Architecture
 
-Surfaces (`cli/` Typer, `cli/tui/` Textual, `api/` FastAPI + SSE) are thin adapters. They call into `core/services/` — `mutation_service`, `sync_service`, `conversation_service` — which is the single write gate. Services talk to providers via the `WorkItemProvider` Protocol in `providers/base.py` and to SQLite via repos in `storage/`. Concrete providers live behind the protocol: `azure_devops`, `github`, `github_stub`.
+Surfaces (`cli/` Typer, `cli/tui/` Textual, `api/` FastAPI + SSE) are thin adapters that call into `core/services/` — the single write gate. Services talk to providers via the `WorkItemProvider` Protocol in `providers/base.py` and to SQLite via repos in `storage/`. Concrete providers live behind the protocol: `azure_devops`, `github`, `github_stub`.
 
-Invariants enforced by tests:
-
-- `core/`, `storage/`, `agent/`, `api/` **must not** import concrete providers (`tests/unit/test_import_boundary.py`).
-- **Named transition intents** (`TransitionIntent.CLOSE_DONE`, `.START_WORK`, …) are the canonical mutation vocabulary; providers translate inside `state_map.py`.
-- **Every mutation** goes through `mutation_service.propose → render_diff → confirm`. No shortcuts.
-- **Sources are read-only for the agent** (`list_sources` / `read_source` / `search_sources`); writes are human-driven only.
-- **The prompt prefix is cache-stable** — `[system + kind template] → [ticket snapshot] → ---` is byte-identical across turns.
-
-For the full contract see [AGENTS.md](AGENTS.md).
+For the full contract — invariants, the proposal-first mutation pattern, tool-registration order, testing conventions — see [AGENTS.md](AGENTS.md).
 
 ---
 
 ## Testing
 
 ```bash
-uv run pytest                                           # full suite, async auto-mode
-uv run pytest tests/integration/test_api_items.py       # one file
-uv run pytest -k "pattern"                              # by name
-uv run ruff check . && uv run ruff format .
-uv run mypy src                                         # strict
-make check                                              # lint + typecheck + test across both trees
+uv run pytest          # full suite (async auto-mode)
+make check             # lint + typecheck + test across both trees
 ```
 
-- `tests/unit/` (pure Python + architectural guards), `tests/integration/` (DB / FastAPI / Typer / services), `tests/pilot/` (Textual `run_test()`).
-- **API tests are split per route module** — `test_api_items.py`, `test_api_conversation.py`, `test_api_mutations.py`, `test_api_spa.py`, etc. Shared fixtures live in `tests/integration/_api_fixtures.py`.
-- **TUI tests are pilot-style** — mount `DocketApp` with a `FakeProvider` via `app.run_test()` and drive with `pilot.press(...)`.
-- **`tmp_xdg` fixture** in `conftest.py` sandboxes XDG paths into a temp root.
-- **VCR cassettes** under `tests/fixtures/cassettes/` back live `AzureDevOpsProvider` tests.
+Test layout, fixtures, and the architectural guards are documented in [AGENTS.md](AGENTS.md).
 
 ---
 

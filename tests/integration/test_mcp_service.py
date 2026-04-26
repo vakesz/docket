@@ -113,8 +113,81 @@ def test_add_rejects_unsupported_transport(tmp_xdg: Path) -> None:
             pid,
             "fake",
             command="/bin/true",
-            transport="sse",
+            transport="grpc",
         )
+
+
+def test_add_http_round_trips_url_and_headers(tmp_xdg: Path) -> None:
+    """http transport persists `url` and `headers`; the stdio fields are
+    dropped on save so on-disk config stays canonical."""
+    config, pid = _seeded(tmp_xdg)
+    paths = resolve_paths()
+    mcp_service.add_server(
+        config,
+        paths,
+        pid,
+        "remote",
+        transport="http",
+        url="https://api.example.com/mcp",
+        headers={"Authorization": "Bearer token-1"},
+        # Provide stdio fields too so we can confirm they're stripped.
+        command="/should/not/persist",
+        args=["--ignored"],
+        env={"IGNORED": "yes"},
+        startup_timeout_seconds=12.0,
+    )
+    reloaded = load_config(paths)
+    entry = mcp_service.get_server(reloaded, pid, "remote")
+    assert entry.transport == "http"
+    assert entry.url == "https://api.example.com/mcp"
+    assert entry.headers == {"Authorization": "Bearer token-1"}
+    assert entry.command == ""
+    assert entry.args == []
+    assert entry.env == {}
+    assert entry.startup_timeout_seconds == 12.0
+
+
+def test_add_sse_requires_url(tmp_xdg: Path) -> None:
+    config, pid = _seeded(tmp_xdg)
+    paths = resolve_paths()
+    with pytest.raises(mcp_service.InvalidServerConfigError):
+        mcp_service.add_server(config, paths, pid, "remote", transport="sse")
+
+
+def test_add_stdio_requires_command(tmp_xdg: Path) -> None:
+    """stdio still needs a command; we don't allow it to be omitted just
+    because http/sse exist."""
+    config, pid = _seeded(tmp_xdg)
+    paths = resolve_paths()
+    with pytest.raises(mcp_service.InvalidServerConfigError):
+        mcp_service.add_server(config, paths, pid, "fake", transport="stdio")
+
+
+def test_update_can_swap_transport_to_http(tmp_xdg: Path) -> None:
+    """Updating transport=stdio→http drops command/args/env in favour of
+    url/headers. Mirrors the user reaching for "Save" after switching the
+    Select in the form."""
+    config, pid = _seeded(tmp_xdg)
+    paths = resolve_paths()
+    mcp_service.add_server(
+        config, paths, pid, "fake", command="/bin/true", args=["a"], env={"K": "V"}
+    )
+    mcp_service.update_server(
+        config,
+        paths,
+        pid,
+        "fake",
+        transport="http",
+        url="https://api.example.com/mcp",
+        headers={"Authorization": "Bearer t"},
+    )
+    entry = mcp_service.get_server(config, pid, "fake")
+    assert entry.transport == "http"
+    assert entry.url == "https://api.example.com/mcp"
+    assert entry.headers == {"Authorization": "Bearer t"}
+    assert entry.command == ""
+    assert entry.args == []
+    assert entry.env == {}
 
 
 def test_update_rejects_nonpositive_timeout(tmp_xdg: Path) -> None:

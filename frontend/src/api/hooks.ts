@@ -663,6 +663,120 @@ export function useApplyMcpPreset(projectId: string | undefined) {
   });
 }
 
+// ---------- Memory -----------------------------------------------------------
+
+export function useMemoryList(projectId: string | undefined) {
+  return useQuery({
+    queryKey: projectId ? qk.memoryList(projectId) : qk.memoryList("__none__"),
+    enabled: Boolean(projectId),
+    queryFn: ({ signal }) =>
+      api.get<DTO["MemoryListDTO"]>(
+        `/projects/${encodeURIComponent(projectId ?? "")}/memory`,
+        undefined,
+        signal,
+      ),
+  });
+}
+
+export function useCreateMemory(projectId: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: DTO["MemoryCreateRequest"]) =>
+      api.post<DTO["MemoryDTO"]>(`/projects/${encodeURIComponent(projectId ?? "")}/memory`, body),
+    onSuccess: () => {
+      if (!projectId) return;
+      qc.invalidateQueries({ queryKey: qk.memoryList(projectId) });
+    },
+  });
+}
+
+export function useUpdateMemory(projectId: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ memoryId, body }: { memoryId: string; body: DTO["MemoryUpdateRequest"] }) =>
+      api.patch<DTO["MemoryDTO"]>(
+        `/projects/${encodeURIComponent(projectId ?? "")}/memory/${encodeURIComponent(memoryId)}`,
+        body,
+      ),
+    onSuccess: (_data, { memoryId }) => {
+      if (!projectId) return;
+      qc.invalidateQueries({ queryKey: qk.memoryList(projectId) });
+      qc.invalidateQueries({ queryKey: qk.memoryEntry(projectId, memoryId) });
+    },
+  });
+}
+
+export function useDeleteMemory(projectId: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (memoryId: string) =>
+      api.delete<void>(
+        `/projects/${encodeURIComponent(projectId ?? "")}/memory/${encodeURIComponent(memoryId)}`,
+      ),
+    onSuccess: () => {
+      if (!projectId) return;
+      qc.invalidateQueries({ queryKey: qk.memoryList(projectId) });
+    },
+  });
+}
+
+// ---------- Sources ----------------------------------------------------------
+
+export function useSourcesList(projectId: string | undefined, kind?: string | null) {
+  return useQuery({
+    queryKey: projectId ? qk.sourcesList(projectId, kind) : qk.sourcesList("__none__"),
+    enabled: Boolean(projectId),
+    queryFn: ({ signal }) =>
+      api.get<DTO["SourceListDTO"]>(
+        `/projects/${encodeURIComponent(projectId ?? "")}/sources`,
+        kind ? { kind } : undefined,
+        signal,
+      ),
+  });
+}
+
+export function useCreateSource(projectId: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: DTO["SourceCreateRequest"]) =>
+      api.post<DTO["SourceDTO"]>(`/projects/${encodeURIComponent(projectId ?? "")}/sources`, body),
+    onSuccess: () => {
+      if (!projectId) return;
+      qc.invalidateQueries({ queryKey: [...qk.all, "sources", projectId] });
+    },
+  });
+}
+
+export function useUpdateSource(projectId: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sourceId, body }: { sourceId: string; body: DTO["SourceUpdateRequest"] }) =>
+      api.patch<DTO["SourceDTO"]>(
+        `/projects/${encodeURIComponent(projectId ?? "")}/sources/${encodeURIComponent(sourceId)}`,
+        body,
+      ),
+    onSuccess: (_data, { sourceId }) => {
+      if (!projectId) return;
+      qc.invalidateQueries({ queryKey: [...qk.all, "sources", projectId] });
+      qc.invalidateQueries({ queryKey: qk.sourceEntry(projectId, sourceId) });
+    },
+  });
+}
+
+export function useDeleteSource(projectId: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (sourceId: string) =>
+      api.delete<void>(
+        `/projects/${encodeURIComponent(projectId ?? "")}/sources/${encodeURIComponent(sourceId)}`,
+      ),
+    onSuccess: () => {
+      if (!projectId) return;
+      qc.invalidateQueries({ queryKey: [...qk.all, "sources", projectId] });
+    },
+  });
+}
+
 // ---------- Sync -------------------------------------------------------------
 
 export function useManualSync() {

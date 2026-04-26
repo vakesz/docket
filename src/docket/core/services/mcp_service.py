@@ -41,25 +41,45 @@ def _project(config: Config, project_id: str) -> ProjectEntry:
     return entry
 
 
+SUPPORTED_TRANSPORTS = frozenset({"stdio", "http", "sse"})
+
+
 def validate_entry(entry: MCPServerEntry) -> MCPServerEntry:
     """Normalize and validate one server entry.
 
-    Today only `stdio` is supported; keep the check centralized so CLI,
-    TUI, HTTP, and runtime rebinding all enforce the same contract.
-    """
+    Per-transport requirements:
+      stdio    requires `command`; ignores `url`/`headers`.
+      http/sse requires `url`;     ignores `command`/`args`/`env`.
+
+    Centralized so CLI, TUI, HTTP, and runtime rebinding all enforce the
+    same contract."""
     transport = (entry.transport or "stdio").strip() or "stdio"
-    if transport != "stdio":
+    if transport not in SUPPORTED_TRANSPORTS:
         raise InvalidServerConfigError(
-            f"Unsupported MCP transport '{transport}'. Only 'stdio' is supported."
+            f"Unsupported MCP transport '{transport}'. "
+            f"Supported: {', '.join(sorted(SUPPORTED_TRANSPORTS))}."
         )
     timeout = float(entry.startup_timeout_seconds)
     if timeout <= 0:
         raise InvalidServerConfigError("startup_timeout_seconds must be > 0.")
+    if transport == "stdio":
+        if not entry.command.strip():
+            raise InvalidServerConfigError("stdio transport requires a `command`.")
+        return MCPServerEntry(
+            transport=transport,
+            command=entry.command,
+            args=list(entry.args),
+            env=dict(entry.env),
+            enabled=entry.enabled,
+            startup_timeout_seconds=timeout,
+        )
+    # http / sse — drop the stdio-only fields so on-disk config stays clean.
+    if not entry.url.strip():
+        raise InvalidServerConfigError(f"{transport} transport requires a `url`.")
     return MCPServerEntry(
         transport=transport,
-        command=entry.command,
-        args=list(entry.args),
-        env=dict(entry.env),
+        url=entry.url,
+        headers=dict(entry.headers),
         enabled=entry.enabled,
         startup_timeout_seconds=timeout,
     )
@@ -85,9 +105,11 @@ def add_server(
     project_id: str,
     name: str,
     *,
-    command: str,
+    command: str = "",
     args: list[str] | None = None,
     env: dict[str, str] | None = None,
+    url: str = "",
+    headers: dict[str, str] | None = None,
     transport: str = "stdio",
     enabled: bool = True,
     startup_timeout_seconds: float = 10.0,
@@ -102,6 +124,8 @@ def add_server(
             command=command,
             args=list(args or []),
             env=dict(env or {}),
+            url=url,
+            headers=dict(headers or {}),
             enabled=enabled,
             startup_timeout_seconds=startup_timeout_seconds,
         )
@@ -120,12 +144,15 @@ def update_server(
     command: str | None = None,
     args: list[str] | None = None,
     env: dict[str, str] | None = None,
+    url: str | None = None,
+    headers: dict[str, str] | None = None,
     transport: str | None = None,
     enabled: bool | None = None,
     startup_timeout_seconds: float | None = None,
 ) -> MCPServerEntry:
     """Replace fields on an existing server entry. Only the kwargs you set
-    are written; pass `args=[]` or `env={}` to explicitly clear those lists.
+    are written; pass `args=[]`, `env={}`, or `headers={}` to explicitly
+    clear those collections.
     """
     existing = get_server(config, project_id, name)
     entry = validate_entry(
@@ -134,6 +161,8 @@ def update_server(
             command=command if command is not None else existing.command,
             args=list(args) if args is not None else list(existing.args),
             env=dict(env) if env is not None else dict(existing.env),
+            url=url if url is not None else existing.url,
+            headers=dict(headers) if headers is not None else dict(existing.headers),
             enabled=enabled if enabled is not None else existing.enabled,
             startup_timeout_seconds=(
                 startup_timeout_seconds
@@ -157,6 +186,7 @@ def remove_server(config: Config, paths: Paths, project_id: str, name: str) -> N
 
 
 __all__ = [
+    "SUPPORTED_TRANSPORTS",
     "DuplicateServerError",
     "InvalidServerConfigError",
     "MissingPresetEnvError",

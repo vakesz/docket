@@ -115,7 +115,9 @@ def test_list_when_empty(client: TestClient) -> None:
 
 def test_create_then_get_round_trips(client: TestClient) -> None:
     pid = _pid()
-    resp = client.post(f"/api/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
+    resp = client.post(
+        f"/api/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS
+    )
     assert resp.status_code == 201, resp.text
     body = resp.json()
     assert body["name"] == "fake"
@@ -130,7 +132,9 @@ def test_create_then_get_round_trips(client: TestClient) -> None:
 def test_create_duplicate_is_409(client: TestClient) -> None:
     pid = _pid()
     client.post(f"/api/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
-    again = client.post(f"/api/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
+    again = client.post(
+        f"/api/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS
+    )
     assert again.status_code == 409
 
 
@@ -215,12 +219,121 @@ def test_test_endpoint_reports_failure_for_broken_command(client: TestClient) ->
 def test_draft_test_endpoint_reports_invalid_transport(client: TestClient) -> None:
     pid = _pid()
     payload = _server_payload()
-    payload["transport"] = "sse"
+    payload["transport"] = "grpc"
     resp = client.post(f"/api/projects/{pid}/mcp/draft/test", json=payload, headers=AUTH_HEADERS)
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["ok"] is False
-    assert "Only 'stdio' is supported" in body["error"]
+    assert "Unsupported MCP transport" in body["error"]
+
+
+def test_create_http_persists_url_and_headers(client: TestClient) -> None:
+    pid = _pid()
+    payload = {
+        "transport": "http",
+        "url": "https://api.example.com/mcp",
+        "headers": {"Authorization": "Bearer token-1"},
+        "command": "",
+        "args": [],
+        "env": {},
+        "enabled": True,
+        "startup_timeout_seconds": 10.0,
+    }
+    resp = client.post(f"/api/projects/{pid}/mcp/remote", json=payload, headers=AUTH_HEADERS)
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["transport"] == "http"
+    assert body["url"] == "https://api.example.com/mcp"
+    assert body["headers"] == {"Authorization": "Bearer token-1"}
+    # Stdio fields are dropped at validation time so on-disk config stays clean.
+    assert body["command"] == ""
+    assert body["args"] == []
+    assert body["env"] == {}
+
+
+def test_create_rejects_http_without_url(client: TestClient) -> None:
+    pid = _pid()
+    payload = {
+        "transport": "http",
+        "url": "",
+        "headers": {},
+        "command": "",
+        "args": [],
+        "env": {},
+        "enabled": True,
+        "startup_timeout_seconds": 10.0,
+    }
+    resp = client.post(f"/api/projects/{pid}/mcp/remote", json=payload, headers=AUTH_HEADERS)
+    assert resp.status_code == 400
+    assert "url" in resp.text
+
+
+def test_runtime_endpoint_reports_connected_servers(client: TestClient) -> None:
+    """`/mcp/runtime` shows the live fleet for the active project."""
+    pid = _pid()
+    resp = client.post(
+        f"/api/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS
+    )
+    assert resp.status_code == 201, resp.text
+    runtime = client.get(f"/api/projects/{pid}/mcp/runtime", headers=AUTH_HEADERS)
+    assert runtime.status_code == 200, runtime.text
+    body = runtime.json()
+    assert body["project_id"] == pid
+    assert body["active_project_id"] == pid
+    by_name = {s["name"]: s for s in body["servers"]}
+    assert by_name["fake"]["connected"] is True
+    assert by_name["fake"]["transport"] == "stdio"
+    assert "mcp__fake__echo" in by_name["fake"]["tools"]
+    assert by_name["fake"]["started_at"] is not None
+    assert by_name["fake"]["last_error"] is None
+
+
+def test_runtime_endpoint_reports_failed_bind(client: TestClient) -> None:
+    """A server whose subprocess immediately exits stays in `runtime` as a
+    failed bind so the SPA can surface "configured but disconnected"."""
+    pid = _pid()
+    payload = {
+        "command": sys.executable,
+        "args": ["-c", "import sys; sys.exit(1)"],
+        "env": {},
+        "transport": "stdio",
+        "enabled": True,
+        "startup_timeout_seconds": 2.0,
+    }
+    resp = client.post(f"/api/projects/{pid}/mcp/broken", json=payload, headers=AUTH_HEADERS)
+    assert resp.status_code == 201, resp.text
+    runtime = client.get(f"/api/projects/{pid}/mcp/runtime", headers=AUTH_HEADERS).json()
+    by_name = {s["name"]: s for s in runtime["servers"]}
+    assert by_name["broken"]["connected"] is False
+    assert by_name["broken"]["last_error"]
+    assert by_name["broken"]["tools"] == []
+
+
+def test_runtime_endpoint_inactive_project_reports_empty_fleet(
+    client: TestClient, tmp_xdg: Path
+) -> None:
+    """Asking about an inactive project returns its id but no servers — the
+    runtime is per-process and only one project is bound at a time."""
+    paths = resolve_paths()
+    cfg = client.app.state.config
+    cfg.providers["secondary"] = ProviderEntry(
+        type="github_stub",
+        display_name="Secondary",
+        config={},
+        scopes={"default": ScopeFilter()},
+        active_scope="default",
+    )
+    other_pid = project_id_for("secondary")
+    cfg.projects[other_pid] = ProjectEntry(provider_key="secondary", name="Other")
+    save_config(paths, cfg)
+
+    runtime = client.get(f"/api/projects/{other_pid}/mcp/runtime", headers=AUTH_HEADERS)
+    assert runtime.status_code == 200, runtime.text
+    body = runtime.json()
+    assert body["project_id"] == other_pid
+    # Active project is still _pid(); the fleet snapshot should report that.
+    assert body["active_project_id"] == _pid()
+    assert body["servers"] == []
 
 
 def test_unknown_project_returns_404(client: TestClient) -> None:
@@ -237,7 +350,10 @@ def test_unknown_server_returns_404(client: TestClient) -> None:
 def test_routes_require_auth(client: TestClient) -> None:
     pid = _pid()
     assert client.get(f"/api/projects/{pid}/mcp").status_code == 401
-    assert client.post(f"/api/projects/{pid}/mcp/draft/test", json=_server_payload()).status_code == 401
+    assert (
+        client.post(f"/api/projects/{pid}/mcp/draft/test", json=_server_payload()).status_code
+        == 401
+    )
 
 
 def test_create_rebinds_active_runtime_manager(client: TestClient) -> None:
@@ -245,7 +361,9 @@ def test_create_rebinds_active_runtime_manager(client: TestClient) -> None:
     pid = _pid()
     manager = _manager(client)
     assert manager.clients == {}
-    resp = client.post(f"/api/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
+    resp = client.post(
+        f"/api/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS
+    )
     assert resp.status_code == 201, resp.text
     assert "fake" in manager.clients
     assert manager.active_project_id == pid
@@ -254,10 +372,10 @@ def test_create_rebinds_active_runtime_manager(client: TestClient) -> None:
 def test_create_rejects_unsupported_transport(client: TestClient) -> None:
     pid = _pid()
     payload = _server_payload()
-    payload["transport"] = "sse"
+    payload["transport"] = "grpc"
     resp = client.post(f"/api/projects/{pid}/mcp/fake", json=payload, headers=AUTH_HEADERS)
     assert resp.status_code == 400
-    assert "Only 'stdio' is supported" in resp.text
+    assert "Unsupported MCP transport" in resp.text
 
 
 def test_disable_via_patch_drops_running_client(client: TestClient) -> None:
@@ -265,7 +383,9 @@ def test_disable_via_patch_drops_running_client(client: TestClient) -> None:
     manager = _manager(client)
     client.post(f"/api/projects/{pid}/mcp/fake", json=_server_payload(), headers=AUTH_HEADERS)
     assert "fake" in manager.clients
-    resp = client.patch(f"/api/projects/{pid}/mcp/fake", json={"enabled": False}, headers=AUTH_HEADERS)
+    resp = client.patch(
+        f"/api/projects/{pid}/mcp/fake", json={"enabled": False}, headers=AUTH_HEADERS
+    )
     assert resp.status_code == 200, resp.text
     assert manager.clients == {}
 

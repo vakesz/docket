@@ -1,20 +1,20 @@
 """Serve the SPA bundle from the FastAPI app.
 
-The frontend builds to `frontend/dist/` (vite static output: `index.html` +
-`assets/`). In production `docket serve` mounts that directory directly so
-there is one process and one origin. The bearer token is injected into the
-HTML at request time as `window.__DOCKET_TOKEN__` — same trust model as the
-old Bun-server proxy: the token never leaves the local box, the page just
-reads it back into Authorization headers.
+Vite emits the built SPA directly into `<docket package>/frontend_dist/`
+(see `frontend/vite.config.ts` `build.outDir`). The same path is used in
+dev (after `bun run build`) and in the installed wheel (hatch ships it as
+an artifact), so there's one source of truth and no copy step. The bearer
+token is injected into the HTML at request time as `window.__DOCKET_TOKEN__`
+— same trust model as the old Bun-server proxy: the token never leaves the
+local box, the page just reads it back into Authorization headers.
 
 Resolution order for the dist directory:
 1. `DOCKET_FRONTEND_DIST` env var (used by tests).
-2. Wheel-installed location: `<docket package>/frontend_dist/` (Phase 2).
-3. Repo-relative: `<repo_root>/frontend/dist/` (dev install).
+2. `<docket package>/frontend_dist/` (dev build *and* wheel install).
 
 If the bundle is missing, we serve a friendly fallback page at `/` instead
 of 404'ing — that keeps `docket serve` usable for someone who just cloned
-the repo and hasn't run `bun run build` yet.
+the repo and hasn't run `make frontend-build` yet.
 """
 
 from __future__ import annotations
@@ -39,11 +39,7 @@ _FALLBACK_HTML = """<!doctype html>
 </head><body>
 <h1>Frontend bundle not built</h1>
 <p>The Docket backend is running, but the SPA assets aren't on disk yet.</p>
-<p>Run one of:</p>
-<ul>
-<li><code>make frontend-build</code> — produces a static bundle, then refresh.</li>
-<li><code>make dev</code> — vite dev server with HMR at <a href="http://localhost:3000">http://localhost:3000</a>.</li>
-</ul>
+<p>Run <code>make frontend-build</code> (or <code>make serve</code>) to produce a static bundle into <code>src/docket/frontend_dist/</code>, then refresh.</p>
 <p>API still works at <code>/api/*</code> and <code>/openapi.json</code>.</p>
 </body></html>
 """
@@ -63,14 +59,6 @@ def resolve_frontend_dist() -> Path | None:
                 return Path(p)
     except (ModuleNotFoundError, FileNotFoundError):
         pass
-
-    here = Path(__file__).resolve()
-    for parent in here.parents:
-        candidate = parent / "frontend" / "dist"
-        if candidate.is_dir() and (candidate / "index.html").is_file():
-            return candidate
-        if (parent / "pyproject.toml").is_file():
-            break
     return None
 
 

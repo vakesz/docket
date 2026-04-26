@@ -56,27 +56,29 @@ export function UiForm({
         </FormField>
       </div>
 
-      <FormField
-        label="Show acceptance criteria"
-        help="Reveal the acceptance criteria block in item detail views."
-      >
-        <Toggle
-          checked={showAcceptance}
-          onChange={(v) => onChange((cur) => ({ ...cur, show_acceptance_criteria: v }))}
-          label={showAcceptance ? "Visible" : "Hidden"}
-        />
-      </FormField>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <FormField
+          label="Show acceptance criteria"
+          help="Reveal the acceptance criteria block in item detail views."
+        >
+          <Toggle
+            checked={showAcceptance}
+            onChange={(v) => onChange((cur) => ({ ...cur, show_acceptance_criteria: v }))}
+            label={showAcceptance ? "Visible" : "Hidden"}
+          />
+        </FormField>
 
-      <FormField
-        label="Hide done items"
-        help="Hide resolved/closed items from the backlog on startup. The TUI's `c` key toggles this at runtime."
-      >
-        <Toggle
-          checked={hideDone}
-          onChange={(v) => onChange((cur) => ({ ...cur, hide_done: v }))}
-          label={hideDone ? "Hidden" : "Shown"}
-        />
-      </FormField>
+        <FormField
+          label="Hide done items"
+          help="Hide resolved/closed items from the backlog on startup. The TUI's `c` key toggles this at runtime."
+        >
+          <Toggle
+            checked={hideDone}
+            onChange={(v) => onChange((cur) => ({ ...cur, hide_done: v }))}
+            label={hideDone ? "Hidden" : "Shown"}
+          />
+        </FormField>
+      </div>
 
       <FormField
         label="Tag filter collapse limit"

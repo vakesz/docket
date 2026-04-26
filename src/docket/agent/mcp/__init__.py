@@ -10,6 +10,6 @@ host event loop (FastAPI, anyio test loops, etc.).
 from __future__ import annotations
 
 from docket.agent.mcp.client import MCPClient
-from docket.agent.mcp.manager import MCPManager
+from docket.agent.mcp.manager import MCPManager, MCPServerStatus
 
-__all__ = ["MCPClient", "MCPManager"]
+__all__ = ["MCPClient", "MCPManager", "MCPServerStatus"]

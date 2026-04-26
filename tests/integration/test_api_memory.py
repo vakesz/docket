@@ -1,4 +1,5 @@
-"""HTTP smoke tests for /projects/{id}/memory and /memory/{id} routes."""
+"""HTTP smoke tests for /projects/{id}/memory routes (list + by-id are both
+nested under the project so cross-project access can't happen by id)."""
 
 from __future__ import annotations
 
@@ -88,7 +89,7 @@ def test_create_memory_round_trips(client: TestClient) -> None:
     memory_id = body["id"]
 
     # GET single
-    one = client.get(f"/api/memory/{memory_id}", headers=AUTH_HEADERS)
+    one = client.get(f"/api/projects/{pid}/memory/{memory_id}", headers=AUTH_HEADERS)
     assert one.status_code == 200
     assert one.json()["body_md"] == "**ALM**: …"
 
@@ -109,7 +110,7 @@ def test_patch_memory_updates_fields(client: TestClient) -> None:
         headers=AUTH_HEADERS,
     ).json()
     resp = client.patch(
-        f"/api/memory/{created['id']}",
+        f"/api/projects/{pid}/memory/{created['id']}",
         json={"title": "New"},
         headers=AUTH_HEADERS,
     )
@@ -128,7 +129,7 @@ def test_patch_memory_requires_at_least_one_field(client: TestClient) -> None:
         headers=AUTH_HEADERS,
     ).json()
     resp = client.patch(
-        f"/api/memory/{created['id']}",
+        f"/api/projects/{pid}/memory/{created['id']}",
         json={},
         headers=AUTH_HEADERS,
     )
@@ -143,9 +144,51 @@ def test_delete_memory(client: TestClient) -> None:
         json={"title": "Tmp", "body_md": ""},
         headers=AUTH_HEADERS,
     ).json()
-    resp = client.delete(f"/api/memory/{created['id']}", headers=AUTH_HEADERS)
+    resp = client.delete(f"/api/projects/{pid}/memory/{created['id']}", headers=AUTH_HEADERS)
     assert resp.status_code == 204
-    assert client.get(f"/api/memory/{created['id']}", headers=AUTH_HEADERS).status_code == 404
+    assert (
+        client.get(f"/api/projects/{pid}/memory/{created['id']}", headers=AUTH_HEADERS).status_code
+        == 404
+    )
+
+
+def test_by_id_routes_reject_wrong_project(client: TestClient) -> None:
+    """An entry's id must not be reachable through another project's URL."""
+    _seed_project(client)
+    pid = _pid()
+    created = client.post(
+        f"/api/projects/{pid}/memory",
+        json={"title": "Real", "body_md": "x"},
+        headers=AUTH_HEADERS,
+    ).json()
+    other = "github::ghost"
+    assert (
+        client.get(
+            f"/api/projects/{other}/memory/{created['id']}", headers=AUTH_HEADERS
+        ).status_code
+        == 404
+    )
+    assert (
+        client.patch(
+            f"/api/projects/{other}/memory/{created['id']}",
+            json={"title": "Hijack"},
+            headers=AUTH_HEADERS,
+        ).status_code
+        == 404
+    )
+    assert (
+        client.delete(
+            f"/api/projects/{other}/memory/{created['id']}", headers=AUTH_HEADERS
+        ).status_code
+        == 404
+    )
+    # And the row is still intact under the real project.
+    assert (
+        client.get(f"/api/projects/{pid}/memory/{created['id']}", headers=AUTH_HEADERS).json()[
+            "title"
+        ]
+        == "Real"
+    )
 
 
 def test_search_memory(client: TestClient) -> None:
@@ -161,7 +204,9 @@ def test_search_memory(client: TestClient) -> None:
         json={"title": "Other", "body_md": "unrelated"},
         headers=AUTH_HEADERS,
     )
-    resp = client.get(f"/api/projects/{pid}/memory/search", params={"q": "OAuth"}, headers=AUTH_HEADERS)
+    resp = client.get(
+        f"/api/projects/{pid}/memory/search", params={"q": "OAuth"}, headers=AUTH_HEADERS
+    )
     assert resp.status_code == 200
     body = resp.json()
     assert [e["title"] for e in body["entries"]] == ["Auth"]

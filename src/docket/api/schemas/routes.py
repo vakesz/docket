@@ -313,7 +313,9 @@ class MCPServerDTO(BaseModel):
     """One MCP server attached to a project, as exposed over HTTP.
 
     Mirrors `docket.config.models.MCPServerEntry` plus the project id and the
-    user-facing `name` (the dict key in `ProjectEntry.mcp`)."""
+    user-facing `name` (the dict key in `ProjectEntry.mcp`). `command/args/env`
+    apply to `transport=stdio`; `url/headers` apply to `transport=http` or
+    `transport=sse`. The unused half is left empty per `mcp_service.validate_entry`."""
 
     project_id: str
     name: str
@@ -321,6 +323,8 @@ class MCPServerDTO(BaseModel):
     command: str = ""
     args: list[str] = Field(default_factory=list)
     env: dict[str, str] = Field(default_factory=dict)
+    url: str = ""
+    headers: dict[str, str] = Field(default_factory=dict)
     enabled: bool = True
     startup_timeout_seconds: float = 10.0
 
@@ -333,14 +337,46 @@ class MCPServerListDTO(BaseModel):
 class MCPServerUpdateRequest(BaseModel):
     """PATCH body. Only fields you set are written; others are left alone.
 
-    Pass `args=[]` or `env={}` to explicitly clear those collections."""
+    Pass `args=[]`, `env={}`, or `headers={}` to explicitly clear those
+    collections."""
 
     command: str | None = None
     args: list[str] | None = None
     env: dict[str, str] | None = None
+    url: str | None = None
+    headers: dict[str, str] | None = None
     transport: str | None = None
     enabled: bool | None = None
     startup_timeout_seconds: float | None = None
+
+
+class MCPRuntimeServerDTO(BaseModel):
+    """One server in the live MCP fleet for the active project.
+
+    `connected=True` means the manager currently holds a started client;
+    `connected=False` plus a `last_error` means the last bind attempt
+    failed (e.g. handshake timeout, missing remote URL). `tools` lists the
+    fully-qualified `mcp__<name>__<tool>` ids registered with the agent."""
+
+    name: str
+    transport: str
+    connected: bool
+    tools: list[str] = Field(default_factory=list)
+    started_at: datetime | None = None
+    last_error: str | None = None
+
+
+class MCPRuntimeDTO(BaseModel):
+    """Snapshot of the live MCP fleet at request time.
+
+    `active_project_id` is the project the manager is currently bound to,
+    not necessarily the URL's `project_id` — the runtime is per-process,
+    so a request that asks about an inactive project gets the configured
+    list (via the regular CRUD routes) but no live state here."""
+
+    project_id: str
+    active_project_id: str | None = None
+    servers: list[MCPRuntimeServerDTO] = Field(default_factory=list)
 
 
 class MCPServerTestResultDTO(BaseModel):

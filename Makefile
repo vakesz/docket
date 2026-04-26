@@ -16,49 +16,19 @@ install: ## install backend + frontend deps (uv sync, bun install)
 	uv sync
 	cd $(FRONTEND) && bun install
 
-.PHONY: backend
-backend: ## run backend on the host (docket serve → 127.0.0.1:8765)
-	uv run docket serve
-
-.PHONY: tui
-tui: ## run the Textual TUI on the host
-	uv run docket
-
-.PHONY: frontend
-frontend: ## run frontend dev server on the host (vite → localhost:3000)
-	@set -a; [ -f $(ENV_FILE) ] && . ./$(ENV_FILE); set +a; \
-	 cd $(FRONTEND) && bun run dev
-
-.PHONY: dev
-dev: ## run backend + frontend concurrently (Ctrl-C stops both)
-	@set -a; [ -f $(ENV_FILE) ] && . ./$(ENV_FILE); set +a; \
-	 trap 'kill 0' EXIT INT TERM; \
-	 uv run docket serve & \
-	 (cd $(FRONTEND) && bun run dev) & \
-	 wait
-
 .PHONY: frontend-build
-frontend-build: ## build the static SPA bundle (frontend/dist)
+frontend-build: ## build the SPA (vite emits straight into src/docket/frontend_dist/)
 	cd $(FRONTEND) && bun run build
 
-.PHONY: bundle-spa
-bundle-spa: frontend-build ## copy the built SPA into src/docket/frontend_dist/ for wheel packaging
-	rm -rf src/docket/frontend_dist
-	cp -R $(FRONTEND)/dist src/docket/frontend_dist
-
 .PHONY: serve
-serve: frontend-build ## build the SPA, then run the backend serving it at http://127.0.0.1:8765
+serve: frontend-build ## build the SPA, then run the backend at http://127.0.0.1:8765
 	uv run docket serve
 
 .PHONY: wheel
-wheel: bundle-spa ## build a single-artifact wheel with the SPA bundled inside
+wheel: frontend-build ## build a single-artifact wheel with the SPA bundled inside
 	uv build --wheel
 
 ## ---------- quality ----------
-
-.PHONY: test
-test: ## run backend pytest suite
-	uv run pytest
 
 .PHONY: lint
 lint: ## lint backend (ruff) and frontend (biome)
@@ -76,11 +46,8 @@ typecheck: ## mypy (backend) + tsc (frontend)
 	cd $(FRONTEND) && bun run typecheck
 
 .PHONY: check
-check: lint typecheck test ## lint + typecheck + test across both trees
-
-.PHONY: gen-api
-gen-api: ## regenerate frontend OpenAPI types from the running backend
-	cd $(FRONTEND) && bun run gen:api
+check: lint typecheck ## lint + typecheck + test across both trees
+	uv run pytest
 
 .PHONY: stats
 stats: ## show LOC stats using cloc (git-tracked files only)
@@ -91,7 +58,7 @@ stats: ## show LOC stats using cloc (git-tracked files only)
 
 .PHONY: clean
 clean: ## remove local caches and the SPA build output
-	rm -rf $(FRONTEND)/dist $(FRONTEND)/.vite src/docket/frontend_dist
+	rm -rf $(FRONTEND)/.vite src/docket/frontend_dist $(FRONTEND)/dist
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +
 	rm -rf .mypy_cache .pytest_cache .ruff_cache
 

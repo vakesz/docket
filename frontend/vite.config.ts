@@ -10,8 +10,10 @@ import { resolveBackendConfig } from "./resolve-backend-config";
  * `index.html` as `window.__DOCKET_TOKEN__` so the same auth path works in
  * dev and prod — see resolve-backend-config.ts for token precedence.
  *
- * Prod: `bun run build` emits a static SPA in `dist/`. The Python backend
- * (`docket serve`) serves it directly and injects the token at request time.
+ * Prod: `bun run build` emits a static SPA directly into
+ * `../src/docket/frontend_dist/` — the same path the Python backend reads
+ * (and the wheel ships via hatch `artifacts`). One build, no copy step.
+ * The token is injected into `index.html` at request time by `spa.py`.
  */
 const { apiUrl: apiTarget, apiToken } = resolveBackendConfig();
 
@@ -35,6 +37,14 @@ function injectDevToken(token: string): Plugin {
 export default defineConfig({
   resolve: {
     tsconfigPaths: true,
+  },
+  build: {
+    // Emit straight into the Python package so `bun run build` is the only
+    // step before `docket serve` (or `uv build --wheel`) sees fresh assets.
+    // `emptyOutDir` is required because the dir lives outside the vite root —
+    // vite refuses to clear an external directory without explicit consent.
+    outDir: "../src/docket/frontend_dist",
+    emptyOutDir: true,
   },
   server: {
     port: 3000,

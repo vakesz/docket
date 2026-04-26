@@ -58,9 +58,10 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/docket"]
-# Built SPA bundle — gitignored, populated by `make bundle-spa` before
-# `uv build --wheel`. `artifacts` overrides VCS exclusions so it ships in
-# the wheel even though it's not tracked.
+# Built SPA bundle — gitignored, populated by `bun run build` (or
+# `make frontend-build` / `make wheel`) before `uv build --wheel`.
+# `artifacts` overrides VCS exclusions so it ships in the wheel even
+# though it's not tracked.
 artifacts = ["src/docket/frontend_dist/"]
 
 [tool.hatch.build.targets.sdist]
@@ -75,7 +76,6 @@ include = [
 ]
 exclude = [
     "frontend/node_modules/",
-    "frontend/dist/",
     "frontend/.vite/",
     "src/docket/frontend_dist/",
 ]

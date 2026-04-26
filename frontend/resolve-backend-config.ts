@@ -48,7 +48,8 @@ interface ProjectEnv {
  * values override, matching `load_project_env()`'s `override=True`. We also
  * track the directory that held `.env` so relative `XDG_CONFIG_HOME` values
  * (e.g. `./.docket-dev/config`) resolve against the repo root, not CWD —
- * `cd frontend && bun run dev` would otherwise look in the wrong place.
+ * any vite invocation from inside `frontend/` would otherwise look in the
+ * wrong place.
  */
 function loadProjectEnv(): ProjectEnv {
   const vars: Record<string, string> = {};

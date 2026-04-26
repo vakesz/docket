@@ -65,7 +65,9 @@ function pushRecent(prev: string[], id: string): string[] {
 
 function extractItemId(pathname: string): string | undefined {
   const m = pathname.match(/^\/items\/([^/]+)/);
-  return m ? decodeURIComponent(m[1]) : undefined;
+  if (!m) return undefined;
+  const raw = m[1];
+  return raw ? decodeURIComponent(raw) : undefined;
 }
 
 export function CommandPalette() {
@@ -240,10 +242,7 @@ export function CommandPalette() {
         group: "Actions",
         keywords: p.key,
         run: () => {
-          setActiveProvider.mutate(
-            { key: p.key },
-            { onSuccess: () => navigate({ to: "/items" }) },
-          );
+          setActiveProvider.mutate({ key: p.key }, { onSuccess: () => navigate({ to: "/items" }) });
           close();
         },
       });
@@ -383,7 +382,11 @@ export function CommandPalette() {
           {pinned.data?.length ? (
             <Command.Group heading="Pinned" className={cn("px-2 py-1", metaLabelFaintClass)}>
               {pinned.data.map((it) => (
-                <ItemEntry key={it.id} it={it} onSelect={() => go("/items/$itemId", { itemId: it.id })} />
+                <ItemEntry
+                  key={it.id}
+                  it={it}
+                  onSelect={() => go("/items/$itemId", { itemId: it.id })}
+                />
               ))}
             </Command.Group>
           ) : null}
@@ -391,7 +394,11 @@ export function CommandPalette() {
           {items.data?.length ? (
             <Command.Group heading="Items" className={cn("px-2 py-1", metaLabelFaintClass)}>
               {items.data.slice(0, 80).map((it) => (
-                <ItemEntry key={it.id} it={it} onSelect={() => go("/items/$itemId", { itemId: it.id })} />
+                <ItemEntry
+                  key={it.id}
+                  it={it}
+                  onSelect={() => go("/items/$itemId", { itemId: it.id })}
+                />
               ))}
             </Command.Group>
           ) : null}
@@ -404,13 +411,7 @@ export function CommandPalette() {
   );
 }
 
-function PaletteEntry({
-  command,
-  onSelect,
-}: {
-  command: PaletteCommand;
-  onSelect: () => void;
-}) {
+function PaletteEntry({ command, onSelect }: { command: PaletteCommand; onSelect: () => void }) {
   const value = [command.label, command.description ?? "", command.keywords ?? ""]
     .filter(Boolean)
     .join(" ");

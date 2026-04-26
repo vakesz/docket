@@ -5,11 +5,12 @@ import { ProviderSwitcher } from "./ProviderSwitcher";
 
 export function TopBar() {
   return (
-    <header className="flex h-11 items-center gap-3 border-b border-border bg-bg px-3">
+    <header className="flex h-12 items-center gap-3 border-b border-border bg-surface/80 px-4 backdrop-blur lg:px-6">
       <Link
         to="/items"
-        className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-fg"
+        className="flex items-center gap-2 font-mono text-xs font-semibold uppercase tracking-[0.2em] text-fg"
       >
+        <span className="h-2 w-2 rounded-full bg-accent" />
         Docket
       </Link>
       <div className="ml-auto flex items-center gap-2">

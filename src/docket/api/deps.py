@@ -12,7 +12,6 @@ routes."""
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Callable
 from typing import cast
 
 from fastapi import HTTPException, Request, status
@@ -173,23 +172,6 @@ def get_config(request: Request) -> Config:
     )
 
 
-def require_by_id[T](
-    fetcher: Callable[[sqlite3.Connection, str], T | None],
-    conn: sqlite3.Connection,
-    entity_id: str,
-    *,
-    label: str,
-) -> T:
-    """Fetch an entity by id via `fetcher(conn, id)` or raise HTTP 404.
-
-    `label` is interpolated into the 404 message — e.g. `label="memory entry"`
-    becomes `"Unknown memory entry 'mem-123'"`."""
-    entry = fetcher(conn, entity_id)
-    if entry is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown {label} '{entity_id}'")
-    return entry
-
-
 def require_pending_proposal(
     store: ProposalStore,
     proposal_id: str,
@@ -233,7 +215,6 @@ __all__ = [
     "get_runtime",
     "get_runtime_optional",
     "require_agent",
-    "require_by_id",
     "require_llm",
     "require_not_read_only",
     "require_patch_not_empty",

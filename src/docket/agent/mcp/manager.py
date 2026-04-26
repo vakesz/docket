@@ -15,6 +15,8 @@ not a critical dependency.
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from docket.agent._helpers import arg_error
@@ -25,6 +27,25 @@ from docket.core.services import mcp_service
 from docket.telemetry.logging import elapsed_ms, get_logger
 
 _log = get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class MCPServerStatus:
+    """Snapshot of one server in the live fleet.
+
+    `connected` reports whether `MCPManager` currently holds a started
+    `MCPClient` for this name. `tools` is the discovered catalog (qualified
+    `mcp__<name>__<tool>` form so callers can correlate with the agent's
+    registry). `last_error` carries the most recent failure surfaced by the
+    client, including handshake/timeout failures when the server failed to
+    start at all."""
+
+    name: str
+    transport: str
+    connected: bool
+    tools: list[str]
+    started_at: datetime | None
+    last_error: str | None
 
 
 class MCPManager:
@@ -40,6 +61,15 @@ class MCPManager:
     def __init__(self) -> None:
         self._clients: dict[str, MCPClient] = {}
         self._project_id: str | None = None
+        # Per-server failure trace from the last `bind_project`. Cleared
+        # on each new bind so stale entries from a previous project don't
+        # leak into the runtime status.
+        self._bind_errors: dict[str, str] = {}
+        # Transport recorded at bind time so the status endpoint can
+        # render "fake (stdio)" without re-reading config. Mirrors
+        # `_clients` for connected servers and survives in `_bind_errors`
+        # for those that failed.
+        self._transports: dict[str, str] = {}
 
     @property
     def active_project_id(self) -> str | None:
@@ -50,20 +80,59 @@ class MCPManager:
         """Snapshot of currently-connected clients keyed by server name."""
         return dict(self._clients)
 
+    def status(self) -> list[MCPServerStatus]:
+        """Per-server snapshot of the live fleet for the active project.
+
+        Includes both connected clients and entries that failed to start
+        on the last bind, sorted by name so the UI render order is stable."""
+        names = sorted(set(self._clients) | set(self._bind_errors))
+        out: list[MCPServerStatus] = []
+        for name in names:
+            client = self._clients.get(name)
+            transport = self._transports.get(name, "stdio")
+            if client is not None:
+                tools = sorted(f"mcp__{name}__{t.name}" for t in client.list_tools())
+                out.append(
+                    MCPServerStatus(
+                        name=name,
+                        transport=transport,
+                        connected=True,
+                        tools=tools,
+                        started_at=client.started_at,
+                        last_error=client.last_error,
+                    )
+                )
+            else:
+                out.append(
+                    MCPServerStatus(
+                        name=name,
+                        transport=transport,
+                        connected=False,
+                        tools=[],
+                        started_at=None,
+                        last_error=self._bind_errors.get(name),
+                    )
+                )
+        return out
+
     def bind_project(self, project_id: str | None, servers: dict[str, MCPServerEntry]) -> None:
         """Switch to `project_id`'s MCP fleet.
 
         Tears down any previously-connected clients first, then starts
         every enabled server in `servers`. Servers that fail to start
-        are logged and skipped — the manager does not raise. Pass
-        `project_id=None` (or an empty `servers` dict) to simply close
-        everything, e.g. on shutdown or when no project is active.
+        are logged, recorded in `status()`, and skipped — the manager
+        does not raise. Pass `project_id=None` (or an empty `servers`
+        dict) to simply close everything, e.g. on shutdown or when no
+        project is active.
         """
         self.close_all()
+        self._bind_errors.clear()
+        self._transports.clear()
         self._project_id = project_id
         if not project_id:
             return
         for name, entry in servers.items():
+            self._transports[name] = (entry.transport or "stdio").strip() or "stdio"
             try:
                 entry = mcp_service.validate_entry(entry)
             except mcp_service.InvalidServerConfigError as exc:
@@ -75,6 +144,7 @@ class MCPManager:
                     error_type="invalid_config",
                     reason=str(exc),
                 )
+                self._bind_errors[name] = str(exc)
                 continue
             if not entry.enabled:
                 _log.debug(
@@ -83,15 +153,9 @@ class MCPManager:
                     tool_name=name,
                     outcome="disabled",
                 )
-                continue
-            if not entry.command:
-                _log.warning(
-                    "mcp_bind",
-                    project=project_id,
-                    tool_name=name,
-                    outcome="error",
-                    error_type="missing_command",
-                )
+                # Disabled isn't an error — drop from the failure trace
+                # too so it doesn't show up in `status()` as "failed".
+                self._transports.pop(name, None)
                 continue
             client = MCPClient(name, entry)
             started = time.monotonic_ns()
@@ -105,13 +169,13 @@ class MCPManager:
                     outcome="error",
                     error_type=type(exc).__name__,
                     reason=str(exc),
-                    command=entry.command,
-                    args=list(entry.args),
+                    transport=entry.transport,
                     latency_ms=elapsed_ms(started),
                 )
                 # `start()` already calls `close()` on failure, but be
                 # defensive in case a future code path changes that.
                 client.close()
+                self._bind_errors[name] = str(exc) or type(exc).__name__
                 continue
             self._clients[name] = client
             tool_count = len(client.list_tools())
@@ -194,4 +258,4 @@ def _make_handler(client: MCPClient, tool_name: str) -> ToolHandler:
     return handler
 
 
-__all__ = ["MCPManager"]
+__all__ = ["MCPManager", "MCPServerStatus"]

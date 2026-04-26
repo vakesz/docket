@@ -173,17 +173,24 @@ class StaleConfig(BaseModel):
 class MCPServerEntry(BaseModel):
     """One MCP server, scoped to a project.
 
-    Only stdio transport is supported in this iteration. The server is launched
-    as a subprocess with `command` + `args` (and optional `env`); its tools are
-    auto-registered into the agent under `mcp__<server_name>__<tool>`.
+    Three transports are supported. `stdio` launches the server as a local
+    subprocess (`command` + `args`, optional `env`). `http` (alias for the
+    streamable-HTTP transport) and `sse` connect to a remote URL with optional
+    `headers` (for `Authorization`, etc.). Discovered tools are auto-registered
+    under `mcp__<server_name>__<tool>` regardless of transport.
 
     Set `enabled=False` to keep the entry in `config.toml` without spawning
     the server (useful for one-off debugging without losing the config)."""
 
     transport: str = "stdio"
+    # stdio fields
     command: str = ""
     args: list[str] = Field(default_factory=list)
     env: dict[str, str] = Field(default_factory=dict)
+    # http/sse fields
+    url: str = ""
+    headers: dict[str, str] = Field(default_factory=dict)
+
     enabled: bool = True
     # How long to wait for the initial handshake / `tools/list` before giving
     # up and skipping the server. The agent build is best-effort: a slow

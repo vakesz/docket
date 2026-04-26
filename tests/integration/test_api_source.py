@@ -1,4 +1,5 @@
-"""HTTP smoke tests for /projects/{id}/sources and /sources/{id} routes."""
+"""HTTP smoke tests for /projects/{id}/sources routes (list + by-id are both
+nested under the project so cross-project access can't happen by id)."""
 
 from __future__ import annotations
 
@@ -93,7 +94,7 @@ def test_create_source_round_trips(client: TestClient) -> None:
     assert body["uri"] == "https://example.test/spec"
     source_id = body["id"]
 
-    one = client.get(f"/api/sources/{source_id}", headers=AUTH_HEADERS)
+    one = client.get(f"/api/projects/{pid}/sources/{source_id}", headers=AUTH_HEADERS)
     assert one.status_code == 200
     assert one.json()["body_md"].startswith("## Goals")
 
@@ -137,7 +138,7 @@ def test_patch_source_updates_fields(client: TestClient) -> None:
         headers=AUTH_HEADERS,
     ).json()
     resp = client.patch(
-        f"/api/sources/{created['id']}",
+        f"/api/projects/{pid}/sources/{created['id']}",
         json={"title": "New"},
         headers=AUTH_HEADERS,
     )
@@ -156,7 +157,7 @@ def test_patch_source_requires_at_least_one_field(client: TestClient) -> None:
         headers=AUTH_HEADERS,
     ).json()
     resp = client.patch(
-        f"/api/sources/{created['id']}",
+        f"/api/projects/{pid}/sources/{created['id']}",
         json={},
         headers=AUTH_HEADERS,
     )
@@ -171,9 +172,50 @@ def test_delete_source(client: TestClient) -> None:
         json={"title": "Tmp", "body_md": ""},
         headers=AUTH_HEADERS,
     ).json()
-    resp = client.delete(f"/api/sources/{created['id']}", headers=AUTH_HEADERS)
+    resp = client.delete(f"/api/projects/{pid}/sources/{created['id']}", headers=AUTH_HEADERS)
     assert resp.status_code == 204
-    assert client.get(f"/api/sources/{created['id']}", headers=AUTH_HEADERS).status_code == 404
+    assert (
+        client.get(f"/api/projects/{pid}/sources/{created['id']}", headers=AUTH_HEADERS).status_code
+        == 404
+    )
+
+
+def test_by_id_routes_reject_wrong_project(client: TestClient) -> None:
+    """An entry's id must not be reachable through another project's URL."""
+    _seed_project(client)
+    pid = _pid()
+    created = client.post(
+        f"/api/projects/{pid}/sources",
+        json={"title": "Real", "body_md": "x"},
+        headers=AUTH_HEADERS,
+    ).json()
+    other = "github::ghost"
+    assert (
+        client.get(
+            f"/api/projects/{other}/sources/{created['id']}", headers=AUTH_HEADERS
+        ).status_code
+        == 404
+    )
+    assert (
+        client.patch(
+            f"/api/projects/{other}/sources/{created['id']}",
+            json={"title": "Hijack"},
+            headers=AUTH_HEADERS,
+        ).status_code
+        == 404
+    )
+    assert (
+        client.delete(
+            f"/api/projects/{other}/sources/{created['id']}", headers=AUTH_HEADERS
+        ).status_code
+        == 404
+    )
+    assert (
+        client.get(f"/api/projects/{pid}/sources/{created['id']}", headers=AUTH_HEADERS).json()[
+            "title"
+        ]
+        == "Real"
+    )
 
 
 def test_search_sources(client: TestClient) -> None:

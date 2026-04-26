@@ -207,7 +207,12 @@ function McpServerListItem({
   active: boolean;
   onSelect: () => void;
 }) {
-  const argsPreview = entry.args && entry.args.length > 0 ? entry.args.join(" ") : "—";
+  const transport = entry.transport ?? "stdio";
+  const isStdio = transport === "stdio";
+  const argsPreview = entry.args && entry.args.length > 0 ? entry.args.join(" ") : "";
+  const subtitle = isStdio
+    ? `${entry.command || "(no command)"}${argsPreview ? ` ${argsPreview}` : ""}`
+    : entry.url || "(no url)";
   return (
     <li>
       <button
@@ -220,6 +225,15 @@ function McpServerListItem({
       >
         <div className="flex items-center gap-2">
           <span className="truncate text-sm font-medium">{entry.name}</span>
+          <span
+            className={cn(
+              "rounded-full px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider",
+              active ? "bg-accent/20 text-accent" : "bg-surface-alt text-fg-muted",
+            )}
+            title={`Transport: ${transport}`}
+          >
+            {transport}
+          </span>
           {!entry.enabled && (
             <span
               className="rounded-full bg-surface-alt px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fg-muted"
@@ -235,7 +249,7 @@ function McpServerListItem({
             active ? "text-accent/80" : "text-fg-muted",
           )}
         >
-          {entry.command || "(no command)"} {argsPreview === "—" ? "" : argsPreview}
+          {subtitle}
         </div>
       </button>
     </li>

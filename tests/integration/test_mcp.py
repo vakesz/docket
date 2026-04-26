@@ -148,29 +148,76 @@ def test_mcp_manager_fails_soft_on_broken_server() -> None:
 
 
 def test_mcp_manager_skips_entry_without_command() -> None:
-    """An entry with no `command` is a misconfiguration, not a crash."""
+    """A stdio entry with no `command` is a misconfiguration; the manager
+    surfaces it in `status()` as a failed bind rather than crashing."""
     manager = MCPManager()
     try:
         manager.bind_project("p1", {"oops": MCPServerEntry()})
         assert manager.clients == {}
+        statuses = {s.name: s for s in manager.status()}
+        assert statuses["oops"].connected is False
+        assert statuses["oops"].last_error
+        assert "command" in statuses["oops"].last_error.lower()
     finally:
         manager.close_all()
 
 
 def test_mcp_manager_skips_unsupported_transport() -> None:
+    """`stdio`, `http`, and `sse` are the supported transports today; anything
+    else is rejected at bind time without spawning a client."""
     manager = MCPManager()
     try:
         manager.bind_project(
             "p1",
             {
                 "oops": MCPServerEntry(
-                    transport="sse",
-                    command=sys.executable,
-                    args=["-m", "tests.fakes.mcp_server"],
+                    transport="grpc",
+                    url="https://example.invalid/mcp",
                 )
             },
         )
         assert manager.clients == {}
+        statuses = {s.name: s for s in manager.status()}
+        assert statuses["oops"].connected is False
+        assert statuses["oops"].last_error
+        assert "Unsupported MCP transport" in statuses["oops"].last_error
+    finally:
+        manager.close_all()
+
+
+def test_mcp_manager_status_reports_connected_servers() -> None:
+    """`status()` returns connected clients with their tools and start time."""
+    manager = MCPManager()
+    try:
+        manager.bind_project("p1", {"fake": _server_entry()})
+        statuses = {s.name: s for s in manager.status()}
+        fake = statuses["fake"]
+        assert fake.connected is True
+        assert fake.transport == "stdio"
+        assert "mcp__fake__echo" in fake.tools
+        assert fake.started_at is not None
+        assert fake.last_error is None
+    finally:
+        manager.close_all()
+
+
+def test_mcp_manager_status_records_failed_bind() -> None:
+    """A server that fails to start is preserved in `status()` so the UI can
+    surface "configured but not connected" instead of dropping it silently."""
+    broken = MCPServerEntry(
+        transport="stdio",
+        command=sys.executable,
+        args=["-c", "import sys; sys.exit(1)"],
+        startup_timeout_seconds=2.0,
+    )
+    manager = MCPManager()
+    try:
+        manager.bind_project("p1", {"broken": broken})
+        statuses = {s.name: s for s in manager.status()}
+        assert statuses["broken"].connected is False
+        assert statuses["broken"].transport == "stdio"
+        assert statuses["broken"].last_error
+        assert statuses["broken"].started_at is None
     finally:
         manager.close_all()
 

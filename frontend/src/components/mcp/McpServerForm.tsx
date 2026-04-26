@@ -64,13 +64,22 @@ export function McpServerForm({
     return null;
   }, [draft.name, mode]);
 
-  const commandError = draft.command.trim().length === 0 ? "Command is required." : null;
+  const isStdio = draft.transport === "stdio";
+  const commandError =
+    isStdio && draft.command.trim().length === 0 ? "Command is required for stdio." : null;
+  const urlError =
+    !isStdio && draft.url.trim().length === 0
+      ? `URL is required for the ${draft.transport} transport.`
+      : null;
   const timeoutError =
     !Number.isFinite(draft.startup_timeout_seconds) || draft.startup_timeout_seconds <= 0
       ? "Startup timeout must be greater than 0."
       : null;
 
-  const formError = nameError || commandError || timeoutError;
+  const formError = nameError || commandError || urlError || timeoutError;
+  // `Test` only needs the transport-specific endpoint, not the timeout. So
+  // gate it on the field that drives the connection rather than `formError`.
+  const testBlockedReason = isStdio ? commandError : urlError;
 
   const dirty = useMemo(() => !draftsEqual(draft, initialDraft), [draft, initialDraft]);
 
@@ -85,6 +94,8 @@ export function McpServerForm({
         command: body.command,
         args: body.args,
         env: body.env,
+        url: body.url,
+        headers: body.headers,
         transport: body.transport,
         enabled: body.enabled,
         startup_timeout_seconds: body.startup_timeout_seconds,
@@ -104,11 +115,11 @@ export function McpServerForm({
   }, [del, initialDraft.name, mode, onDeleted, readOnly]);
 
   const onTest = useCallback(async () => {
-    if (readOnly || commandError) return;
+    if (readOnly || testBlockedReason) return;
     setTestResult(null);
     // For a saved-and-untouched server, omit the body so the backend exercises
-    // the runtime fleet's live client config rather than spawning a throwaway
-    // subprocess. For drafts and dirty edits, send the in-flight config.
+    // the runtime fleet's live client config rather than re-binding a throwaway
+    // client. For drafts and dirty edits, send the in-flight config.
     const sendBody = mode === "create" || dirty;
     const name = mode === "edit" ? initialDraft.name : draft.name.trim() || "draft";
     const result = await testServer.mutateAsync({
@@ -116,7 +127,7 @@ export function McpServerForm({
       body: sendBody ? serializeDraft(draft) : undefined,
     });
     setTestResult(result);
-  }, [commandError, dirty, draft, initialDraft.name, mode, readOnly, testServer]);
+  }, [testBlockedReason, dirty, draft, initialDraft.name, mode, readOnly, testServer]);
 
   const saving = create.isPending || update.isPending;
   const testing = testServer.isPending;
@@ -159,8 +170,8 @@ export function McpServerForm({
           </div>
           <p className="mt-1 text-sm text-fg-muted">
             {mode === "create"
-              ? "Stdio MCP subprocess that exposes tools to the agent. Names are immutable once saved."
-              : "Edit the server config. Changes restart the live subprocess on save."}
+              ? "MCP server (stdio subprocess or remote http/sse endpoint) that exposes tools to the agent. Names are immutable once saved."
+              : "Edit the server config. Changes rebind the live client on save."}
           </p>
         </div>
 
@@ -168,9 +179,13 @@ export function McpServerForm({
           <button
             type="button"
             onClick={() => void onTest()}
-            disabled={readOnly || testing || Boolean(commandError)}
+            disabled={readOnly || testing || Boolean(testBlockedReason)}
             className={outlineButtonClass}
-            title="Spawn the subprocess, run the MCP handshake, and list its tools"
+            title={
+              isStdio
+                ? "Spawn the subprocess, run the MCP handshake, and list its tools"
+                : "Open a connection to the remote MCP server, run the handshake, and list its tools"
+            }
           >
             <FlaskConical className="h-4 w-4" />
             {testing ? "Testing…" : "Test"}
@@ -234,31 +249,24 @@ export function McpServerForm({
               {nameError && <FieldError>{nameError}</FieldError>}
             </FormField>
 
-            <FormField
-              label="Command"
-              help="Executable that speaks MCP over stdio. Must be on PATH or absolute."
-            >
-              <TextInput
-                value={draft.command}
-                onChange={(v) => setDraft((d) => ({ ...d, command: v }))}
-                placeholder="npx"
-              />
-              {commandError && <FieldError>{commandError}</FieldError>}
-            </FormField>
-
-            <FormField label="Arguments" help="Whitespace-separated. No shell quoting.">
-              <TextInput
-                value={draft.args}
-                onChange={(v) => setDraft((d) => ({ ...d, args: v }))}
-                placeholder="-y @modelcontextprotocol/server-github"
-              />
-            </FormField>
-
             <div className="grid gap-4 sm:grid-cols-[1fr_160px]">
-              <FormField label="Transport" help="Only stdio is supported today.">
+              <FormField
+                label="Transport"
+                help={
+                  isStdio
+                    ? "Local subprocess speaking MCP over stdio."
+                    : draft.transport === "http"
+                      ? "Remote streamable-HTTP MCP endpoint (e.g. hosted GitHub MCP)."
+                      : "Remote MCP endpoint over Server-Sent Events."
+                }
+              >
                 <Select
                   value={draft.transport}
-                  options={[{ value: "stdio", label: "stdio" }]}
+                  options={[
+                    { value: "stdio", label: "stdio (subprocess)" },
+                    { value: "http", label: "http (streamable HTTP)" },
+                    { value: "sse", label: "sse (server-sent events)" },
+                  ]}
                   onChange={(v) => setDraft((d) => ({ ...d, transport: v }))}
                 />
               </FormField>
@@ -274,21 +282,87 @@ export function McpServerForm({
               </FormField>
             </div>
 
+            {isStdio ? (
+              <>
+                <FormField
+                  label="Command"
+                  help="Executable that speaks MCP over stdio. Must be on PATH or absolute."
+                >
+                  <TextInput
+                    value={draft.command}
+                    onChange={(v) => setDraft((d) => ({ ...d, command: v }))}
+                    placeholder="npx"
+                  />
+                  {commandError && <FieldError>{commandError}</FieldError>}
+                </FormField>
+
+                <FormField label="Arguments" help="Whitespace-separated. No shell quoting.">
+                  <TextInput
+                    value={draft.args}
+                    onChange={(v) => setDraft((d) => ({ ...d, args: v }))}
+                    placeholder="-y @modelcontextprotocol/server-github"
+                  />
+                </FormField>
+
+                <FormField
+                  label="Environment"
+                  help="Key/value pairs forwarded to the subprocess. Use for secrets like API tokens."
+                >
+                  <PairEditor
+                    value={draft.env}
+                    onChange={(next) => setDraft((d) => ({ ...d, env: next }))}
+                    keyPlaceholder="GITHUB_PERSONAL_ACCESS_TOKEN"
+                    valuePlaceholder="ghp_…"
+                    valueType="password"
+                    addLabel="Add env var"
+                    emptyLabel="No env vars set."
+                  />
+                </FormField>
+              </>
+            ) : (
+              <>
+                <FormField
+                  label="URL"
+                  help={
+                    draft.transport === "http"
+                      ? "Streamable-HTTP endpoint (usually ends in /mcp)."
+                      : "SSE endpoint URL."
+                  }
+                >
+                  <TextInput
+                    value={draft.url}
+                    onChange={(v) => setDraft((d) => ({ ...d, url: v }))}
+                    placeholder={
+                      draft.transport === "http"
+                        ? "https://api.example.com/mcp"
+                        : "https://api.example.com/sse"
+                    }
+                  />
+                  {urlError && <FieldError>{urlError}</FieldError>}
+                </FormField>
+
+                <FormField
+                  label="Headers"
+                  help="Sent on every request. Use for `Authorization: Bearer …` and the like."
+                >
+                  <PairEditor
+                    value={draft.headers}
+                    onChange={(next) => setDraft((d) => ({ ...d, headers: next }))}
+                    keyPlaceholder="Authorization"
+                    valuePlaceholder="Bearer …"
+                    valueType="password"
+                    addLabel="Add header"
+                    emptyLabel="No headers set."
+                  />
+                </FormField>
+              </>
+            )}
+
             <FormField label="Enabled" help="Disabled servers are skipped at bind time.">
               <Toggle
                 checked={draft.enabled}
                 onChange={(v) => setDraft((d) => ({ ...d, enabled: v }))}
                 label={draft.enabled ? "Enabled" : "Disabled"}
-              />
-            </FormField>
-
-            <FormField
-              label="Environment"
-              help="Key/value pairs forwarded to the subprocess. Use for secrets like API tokens."
-            >
-              <EnvEditor
-                value={draft.env}
-                onChange={(next) => setDraft((d) => ({ ...d, env: next }))}
               />
             </FormField>
           </section>
@@ -366,12 +440,22 @@ function TestResultCard({ result }: { result: DTO["MCPServerTestResultDTO"] }) {
   );
 }
 
-function EnvEditor({
+function PairEditor({
   value,
   onChange,
+  keyPlaceholder,
+  valuePlaceholder,
+  valueType,
+  addLabel,
+  emptyLabel,
 }: {
   value: { key: string; value: string }[];
   onChange: (next: { key: string; value: string }[]) => void;
+  keyPlaceholder: string;
+  valuePlaceholder: string;
+  valueType?: "text" | "password";
+  addLabel: string;
+  emptyLabel: string;
 }) {
   const updateRow = (idx: number, patch: Partial<{ key: string; value: string }>) => {
     const next = value.map((row, i) => (i === idx ? { ...row, ...patch } : row));
@@ -388,25 +472,25 @@ function EnvEditor({
     <div className="flex flex-col gap-2">
       {value.length === 0 && (
         <p className="rounded-xl border border-dashed border-border px-3 py-2 text-xs text-fg-muted">
-          No env vars set.
+          {emptyLabel}
         </p>
       )}
       {value.map((row, idx) => (
         <div
-          // biome-ignore lint/suspicious/noArrayIndexKey: env rows are ordered and the index is a stable identity while the row is mounted; swapping to random ids would force remount on every keystroke.
+          // biome-ignore lint/suspicious/noArrayIndexKey: pair rows are ordered and the index is a stable identity while the row is mounted; swapping to random ids would force remount on every keystroke.
           key={idx}
           className="grid grid-cols-[1fr_1.5fr_auto] items-stretch gap-2"
         >
           <TextInput
             value={row.key}
             onChange={(v) => updateRow(idx, { key: v })}
-            placeholder="GITHUB_PERSONAL_ACCESS_TOKEN"
+            placeholder={keyPlaceholder}
           />
           <TextInput
             value={row.value}
             onChange={(v) => updateRow(idx, { value: v })}
-            placeholder="ghp_…"
-            type="password"
+            placeholder={valuePlaceholder}
+            type={valueType ?? "text"}
           />
           <button
             type="button"
@@ -424,7 +508,7 @@ function EnvEditor({
         className="inline-flex w-fit items-center gap-1 rounded-xl border border-border px-3 py-1.5 text-xs text-fg-muted hover:bg-surface-alt"
       >
         <Plus className="h-3 w-3" />
-        Add env var
+        {addLabel}
       </button>
     </div>
   );

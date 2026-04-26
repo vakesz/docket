@@ -31,6 +31,8 @@ from docket.api.schemas import (
     MCPPresetDTO,
     MCPPresetEnvDTO,
     MCPPresetListDTO,
+    MCPRuntimeDTO,
+    MCPRuntimeServerDTO,
     MCPServerDTO,
     MCPServerListDTO,
     MCPServerTestResultDTO,
@@ -53,6 +55,8 @@ def _to_dto(project_id: str, name: str, entry: MCPServerEntry) -> MCPServerDTO:
         command=entry.command,
         args=list(entry.args),
         env=dict(entry.env),
+        url=entry.url,
+        headers=dict(entry.headers),
         enabled=entry.enabled,
         startup_timeout_seconds=entry.startup_timeout_seconds,
     )
@@ -86,10 +90,6 @@ def _test_result(name: str, entry: MCPServerEntry) -> MCPServerTestResultDTO:
         entry = mcp_service.validate_entry(entry)
     except mcp_service.InvalidServerConfigError as exc:
         return MCPServerTestResultDTO(name=name, ok=False, error=str(exc))
-    if not entry.command:
-        return MCPServerTestResultDTO(
-            name=name, ok=False, error="Server entry has no `command` configured."
-        )
     client = MCPClient(name, entry)
     try:
         client.start()
@@ -124,6 +124,52 @@ def list_mcp_servers(
     return MCPServerListDTO(
         project_id=project_id,
         entries=[_to_dto(project_id, name, entry) for name, entry in servers.items()],
+    )
+
+
+@router.get(
+    "/projects/{project_id:path}/mcp/runtime",
+    response_model=MCPRuntimeDTO,
+)
+def get_mcp_runtime(
+    project_id: str,
+    config: Config = Depends(get_config),
+    runtime: RuntimeState = Depends(get_runtime),
+) -> MCPRuntimeDTO:
+    """Snapshot the live MCP fleet for the active project.
+
+    Returns connected clients with their discovered tool catalog plus any
+    servers that failed to start on the last bind (with `last_error`). When
+    `project_id` is not the runtime's currently-active project, the response
+    has `active_project_id` set but no live `servers` — the configured list
+    is available via the regular CRUD route. 404 if the project doesn't
+    exist at all.
+
+    Registered before `GET /{name}` so the path segment `runtime` doesn't
+    get swallowed as a server lookup."""
+    require_project(config, project_id)
+    manager = runtime.mcp_manager
+    if manager is None or runtime.project_id != project_id:
+        return MCPRuntimeDTO(
+            project_id=project_id,
+            active_project_id=manager.active_project_id if manager else None,
+            servers=[],
+        )
+    servers = [
+        MCPRuntimeServerDTO(
+            name=s.name,
+            transport=s.transport,
+            connected=s.connected,
+            tools=list(s.tools),
+            started_at=s.started_at,
+            last_error=s.last_error,
+        )
+        for s in manager.status()
+    ]
+    return MCPRuntimeDTO(
+        project_id=project_id,
+        active_project_id=manager.active_project_id,
+        servers=servers,
     )
 
 
@@ -169,6 +215,8 @@ def create_mcp_server(
             command=payload.command,
             args=list(payload.args),
             env=dict(payload.env),
+            url=payload.url,
+            headers=dict(payload.headers),
             transport=payload.transport,
             enabled=payload.enabled,
             startup_timeout_seconds=payload.startup_timeout_seconds,
@@ -202,8 +250,8 @@ def update_mcp_server(
     if not payload.model_dump(exclude_none=True):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            "At least one of command, args, env, transport, enabled, "
-            "startup_timeout_seconds must be set.",
+            "At least one of command, args, env, url, headers, transport, "
+            "enabled, startup_timeout_seconds must be set.",
         )
     try:
         entry = mcp_service.update_server(
@@ -214,6 +262,8 @@ def update_mcp_server(
             command=payload.command,
             args=list(payload.args) if payload.args is not None else None,
             env=dict(payload.env) if payload.env is not None else None,
+            url=payload.url,
+            headers=dict(payload.headers) if payload.headers is not None else None,
             transport=payload.transport,
             enabled=payload.enabled,
             startup_timeout_seconds=payload.startup_timeout_seconds,

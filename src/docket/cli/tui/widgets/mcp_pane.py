@@ -17,6 +17,7 @@ Delete + re-add if a name needs to change."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import ClassVar
 
 from textual.app import ComposeResult
@@ -30,32 +31,47 @@ from docket.config.paths import Paths
 from docket.core.services import mcp_service
 
 
-def _format_env(env: dict[str, str]) -> str:
-    return "\n".join(f"{k}={v}" for k, v in env.items())
+def _format_pairs(pairs: dict[str, str]) -> str:
+    return "\n".join(f"{k}={v}" for k, v in pairs.items())
 
 
-def _parse_env(raw: str) -> dict[str, str]:
-    """Parse the env TextArea (KEY=VALUE per line). Blank lines ignored.
-    Raises ValueError on malformed lines so the caller can surface the
-    exact line number to the user."""
-    env: dict[str, str] = {}
+def _parse_pairs(raw: str, *, label: str) -> dict[str, str]:
+    """Parse a KEY=VALUE-per-line TextArea. Blank lines ignored.
+    Raises ValueError on malformed lines with the surrounding `label` so
+    the caller can prefix the user-facing message."""
+    pairs: dict[str, str] = {}
     for index, line in enumerate(raw.splitlines(), start=1):
         stripped = line.strip()
         if not stripped:
             continue
         if "=" not in stripped:
-            raise ValueError(f"line {index}: '{stripped}' must be KEY=VALUE")
+            raise ValueError(f"{label} line {index}: '{stripped}' must be KEY=VALUE")
         key, _, value = stripped.partition("=")
         key = key.strip()
         if not key:
-            raise ValueError(f"line {index}: '{stripped}' has empty key")
-        env[key] = value
-    return env
+            raise ValueError(f"{label} line {index}: '{stripped}' has empty key")
+        pairs[key] = value
+    return pairs
 
 
 def _parse_args(raw: str) -> list[str]:
     """Whitespace-split args. Mirrors the CLI's `_split_args`."""
     return [piece for piece in raw.split() if piece]
+
+
+@dataclass(frozen=True)
+class _FormValues:
+    """Validated editor form, ready to hand to `mcp_service`."""
+
+    name: str
+    transport: str
+    command: str
+    args: list[str]
+    env: dict[str, str]
+    url: str
+    headers: dict[str, str] = field(default_factory=dict)
+    enabled: bool = True
+    timeout: float = 10.0
 
 
 class MCPPane(ListEditPane):
@@ -70,9 +86,11 @@ class MCPPane(ListEditPane):
     MCPPane #name-input { height: 3; }
     MCPPane #command-input { height: 3; }
     MCPPane #args-input { height: 3; }
+    MCPPane #url-input { height: 3; }
     MCPPane #transport-input { height: 3; }
     MCPPane #timeout-input { height: 3; }
-    MCPPane #env-input { height: 8; border: round $panel-lighten-1; background: $panel; }
+    MCPPane #env-input { height: 6; border: round $panel-lighten-1; background: $panel; }
+    MCPPane #headers-input { height: 6; border: round $panel-lighten-1; background: $panel; }
     MCPPane #enabled-checkbox { height: 3; padding-top: 1; }
     """
 
@@ -115,14 +133,18 @@ class MCPPane(ListEditPane):
     def compose_editor(self) -> ComposeResult:
         yield Static("name (immutable after create)", classes="field-label")
         yield Input(placeholder="short identifier…", id="name-input")
-        yield Static("command", classes="field-label")
-        yield Input(placeholder="/usr/bin/python or absolute path", id="command-input")
-        yield Static("args (whitespace-separated)", classes="field-label")
-        yield Input(placeholder="-m my.server --flag", id="args-input")
-        yield Static("env (KEY=VALUE per line)", classes="field-label")
-        yield TextArea("", id="env-input")
         yield Static("transport", classes="field-label")
-        yield Input(value="stdio", placeholder="stdio", id="transport-input")
+        yield Input(value="stdio", placeholder="stdio · http · sse", id="transport-input")
+        yield Static("command (stdio)", classes="field-label")
+        yield Input(placeholder="/usr/bin/python or absolute path", id="command-input")
+        yield Static("args (stdio · whitespace-separated)", classes="field-label")
+        yield Input(placeholder="-m my.server --flag", id="args-input")
+        yield Static("env (stdio · KEY=VALUE per line)", classes="field-label")
+        yield TextArea("", id="env-input")
+        yield Static("url (http / sse)", classes="field-label")
+        yield Input(placeholder="https://server.example.com/mcp", id="url-input")
+        yield Static("headers (http / sse · KEY=VALUE per line)", classes="field-label")
+        yield TextArea("", id="headers-input")
         yield Static("startup timeout (seconds)", classes="field-label")
         yield Input(value="10.0", placeholder="10.0", id="timeout-input")
         yield Checkbox("Enabled (start on bind)", value=True, id="enabled-checkbox")
@@ -143,10 +165,12 @@ class MCPPane(ListEditPane):
     def _field_ids(self) -> tuple[str, ...]:
         return (
             "name-input",
+            "transport-input",
             "command-input",
             "args-input",
             "env-input",
-            "transport-input",
+            "url-input",
+            "headers-input",
             "timeout-input",
             "enabled-checkbox",
         )
@@ -171,10 +195,12 @@ class MCPPane(ListEditPane):
         # Names are immutable after create — disable so the user doesn't
         # accidentally type a new value and expect a rename.
         name_input.disabled = True
+        self.query_one("#transport-input", Input).value = entry.transport
         self.query_one("#command-input", Input).value = entry.command
         self.query_one("#args-input", Input).value = " ".join(entry.args)
-        self.query_one("#env-input", TextArea).text = _format_env(entry.env)
-        self.query_one("#transport-input", Input).value = entry.transport
+        self.query_one("#env-input", TextArea).text = _format_pairs(entry.env)
+        self.query_one("#url-input", Input).value = entry.url
+        self.query_one("#headers-input", TextArea).text = _format_pairs(entry.headers)
         self.query_one("#timeout-input", Input).value = f"{entry.startup_timeout_seconds}"
         self.query_one("#enabled-checkbox", Checkbox).value = entry.enabled
 
@@ -183,10 +209,12 @@ class MCPPane(ListEditPane):
         name_input.value = ""
         # Editable for new-entry creation.
         name_input.disabled = self._read_only
+        self.query_one("#transport-input", Input).value = "stdio"
         self.query_one("#command-input", Input).value = ""
         self.query_one("#args-input", Input).value = ""
         self.query_one("#env-input", TextArea).text = ""
-        self.query_one("#transport-input", Input).value = "stdio"
+        self.query_one("#url-input", Input).value = ""
+        self.query_one("#headers-input", TextArea).text = ""
         self.query_one("#timeout-input", Input).value = "10.0"
         self.query_one("#enabled-checkbox", Checkbox).value = True
 
@@ -194,47 +222,50 @@ class MCPPane(ListEditPane):
         form = self._read_form()
         if form is None:
             return None
-        name, command, args, env, transport, enabled, timeout = form
         try:
             if self._current_id is None:
                 mcp_service.add_server(
                     self._config,
                     self._paths,
                     self._project_id,
-                    name,
-                    command=command,
-                    args=args,
-                    env=env,
-                    transport=transport,
-                    enabled=enabled,
-                    startup_timeout_seconds=timeout,
+                    form.name,
+                    command=form.command,
+                    args=form.args,
+                    env=form.env,
+                    url=form.url,
+                    headers=form.headers,
+                    transport=form.transport,
+                    enabled=form.enabled,
+                    startup_timeout_seconds=form.timeout,
                 )
-                self.app.notify(f"Added MCP server '{name}'.", severity="information")
+                self.app.notify(f"Added MCP server '{form.name}'.", severity="information")
             else:
                 mcp_service.update_server(
                     self._config,
                     self._paths,
                     self._project_id,
                     self._current_id,
-                    command=command,
-                    args=args,
-                    env=env,
-                    transport=transport,
-                    enabled=enabled,
-                    startup_timeout_seconds=timeout,
+                    command=form.command,
+                    args=form.args,
+                    env=form.env,
+                    url=form.url,
+                    headers=form.headers,
+                    transport=form.transport,
+                    enabled=form.enabled,
+                    startup_timeout_seconds=form.timeout,
                 )
-                self.app.notify(f"Saved MCP server '{name}'.", severity="information")
+                self.app.notify(f"Saved MCP server '{form.name}'.", severity="information")
         except mcp_service.DuplicateServerError:
-            self.app.notify(f"'{name}' already exists.", severity="error")
+            self.app.notify(f"'{form.name}' already exists.", severity="error")
             return None
         except mcp_service.InvalidServerConfigError as exc:
             self.app.notify(str(exc), severity="error")
             return None
         except mcp_service.UnknownServerError:
-            self.app.notify(f"'{name}' vanished — refreshing.", severity="warning")
+            self.app.notify(f"'{form.name}' vanished — refreshing.", severity="warning")
             return None
         self._rebind_live_fleet()
-        return name
+        return form.name
 
     def _delete_one(self, entry_id: str) -> bool:
         try:
@@ -256,24 +287,23 @@ class MCPPane(ListEditPane):
         form = self._read_form()
         if form is None:
             return
-        name, command, args, env, transport, enabled, timeout = form
-        if not command:
-            self.app.notify("Set a command before testing.", severity="warning")
-            return
         entry = MCPServerEntry(
-            transport=transport,
-            command=command,
-            args=args,
-            env=env,
-            enabled=enabled,
-            startup_timeout_seconds=timeout,
+            transport=form.transport,
+            command=form.command,
+            args=form.args,
+            env=form.env,
+            url=form.url,
+            headers=form.headers,
+            enabled=form.enabled,
+            startup_timeout_seconds=form.timeout,
         )
         try:
             entry = mcp_service.validate_entry(entry)
         except mcp_service.InvalidServerConfigError as exc:
             self.app.notify(str(exc), severity="error")
             return
-        self.app.notify(f"Starting MCP server '{name}'…", severity="information")
+        self.app.notify(f"Starting MCP server '{form.name}'…", severity="information")
+        name = form.name
         self.run_worker(
             lambda: self._test_worker(name, entry),
             group=f"mcp-test-{name}",
@@ -307,28 +337,46 @@ class MCPPane(ListEditPane):
 
     # -- helpers -----------------------------------------------------------
 
-    def _read_form(
-        self,
-    ) -> tuple[str, str, list[str], dict[str, str], str, bool, float] | None:
+    def _read_form(self) -> _FormValues | None:
         """Read + validate the editor form. Notifies on error and returns
-        `None` so callers can early-exit."""
+        `None` so callers can early-exit. Per-transport requirements
+        (stdio needs `command`; http/sse needs `url`) match `mcp_service.
+        validate_entry`, so the service-side check is just defense in
+        depth."""
         name = self.query_one("#name-input", Input).value.strip()
+        transport = self.query_one("#transport-input", Input).value.strip() or "stdio"
         command = self.query_one("#command-input", Input).value.strip()
         args_raw = self.query_one("#args-input", Input).value
         env_raw = self.query_one("#env-input", TextArea).text
-        transport = self.query_one("#transport-input", Input).value.strip() or "stdio"
+        url = self.query_one("#url-input", Input).value.strip()
+        headers_raw = self.query_one("#headers-input", TextArea).text
         timeout_raw = self.query_one("#timeout-input", Input).value.strip()
         enabled = self.query_one("#enabled-checkbox", Checkbox).value
         if not name:
             self.app.notify("Name is required.", severity="warning")
             return None
-        if not command:
-            self.app.notify("Command is required.", severity="warning")
+        if transport not in mcp_service.SUPPORTED_TRANSPORTS:
+            self.app.notify(
+                f"Unsupported transport '{transport}'. "
+                f"Use one of: {', '.join(sorted(mcp_service.SUPPORTED_TRANSPORTS))}.",
+                severity="warning",
+            )
+            return None
+        if transport == "stdio" and not command:
+            self.app.notify("stdio transport requires a command.", severity="warning")
+            return None
+        if transport != "stdio" and not url:
+            self.app.notify(f"{transport} transport requires a url.", severity="warning")
             return None
         try:
-            env = _parse_env(env_raw)
+            env = _parse_pairs(env_raw, label="env")
         except ValueError as exc:
-            self.app.notify(f"env: {exc}", severity="error")
+            self.app.notify(str(exc), severity="error")
+            return None
+        try:
+            headers = _parse_pairs(headers_raw, label="headers")
+        except ValueError as exc:
+            self.app.notify(str(exc), severity="error")
             return None
         try:
             timeout = float(timeout_raw) if timeout_raw else 10.0
@@ -338,7 +386,17 @@ class MCPPane(ListEditPane):
         if timeout <= 0:
             self.app.notify("timeout must be > 0.", severity="warning")
             return None
-        return name, command, _parse_args(args_raw), env, transport, enabled, timeout
+        return _FormValues(
+            name=name,
+            transport=transport,
+            command=command,
+            args=_parse_args(args_raw),
+            env=env,
+            url=url,
+            headers=headers,
+            enabled=enabled,
+            timeout=timeout,
+        )
 
     def _rebind_live_fleet(self) -> None:
         """Push the latest `[projects.<pid>.mcp]` snapshot into the running

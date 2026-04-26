@@ -215,10 +215,12 @@ Before `config.toml` exists, `docket serve` falls through to a tiny FastAPI expo
 ```bash
 make install         # uv sync + bun install (one-time)
 make env             # mint a fresh DOCKET_API_TOKEN into .env (one-time, dev only)
-make dev             # backend + vite dev server together
+make serve           # build the SPA and run the backend serving it
 ```
 
-`make dev` brings up the backend on `127.0.0.1:8765` and the dev frontend on `localhost:3000`. The frontend's Bun server proxies `/api/*` to the backend with the bearer attached server-side; the token never reaches the browser.
+`make serve` runs `bun run build` (vite emits the static SPA into `src/docket/frontend_dist/`) and then starts the backend at `127.0.0.1:8765` — one process, one origin, no separate frontend server. The bearer token is injected into `index.html` at request time as `window.__DOCKET_TOKEN__` and re-attached to every API call from the browser. The token only ever lives on the local box — same trust model as the wheel install.
+
+To iterate on the SPA, re-run `make frontend-build` and refresh the browser. There is no HMR loop; trade-off for the single-origin, single-process model.
 
 `resolve-backend-config.ts` reads the token in this order:
 
@@ -227,9 +229,9 @@ make dev             # backend + vite dev server together
 
 So once setup has written `config.toml`, you can clear `DOCKET_API_TOKEN` from `.env` and both stacks still agree on the same token. Override `DOCKET_API_URL` only when the backend isn't on `127.0.0.1:8765`.
 
-Production: `make frontend-build` then `make frontend-start` runs the SSR bundle through Bun.
+Production: `make serve` (or `make wheel` for the installable artifact). Both run `bun run build`, which emits the static SPA directly into `src/docket/frontend_dist/`; the backend then serves it from there.
 
-Regenerate the OpenAPI-typed client with `make gen-api` while the backend is running.
+Regenerate the OpenAPI-typed client with `cd frontend && bun run gen:api` while the backend is running.
 
 ---
 
@@ -316,7 +318,7 @@ The `[http]` section in `config.toml` either has `enabled = false` or `token = "
 
 ### Web UI loads but every `/api/*` request 401s
 
-Either `DOCKET_API_TOKEN` (in `.env`) and `[http] token` (in `config.toml`) disagree, or both are empty. `make env` mints a fresh token into `.env`; the wizard mirrors `DOCKET_API_TOKEN` from the env into `config.toml` if it's set when you run `docket setup --step=http`. After they agree, restart `make dev` so the Bun proxy picks up the new value.
+Either `DOCKET_API_TOKEN` (in `.env`) and `[http] token` (in `config.toml`) disagree, or both are empty. `make env` mints a fresh token into `.env`; the wizard mirrors `DOCKET_API_TOKEN` from the env into `config.toml` if it's set when you run `docket setup --step=http`. After they agree, re-run `make serve` so the new token is injected into the served `index.html`.
 
 ### "Read-only mode — mutations disabled"
 

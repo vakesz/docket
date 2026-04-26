@@ -4,7 +4,7 @@
  */
 
 export interface paths {
-    "/items/{item_id}/mutations/transition/propose": {
+    "/api/items/{item_id}/mutations/transition/propose": {
         parameters: {
             query?: never;
             header?: never;
@@ -14,14 +14,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Propose Transition */
-        post: operations["propose_transition_items__item_id__mutations_transition_propose_post"];
+        post: operations["propose_transition_api_items__item_id__mutations_transition_propose_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/items/{item_id}/mutations/description/propose": {
+    "/api/items/{item_id}/mutations/description/propose": {
         parameters: {
             query?: never;
             header?: never;
@@ -31,14 +31,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Propose Description */
-        post: operations["propose_description_items__item_id__mutations_description_propose_post"];
+        post: operations["propose_description_api_items__item_id__mutations_description_propose_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/items/{item_id}/mutations/attachment/propose": {
+    "/api/items/{item_id}/mutations/attachment/propose": {
         parameters: {
             query?: never;
             header?: never;
@@ -48,14 +48,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Propose Attachment */
-        post: operations["propose_attachment_items__item_id__mutations_attachment_propose_post"];
+        post: operations["propose_attachment_api_items__item_id__mutations_attachment_propose_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/items/{item_id}/mutations/comment/propose": {
+    "/api/items/{item_id}/mutations/comment/propose": {
         parameters: {
             query?: never;
             header?: never;
@@ -65,14 +65,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Propose Comment */
-        post: operations["propose_comment_items__item_id__mutations_comment_propose_post"];
+        post: operations["propose_comment_api_items__item_id__mutations_comment_propose_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/items/{item_id}/mutations/{proposal_id}": {
+    "/api/items/{item_id}/mutations/{proposal_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -80,7 +80,7 @@ export interface paths {
             cookie?: never;
         };
         /** Get Proposal */
-        get: operations["get_proposal_items__item_id__mutations__proposal_id__get"];
+        get: operations["get_proposal_api_items__item_id__mutations__proposal_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -89,7 +89,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/items/{item_id}/mutations/{proposal_id}/confirm": {
+    "/api/items/{item_id}/mutations/{proposal_id}/confirm": {
         parameters: {
             query?: never;
             header?: never;
@@ -99,14 +99,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Confirm Proposal */
-        post: operations["confirm_proposal_items__item_id__mutations__proposal_id__confirm_post"];
+        post: operations["confirm_proposal_api_items__item_id__mutations__proposal_id__confirm_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/items/{item_id}/mutations/{proposal_id}/reject": {
+    "/api/items/{item_id}/mutations/{proposal_id}/reject": {
         parameters: {
             query?: never;
             header?: never;
@@ -116,14 +116,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Reject Proposal */
-        post: operations["reject_proposal_items__item_id__mutations__proposal_id__reject_post"];
+        post: operations["reject_proposal_api_items__item_id__mutations__proposal_id__reject_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/items/{item_id}/conversation": {
+    "/api/items/{item_id}/conversation": {
         parameters: {
             query?: never;
             header?: never;
@@ -131,7 +131,7 @@ export interface paths {
             cookie?: never;
         };
         /** Get History */
-        get: operations["get_history_items__item_id__conversation_get"];
+        get: operations["get_history_api_items__item_id__conversation_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -140,7 +140,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/items/{item_id}/conversation/pending_question": {
+    "/api/items/{item_id}/conversation/pending_question": {
         parameters: {
             query?: never;
             header?: never;
@@ -155,7 +155,7 @@ export interface paths {
          *     placeholder tool-result message is in history, but the structured options
          *     only live in memory until the user answers.
          */
-        get: operations["get_pending_question_items__item_id__conversation_pending_question_get"];
+        get: operations["get_pending_question_api_items__item_id__conversation_pending_question_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -164,7 +164,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/items/{item_id}/conversation/thread": {
+    "/api/items/{item_id}/conversation/thread": {
         parameters: {
             query?: never;
             header?: never;
@@ -174,14 +174,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Start Thread */
-        post: operations["start_thread_items__item_id__conversation_thread_post"];
+        post: operations["start_thread_api_items__item_id__conversation_thread_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/items/{item_id}/conversation/messages": {
+    "/api/items/{item_id}/conversation/messages": {
         parameters: {
             query?: never;
             header?: never;
@@ -203,14 +203,14 @@ export interface paths {
          *       - `done` — terminal, carries usage totals
          *       - `error` — terminal, carries a human-readable detail
          */
-        post: operations["send_message_items__item_id__conversation_messages_post"];
+        post: operations["send_message_api_items__item_id__conversation_messages_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/items/{item_id}/conversation/answer": {
+    "/api/items/{item_id}/conversation/answer": {
         parameters: {
             query?: never;
             header?: never;
@@ -226,14 +226,14 @@ export interface paths {
          *     Streams the same event types as `/messages` (delta/message/proposal/question/done/error).
          *     Returns 409 if no question is pending or the id does not match.
          */
-        post: operations["answer_question_items__item_id__conversation_answer_post"];
+        post: operations["answer_question_api_items__item_id__conversation_answer_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/items/{item_id}/pinned": {
+    "/api/items/{item_id}/pinned": {
         parameters: {
             query?: never;
             header?: never;
@@ -241,7 +241,7 @@ export interface paths {
             cookie?: never;
         };
         /** Is Pinned */
-        get: operations["is_pinned_items__item_id__pinned_get"];
+        get: operations["is_pinned_api_items__item_id__pinned_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -250,7 +250,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/items/{item_id}/pin": {
+    "/api/items/{item_id}/pin": {
         parameters: {
             query?: never;
             header?: never;
@@ -260,15 +260,15 @@ export interface paths {
         get?: never;
         put?: never;
         /** Pin Item */
-        post: operations["pin_item_items__item_id__pin_post"];
+        post: operations["pin_item_api_items__item_id__pin_post"];
         /** Unpin Item */
-        delete: operations["unpin_item_items__item_id__pin_delete"];
+        delete: operations["unpin_item_api_items__item_id__pin_delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/pinned": {
+    "/api/pinned": {
         parameters: {
             query?: never;
             header?: never;
@@ -276,7 +276,7 @@ export interface paths {
             cookie?: never;
         };
         /** List Pinned */
-        get: operations["list_pinned_pinned_get"];
+        get: operations["list_pinned_api_pinned_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -285,7 +285,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/items/{item_id}/suggestion": {
+    "/api/items/{item_id}/suggestion": {
         parameters: {
             query?: never;
             header?: never;
@@ -295,14 +295,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Get Suggestion */
-        post: operations["get_suggestion_items__item_id__suggestion_post"];
+        post: operations["get_suggestion_api_items__item_id__suggestion_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/items/{item_id}/suggestion/stage": {
+    "/api/items/{item_id}/suggestion/stage": {
         parameters: {
             query?: never;
             header?: never;
@@ -312,14 +312,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Stage Suggestion */
-        post: operations["stage_suggestion_items__item_id__suggestion_stage_post"];
+        post: operations["stage_suggestion_api_items__item_id__suggestion_stage_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/items": {
+    "/api/items": {
         parameters: {
             query?: never;
             header?: never;
@@ -327,7 +327,7 @@ export interface paths {
             cookie?: never;
         };
         /** List Items */
-        get: operations["list_items_items_get"];
+        get: operations["list_items_api_items_get"];
         put?: never;
         /**
          * Create Item
@@ -339,14 +339,14 @@ export interface paths {
          *     actually create the item, or `/reject` to discard it. Nothing hits the
          *     provider until confirm.
          */
-        post: operations["create_item_items_post"];
+        post: operations["create_item_api_items_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/items/search": {
+    "/api/items/search": {
         parameters: {
             query?: never;
             header?: never;
@@ -360,7 +360,7 @@ export interface paths {
          *     Backs the create-item duplicate-candidate panel: OR-semantics FTS5 search
          *     scoped to the active provider. Empty `q` returns `[]`.
          */
-        get: operations["search_items_items_search_get"];
+        get: operations["search_items_api_items_search_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -369,7 +369,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/items/{item_id}/comments": {
+    "/api/items/{item_id}/comments": {
         parameters: {
             query?: never;
             header?: never;
@@ -377,7 +377,7 @@ export interface paths {
             cookie?: never;
         };
         /** Get Comments */
-        get: operations["get_comments_items__item_id__comments_get"];
+        get: operations["get_comments_api_items__item_id__comments_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -386,7 +386,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/items/{item_id}/linked": {
+    "/api/items/{item_id}/linked": {
         parameters: {
             query?: never;
             header?: never;
@@ -394,7 +394,7 @@ export interface paths {
             cookie?: never;
         };
         /** Get Linked */
-        get: operations["get_linked_items__item_id__linked_get"];
+        get: operations["get_linked_api_items__item_id__linked_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -403,7 +403,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/items/{item_id}": {
+    "/api/items/{item_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -411,7 +411,7 @@ export interface paths {
             cookie?: never;
         };
         /** Get Item */
-        get: operations["get_item_items__item_id__get"];
+        get: operations["get_item_api_items__item_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -420,7 +420,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/items/proposals/{proposal_id}/confirm": {
+    "/api/items/proposals/{proposal_id}/confirm": {
         parameters: {
             query?: never;
             header?: never;
@@ -430,14 +430,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Confirm Item Create */
-        post: operations["confirm_item_create_items_proposals__proposal_id__confirm_post"];
+        post: operations["confirm_item_create_api_items_proposals__proposal_id__confirm_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/items/proposals/{proposal_id}/reject": {
+    "/api/items/proposals/{proposal_id}/reject": {
         parameters: {
             query?: never;
             header?: never;
@@ -447,14 +447,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Reject Item Create */
-        post: operations["reject_item_create_items_proposals__proposal_id__reject_post"];
+        post: operations["reject_item_create_api_items_proposals__proposal_id__reject_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/prompts": {
+    "/api/prompts": {
         parameters: {
             query?: never;
             header?: never;
@@ -462,7 +462,7 @@ export interface paths {
             cookie?: never;
         };
         /** List Prompts */
-        get: operations["list_prompts_prompts_get"];
+        get: operations["list_prompts_api_prompts_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -471,7 +471,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/prompts/{key}": {
+    "/api/prompts/{key}": {
         parameters: {
             query?: never;
             header?: never;
@@ -479,9 +479,9 @@ export interface paths {
             cookie?: never;
         };
         /** Get Prompt */
-        get: operations["get_prompt_prompts__key__get"];
+        get: operations["get_prompt_api_prompts__key__get"];
         /** Put Prompt */
-        put: operations["put_prompt_prompts__key__put"];
+        put: operations["put_prompt_api_prompts__key__put"];
         post?: never;
         /**
          * Reset Prompt
@@ -491,13 +491,13 @@ export interface paths {
          *     default rather than deleting it. Clients can distinguish by reading the
          *     content — the returned `content_md` is exactly the canonical template.
          */
-        delete: operations["reset_prompt_prompts__key__delete"];
+        delete: operations["reset_prompt_api_prompts__key__delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/settings": {
+    "/api/settings": {
         parameters: {
             query?: never;
             header?: never;
@@ -505,17 +505,17 @@ export interface paths {
             cookie?: never;
         };
         /** Get Settings */
-        get: operations["get_settings_settings_get"];
+        get: operations["get_settings_api_settings_get"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
         /** Patch Settings */
-        patch: operations["patch_settings_settings_patch"];
+        patch: operations["patch_settings_api_settings_patch"];
         trace?: never;
     };
-    "/settings/llm-key": {
+    "/api/settings/llm-key": {
         parameters: {
             query?: never;
             header?: never;
@@ -534,14 +534,14 @@ export interface paths {
          *     a restart, which we signal via `requires_restart=True` when the key
          *     actually changed.
          */
-        post: operations["rotate_llm_key_settings_llm_key_post"];
+        post: operations["rotate_llm_key_api_settings_llm_key_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/settings/http-token/regenerate": {
+    "/api/settings/http-token/regenerate": {
         parameters: {
             query?: never;
             header?: never;
@@ -560,14 +560,14 @@ export interface paths {
          *     client would be logged out mid-flight; telling the user to restart keeps
          *     the contract simple and matches how the wizard treats it.
          */
-        post: operations["regenerate_http_token_settings_http_token_regenerate_post"];
+        post: operations["regenerate_http_token_api_settings_http_token_regenerate_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/settings/providers/types": {
+    "/api/settings/providers/types": {
         parameters: {
             query?: never;
             header?: never;
@@ -582,7 +582,7 @@ export interface paths {
          *     same component, but post-bootstrap callers use this path so they don't
          *     need the setup token.
          */
-        get: operations["provider_types_settings_providers_types_get"];
+        get: operations["provider_types_api_settings_providers_types_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -591,7 +591,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/settings/providers/test": {
+    "/api/settings/providers/test": {
         parameters: {
             query?: never;
             header?: never;
@@ -604,14 +604,14 @@ export interface paths {
          * Test Provider Config
          * @description Dry-run a provider config without persisting it.
          */
-        post: operations["test_provider_config_settings_providers_test_post"];
+        post: operations["test_provider_config_api_settings_providers_test_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/settings/providers": {
+    "/api/settings/providers": {
         parameters: {
             query?: never;
             header?: never;
@@ -629,14 +629,14 @@ export interface paths {
          *     adds it to both the on-disk config and the in-memory `runtime.providers`
          *     dict so the frontend can switch to it immediately.
          */
-        post: operations["add_provider_settings_providers_post"];
+        post: operations["add_provider_api_settings_providers_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/settings/providers/{key}": {
+    "/api/settings/providers/{key}": {
         parameters: {
             query?: never;
             header?: never;
@@ -653,7 +653,7 @@ export interface paths {
          *     them mid-stream would orphan rows. Callers who need a different type
          *     should remove + re-add.
          */
-        put: operations["update_provider_settings_providers__key__put"];
+        put: operations["update_provider_api_settings_providers__key__put"];
         post?: never;
         /**
          * Remove Provider
@@ -664,13 +664,13 @@ export interface paths {
          *     warning the user that chat / sync / mutations will 503 until another is
          *     added.
          */
-        delete: operations["remove_provider_settings_providers__key__delete"];
+        delete: operations["remove_provider_api_settings_providers__key__delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/scopes": {
+    "/api/scopes": {
         parameters: {
             query?: never;
             header?: never;
@@ -678,7 +678,7 @@ export interface paths {
             cookie?: never;
         };
         /** List Scopes */
-        get: operations["list_scopes_scopes_get"];
+        get: operations["list_scopes_api_scopes_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -687,7 +687,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/scopes/active": {
+    "/api/scopes/active": {
         parameters: {
             query?: never;
             header?: never;
@@ -695,9 +695,9 @@ export interface paths {
             cookie?: never;
         };
         /** Active Scope */
-        get: operations["active_scope_scopes_active_get"];
+        get: operations["active_scope_api_scopes_active_get"];
         /** Set Active Scope */
-        put: operations["set_active_scope_scopes_active_put"];
+        put: operations["set_active_scope_api_scopes_active_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -705,7 +705,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/providers": {
+    "/api/providers": {
         parameters: {
             query?: never;
             header?: never;
@@ -713,7 +713,7 @@ export interface paths {
             cookie?: never;
         };
         /** List Providers */
-        get: operations["list_providers_providers_get"];
+        get: operations["list_providers_api_providers_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -722,7 +722,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/providers/active": {
+    "/api/providers/active": {
         parameters: {
             query?: never;
             header?: never;
@@ -730,9 +730,9 @@ export interface paths {
             cookie?: never;
         };
         /** Active Provider */
-        get: operations["active_provider_providers_active_get"];
+        get: operations["active_provider_api_providers_active_get"];
         /** Set Active Provider */
-        put: operations["set_active_provider_providers_active_put"];
+        put: operations["set_active_provider_api_providers_active_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -740,7 +740,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/projects/{project_id}/memory": {
+    "/api/projects/{project_id}/memory": {
         parameters: {
             query?: never;
             header?: never;
@@ -748,17 +748,17 @@ export interface paths {
             cookie?: never;
         };
         /** List Memory */
-        get: operations["list_memory_projects__project_id__memory_get"];
+        get: operations["list_memory_api_projects__project_id__memory_get"];
         put?: never;
         /** Create Memory */
-        post: operations["create_memory_projects__project_id__memory_post"];
+        post: operations["create_memory_api_projects__project_id__memory_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/projects/{project_id}/memory/search": {
+    "/api/projects/{project_id}/memory/search": {
         parameters: {
             query?: never;
             header?: never;
@@ -766,7 +766,7 @@ export interface paths {
             cookie?: never;
         };
         /** Search Memory */
-        get: operations["search_memory_projects__project_id__memory_search_get"];
+        get: operations["search_memory_api_projects__project_id__memory_search_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -775,7 +775,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/memory/{memory_id}": {
+    "/api/projects/{project_id}/memory/{memory_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -783,18 +783,18 @@ export interface paths {
             cookie?: never;
         };
         /** Get Memory */
-        get: operations["get_memory_memory__memory_id__get"];
+        get: operations["get_memory_api_projects__project_id__memory__memory_id__get"];
         put?: never;
         post?: never;
         /** Delete Memory */
-        delete: operations["delete_memory_memory__memory_id__delete"];
+        delete: operations["delete_memory_api_projects__project_id__memory__memory_id__delete"];
         options?: never;
         head?: never;
         /** Update Memory */
-        patch: operations["update_memory_memory__memory_id__patch"];
+        patch: operations["update_memory_api_projects__project_id__memory__memory_id__patch"];
         trace?: never;
     };
-    "/projects/{project_id}/sources": {
+    "/api/projects/{project_id}/sources": {
         parameters: {
             query?: never;
             header?: never;
@@ -802,17 +802,17 @@ export interface paths {
             cookie?: never;
         };
         /** List Sources */
-        get: operations["list_sources_projects__project_id__sources_get"];
+        get: operations["list_sources_api_projects__project_id__sources_get"];
         put?: never;
         /** Create Source */
-        post: operations["create_source_projects__project_id__sources_post"];
+        post: operations["create_source_api_projects__project_id__sources_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/projects/{project_id}/sources/search": {
+    "/api/projects/{project_id}/sources/search": {
         parameters: {
             query?: never;
             header?: never;
@@ -820,7 +820,7 @@ export interface paths {
             cookie?: never;
         };
         /** Search Sources */
-        get: operations["search_sources_projects__project_id__sources_search_get"];
+        get: operations["search_sources_api_projects__project_id__sources_search_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -829,7 +829,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/sources/{source_id}": {
+    "/api/projects/{project_id}/sources/{source_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -837,18 +837,18 @@ export interface paths {
             cookie?: never;
         };
         /** Get Source */
-        get: operations["get_source_sources__source_id__get"];
+        get: operations["get_source_api_projects__project_id__sources__source_id__get"];
         put?: never;
         post?: never;
         /** Delete Source */
-        delete: operations["delete_source_sources__source_id__delete"];
+        delete: operations["delete_source_api_projects__project_id__sources__source_id__delete"];
         options?: never;
         head?: never;
         /** Update Source */
-        patch: operations["update_source_sources__source_id__patch"];
+        patch: operations["update_source_api_projects__project_id__sources__source_id__patch"];
         trace?: never;
     };
-    "/projects/{project_id}/mcp": {
+    "/api/projects/{project_id}/mcp": {
         parameters: {
             query?: never;
             header?: never;
@@ -856,7 +856,7 @@ export interface paths {
             cookie?: never;
         };
         /** List Mcp Servers */
-        get: operations["list_mcp_servers_projects__project_id__mcp_get"];
+        get: operations["list_mcp_servers_api_projects__project_id__mcp_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -865,7 +865,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/projects/{project_id}/mcp/{name}": {
+    "/api/projects/{project_id}/mcp/runtime": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Mcp Runtime
+         * @description Snapshot the live MCP fleet for the active project.
+         *
+         *     Returns connected clients with their discovered tool catalog plus any
+         *     servers that failed to start on the last bind (with `last_error`). When
+         *     `project_id` is not the runtime's currently-active project, the response
+         *     has `active_project_id` set but no live `servers` — the configured list
+         *     is available via the regular CRUD route. 404 if the project doesn't
+         *     exist at all.
+         *
+         *     Registered before `GET /{name}` so the path segment `runtime` doesn't
+         *     get swallowed as a server lookup.
+         */
+        get: operations["get_mcp_runtime_api_projects__project_id__mcp_runtime_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/mcp/{name}": {
         parameters: {
             query?: never;
             header?: never;
@@ -873,19 +903,19 @@ export interface paths {
             cookie?: never;
         };
         /** Get Mcp Server */
-        get: operations["get_mcp_server_projects__project_id__mcp__name__get"];
+        get: operations["get_mcp_server_api_projects__project_id__mcp__name__get"];
         put?: never;
         /** Create Mcp Server */
-        post: operations["create_mcp_server_projects__project_id__mcp__name__post"];
+        post: operations["create_mcp_server_api_projects__project_id__mcp__name__post"];
         /** Delete Mcp Server */
-        delete: operations["delete_mcp_server_projects__project_id__mcp__name__delete"];
+        delete: operations["delete_mcp_server_api_projects__project_id__mcp__name__delete"];
         options?: never;
         head?: never;
         /** Update Mcp Server */
-        patch: operations["update_mcp_server_projects__project_id__mcp__name__patch"];
+        patch: operations["update_mcp_server_api_projects__project_id__mcp__name__patch"];
         trace?: never;
     };
-    "/projects/{project_id}/mcp/{name}/test": {
+    "/api/projects/{project_id}/mcp/{name}/test": {
         parameters: {
             query?: never;
             header?: never;
@@ -903,14 +933,14 @@ export interface paths {
          *     spawns a fresh subprocess for it — the live runtime fleet is not touched
          *     either way.
          */
-        post: operations["test_mcp_server_projects__project_id__mcp__name__test_post"];
+        post: operations["test_mcp_server_api_projects__project_id__mcp__name__test_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/mcp/presets": {
+    "/api/mcp/presets": {
         parameters: {
             query?: never;
             header?: never;
@@ -924,7 +954,7 @@ export interface paths {
          *     Read-only and project-independent — both bootstrap and full servers can
          *     serve this so the setup UI can show presets before any project exists.
          */
-        get: operations["list_mcp_presets_mcp_presets_get"];
+        get: operations["list_mcp_presets_api_mcp_presets_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -933,7 +963,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/projects/{project_id}/mcp/presets/{preset_id}/apply": {
+    "/api/projects/{project_id}/mcp/presets/{preset_id}/apply": {
         parameters: {
             query?: never;
             header?: never;
@@ -950,14 +980,14 @@ export interface paths {
          *     values (typically an API token) via `payload.env`. Returns 400 if the
          *     preset or a required env var is missing, 409 on name conflict.
          */
-        post: operations["apply_mcp_preset_projects__project_id__mcp_presets__preset_id__apply_post"];
+        post: operations["apply_mcp_preset_api_projects__project_id__mcp_presets__preset_id__apply_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/projects": {
+    "/api/projects": {
         parameters: {
             query?: never;
             header?: never;
@@ -968,7 +998,7 @@ export interface paths {
          * List Projects
          * @description List projects from `config.toml`. Active project is flagged.
          */
-        get: operations["list_projects_projects_get"];
+        get: operations["list_projects_api_projects_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -977,7 +1007,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/projects/active": {
+    "/api/projects/active": {
         parameters: {
             query?: never;
             header?: never;
@@ -992,7 +1022,7 @@ export interface paths {
          *     provider is queried, so the UI never sees an empty body for the active
          *     project.
          */
-        get: operations["active_project_projects_active_get"];
+        get: operations["active_project_api_projects_active_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1001,7 +1031,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/projects/{project_id}": {
+    "/api/projects/{project_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1009,7 +1039,7 @@ export interface paths {
             cookie?: never;
         };
         /** Get Project */
-        get: operations["get_project_projects__project_id__get"];
+        get: operations["get_project_api_projects__project_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1019,10 +1049,10 @@ export interface paths {
          * Update Project
          * @description Rename / re-describe / archive a project. Persists to `config.toml`.
          */
-        patch: operations["update_project_projects__project_id__patch"];
+        patch: operations["update_project_api_projects__project_id__patch"];
         trace?: never;
     };
-    "/projects/{project_id}/activate": {
+    "/api/projects/{project_id}/activate": {
         parameters: {
             query?: never;
             header?: never;
@@ -1032,14 +1062,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Activate Project */
-        post: operations["activate_project_projects__project_id__activate_post"];
+        post: operations["activate_project_api_projects__project_id__activate_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/sync": {
+    "/api/sync": {
         parameters: {
             query?: never;
             header?: never;
@@ -1049,14 +1079,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Manual Sync */
-        post: operations["manual_sync_sync_post"];
+        post: operations["manual_sync_api_sync_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/status": {
+    "/api/status": {
         parameters: {
             query?: never;
             header?: never;
@@ -1064,7 +1094,7 @@ export interface paths {
             cookie?: never;
         };
         /** Status */
-        get: operations["status_status_get"];
+        get: operations["status_api_status_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1073,7 +1103,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/setup/status": {
+    "/api/setup/status": {
         parameters: {
             query?: never;
             header?: never;
@@ -1081,7 +1111,7 @@ export interface paths {
             cookie?: never;
         };
         /** Setup Status */
-        get: operations["setup_status_setup_status_get"];
+        get: operations["setup_status_api_setup_status_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1090,7 +1120,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/setup/providers/types": {
+    "/api/setup/providers/types": {
         parameters: {
             query?: never;
             header?: never;
@@ -1098,7 +1128,7 @@ export interface paths {
             cookie?: never;
         };
         /** Provider Types */
-        get: operations["provider_types_setup_providers_types_get"];
+        get: operations["provider_types_api_setup_providers_types_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1107,7 +1137,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/setup/test-provider": {
+    "/api/setup/test-provider": {
         parameters: {
             query?: never;
             header?: never;
@@ -1117,14 +1147,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Test Provider */
-        post: operations["test_provider_setup_test_provider_post"];
+        post: operations["test_provider_api_setup_test_provider_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/setup/test-llm": {
+    "/api/setup/test-llm": {
         parameters: {
             query?: never;
             header?: never;
@@ -1134,14 +1164,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Test Llm */
-        post: operations["test_llm_setup_test_llm_post"];
+        post: operations["test_llm_api_setup_test_llm_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/setup/complete": {
+    "/api/setup/complete": {
         parameters: {
             query?: never;
             header?: never;
@@ -1151,14 +1181,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Setup Complete */
-        post: operations["setup_complete_setup_complete_post"];
+        post: operations["setup_complete_api_setup_complete_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/health": {
+    "/api/health": {
         parameters: {
             query?: never;
             header?: never;
@@ -1166,7 +1196,7 @@ export interface paths {
             cookie?: never;
         };
         /** Health */
-        get: operations["health_health_get"];
+        get: operations["health_api_health_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1175,7 +1205,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/whoami": {
+    "/api/whoami": {
         parameters: {
             query?: never;
             header?: never;
@@ -1183,7 +1213,7 @@ export interface paths {
             cookie?: never;
         };
         /** Whoami */
-        get: operations["whoami_whoami_get"];
+        get: operations["whoami_api_whoami_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1428,11 +1458,53 @@ export interface components {
             presets?: components["schemas"]["MCPPresetDTO"][];
         };
         /**
+         * MCPRuntimeDTO
+         * @description Snapshot of the live MCP fleet at request time.
+         *
+         *     `active_project_id` is the project the manager is currently bound to,
+         *     not necessarily the URL's `project_id` — the runtime is per-process,
+         *     so a request that asks about an inactive project gets the configured
+         *     list (via the regular CRUD routes) but no live state here.
+         */
+        MCPRuntimeDTO: {
+            /** Project Id */
+            project_id: string;
+            /** Active Project Id */
+            active_project_id?: string | null;
+            /** Servers */
+            servers?: components["schemas"]["MCPRuntimeServerDTO"][];
+        };
+        /**
+         * MCPRuntimeServerDTO
+         * @description One server in the live MCP fleet for the active project.
+         *
+         *     `connected=True` means the manager currently holds a started client;
+         *     `connected=False` plus a `last_error` means the last bind attempt
+         *     failed (e.g. handshake timeout, missing remote URL). `tools` lists the
+         *     fully-qualified `mcp__<name>__<tool>` ids registered with the agent.
+         */
+        MCPRuntimeServerDTO: {
+            /** Name */
+            name: string;
+            /** Transport */
+            transport: string;
+            /** Connected */
+            connected: boolean;
+            /** Tools */
+            tools?: string[];
+            /** Started At */
+            started_at?: string | null;
+            /** Last Error */
+            last_error?: string | null;
+        };
+        /**
          * MCPServerDTO
          * @description One MCP server attached to a project, as exposed over HTTP.
          *
          *     Mirrors `docket.config.models.MCPServerEntry` plus the project id and the
-         *     user-facing `name` (the dict key in `ProjectEntry.mcp`).
+         *     user-facing `name` (the dict key in `ProjectEntry.mcp`). `command/args/env`
+         *     apply to `transport=stdio`; `url/headers` apply to `transport=http` or
+         *     `transport=sse`. The unused half is left empty per `mcp_service.validate_entry`.
          */
         MCPServerDTO: {
             /** Project Id */
@@ -1456,6 +1528,15 @@ export interface components {
                 [key: string]: string;
             };
             /**
+             * Url
+             * @default
+             */
+            url: string;
+            /** Headers */
+            headers?: {
+                [key: string]: string;
+            };
+            /**
              * Enabled
              * @default true
              */
@@ -1470,9 +1551,11 @@ export interface components {
          * MCPServerEntry
          * @description One MCP server, scoped to a project.
          *
-         *     Only stdio transport is supported in this iteration. The server is launched
-         *     as a subprocess with `command` + `args` (and optional `env`); its tools are
-         *     auto-registered into the agent under `mcp__<server_name>__<tool>`.
+         *     Three transports are supported. `stdio` launches the server as a local
+         *     subprocess (`command` + `args`, optional `env`). `http` (alias for the
+         *     streamable-HTTP transport) and `sse` connect to a remote URL with optional
+         *     `headers` (for `Authorization`, etc.). Discovered tools are auto-registered
+         *     under `mcp__<server_name>__<tool>` regardless of transport.
          *
          *     Set `enabled=False` to keep the entry in `config.toml` without spawning
          *     the server (useful for one-off debugging without losing the config).
@@ -1492,6 +1575,15 @@ export interface components {
             args?: string[];
             /** Env */
             env?: {
+                [key: string]: string;
+            };
+            /**
+             * Url
+             * @default
+             */
+            url: string;
+            /** Headers */
+            headers?: {
                 [key: string]: string;
             };
             /**
@@ -1538,7 +1630,8 @@ export interface components {
          * MCPServerUpdateRequest
          * @description PATCH body. Only fields you set are written; others are left alone.
          *
-         *     Pass `args=[]` or `env={}` to explicitly clear those collections.
+         *     Pass `args=[]`, `env={}`, or `headers={}` to explicitly clear those
+         *     collections.
          */
         MCPServerUpdateRequest: {
             /** Command */
@@ -1547,6 +1640,12 @@ export interface components {
             args?: string[] | null;
             /** Env */
             env?: {
+                [key: string]: string;
+            } | null;
+            /** Url */
+            url?: string | null;
+            /** Headers */
+            headers?: {
                 [key: string]: string;
             } | null;
             /** Transport */
@@ -2388,7 +2487,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    propose_transition_items__item_id__mutations_transition_propose_post: {
+    propose_transition_api_items__item_id__mutations_transition_propose_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2423,7 +2522,7 @@ export interface operations {
             };
         };
     };
-    propose_description_items__item_id__mutations_description_propose_post: {
+    propose_description_api_items__item_id__mutations_description_propose_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2458,7 +2557,7 @@ export interface operations {
             };
         };
     };
-    propose_attachment_items__item_id__mutations_attachment_propose_post: {
+    propose_attachment_api_items__item_id__mutations_attachment_propose_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2493,7 +2592,7 @@ export interface operations {
             };
         };
     };
-    propose_comment_items__item_id__mutations_comment_propose_post: {
+    propose_comment_api_items__item_id__mutations_comment_propose_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2528,7 +2627,7 @@ export interface operations {
             };
         };
     };
-    get_proposal_items__item_id__mutations__proposal_id__get: {
+    get_proposal_api_items__item_id__mutations__proposal_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2560,7 +2659,7 @@ export interface operations {
             };
         };
     };
-    confirm_proposal_items__item_id__mutations__proposal_id__confirm_post: {
+    confirm_proposal_api_items__item_id__mutations__proposal_id__confirm_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2592,7 +2691,7 @@ export interface operations {
             };
         };
     };
-    reject_proposal_items__item_id__mutations__proposal_id__reject_post: {
+    reject_proposal_api_items__item_id__mutations__proposal_id__reject_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2622,7 +2721,7 @@ export interface operations {
             };
         };
     };
-    get_history_items__item_id__conversation_get: {
+    get_history_api_items__item_id__conversation_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2653,7 +2752,7 @@ export interface operations {
             };
         };
     };
-    get_pending_question_items__item_id__conversation_pending_question_get: {
+    get_pending_question_api_items__item_id__conversation_pending_question_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2684,7 +2783,7 @@ export interface operations {
             };
         };
     };
-    start_thread_items__item_id__conversation_thread_post: {
+    start_thread_api_items__item_id__conversation_thread_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2715,7 +2814,7 @@ export interface operations {
             };
         };
     };
-    send_message_items__item_id__conversation_messages_post: {
+    send_message_api_items__item_id__conversation_messages_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2750,7 +2849,7 @@ export interface operations {
             };
         };
     };
-    answer_question_items__item_id__conversation_answer_post: {
+    answer_question_api_items__item_id__conversation_answer_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2785,7 +2884,7 @@ export interface operations {
             };
         };
     };
-    is_pinned_items__item_id__pinned_get: {
+    is_pinned_api_items__item_id__pinned_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2816,7 +2915,7 @@ export interface operations {
             };
         };
     };
-    pin_item_items__item_id__pin_post: {
+    pin_item_api_items__item_id__pin_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2845,7 +2944,7 @@ export interface operations {
             };
         };
     };
-    unpin_item_items__item_id__pin_delete: {
+    unpin_item_api_items__item_id__pin_delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -2874,7 +2973,7 @@ export interface operations {
             };
         };
     };
-    list_pinned_pinned_get: {
+    list_pinned_api_pinned_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2894,7 +2993,7 @@ export interface operations {
             };
         };
     };
-    get_suggestion_items__item_id__suggestion_post: {
+    get_suggestion_api_items__item_id__suggestion_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2925,7 +3024,7 @@ export interface operations {
             };
         };
     };
-    stage_suggestion_items__item_id__suggestion_stage_post: {
+    stage_suggestion_api_items__item_id__suggestion_stage_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2960,7 +3059,7 @@ export interface operations {
             };
         };
     };
-    list_items_items_get: {
+    list_items_api_items_get: {
         parameters: {
             query?: {
                 /** @description Filter by item kind. */
@@ -3000,7 +3099,7 @@ export interface operations {
             };
         };
     };
-    create_item_items_post: {
+    create_item_api_items_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3033,7 +3132,7 @@ export interface operations {
             };
         };
     };
-    search_items_items_search_get: {
+    search_items_api_items_search_get: {
         parameters: {
             query?: {
                 /** @description Title substring to find duplicate candidates for. */
@@ -3067,7 +3166,7 @@ export interface operations {
             };
         };
     };
-    get_comments_items__item_id__comments_get: {
+    get_comments_api_items__item_id__comments_get: {
         parameters: {
             query?: {
                 /** @description Fetch fresh from provider. */
@@ -3101,7 +3200,7 @@ export interface operations {
             };
         };
     };
-    get_linked_items__item_id__linked_get: {
+    get_linked_api_items__item_id__linked_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3132,7 +3231,7 @@ export interface operations {
             };
         };
     };
-    get_item_items__item_id__get: {
+    get_item_api_items__item_id__get: {
         parameters: {
             query?: {
                 /** @description Fetch from provider instead of cache. */
@@ -3166,7 +3265,7 @@ export interface operations {
             };
         };
     };
-    confirm_item_create_items_proposals__proposal_id__confirm_post: {
+    confirm_item_create_api_items_proposals__proposal_id__confirm_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3197,7 +3296,7 @@ export interface operations {
             };
         };
     };
-    reject_item_create_items_proposals__proposal_id__reject_post: {
+    reject_item_create_api_items_proposals__proposal_id__reject_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3226,7 +3325,7 @@ export interface operations {
             };
         };
     };
-    list_prompts_prompts_get: {
+    list_prompts_api_prompts_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3246,7 +3345,7 @@ export interface operations {
             };
         };
     };
-    get_prompt_prompts__key__get: {
+    get_prompt_api_prompts__key__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3277,7 +3376,7 @@ export interface operations {
             };
         };
     };
-    put_prompt_prompts__key__put: {
+    put_prompt_api_prompts__key__put: {
         parameters: {
             query?: never;
             header?: never;
@@ -3312,7 +3411,7 @@ export interface operations {
             };
         };
     };
-    reset_prompt_prompts__key__delete: {
+    reset_prompt_api_prompts__key__delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -3343,7 +3442,7 @@ export interface operations {
             };
         };
     };
-    get_settings_settings_get: {
+    get_settings_api_settings_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3363,7 +3462,7 @@ export interface operations {
             };
         };
     };
-    patch_settings_settings_patch: {
+    patch_settings_api_settings_patch: {
         parameters: {
             query?: never;
             header?: never;
@@ -3396,7 +3495,7 @@ export interface operations {
             };
         };
     };
-    rotate_llm_key_settings_llm_key_post: {
+    rotate_llm_key_api_settings_llm_key_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3429,7 +3528,7 @@ export interface operations {
             };
         };
     };
-    regenerate_http_token_settings_http_token_regenerate_post: {
+    regenerate_http_token_api_settings_http_token_regenerate_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3449,7 +3548,7 @@ export interface operations {
             };
         };
     };
-    provider_types_settings_providers_types_get: {
+    provider_types_api_settings_providers_types_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3469,7 +3568,7 @@ export interface operations {
             };
         };
     };
-    test_provider_config_settings_providers_test_post: {
+    test_provider_config_api_settings_providers_test_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3502,7 +3601,7 @@ export interface operations {
             };
         };
     };
-    add_provider_settings_providers_post: {
+    add_provider_api_settings_providers_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3535,7 +3634,7 @@ export interface operations {
             };
         };
     };
-    update_provider_settings_providers__key__put: {
+    update_provider_api_settings_providers__key__put: {
         parameters: {
             query?: never;
             header?: never;
@@ -3570,7 +3669,7 @@ export interface operations {
             };
         };
     };
-    remove_provider_settings_providers__key__delete: {
+    remove_provider_api_settings_providers__key__delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -3601,7 +3700,7 @@ export interface operations {
             };
         };
     };
-    list_scopes_scopes_get: {
+    list_scopes_api_scopes_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3621,7 +3720,7 @@ export interface operations {
             };
         };
     };
-    active_scope_scopes_active_get: {
+    active_scope_api_scopes_active_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3641,7 +3740,7 @@ export interface operations {
             };
         };
     };
-    set_active_scope_scopes_active_put: {
+    set_active_scope_api_scopes_active_put: {
         parameters: {
             query?: never;
             header?: never;
@@ -3674,7 +3773,7 @@ export interface operations {
             };
         };
     };
-    list_providers_providers_get: {
+    list_providers_api_providers_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3694,7 +3793,7 @@ export interface operations {
             };
         };
     };
-    active_provider_providers_active_get: {
+    active_provider_api_providers_active_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3714,7 +3813,7 @@ export interface operations {
             };
         };
     };
-    set_active_provider_providers_active_put: {
+    set_active_provider_api_providers_active_put: {
         parameters: {
             query?: never;
             header?: never;
@@ -3747,7 +3846,7 @@ export interface operations {
             };
         };
     };
-    list_memory_projects__project_id__memory_get: {
+    list_memory_api_projects__project_id__memory_get: {
         parameters: {
             query?: {
                 limit?: number;
@@ -3780,7 +3879,7 @@ export interface operations {
             };
         };
     };
-    create_memory_projects__project_id__memory_post: {
+    create_memory_api_projects__project_id__memory_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3815,7 +3914,7 @@ export interface operations {
             };
         };
     };
-    search_memory_projects__project_id__memory_search_get: {
+    search_memory_api_projects__project_id__memory_search_get: {
         parameters: {
             query: {
                 /** @description FTS query. */
@@ -3850,11 +3949,12 @@ export interface operations {
             };
         };
     };
-    get_memory_memory__memory_id__get: {
+    get_memory_api_projects__project_id__memory__memory_id__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
+                project_id: string;
                 memory_id: string;
             };
             cookie?: never;
@@ -3881,11 +3981,12 @@ export interface operations {
             };
         };
     };
-    delete_memory_memory__memory_id__delete: {
+    delete_memory_api_projects__project_id__memory__memory_id__delete: {
         parameters: {
             query?: never;
             header?: never;
             path: {
+                project_id: string;
                 memory_id: string;
             };
             cookie?: never;
@@ -3910,11 +4011,12 @@ export interface operations {
             };
         };
     };
-    update_memory_memory__memory_id__patch: {
+    update_memory_api_projects__project_id__memory__memory_id__patch: {
         parameters: {
             query?: never;
             header?: never;
             path: {
+                project_id: string;
                 memory_id: string;
             };
             cookie?: never;
@@ -3945,7 +4047,7 @@ export interface operations {
             };
         };
     };
-    list_sources_projects__project_id__sources_get: {
+    list_sources_api_projects__project_id__sources_get: {
         parameters: {
             query?: {
                 /** @description Filter by kind. */
@@ -3980,7 +4082,7 @@ export interface operations {
             };
         };
     };
-    create_source_projects__project_id__sources_post: {
+    create_source_api_projects__project_id__sources_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -4015,7 +4117,7 @@ export interface operations {
             };
         };
     };
-    search_sources_projects__project_id__sources_search_get: {
+    search_sources_api_projects__project_id__sources_search_get: {
         parameters: {
             query: {
                 /** @description FTS query. */
@@ -4052,11 +4154,12 @@ export interface operations {
             };
         };
     };
-    get_source_sources__source_id__get: {
+    get_source_api_projects__project_id__sources__source_id__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
+                project_id: string;
                 source_id: string;
             };
             cookie?: never;
@@ -4083,11 +4186,12 @@ export interface operations {
             };
         };
     };
-    delete_source_sources__source_id__delete: {
+    delete_source_api_projects__project_id__sources__source_id__delete: {
         parameters: {
             query?: never;
             header?: never;
             path: {
+                project_id: string;
                 source_id: string;
             };
             cookie?: never;
@@ -4112,11 +4216,12 @@ export interface operations {
             };
         };
     };
-    update_source_sources__source_id__patch: {
+    update_source_api_projects__project_id__sources__source_id__patch: {
         parameters: {
             query?: never;
             header?: never;
             path: {
+                project_id: string;
                 source_id: string;
             };
             cookie?: never;
@@ -4147,7 +4252,7 @@ export interface operations {
             };
         };
     };
-    list_mcp_servers_projects__project_id__mcp_get: {
+    list_mcp_servers_api_projects__project_id__mcp_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -4178,7 +4283,38 @@ export interface operations {
             };
         };
     };
-    get_mcp_server_projects__project_id__mcp__name__get: {
+    get_mcp_runtime_api_projects__project_id__mcp_runtime_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPRuntimeDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_mcp_server_api_projects__project_id__mcp__name__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -4210,7 +4346,7 @@ export interface operations {
             };
         };
     };
-    create_mcp_server_projects__project_id__mcp__name__post: {
+    create_mcp_server_api_projects__project_id__mcp__name__post: {
         parameters: {
             query?: never;
             header?: never;
@@ -4246,7 +4382,7 @@ export interface operations {
             };
         };
     };
-    delete_mcp_server_projects__project_id__mcp__name__delete: {
+    delete_mcp_server_api_projects__project_id__mcp__name__delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -4276,7 +4412,7 @@ export interface operations {
             };
         };
     };
-    update_mcp_server_projects__project_id__mcp__name__patch: {
+    update_mcp_server_api_projects__project_id__mcp__name__patch: {
         parameters: {
             query?: never;
             header?: never;
@@ -4312,7 +4448,7 @@ export interface operations {
             };
         };
     };
-    test_mcp_server_projects__project_id__mcp__name__test_post: {
+    test_mcp_server_api_projects__project_id__mcp__name__test_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -4348,7 +4484,7 @@ export interface operations {
             };
         };
     };
-    list_mcp_presets_mcp_presets_get: {
+    list_mcp_presets_api_mcp_presets_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -4368,7 +4504,7 @@ export interface operations {
             };
         };
     };
-    apply_mcp_preset_projects__project_id__mcp_presets__preset_id__apply_post: {
+    apply_mcp_preset_api_projects__project_id__mcp_presets__preset_id__apply_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -4404,7 +4540,7 @@ export interface operations {
             };
         };
     };
-    list_projects_projects_get: {
+    list_projects_api_projects_get: {
         parameters: {
             query?: {
                 include_archived?: boolean;
@@ -4435,7 +4571,7 @@ export interface operations {
             };
         };
     };
-    active_project_projects_active_get: {
+    active_project_api_projects_active_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -4455,7 +4591,7 @@ export interface operations {
             };
         };
     };
-    get_project_projects__project_id__get: {
+    get_project_api_projects__project_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -4486,7 +4622,7 @@ export interface operations {
             };
         };
     };
-    update_project_projects__project_id__patch: {
+    update_project_api_projects__project_id__patch: {
         parameters: {
             query?: never;
             header?: never;
@@ -4521,7 +4657,7 @@ export interface operations {
             };
         };
     };
-    activate_project_projects__project_id__activate_post: {
+    activate_project_api_projects__project_id__activate_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -4552,7 +4688,7 @@ export interface operations {
             };
         };
     };
-    manual_sync_sync_post: {
+    manual_sync_api_sync_post: {
         parameters: {
             query?: {
                 /** @description Reset watermark before syncing. */
@@ -4584,7 +4720,7 @@ export interface operations {
             };
         };
     };
-    status_status_get: {
+    status_api_status_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -4604,7 +4740,7 @@ export interface operations {
             };
         };
     };
-    setup_status_setup_status_get: {
+    setup_status_api_setup_status_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -4624,7 +4760,7 @@ export interface operations {
             };
         };
     };
-    provider_types_setup_providers_types_get: {
+    provider_types_api_setup_providers_types_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -4644,7 +4780,7 @@ export interface operations {
             };
         };
     };
-    test_provider_setup_test_provider_post: {
+    test_provider_api_setup_test_provider_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -4677,7 +4813,7 @@ export interface operations {
             };
         };
     };
-    test_llm_setup_test_llm_post: {
+    test_llm_api_setup_test_llm_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -4710,7 +4846,7 @@ export interface operations {
             };
         };
     };
-    setup_complete_setup_complete_post: {
+    setup_complete_api_setup_complete_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -4743,7 +4879,7 @@ export interface operations {
             };
         };
     };
-    health_health_get: {
+    health_api_health_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -4763,7 +4899,7 @@ export interface operations {
             };
         };
     };
-    whoami_whoami_get: {
+    whoami_api_whoami_get: {
         parameters: {
             query?: never;
             header?: never;

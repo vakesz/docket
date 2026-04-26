@@ -71,16 +71,22 @@ def mcp_list() -> None:
         table.add_column("Name", style="cyan")
         table.add_column("Enabled", style="green")
         table.add_column("Transport", style="magenta")
-        table.add_column("Command", style="yellow")
-        table.add_column("Args", style="dim")
+        table.add_column("Endpoint", style="yellow")
+        table.add_column("Args/Headers", style="dim")
         table.add_column("Timeout", style="dim", justify="right")
         for name, entry in servers.items():
+            if entry.transport == "stdio":
+                endpoint = entry.command or "—"
+                extra = " ".join(entry.args)
+            else:
+                endpoint = entry.url or "—"
+                extra = ", ".join(sorted(entry.headers))
             table.add_row(
                 name,
                 "yes" if entry.enabled else "no",
                 entry.transport,
-                entry.command or "—",
-                " ".join(entry.args),
+                endpoint,
+                extra,
                 f"{entry.startup_timeout_seconds:.1f}s",
             )
         console.print(table)
@@ -89,11 +95,22 @@ def mcp_list() -> None:
 @mcp_app.command("add")
 def mcp_add(
     name: str = typer.Argument(..., help="Short name. Becomes the `mcp__<name>__*` tool prefix."),
-    command: str = typer.Option(..., "--command", help="Executable to spawn (stdio transport)."),
+    transport: str = typer.Option(
+        "stdio",
+        "--transport",
+        help="Transport: stdio | http | sse. stdio uses --command; http/sse use --url.",
+    ),
+    command: str = typer.Option("", "--command", help="Executable to spawn (stdio transport)."),
     args: str | None = typer.Option(
         None, "--args", help="Whitespace-separated args. Repeat the flag for spaces in paths."
     ),
     env: list[str] | None = typer.Option(None, "--env", help="KEY=VALUE env override. Repeatable."),
+    url: str = typer.Option("", "--url", help="Endpoint URL (http/sse transport)."),
+    header: list[str] | None = typer.Option(
+        None,
+        "--header",
+        help="KEY=VALUE HTTP header for http/sse (e.g. Authorization=Bearer xxx). Repeatable.",
+    ),
     enabled: bool = typer.Option(True, "--enabled/--disabled", help="Start the server on bind."),
     timeout: float = typer.Option(
         10.0, "--timeout", help="Seconds to wait for the initial handshake."
@@ -111,6 +128,9 @@ def mcp_add(
                 command=command,
                 args=_split_args(args),
                 env=_split_env(env),
+                url=url,
+                headers=_split_env(header),
+                transport=transport,
                 enabled=enabled,
                 startup_timeout_seconds=timeout,
             )
@@ -296,9 +316,6 @@ def mcp_test(
         except mcp_service.InvalidServerConfigError as exc:
             console.print(f"[red]Invalid MCP config:[/red] {exc}")
             raise typer.Exit(1) from exc
-        if not entry.command:
-            console.print(f"[red]Server '{name}' has no `command` configured.[/red]")
-            raise typer.Exit(1)
 
     client = MCPClient(name, entry)
     try:

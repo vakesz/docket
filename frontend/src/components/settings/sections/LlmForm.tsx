@@ -24,22 +24,26 @@ export function LlmForm({
 
   return (
     <>
-      <FormField label="Endpoint" help="Azure OpenAI chat-completions URL (including api-version).">
-        <TextInput
-          type="url"
-          value={endpoint}
-          onChange={(v) => onChange((cur) => setOrUnset(cur, "endpoint", v))}
-          placeholder="https://…cognitiveservices.azure.com/…/chat/completions?api-version=…"
-        />
-      </FormField>
-
-      <FormField label="Deployment" help="Azure OpenAI deployment name.">
-        <TextInput
-          value={deployment}
-          onChange={(v) => onChange((cur) => ({ ...cur, deployment: v }))}
-          placeholder="gpt-5"
-        />
-      </FormField>
+      <div className="grid gap-4 xl:grid-cols-[2fr_1fr]">
+        <FormField
+          label="Endpoint"
+          help="Azure OpenAI chat-completions URL (including api-version)."
+        >
+          <TextInput
+            type="url"
+            value={endpoint}
+            onChange={(v) => onChange((cur) => setOrUnset(cur, "endpoint", v))}
+            placeholder="https://…cognitiveservices.azure.com/…/chat/completions?api-version=…"
+          />
+        </FormField>
+        <FormField label="Deployment" help="Azure OpenAI deployment name.">
+          <TextInput
+            value={deployment}
+            onChange={(v) => onChange((cur) => ({ ...cur, deployment: v }))}
+            placeholder="gpt-5"
+          />
+        </FormField>
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <FormField
