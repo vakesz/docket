@@ -58,7 +58,7 @@ class ScopeDTO(BaseModel):
     matching `SetupProviderTypeDTO.scope_axes` entry."""
 
     name: str
-    assignee: str = "@me"
+    assignee: str = ""
     axes: dict[str, str] = Field(default_factory=dict)
     active: bool = False
 

@@ -155,7 +155,7 @@ def test_list_changes_since_initial_sync_is_desc_and_resolves_me() -> None:
         return httpx.Response(200, json=[_issue_payload()])
 
     provider = _mk_provider(handler)
-    list(provider.list_changes_since(None, ScopeFilters()))
+    list(provider.list_changes_since(None, ScopeFilters(assignee="@me")))
     issues_calls = [c for c in calls if c[0] == "/repos/acme/widgets/issues"]
     assert issues_calls, "expected an issues request"
     params = issues_calls[0][1]

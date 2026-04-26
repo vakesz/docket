@@ -56,7 +56,7 @@ class ScopeFilters:
     matcher implementation lives on the provider's `ProviderSpec.axis_matcher`
     so `core/` stays provider-agnostic."""
 
-    assignee: str = "@me"
+    assignee: str = ""
     axes: Mapping[str, str] = _EMPTY_AXES
 
 

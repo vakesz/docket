@@ -33,7 +33,7 @@ class ScopeFilter(BaseModel):
     with its own axes does not require schema churn here. Empty values
     mean the axis is unconstrained."""
 
-    assignee: str = "@me"
+    assignee: str = ""
     axes: dict[str, str] = Field(default_factory=dict)
 
     def to_core(self) -> ScopeFilters:
