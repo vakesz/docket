@@ -11,7 +11,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import type { DTO } from "~/api/client";
-import { useAdoDiscover, useProbeScope } from "~/api/hooks";
+import { useProbeScope, useProviderDiscover } from "~/api/hooks";
 import { HelpText, TextInput } from "~/components/common/FormInputs";
 import { Label } from "~/components/common/Label";
 import { cn } from "~/lib/cn";
@@ -138,14 +138,14 @@ function AdoAxisField({
   onChange,
 }: {
   label: string;
-  stage: DTO["AdoDiscoverRequest"]["stage"];
+  stage: "teams" | "areas" | "iterations";
   org: string;
   project: string;
   enabled: boolean;
   value: string;
   onChange: (v: string) => void;
 }) {
-  const discover = useAdoDiscover();
+  const discover = useProviderDiscover("azure_devops");
   const [options, setOptions] = useState<string[]>([]);
   const [error, setError] = useState("");
 
@@ -156,7 +156,7 @@ function AdoAxisField({
     }
     let cancelled = false;
     discover.mutate(
-      { stage, org, project },
+      { stage, payload: { org, project } },
       {
         onSuccess: (res) => {
           if (cancelled) return;
@@ -165,7 +165,7 @@ function AdoAxisField({
             setError(res.error ?? "");
             return;
           }
-          setOptions(res.items ?? []);
+          setOptions((res.items ?? []).map((it) => it.value));
           setError("");
         },
         onError: () => {

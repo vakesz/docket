@@ -6,12 +6,13 @@ registers the callbacks with `config.setup_hooks`."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 from rich.prompt import Prompt
 
 from docket._console import console
-from docket.config.setup_hooks import WizardHooks
+from docket.config.setup_hooks import DiscoveryItem, WizardHooks
 from docket.config.setup_hooks import register as register_hooks
 from docket.config.setup_utils import pick, pick_assignee, step_auth_with_retry
 from docket.providers.github import discover
@@ -191,14 +192,61 @@ def _prompt_github_repo_manual() -> str:
         console.print("[red]Please enter an owner/name pair, e.g. `anthropics/claude-code`.[/red]")
 
 
+def discover_step(stage: str, payload: Mapping[str, str]) -> list[DiscoveryItem]:
+    """Stage-driven discovery for the SPA wizard's pickers.
+
+    Stage map (1:1 with `providers.github.discover`):
+      - `hosts`     → no payload → `[{value=hostname, label=hostname,
+                       extras.api_base_url=...}]`
+      - `repos`     → `{host?}` → `[{value=full_name, label=full_name}]`
+      - `orgs`      → `{host?}` → `[{value=login, label=login}]`
+      - `org_repos` → `{org, host?}` → `[{value=full_name, label=full_name}]`
+
+    `DiscoveryError` from the underlying helper bubbles up. Unknown
+    stages raise `ValueError`. The host argument defaults to the gh
+    CLI's active host when omitted, mirroring the CLI wizard."""
+    host = payload.get("host", "").strip() or None
+    if stage == "hosts":
+        return [
+            DiscoveryItem(
+                value=h.hostname,
+                label=h.hostname,
+                extras={"api_base_url": h.api_base_url},
+            )
+            for h in discover.list_hosts()
+        ]
+    if stage == "repos":
+        return [
+            DiscoveryItem(value=r.full_name, label=r.full_name)
+            for r in discover.list_repos(host=host)
+        ]
+    if stage == "orgs":
+        return [DiscoveryItem(value=o.login, label=o.login) for o in discover.list_orgs(host=host)]
+    if stage == "org_repos":
+        org = payload.get("org", "").strip()
+        if not org:
+            raise ValueError("payload.org is required for stage 'org_repos'")
+        return [
+            DiscoveryItem(value=r.full_name, label=r.full_name)
+            for r in discover.list_org_repos(org, host=host)
+        ]
+    raise ValueError(f"unknown stage: {stage!r}")
+
+
 def register() -> None:
     register_hooks(
         "github",
-        WizardHooks(auth=step_auth, connection=step_connection, scope=step_scope),
+        WizardHooks(
+            auth=step_auth,
+            connection=step_connection,
+            scope=step_scope,
+            discover=discover_step,
+        ),
     )
 
 
 __all__ = [
+    "discover_step",
     "pick_github_host",
     "pick_github_repo",
     "register",

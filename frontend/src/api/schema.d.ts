@@ -1222,7 +1222,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/setup/azure-devops/discover": {
+    "/api/setup/providers/{type_id}/discover": {
         parameters: {
             query?: never;
             header?: never;
@@ -1232,50 +1232,18 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Azure Devops Discover
-         * @description Run one Azure DevOps discovery stage against the user's `az` session.
+         * Provider Discover
+         * @description Generic stage-driven discovery.
          *
-         *     Stage map (1:1 with `providers.azure_devops.discover`):
-         *       - orgs       → list_orgs() → {orgs:[{name,url}]}
-         *       - projects   → list_projects(org) → {projects:[name]}
-         *       - teams      → list_teams(org, project) → {items:[name]}
-         *       - areas      → list_area_paths(org, project) → {items:[path]}
-         *       - iterations → list_iteration_paths(org, project) → {items:[path]}
-         *
-         *     Failures map to `ok=false` with the helper's human-readable message;
-         *     the SPA falls back to free-form input on failure (same UX as the CLI
-         *     wizard's `__custom__` branch).
+         *     Dispatches to the registered provider's `discover` hook (see
+         *     `providers/<type>/setup.py`). Stage names + payload keys are
+         *     provider-defined; the SPA already knows the shape per provider via
+         *     its connection components. Failures collapse to `ok=false` with the
+         *     underlying error message so the SPA can fall back to manual entry
+         *     without translating exception types — the same UX the CLI wizard's
+         *     `__custom__` branch offers.
          */
-        post: operations["azure_devops_discover_api_setup_azure_devops_discover_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/setup/github/discover": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Github Discover
-         * @description Run one GitHub discovery stage via `gh api`.
-         *
-         *     Stage map (1:1 with `providers.github.discover`):
-         *       - hosts     → list_hosts() (also returned in /cli-status; here for symmetry)
-         *       - repos     → list_repos(host) (signed-in user's repos)
-         *       - orgs      → list_orgs(host) (orgs the user is a member of)
-         *       - org_repos → list_org_repos(org, host)
-         *
-         *     Same failure UX as the ADO discovery: `ok=false` + message → SPA
-         *     drops back to manual repo entry.
-         */
-        post: operations["github_discover_api_setup_github_discover_post"];
+        post: operations["provider_discover_api_setup_providers__type_id__discover_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1393,54 +1361,6 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /**
-         * AdoDiscoverRequest
-         * @description Stage-driven Azure DevOps discovery probe.
-         *
-         *     Each stage maps 1:1 to a `providers.azure_devops.discover` helper.
-         *     `org` is required for `projects` / `teams` / `areas` / `iterations`;
-         *     `project` is required for the latter three.
-         */
-        AdoDiscoverRequest: {
-            /**
-             * Stage
-             * @enum {string}
-             */
-            stage: "orgs" | "projects" | "teams" | "areas" | "iterations";
-            /**
-             * Org
-             * @default
-             */
-            org: string;
-            /**
-             * Project
-             * @default
-             */
-            project: string;
-        };
-        /** AdoDiscoverResultDTO */
-        AdoDiscoverResultDTO: {
-            /** Ok */
-            ok: boolean;
-            /**
-             * Error
-             * @default
-             */
-            error: string;
-            /** Orgs */
-            orgs?: components["schemas"]["AdoOrgDTO"][];
-            /** Projects */
-            projects?: string[];
-            /** Items */
-            items?: string[];
-        };
-        /** AdoOrgDTO */
-        AdoOrgDTO: {
-            /** Name */
-            name: string;
-            /** Url */
-            url: string;
-        };
         /** AnswerQuestionRequest */
         AnswerQuestionRequest: {
             /** Question Id */
@@ -1590,31 +1510,25 @@ export interface components {
             tags?: string[];
         };
         /**
-         * GithubDiscoverRequest
-         * @description Stage-driven GitHub discovery via `gh api`.
+         * DiscoverRequest
+         * @description Stage-driven discovery for the SPA wizard.
          *
-         *     `host` selects the gh hostname (only meaningful when the user is
-         *     authenticated against multiple). `org` is required for `org_repos`.
+         *     `stage` is provider-specific (`"orgs"`, `"projects"`, `"repos"`, …);
+         *     `payload` carries any context the stage needs (e.g. `{"org": "..."}`
+         *     for ADO `projects`, or `{"host": "..."}` for GitHub `repos`). The
+         *     backend dispatches to the registered provider's `discover` hook so
+         *     new providers participate without API churn.
          */
-        GithubDiscoverRequest: {
-            /**
-             * Stage
-             * @enum {string}
-             */
-            stage: "hosts" | "repos" | "orgs" | "org_repos";
-            /**
-             * Host
-             * @default
-             */
-            host: string;
-            /**
-             * Org
-             * @default
-             */
-            org: string;
+        DiscoverRequest: {
+            /** Stage */
+            stage: string;
+            /** Payload */
+            payload?: {
+                [key: string]: string;
+            };
         };
-        /** GithubDiscoverResultDTO */
-        GithubDiscoverResultDTO: {
+        /** DiscoverResultDTO */
+        DiscoverResultDTO: {
             /** Ok */
             ok: boolean;
             /**
@@ -1622,12 +1536,28 @@ export interface components {
              * @default
              */
             error: string;
-            /** Hosts */
-            hosts?: components["schemas"]["GithubHostDTO"][];
-            /** Repos */
-            repos?: components["schemas"]["GithubRepoDTO"][];
-            /** Orgs */
-            orgs?: components["schemas"]["GithubOrgDTO"][];
+            /** Items */
+            items?: components["schemas"]["DiscoveryItemDTO"][];
+        };
+        /**
+         * DiscoveryItemDTO
+         * @description One row of a discovery result.
+         *
+         *     `value` is what the picker should persist (org URL, repo full-name,
+         *     team name); `label` is what to render. `extras` is provider-specific
+         *     metadata — the GitHub host stage uses it to surface `api_base_url`
+         *     so the SPA can map a hostname to its API endpoint without a second
+         *     round-trip.
+         */
+        DiscoveryItemDTO: {
+            /** Value */
+            value: string;
+            /** Label */
+            label: string;
+            /** Extras */
+            extras?: {
+                [key: string]: string;
+            };
         };
         /** GithubHostDTO */
         GithubHostDTO: {
@@ -1635,16 +1565,6 @@ export interface components {
             hostname: string;
             /** Api Base Url */
             api_base_url: string;
-        };
-        /** GithubOrgDTO */
-        GithubOrgDTO: {
-            /** Login */
-            login: string;
-        };
-        /** GithubRepoDTO */
-        GithubRepoDTO: {
-            /** Full Name */
-            full_name: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -5300,16 +5220,18 @@ export interface operations {
             };
         };
     };
-    azure_devops_discover_api_setup_azure_devops_discover_post: {
+    provider_discover_api_setup_providers__type_id__discover_post: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                type_id: string;
+            };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AdoDiscoverRequest"];
+                "application/json": components["schemas"]["DiscoverRequest"];
             };
         };
         responses: {
@@ -5319,40 +5241,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AdoDiscoverResultDTO"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    github_discover_api_setup_github_discover_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["GithubDiscoverRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GithubDiscoverResultDTO"];
+                    "application/json": components["schemas"]["DiscoverResultDTO"];
                 };
             };
             /** @description Validation Error */

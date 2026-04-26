@@ -26,7 +26,7 @@
 |---|-----------|------|-------|
 | 1 | `src/docket/config/provider_crud.py:69-97` | `match type_id:` with hardcoded prompts | Phase 3 |
 | 2 | `src/docket/cli/tui/widgets/settings_modal.py:159, 230, 441` | TUI settings modal hardcodes ADO fields | Phase 2 |
-| 3 | `src/docket/api/routes/setup.py:301-396` + `api/schemas/setup.py:131-176` + `config/setup_discovery.py` | Per-provider discovery routes/schemas | Phase 4 |
+| 3 | ~~`src/docket/api/routes/setup.py:301-396` + `api/schemas/setup.py:131-176` + `config/setup_discovery.py`~~ | ~~Per-provider discovery routes/schemas~~ | ✅ Phase 4 |
 | 4 | `src/docket/config/setup_utils.py:85-103` | `build_label_suggestion()` if-ladder | Phase 1 |
 | 5 | `src/docket/config/setup_wizard.py:615-631` | `_WIZARDS` hardcoded trios | Phase 3 |
 
@@ -195,9 +195,12 @@ dispatch boundary; each built-in provider package owns its own
 `setup.py` (`providers/{azure_devops,github,github_stub}/setup.py`)
 that registers `WizardHooks(auth, connection, scope)` at registry
 bootstrap. `setup_wizard.py` no longer imports any concrete provider
-symbols (verified by inspection — `setup_discovery.py` is the only
-remaining concrete-import site under `config/`, scheduled for deletion
-in Phase 4). `provider_crud.py` now collects fields generically from
+symbols. `setup_discovery.py` (now CLI-probes only after Phase 4)
+remains the last concrete-import site under `config/` — it stays
+because `probe_az`/`probe_gh`/`list_gh_hosts` are about the local CLI
+session, not an active provider, and pulling them under `providers/`
+would require a separate `WizardHooks.probe_session` axis.
+`provider_crud.py` now collects fields generically from
 `spec.setup_fields`. Tests assert hook registration parity with the
 spec registry.
 
@@ -252,10 +255,38 @@ type_id:`); remove concrete-provider imports from
 
 ---
 
-## Phase 4 — generic discovery endpoint
+## Phase 4 — generic discovery endpoint ✅ landed
 
-**Goal:** kill leak #3. Replace `/setup/azure-devops/discover` and
-`/setup/github/discover` with one route.
+**Status:** Discovery is now stage-driven through one route.
+
+- `WizardHooks` grew a `discover: DiscoverFn | None` field; each
+  provider's `setup.discover_step(stage, payload)` returns
+  `list[DiscoveryItem]` (`config/setup_hooks.py`). ADO maps
+  `orgs|projects|teams|areas|iterations`; GitHub maps
+  `hosts|repos|orgs|org_repos` (host stage emits `extras.api_base_url`);
+  `github_stub` returns `[]` for known stages and `ValueError` otherwise.
+- Old per-provider routes (`/setup/azure-devops/discover`,
+  `/setup/github/discover`) and their DTOs (`AdoDiscoverRequest`,
+  `GithubDiscoverRequest`, `AdoOrgDTO`, `GithubRepoDTO`, etc.) deleted.
+  New: `POST /api/setup/providers/{type_id}/discover` with
+  `DiscoverRequest{stage, payload}` → `DiscoverResultDTO{ok, error,
+  items: [DiscoveryItemDTO{value, label, extras}]}`.
+- `setup_discovery.py` shrunk to just CLI-status probes (`probe_az`,
+  `probe_gh`, `list_gh_hosts`, `CliToolStatus`); the
+  `ado_list_*`/`gh_list_*` shims are gone now that the API layer
+  reaches discovery through `setup_hooks` instead.
+- SPA migrated to `useProviderDiscover(typeId)`; `AzureConnection`,
+  `GithubConnection`, and `ScopeStep`'s `AdoAxisField` map
+  `items[].value` into form state. `schema.d.ts` regenerated via
+  `bun run gen:api`.
+- `tests/integration/test_api_setup_discover_generic.py` (placeholder)
+  removed; canonical discovery coverage lives in
+  `tests/integration/test_api_setup.py` and exercises the route → hooks
+  → underlying `discover.list_*` helper path with monkey-patched
+  helpers.
+
+**Original plan:** kill leak #3. Replace `/setup/azure-devops/discover`
+and `/setup/github/discover` with one route.
 
 **Plan:**
 1. New canonical row shape in `src/docket/api/schemas/setup.py`:

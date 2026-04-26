@@ -11,14 +11,14 @@ runtime that builds an ADO provider."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING
 
 from pydantic import HttpUrl
 from rich.prompt import Confirm, Prompt
 
 from docket._console import console
-from docket.config.setup_hooks import WizardHooks
+from docket.config.setup_hooks import DiscoveryItem, WizardHooks
 from docket.config.setup_hooks import register as register_hooks
 from docket.config.setup_utils import (
     looks_like_http_url,
@@ -210,11 +210,53 @@ def _count_items(org: str, project: str, scope: ScopeFilter) -> int | None:
         return None
 
 
+def discover_step(stage: str, payload: Mapping[str, str]) -> list[DiscoveryItem]:
+    """Stage-driven discovery for the SPA wizard's pickers.
+
+    Stage map (1:1 with `providers.azure_devops.discover`):
+      - `orgs`       → no payload → `[{value=url, label=name}]`
+      - `projects`   → `{org}` → `[{value=name, label=name}]`
+      - `teams`      → `{org, project}` → `[{value=name, label=name}]`
+      - `areas`      → `{org, project}` → `[{value=path, label=path}]`
+      - `iterations` → `{org, project}` → `[{value=path, label=path}]`
+
+    `DiscoveryError` from the underlying helper bubbles up; the route
+    catches it and surfaces `ok=false` with the human-readable message.
+    Unknown stages raise `ValueError` so the route returns the same
+    `ok=false` instead of a 500."""
+    if stage == "orgs":
+        return [DiscoveryItem(value=o.url, label=o.name) for o in discover.list_orgs()]
+    if stage == "projects":
+        org = payload.get("org", "").strip()
+        if not org:
+            raise ValueError("payload.org is required for stage 'projects'")
+        return [DiscoveryItem(value=p.name, label=p.name) for p in discover.list_projects(org)]
+    if stage in ("teams", "areas", "iterations"):
+        org = payload.get("org", "").strip()
+        project = payload.get("project", "").strip()
+        if not org or not project:
+            raise ValueError(f"payload.org and payload.project are required for stage '{stage}'")
+        match stage:
+            case "teams":
+                items = discover.list_teams(org, project)
+            case "areas":
+                items = discover.list_area_paths(org, project)
+            case _:
+                items = discover.list_iteration_paths(org, project)
+        return [DiscoveryItem(value=v, label=v) for v in items]
+    raise ValueError(f"unknown stage: {stage!r}")
+
+
 def register() -> None:
     register_hooks(
         "azure_devops",
-        WizardHooks(auth=step_auth, connection=step_connection, scope=step_scope),
+        WizardHooks(
+            auth=step_auth,
+            connection=step_connection,
+            scope=step_scope,
+            discover=discover_step,
+        ),
     )
 
 
-__all__ = ["register", "step_auth", "step_connection", "step_scope"]
+__all__ = ["discover_step", "register", "step_auth", "step_connection", "step_scope"]

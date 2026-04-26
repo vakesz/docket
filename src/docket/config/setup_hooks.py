@@ -13,8 +13,8 @@ third-party providers register from their own setup module imported via the
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -29,17 +29,42 @@ through to a sensible default in that case."""
 
 
 @dataclass(frozen=True)
+class DiscoveryItem:
+    """One row returned by a provider's `discover` hook.
+
+    `value` is what gets persisted in the provider draft (the org URL, the
+    repo full-name, the team name); `label` is what the picker shows; the
+    free-form `extras` carries hints like `api_base_url` so a host picker
+    can look up the matching API endpoint without a second round-trip."""
+
+    value: str
+    label: str
+    extras: Mapping[str, str] = field(default_factory=dict)
+
+
+DiscoverFn = Callable[[str, Mapping[str, str]], list[DiscoveryItem]]
+"""Provider-specific discovery callback. Takes a stage name (`"orgs"`,
+`"repos"`, …) and a free-form payload dict; returns a list of canonical
+`DiscoveryItem` rows. Provider-native errors raise `ProviderError` (or a
+subclass like `DiscoveryError`); unknown stages should raise `ValueError`
+so the route surfaces them as `ok=false` instead of a 500."""
+
+
+@dataclass(frozen=True)
 class WizardHooks:
     """Per-provider onboarding callbacks.
 
     Any of `auth`, `connection`, `scope` may be `None`; the orchestrator
     falls through to a sensible default in that case (a short "no auth
     needed" message for `auth`, the spec-driven prompts for `connection`,
-    and an empty scope for `scope`)."""
+    and an empty scope for `scope`). `discover` powers the SPA wizard's
+    stage-driven picker; `None` means the SPA falls back to manual entry.
+    """
 
     auth: WizardStep | None = None
     connection: WizardStep | None = None
     scope: WizardStep | None = None
+    discover: DiscoverFn | None = None
 
 
 _HOOKS: dict[str, WizardHooks] = {}
@@ -62,6 +87,8 @@ def registered_type_ids() -> list[str]:
 
 
 __all__ = [
+    "DiscoverFn",
+    "DiscoveryItem",
     "WizardHooks",
     "WizardStep",
     "get",

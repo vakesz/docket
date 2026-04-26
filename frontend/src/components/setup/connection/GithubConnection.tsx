@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { DTO } from "~/api/client";
-import { useGithubDiscover } from "~/api/hooks";
+import { useProviderDiscover } from "~/api/hooks";
 import { Label } from "~/components/common/Label";
 import { Combobox } from "./Combobox";
 
@@ -13,7 +13,7 @@ export function GithubConnection({
   onChange: (next: Record<string, string>) => void;
   cli: DTO["CliStatusDTO"] | null;
 }) {
-  const discover = useGithubDiscover();
+  const discover = useProviderDiscover("github");
   const [repoOptions, setRepoOptions] = useState<string[]>([]);
   const [discoveryError, setDiscoveryError] = useState("");
   const ghHosts = cli?.gh_hosts ?? [];
@@ -30,7 +30,7 @@ export function GithubConnection({
     }
     let cancelled = false;
     discover.mutate(
-      { stage: "repos", host, org: "" },
+      { stage: "repos", payload: host ? { host } : {} },
       {
         onSuccess: (res) => {
           if (cancelled) return;
@@ -39,7 +39,7 @@ export function GithubConnection({
             setDiscoveryError(res.error ?? "");
             return;
           }
-          setRepoOptions((res.repos ?? []).map((r) => r.full_name));
+          setRepoOptions((res.items ?? []).map((it) => it.value));
           setDiscoveryError("");
         },
         onError: () => {

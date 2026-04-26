@@ -7,12 +7,13 @@ the github provider's assignee-only scope step."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 from rich.prompt import Prompt
 
 from docket._console import console
-from docket.config.setup_hooks import WizardHooks
+from docket.config.setup_hooks import DiscoveryItem, WizardHooks
 from docket.config.setup_hooks import register as register_hooks
 from docket.providers.github.setup import step_scope as github_step_scope
 
@@ -30,11 +31,27 @@ def step_connection(state: WizardState) -> None:
     state.provider_config = {"default_repo": repo}
 
 
+def discover_step(stage: str, payload: Mapping[str, str]) -> list[DiscoveryItem]:
+    """No discovery — github_stub is in-memory and has nothing to scan.
+
+    Returns an empty list for any stage so the SPA's wizard keeps the
+    fallback "type a repo manually" UX instead of erroring out."""
+    del payload
+    if stage in ("hosts", "repos", "orgs", "org_repos"):
+        return []
+    raise ValueError(f"unknown stage: {stage!r}")
+
+
 def register() -> None:
     register_hooks(
         "github_stub",
-        WizardHooks(auth=step_auth, connection=step_connection, scope=github_step_scope),
+        WizardHooks(
+            auth=step_auth,
+            connection=step_connection,
+            scope=github_step_scope,
+            discover=discover_step,
+        ),
     )
 
 
-__all__ = ["register", "step_auth", "step_connection"]
+__all__ = ["discover_step", "register", "step_auth", "step_connection"]

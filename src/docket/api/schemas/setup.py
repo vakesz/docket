@@ -123,56 +123,37 @@ class CliStatusDTO(BaseModel):
     keyring_error: str = ""
 
 
-class AdoOrgDTO(BaseModel):
-    name: str
-    url: str
+class DiscoverRequest(BaseModel):
+    """Stage-driven discovery for the SPA wizard.
+
+    `stage` is provider-specific (`"orgs"`, `"projects"`, `"repos"`, …);
+    `payload` carries any context the stage needs (e.g. `{"org": "..."}`
+    for ADO `projects`, or `{"host": "..."}` for GitHub `repos`). The
+    backend dispatches to the registered provider's `discover` hook so
+    new providers participate without API churn."""
+
+    stage: str
+    payload: dict[str, str] = Field(default_factory=dict)
 
 
-class AdoDiscoverRequest(BaseModel):
-    """Stage-driven Azure DevOps discovery probe.
+class DiscoveryItemDTO(BaseModel):
+    """One row of a discovery result.
 
-    Each stage maps 1:1 to a `providers.azure_devops.discover` helper.
-    `org` is required for `projects` / `teams` / `areas` / `iterations`;
-    `project` is required for the latter three."""
+    `value` is what the picker should persist (org URL, repo full-name,
+    team name); `label` is what to render. `extras` is provider-specific
+    metadata — the GitHub host stage uses it to surface `api_base_url`
+    so the SPA can map a hostname to its API endpoint without a second
+    round-trip."""
 
-    stage: Literal["orgs", "projects", "teams", "areas", "iterations"]
-    org: str = ""
-    project: str = ""
+    value: str
+    label: str
+    extras: dict[str, str] = Field(default_factory=dict)
 
 
-class AdoDiscoverResultDTO(BaseModel):
+class DiscoverResultDTO(BaseModel):
     ok: bool
     error: str = ""
-    orgs: list[AdoOrgDTO] = Field(default_factory=list)
-    projects: list[str] = Field(default_factory=list)
-    items: list[str] = Field(default_factory=list)
-
-
-class GithubDiscoverRequest(BaseModel):
-    """Stage-driven GitHub discovery via `gh api`.
-
-    `host` selects the gh hostname (only meaningful when the user is
-    authenticated against multiple). `org` is required for `org_repos`."""
-
-    stage: Literal["hosts", "repos", "orgs", "org_repos"]
-    host: str = ""
-    org: str = ""
-
-
-class GithubRepoDTO(BaseModel):
-    full_name: str
-
-
-class GithubOrgDTO(BaseModel):
-    login: str
-
-
-class GithubDiscoverResultDTO(BaseModel):
-    ok: bool
-    error: str = ""
-    hosts: list[GithubHostDTO] = Field(default_factory=list)
-    repos: list[GithubRepoDTO] = Field(default_factory=list)
-    orgs: list[GithubOrgDTO] = Field(default_factory=list)
+    items: list[DiscoveryItemDTO] = Field(default_factory=list)
 
 
 class SuggestKeyRequest(BaseModel):

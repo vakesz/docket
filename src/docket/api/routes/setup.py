@@ -31,16 +31,12 @@ from docket.api._provider_setup import (
 from docket.api.auth import require_setup_token
 from docket.api.deps import get_paths
 from docket.api.schemas import (
-    AdoDiscoverRequest,
-    AdoDiscoverResultDTO,
-    AdoOrgDTO,
     CliStatusDTO,
     CliToolStatusDTO,
-    GithubDiscoverRequest,
-    GithubDiscoverResultDTO,
+    DiscoverRequest,
+    DiscoverResultDTO,
+    DiscoveryItemDTO,
     GithubHostDTO,
-    GithubOrgDTO,
-    GithubRepoDTO,
     ProbeScopeDTO,
     ProbeScopeRequest,
     SetupCompleteDTO,
@@ -56,7 +52,7 @@ from docket.api.schemas import (
     SuggestLabelRequest,
     SyncSummaryDTO,
 )
-from docket.config import setup_discovery
+from docket.config import setup_discovery, setup_hooks
 from docket.config.loader import load_config, save_config
 from docket.config.models import (
     ProviderEntry,
@@ -299,99 +295,42 @@ def _to_cli_dto(status: setup_discovery.CliToolStatus) -> CliToolStatusDTO:
 
 
 @router.post(
-    "/azure-devops/discover",
-    response_model=AdoDiscoverResultDTO,
+    "/providers/{type_id}/discover",
+    response_model=DiscoverResultDTO,
     dependencies=[Depends(require_setup_token)],
 )
-def azure_devops_discover(req: AdoDiscoverRequest) -> AdoDiscoverResultDTO:
-    """Run one Azure DevOps discovery stage against the user's `az` session.
+def provider_discover(type_id: str, req: DiscoverRequest) -> DiscoverResultDTO:
+    """Generic stage-driven discovery.
 
-    Stage map (1:1 with `providers.azure_devops.discover`):
-      - orgs       → list_orgs() → {orgs:[{name,url}]}
-      - projects   → list_projects(org) → {projects:[name]}
-      - teams      → list_teams(org, project) → {items:[name]}
-      - areas      → list_area_paths(org, project) → {items:[path]}
-      - iterations → list_iteration_paths(org, project) → {items:[path]}
-
-    Failures map to `ok=false` with the helper's human-readable message;
-    the SPA falls back to free-form input on failure (same UX as the CLI
-    wizard's `__custom__` branch)."""
-    try:
-        if req.stage == "orgs":
-            return AdoDiscoverResultDTO(
-                ok=True,
-                orgs=[AdoOrgDTO(name=o.name, url=o.url) for o in setup_discovery.ado_list_orgs()],
-            )
-        if req.stage == "projects":
-            if not req.org:
-                return AdoDiscoverResultDTO(ok=False, error="org is required")
-            return AdoDiscoverResultDTO(
-                ok=True, projects=setup_discovery.ado_list_projects(req.org)
-            )
-        if not req.org or not req.project:
-            return AdoDiscoverResultDTO(ok=False, error="org and project are required")
-        if req.stage == "teams":
-            return AdoDiscoverResultDTO(
-                ok=True, items=setup_discovery.ado_list_teams(req.org, req.project)
-            )
-        if req.stage == "areas":
-            return AdoDiscoverResultDTO(
-                ok=True, items=setup_discovery.ado_list_areas(req.org, req.project)
-            )
-        # iterations
-        return AdoDiscoverResultDTO(
-            ok=True, items=setup_discovery.ado_list_iterations(req.org, req.project)
+    Dispatches to the registered provider's `discover` hook (see
+    `providers/<type>/setup.py`). Stage names + payload keys are
+    provider-defined; the SPA already knows the shape per provider via
+    its connection components. Failures collapse to `ok=false` with the
+    underlying error message so the SPA can fall back to manual entry
+    without translating exception types — the same UX the CLI wizard's
+    `__custom__` branch offers."""
+    hooks = setup_hooks.get(type_id)
+    if hooks is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"unknown provider type: {type_id}",
         )
-    except setup_discovery.AdoDiscoveryError as e:
-        return AdoDiscoverResultDTO(ok=False, error=str(e))
-
-
-@router.post(
-    "/github/discover",
-    response_model=GithubDiscoverResultDTO,
-    dependencies=[Depends(require_setup_token)],
-)
-def github_discover(req: GithubDiscoverRequest) -> GithubDiscoverResultDTO:
-    """Run one GitHub discovery stage via `gh api`.
-
-    Stage map (1:1 with `providers.github.discover`):
-      - hosts     → list_hosts() (also returned in /cli-status; here for symmetry)
-      - repos     → list_repos(host) (signed-in user's repos)
-      - orgs      → list_orgs(host) (orgs the user is a member of)
-      - org_repos → list_org_repos(org, host)
-
-    Same failure UX as the ADO discovery: `ok=false` + message → SPA
-    drops back to manual repo entry."""
-    host = req.host or None
+    if hooks.discover is None:
+        return DiscoverResultDTO(
+            ok=False,
+            error=f"provider type '{type_id}' does not expose discovery",
+        )
     try:
-        if req.stage == "hosts":
-            return GithubDiscoverResultDTO(
-                ok=True,
-                hosts=[
-                    GithubHostDTO(hostname=h.hostname, api_base_url=h.api_base_url)
-                    for h in setup_discovery.list_gh_hosts()
-                ],
-            )
-        if req.stage == "repos":
-            refs = setup_discovery.gh_list_repos(host)
-            return GithubDiscoverResultDTO(
-                ok=True, repos=[GithubRepoDTO(full_name=r.full_name) for r in refs]
-            )
-        if req.stage == "orgs":
-            return GithubDiscoverResultDTO(
-                ok=True,
-                orgs=[GithubOrgDTO(login=o.login) for o in setup_discovery.gh_list_orgs(host)],
-            )
-        if req.stage == "org_repos":
-            if not req.org:
-                return GithubDiscoverResultDTO(ok=False, error="org is required")
-            refs = setup_discovery.gh_list_org_repos(req.org, host)
-            return GithubDiscoverResultDTO(
-                ok=True, repos=[GithubRepoDTO(full_name=r.full_name) for r in refs]
-            )
-        return GithubDiscoverResultDTO(ok=False, error=f"unknown stage: {req.stage}")
-    except setup_discovery.GhDiscoveryError as e:
-        return GithubDiscoverResultDTO(ok=False, error=str(e))
+        items = hooks.discover(req.stage, dict(req.payload))
+    except (ProviderError, ValueError) as e:
+        return DiscoverResultDTO(ok=False, error=str(e))
+    return DiscoverResultDTO(
+        ok=True,
+        items=[
+            DiscoveryItemDTO(value=item.value, label=item.label, extras=dict(item.extras))
+            for item in items
+        ],
+    )
 
 
 @router.post(

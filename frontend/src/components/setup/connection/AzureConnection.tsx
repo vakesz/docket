@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { DTO } from "~/api/client";
-import { useAdoDiscover } from "~/api/hooks";
+import { useProviderDiscover } from "~/api/hooks";
 import { Label } from "~/components/common/Label";
 import { Combobox } from "./Combobox";
 
@@ -13,7 +13,7 @@ export function AzureConnection({
   onChange: (next: Record<string, string>) => void;
   cli: DTO["CliStatusDTO"] | null;
 }) {
-  const discover = useAdoDiscover();
+  const discover = useProviderDiscover("azure_devops");
   const [orgOptions, setOrgOptions] = useState<string[]>([]);
   const [projectOptions, setProjectOptions] = useState<string[]>([]);
   const [orgError, setOrgError] = useState("");
@@ -26,7 +26,7 @@ export function AzureConnection({
     }
     let cancelled = false;
     discover.mutate(
-      { stage: "orgs", org: "", project: "" },
+      { stage: "orgs", payload: {} },
       {
         onSuccess: (res) => {
           if (cancelled) return;
@@ -35,7 +35,7 @@ export function AzureConnection({
             setOrgError(res.error ?? "");
             return;
           }
-          setOrgOptions((res.orgs ?? []).map((o) => o.url));
+          setOrgOptions((res.items ?? []).map((it) => it.value));
           setOrgError("");
         },
       },
@@ -54,7 +54,7 @@ export function AzureConnection({
     }
     let cancelled = false;
     discover.mutate(
-      { stage: "projects", org, project: "" },
+      { stage: "projects", payload: { org } },
       {
         onSuccess: (res) => {
           if (cancelled) return;
@@ -63,7 +63,7 @@ export function AzureConnection({
             setProjectError(res.error ?? "");
             return;
           }
-          setProjectOptions(res.projects ?? []);
+          setProjectOptions((res.items ?? []).map((it) => it.value));
           setProjectError("");
         },
       },

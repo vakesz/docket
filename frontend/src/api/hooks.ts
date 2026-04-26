@@ -65,17 +65,21 @@ export function useCliStatus(enabled = true) {
   });
 }
 
-export function useAdoDiscover() {
+/** Stage-driven discovery for the wizard's per-provider pickers.
+ *
+ * The route is provider-agnostic: each provider's `setup.discover_step`
+ * decides which `stage` strings it understands and what `payload` keys
+ * each stage requires. Caller maps `items[].value` (canonical
+ * persistable id) into form state and reads `items[].extras` for any
+ * provider-specific metadata (e.g. GitHub's `api_base_url` for hosts).
+ */
+export function useProviderDiscover(typeId: string) {
   return useMutation({
-    mutationFn: (body: DTO["AdoDiscoverRequest"]) =>
-      api.post<DTO["AdoDiscoverResultDTO"]>("/setup/azure-devops/discover", body),
-  });
-}
-
-export function useGithubDiscover() {
-  return useMutation({
-    mutationFn: (body: DTO["GithubDiscoverRequest"]) =>
-      api.post<DTO["GithubDiscoverResultDTO"]>("/setup/github/discover", body),
+    mutationFn: (body: DTO["DiscoverRequest"]) =>
+      api.post<DTO["DiscoverResultDTO"]>(
+        `/setup/providers/${encodeURIComponent(typeId)}/discover`,
+        body,
+      ),
   });
 }
 

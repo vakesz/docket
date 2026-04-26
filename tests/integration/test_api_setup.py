@@ -662,36 +662,65 @@ def test_cli_status_skips_gh_hosts_when_logged_out(
     assert r.json()["gh_hosts"] == []
 
 
+# Generic discovery route: `POST /api/setup/providers/{type_id}/discover`.
+# Each provider's `setup.discover_step` is the dispatch target; tests patch
+# the underlying `provider.<type>.discover` helpers (the I/O layer) so we
+# exercise the full route → hooks → discover-helper path.
+
+
+def test_provider_discover_unknown_type_returns_404(tmp_path: Path) -> None:
+    paths = _mk_paths(tmp_path)
+    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
+    r = client.post(
+        "/api/setup/providers/does_not_exist/discover",
+        headers=SETUP_AUTH,
+        json={"stage": "orgs", "payload": {}},
+    )
+    assert r.status_code == 404
+
+
+def test_provider_discover_requires_setup_token(tmp_path: Path) -> None:
+    paths = _mk_paths(tmp_path)
+    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
+    r = client.post(
+        "/api/setup/providers/azure_devops/discover",
+        json={"stage": "orgs", "payload": {}},
+    )
+    assert r.status_code == 401
+
+
 def test_azure_devops_discover_orgs_ok(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     paths = _mk_paths(tmp_path)
-    from docket.config import setup_discovery
+    from docket.providers.azure_devops import discover as ado_discover
 
     monkeypatch.setattr(
-        setup_discovery,
-        "ado_list_orgs",
+        ado_discover,
+        "list_orgs",
         lambda: [
-            setup_discovery.AdoOrgRef(name="Contoso", url="https://dev.azure.com/contoso"),
+            ado_discover.OrgRef(name="Contoso", url="https://dev.azure.com/contoso"),
         ],
     )
     client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
     r = client.post(
-        "/api/setup/azure-devops/discover",
+        "/api/setup/providers/azure_devops/discover",
         headers=SETUP_AUTH,
-        json={"stage": "orgs"},
+        json={"stage": "orgs", "payload": {}},
     )
     assert r.status_code == 200
     body = r.json()
     assert body["ok"] is True
-    assert body["orgs"] == [{"name": "Contoso", "url": "https://dev.azure.com/contoso"}]
+    assert body["items"] == [
+        {"value": "https://dev.azure.com/contoso", "label": "Contoso", "extras": {}}
+    ]
 
 
 def test_azure_devops_discover_projects_requires_org(tmp_path: Path) -> None:
     paths = _mk_paths(tmp_path)
     client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
     r = client.post(
-        "/api/setup/azure-devops/discover",
+        "/api/setup/providers/azure_devops/discover",
         headers=SETUP_AUTH,
-        json={"stage": "projects"},
+        json={"stage": "projects", "payload": {}},
     )
     assert r.status_code == 200
     body = r.json()
@@ -703,32 +732,42 @@ def test_azure_devops_discover_projects_returns_list(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     paths = _mk_paths(tmp_path)
-    from docket.config import setup_discovery
+    from docket.providers.azure_devops import discover as ado_discover
 
     monkeypatch.setattr(
-        setup_discovery,
-        "ado_list_projects",
-        lambda org: ["Acme", "Bravo"],
+        ado_discover,
+        "list_projects",
+        lambda org: [
+            ado_discover.ProjectRef(id="acme-id", name="Acme"),
+            ado_discover.ProjectRef(id="bravo-id", name="Bravo"),
+        ],
     )
     client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
     r = client.post(
-        "/api/setup/azure-devops/discover",
+        "/api/setup/providers/azure_devops/discover",
         headers=SETUP_AUTH,
-        json={"stage": "projects", "org": "https://dev.azure.com/contoso"},
+        json={
+            "stage": "projects",
+            "payload": {"org": "https://dev.azure.com/contoso"},
+        },
     )
     assert r.status_code == 200
     body = r.json()
     assert body["ok"] is True
-    assert body["projects"] == ["Acme", "Bravo"]
+    assert [it["value"] for it in body["items"]] == ["Acme", "Bravo"]
+    assert [it["label"] for it in body["items"]] == ["Acme", "Bravo"]
 
 
 def test_azure_devops_discover_teams_requires_project(tmp_path: Path) -> None:
     paths = _mk_paths(tmp_path)
     client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
     r = client.post(
-        "/api/setup/azure-devops/discover",
+        "/api/setup/providers/azure_devops/discover",
         headers=SETUP_AUTH,
-        json={"stage": "teams", "org": "https://dev.azure.com/contoso"},
+        json={
+            "stage": "teams",
+            "payload": {"org": "https://dev.azure.com/contoso"},
+        },
     )
     body = r.json()
     assert r.status_code == 200
@@ -740,46 +779,48 @@ def test_azure_devops_discover_iterations_returns_items(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     paths = _mk_paths(tmp_path)
-    from docket.config import setup_discovery
+    from docket.providers.azure_devops import discover as ado_discover
 
     monkeypatch.setattr(
-        setup_discovery,
-        "ado_list_iterations",
+        ado_discover,
+        "list_iteration_paths",
         lambda org, project: ["Acme\\Sprint 1", "Acme\\Sprint 2"],
     )
     client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
     r = client.post(
-        "/api/setup/azure-devops/discover",
+        "/api/setup/providers/azure_devops/discover",
         headers=SETUP_AUTH,
         json={
             "stage": "iterations",
-            "org": "https://dev.azure.com/contoso",
-            "project": "Acme",
+            "payload": {
+                "org": "https://dev.azure.com/contoso",
+                "project": "Acme",
+            },
         },
     )
     assert r.status_code == 200
     body = r.json()
     assert body["ok"] is True
-    assert body["items"] == ["Acme\\Sprint 1", "Acme\\Sprint 2"]
+    assert [it["value"] for it in body["items"]] == ["Acme\\Sprint 1", "Acme\\Sprint 2"]
 
 
 def test_azure_devops_discover_failure_reports_ok_false(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Helper raising AdoDiscoveryError → DTO with `ok=false` and the
-    helper's message. SPA falls back to free-form entry on this signal."""
+    """Helper raising DiscoveryError → DTO with `ok=false` and the helper's
+    message. SPA falls back to free-form entry on this signal."""
     paths = _mk_paths(tmp_path)
-    from docket.config import setup_discovery
+    from docket.providers.azure_devops import discover as ado_discover
 
     def _boom() -> list[Any]:
-        raise setup_discovery.AdoDiscoveryError("az session expired")
+        raise ado_discover.DiscoveryError("az session expired")
 
-    monkeypatch.setattr(setup_discovery, "ado_list_orgs", _boom)
+    monkeypatch.setattr(ado_discover, "list_orgs", _boom)
     client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
     r = client.post(
-        "/api/setup/azure-devops/discover",
+        "/api/setup/providers/azure_devops/discover",
         headers=SETUP_AUTH,
-        json={"stage": "orgs"},
+        json={"stage": "orgs", "payload": {}},
     )
     body = r.json()
     assert r.status_code == 200
@@ -787,68 +828,106 @@ def test_azure_devops_discover_failure_reports_ok_false(
     assert "az session expired" in body["error"]
 
 
-def test_azure_devops_discover_requires_setup_token(tmp_path: Path) -> None:
+def test_azure_devops_discover_unknown_stage_reports_ok_false(tmp_path: Path) -> None:
+    """Unknown stages raise `ValueError` inside the hook; the route maps that
+    to `ok=false` so the SPA can fall back gracefully."""
     paths = _mk_paths(tmp_path)
     client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
     r = client.post(
-        "/api/setup/azure-devops/discover",
-        json={"stage": "orgs"},
+        "/api/setup/providers/azure_devops/discover",
+        headers=SETUP_AUTH,
+        json={"stage": "nope", "payload": {}},
     )
-    assert r.status_code == 401
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is False
+    assert "nope" in body["error"]
 
 
 def test_github_discover_repos_ok(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     paths = _mk_paths(tmp_path)
-    from docket.config import setup_discovery
+    from docket.providers.github import discover as gh_discover
 
     monkeypatch.setattr(
-        setup_discovery,
-        "gh_list_repos",
-        lambda host: [
-            setup_discovery.GhRepoRef(owner="contoso", name="alpha"),
-            setup_discovery.GhRepoRef(owner="contoso", name="bravo"),
+        gh_discover,
+        "list_repos",
+        lambda host=None: [
+            gh_discover.RepoRef(owner="contoso", name="alpha"),
+            gh_discover.RepoRef(owner="contoso", name="bravo"),
         ],
     )
     client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
     r = client.post(
-        "/api/setup/github/discover",
+        "/api/setup/providers/github/discover",
         headers=SETUP_AUTH,
-        json={"stage": "repos", "host": "github.com"},
+        json={"stage": "repos", "payload": {"host": "github.com"}},
     )
     assert r.status_code == 200
     body = r.json()
     assert body["ok"] is True
-    assert body["repos"] == [{"full_name": "contoso/alpha"}, {"full_name": "contoso/bravo"}]
+    assert [it["value"] for it in body["items"]] == ["contoso/alpha", "contoso/bravo"]
+    assert [it["label"] for it in body["items"]] == ["contoso/alpha", "contoso/bravo"]
 
 
 def test_github_discover_orgs_ok(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     paths = _mk_paths(tmp_path)
-    from docket.config import setup_discovery
+    from docket.providers.github import discover as gh_discover
 
     monkeypatch.setattr(
-        setup_discovery,
-        "gh_list_orgs",
-        lambda host: [setup_discovery.GhOrgRef(login="contoso")],
+        gh_discover,
+        "list_orgs",
+        lambda host=None: [gh_discover.OrgRef(login="contoso")],
     )
     client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
     r = client.post(
-        "/api/setup/github/discover",
+        "/api/setup/providers/github/discover",
         headers=SETUP_AUTH,
-        json={"stage": "orgs"},
+        json={"stage": "orgs", "payload": {}},
     )
     assert r.status_code == 200
     body = r.json()
     assert body["ok"] is True
-    assert body["orgs"] == [{"login": "contoso"}]
+    assert body["items"] == [{"value": "contoso", "label": "contoso", "extras": {}}]
+
+
+def test_github_discover_hosts_includes_api_base_url_in_extras(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`hosts` stage threads `api_base_url` through `extras` so the SPA can
+    map a hostname to its API endpoint without a second round-trip."""
+    paths = _mk_paths(tmp_path)
+    from docket.providers.github import discover as gh_discover
+
+    monkeypatch.setattr(
+        gh_discover,
+        "list_hosts",
+        lambda: [
+            gh_discover.HostRef(hostname="github.com", api_base_url="https://api.github.com"),
+            gh_discover.HostRef(
+                hostname="ghe.example.com", api_base_url="https://ghe.example.com/api/v3"
+            ),
+        ],
+    )
+    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
+    r = client.post(
+        "/api/setup/providers/github/discover",
+        headers=SETUP_AUTH,
+        json={"stage": "hosts", "payload": {}},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    assert body["items"][0]["extras"] == {"api_base_url": "https://api.github.com"}
+    assert body["items"][1]["extras"] == {"api_base_url": "https://ghe.example.com/api/v3"}
 
 
 def test_github_discover_org_repos_requires_org(tmp_path: Path) -> None:
     paths = _mk_paths(tmp_path)
     client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
     r = client.post(
-        "/api/setup/github/discover",
+        "/api/setup/providers/github/discover",
         headers=SETUP_AUTH,
-        json={"stage": "org_repos"},
+        json={"stage": "org_repos", "payload": {}},
     )
     body = r.json()
     assert r.status_code == 200
@@ -860,22 +939,39 @@ def test_github_discover_failure_reports_ok_false(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     paths = _mk_paths(tmp_path)
-    from docket.config import setup_discovery
+    from docket.providers.github import discover as gh_discover
 
-    def _boom(host: Any) -> list[Any]:
-        raise setup_discovery.GhDiscoveryError("gh: api rate-limited")
+    def _boom(host: Any = None) -> list[Any]:
+        raise gh_discover.DiscoveryError("gh: api rate-limited")
 
-    monkeypatch.setattr(setup_discovery, "gh_list_repos", _boom)
+    monkeypatch.setattr(gh_discover, "list_repos", _boom)
     client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
     r = client.post(
-        "/api/setup/github/discover",
+        "/api/setup/providers/github/discover",
         headers=SETUP_AUTH,
-        json={"stage": "repos"},
+        json={"stage": "repos", "payload": {}},
     )
     body = r.json()
     assert r.status_code == 200
     assert body["ok"] is False
     assert "rate-limited" in body["error"]
+
+
+def test_github_stub_discover_returns_empty_for_known_stages(tmp_path: Path) -> None:
+    """github_stub has nothing to scan — known stages return `ok=true,
+    items=[]` so the SPA shows the manual-entry fallback rather than a
+    discovery error."""
+    paths = _mk_paths(tmp_path)
+    client = TestClient(create_bootstrap_app(paths=paths, setup_token=SETUP_TOKEN))
+    r = client.post(
+        "/api/setup/providers/github_stub/discover",
+        headers=SETUP_AUTH,
+        json={"stage": "repos", "payload": {}},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    assert body["items"] == []
 
 
 def test_suggest_key_avoids_taken_slots(tmp_path: Path) -> None:
