@@ -1,5 +1,6 @@
 import "server-only";
 import type { ProviderSpec } from "@/core/provider";
+import { githubSpec } from "@/providers/github/spec";
 
 /**
  * Static registry of provider specs.
@@ -9,11 +10,10 @@ import type { ProviderSpec } from "@/core/provider";
  * static — third-party providers add their spec to this array directly
  * (or, if we ever want a plugin shape, we'd add a build-time include).
  *
- * Phase 1 ships an empty array. Phase 3 adds the GitHub spec; Phase 9 adds
- * Azure DevOps. The github_stub provider is dropped — tests use vi mocks
- * against `WorkItemProvider` instead.
+ * Phase 3 wires GitHub. Phase 9 adds Azure DevOps. The github_stub provider
+ * is dropped — tests use vi mocks against `WorkItemProvider` instead.
  */
-export const PROVIDER_SPECS: readonly ProviderSpec[] = [];
+export const PROVIDER_SPECS: readonly ProviderSpec[] = [githubSpec];
 
 export function getProviderSpec(typeId: string): ProviderSpec | null {
   return PROVIDER_SPECS.find((spec) => spec.typeId === typeId) ?? null;

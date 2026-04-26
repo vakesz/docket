@@ -2,13 +2,18 @@ import { describe, expect, it } from "vitest";
 import { getProviderSpec, listProviderSpecs, PROVIDER_SPECS } from "@/server/provider-registry";
 
 describe("provider-registry", () => {
-  it("ships empty in Phase 1 — concrete specs land in Phase 3 (GitHub) and Phase 9 (AzDO)", () => {
-    expect(PROVIDER_SPECS).toEqual([]);
-    expect(listProviderSpecs()).toEqual([]);
+  it("ships GitHub at Phase 3; Azure DevOps lands at Phase 9", () => {
+    expect(PROVIDER_SPECS.map((s) => s.typeId)).toEqual(["github"]);
+    expect(listProviderSpecs()).toBe(PROVIDER_SPECS);
   });
 
   it("getProviderSpec returns null for unknown typeIds", () => {
-    expect(getProviderSpec("github")).toBeNull();
     expect(getProviderSpec("anything")).toBeNull();
+  });
+
+  it("getProviderSpec resolves github to its spec", () => {
+    const spec = getProviderSpec("github");
+    expect(spec?.typeId).toBe("github");
+    expect(spec?.displayName).toBe("GitHub");
   });
 });

@@ -1,4 +1,5 @@
 import { TRPCError } from "@trpc/server";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createCaller } from "@/server/trpc-caller";
 
@@ -31,13 +32,22 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
         </div>
       </div>
 
-      <section className="rounded-md border border-dashed border-zinc-300 p-8 text-center text-sm text-zinc-500 dark:border-zinc-700">
-        <p className="font-medium text-zinc-700 dark:text-zinc-300">
-          Items, sync, and chat land in later phases.
-        </p>
-        <p className="mt-2">
-          Phase 3 wires the GitHub provider and sync. Phase 5 adds conversations and the watchlist.
-          Phase 6 brings the agent loop.
+      <section className="flex flex-col gap-4 rounded-md border border-zinc-200 p-6 dark:border-zinc-800">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-medium">Surfaces</h2>
+        </div>
+        <ul className="flex flex-col gap-2 text-sm">
+          <li>
+            <Link
+              href={`/projects/${projectId}/items`}
+              className="rounded-md px-2 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+            >
+              → Items (cached from the provider)
+            </Link>
+          </li>
+        </ul>
+        <p className="text-xs text-zinc-500">
+          Phase 5 adds conversations and the watchlist. Phase 6 brings the agent loop.
         </p>
       </section>
     </div>
