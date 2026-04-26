@@ -52,6 +52,15 @@ export const SETTINGS_CATALOG = {
     description:
       "When on, Enter sends the message and Shift-Enter inserts a newline. When off, the keys swap.",
   },
+  "app.read-only": {
+    key: "app.read-only",
+    scope: "global",
+    schema: BoolSchema,
+    default: false,
+    label: "System read-only mode",
+    description:
+      "When on, every mutation route — including proposal confirms — is blocked. Reads stay open. Flip on for maintenance windows.",
+  },
 } as const satisfies Record<string, SettingDef<z.ZodTypeAny>>;
 
 export type SettingKey = keyof typeof SETTINGS_CATALOG;

@@ -6,6 +6,7 @@ import { ZodError, z } from "zod";
 import { auth } from "@/server/auth";
 import { db } from "@/server/db";
 import { logger } from "@/server/logger";
+import { loadGlobalSetting } from "@/server/settings/effective";
 
 export type Context = {
   session: Session | null;
@@ -58,10 +59,26 @@ const requireSession = t.middleware(({ ctx, next }) => {
 export const protectedProcedure = t.procedure.use(requireSession);
 
 /**
- * Mutating procedure: same as protected today; Phase 10 adds the role check
- * (rejects `viewer`) and read-only-mode gate.
+ * System-wide read-only gate. Reads the `app.read-only` global Setting on
+ * every mutation and refuses if it's on. Cheap (one indexed query) — if it
+ * shows up in profiles, layer a per-request memoizer in `createContext`.
  */
-export const mutationProcedure = protectedProcedure;
+const enforceReadWrite = t.middleware(async ({ ctx, next }) => {
+  const readOnly = await loadGlobalSetting(ctx.db, "app.read-only");
+  if (readOnly) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "system is in read-only mode — mutations are blocked",
+    });
+  }
+  return next();
+});
+
+/**
+ * Mutating procedure: protected + system read-only gate. Project-scoped
+ * mutations get the role check on top.
+ */
+export const mutationProcedure = protectedProcedure.use(enforceReadWrite);
 
 /**
  * Project-scoped procedure: requires `projectId` in the input and verifies
@@ -116,39 +133,70 @@ const enforceProjectMembership = t.middleware(async ({ ctx, getRawInput, next })
 export const projectScopedProcedure = protectedProcedure.use(enforceProjectMembership);
 
 /**
- * Mutating, project-scoped procedure. Owners always pass; non-owner members
- * must have a role other than `viewer`. Phase 10 layers the system-wide
- * read-only gate on top of this same middleware.
- *
- * The upstream `enforceProjectMembership` already injected `ctx.project`
- * (with `ownerUserId`) and verified the caller is the owner or a member;
- * we just re-look-up the membership row to read its `role` for non-owners.
+ * Look up the caller's effective role on `ctx.project`. Owners are reported
+ * as `'owner'` (a synthetic role above `approver`); members surface their
+ * stored role; users with no membership row return `null`.
  */
-const rejectViewerRole = t.middleware(async ({ ctx, next }) => {
-  const projectScopedCtx = ctx as Context & {
-    project?: { id: string; ownerUserId: string };
-  };
-  const project = projectScopedCtx.project;
+async function effectiveProjectRole(
+  ctx: Context & { project?: { id: string; ownerUserId: string } },
+): Promise<"owner" | "approver" | "member" | "viewer" | null> {
+  const project = ctx.project;
   const userId = ctx.session?.user?.id;
   if (!project || !userId) {
     throw new TRPCError({
       code: "INTERNAL_SERVER_ERROR",
-      message: "rejectViewerRole requires projectScopedProcedure upstream",
+      message: "effectiveProjectRole requires projectScopedProcedure upstream",
     });
   }
-  if (project.ownerUserId !== userId) {
-    const membership = await ctx.db.projectMembership.findUnique({
-      where: { projectId_userId: { projectId: project.id, userId } },
-      select: { role: true },
+  if (project.ownerUserId === userId) return "owner";
+  const membership = await ctx.db.projectMembership.findUnique({
+    where: { projectId_userId: { projectId: project.id, userId } },
+    select: { role: true },
+  });
+  if (!membership) return null;
+  if (membership.role === "approver") return "approver";
+  if (membership.role === "viewer") return "viewer";
+  return "member";
+}
+
+/**
+ * Mutating, project-scoped procedure. Owners always pass; non-owner members
+ * must have a role other than `viewer`. Layers the system-wide read-only
+ * gate so a single toggle can lock the whole app.
+ */
+const rejectViewerRole = t.middleware(async ({ ctx, next }) => {
+  const role = await effectiveProjectRole(
+    ctx as Context & { project?: { id: string; ownerUserId: string } },
+  );
+  if (role === "viewer" || role === null) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "viewers cannot perform mutations on this project",
     });
-    if (membership?.role === "viewer") {
-      throw new TRPCError({
-        code: "FORBIDDEN",
-        message: "viewers cannot perform mutations on this project",
-      });
-    }
   }
   return next();
 });
 
-export const projectScopedMutationProcedure = projectScopedProcedure.use(rejectViewerRole);
+export const projectScopedMutationProcedure = projectScopedProcedure
+  .use(enforceReadWrite)
+  .use(rejectViewerRole);
+
+/**
+ * Approver-or-owner gate for confirming/rejecting proposals. Non-owner
+ * members with role `member` (or below) can stage proposals but can't
+ * execute them — the human-in-the-loop on writes.
+ */
+const requireApprover = t.middleware(async ({ ctx, next }) => {
+  const role = await effectiveProjectRole(
+    ctx as Context & { project?: { id: string; ownerUserId: string } },
+  );
+  if (role !== "owner" && role !== "approver") {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "only project owners and approvers can confirm or reject proposals",
+    });
+  }
+  return next();
+});
+
+export const projectScopedApproverProcedure = projectScopedMutationProcedure.use(requireApprover);

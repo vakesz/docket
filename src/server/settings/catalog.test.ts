@@ -43,4 +43,12 @@ describe("settings catalog", () => {
   it("getSettingDef throws on unknown keys", () => {
     expect(() => getSettingDef("nope")).toThrow(/unknown setting key/);
   });
+
+  it("app.read-only is global-scoped and defaults to false", () => {
+    const def = getSettingDef("app.read-only");
+    expect(def.scope).toBe("global");
+    expect(def.default).toBe(false);
+    expect(decodeSettingValue("app.read-only", null)).toBe(false);
+    expect(decodeSettingValue("app.read-only", JSON.stringify(true))).toBe(true);
+  });
 });

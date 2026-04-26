@@ -11,7 +11,12 @@ import {
 } from "@/server/proposals/builders";
 import { diffOf } from "@/server/proposals/diff";
 import { confirmProposal, rejectProposal } from "@/server/proposals/executor";
-import { projectScopedMutationProcedure, projectScopedProcedure, router } from "@/server/trpc";
+import {
+  projectScopedApproverProcedure,
+  projectScopedMutationProcedure,
+  projectScopedProcedure,
+  router,
+} from "@/server/trpc";
 
 const ProjectId = z.object({ projectId: z.string().min(1) });
 
@@ -24,6 +29,14 @@ const ListInput = ProjectId.extend({
 });
 
 const ProposalIdInput = ProjectId.extend({ proposalId: z.string().min(1) });
+
+const AuditListInput = ProjectId.extend({
+  /// When set, returns only audit rows for one proposal.
+  proposalId: z.string().min(1).optional(),
+  /// When set, filters to one action kind (e.g. `proposal.confirm.failed`).
+  action: z.string().min(1).max(64).optional(),
+  limit: z.number().int().min(1).max(200).default(50),
+});
 
 const ProposeTransitionInput = ProjectId.extend({
   providerItemId: z.string().min(1),
@@ -64,11 +77,15 @@ function ctxFor(ctx: {
 }
 
 /**
- * Proposals API (Phase 4).
+ * Proposals API (Phase 4 + Phase 10 role gates).
  *
- * Reads (`list`, `get`) live on `projectScopedProcedure` so viewers can see
- * what the team is staging. Stages (`propose*`) and `confirm`/`reject` use
- * `projectScopedMutationProcedure`, which rejects 'viewer' members.
+ * - Reads (`list`, `get`) live on `projectScopedProcedure` so viewers can see
+ *   what the team is staging.
+ * - Stages (`propose*`) use `projectScopedMutationProcedure`, which rejects
+ *   `viewer` members and blocks when the system is in read-only mode.
+ * - `confirm`/`reject` use `projectScopedApproverProcedure`, which further
+ *   restricts execution to project owners and members with role `approver`
+ *   (the human-in-the-loop gate on writes).
  *
  * `get` returns the persisted row plus a freshly computed `diff`. The diff
  * isn't stored — it's derived from the payload at read time so updates to
@@ -147,13 +164,31 @@ export const proposalsRouter = router({
       return { id: row.id, diff: diffOf(hydrateProposal(row)) };
     }),
 
-  confirm: projectScopedMutationProcedure
+  confirm: projectScopedApproverProcedure
     .input(ProposalIdInput)
     .mutation(async ({ ctx, input }) => {
       return confirmProposal(ctxFor(ctx), input.proposalId);
     }),
 
-  reject: projectScopedMutationProcedure.input(ProposalIdInput).mutation(async ({ ctx, input }) => {
+  reject: projectScopedApproverProcedure.input(ProposalIdInput).mutation(async ({ ctx, input }) => {
     return rejectProposal(ctxFor(ctx), input.proposalId);
+  }),
+
+  /**
+   * Audit feed for the project. Available to anyone with project access
+   * (including viewers) — the trail is meant to be transparent. Per the
+   * Audit model docstring, rows are append-only and never mutated, so
+   * exposing reads is safe even to read-only members.
+   */
+  auditList: projectScopedProcedure.input(AuditListInput).query(async ({ ctx, input }) => {
+    return ctx.db.audit.findMany({
+      where: {
+        projectId: ctx.projectId,
+        ...(input.proposalId ? { proposalId: input.proposalId } : {}),
+        ...(input.action ? { action: input.action } : {}),
+      },
+      orderBy: [{ createdAt: "desc" }],
+      take: input.limit,
+    });
   }),
 });

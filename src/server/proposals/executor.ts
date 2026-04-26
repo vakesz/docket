@@ -33,6 +33,29 @@ type ExecutorContext = {
   userId: string;
 };
 
+async function recordAudit(
+  ctx: ExecutorContext,
+  action: string,
+  proposalId: string,
+  payload: Prisma.InputJsonValue,
+): Promise<void> {
+  // Best-effort: never let audit failures swallow the user-visible result.
+  // We log via console so the surface still gets the original outcome.
+  try {
+    await ctx.db.audit.create({
+      data: {
+        projectId: ctx.projectId,
+        userId: ctx.userId,
+        action,
+        proposalId,
+        payload,
+      },
+    });
+  } catch (err) {
+    console.error("audit.write failed", { action, proposalId, err });
+  }
+}
+
 async function loadPending(ctx: ExecutorContext, proposalId: string) {
   const row = await ctx.db.proposal.findFirst({
     where: { id: proposalId, projectId: ctx.projectId },
@@ -195,7 +218,7 @@ export async function confirmProposal(
       await refreshCacheFromCanonical(ctx, canonical);
     }
 
-    return ctx.db.proposal.update({
+    const updated = await ctx.db.proposal.update({
       where: { id: row.id },
       data: {
         executedAt: new Date(),
@@ -204,12 +227,24 @@ export async function confirmProposal(
           : {}),
       },
     });
+    await recordAudit(ctx, "proposal.confirm", row.id, {
+      kind: row.kind,
+      providerItemId: row.providerItemId,
+      ...(commentId ? { commentId } : {}),
+    });
+    return updated;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return ctx.db.proposal.update({
+    const failed = await ctx.db.proposal.update({
       where: { id: row.id },
       data: { errorMessage: message },
     });
+    await recordAudit(ctx, "proposal.confirm.failed", row.id, {
+      kind: row.kind,
+      providerItemId: row.providerItemId,
+      error: message,
+    });
+    return failed;
   }
 }
 
@@ -218,8 +253,13 @@ export async function rejectProposal(
   proposalId: string,
 ): Promise<ProposalRow> {
   const row = await loadPending(ctx, proposalId);
-  return ctx.db.proposal.update({
+  const updated = await ctx.db.proposal.update({
     where: { id: row.id },
     data: { status: "rejected" },
   });
+  await recordAudit(ctx, "proposal.reject", row.id, {
+    kind: row.kind,
+    providerItemId: row.providerItemId,
+  });
+  return updated;
 }

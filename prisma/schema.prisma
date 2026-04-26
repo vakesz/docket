@@ -192,6 +192,7 @@ model Project {
   commandUsage  CommandUsage[]
   sync          SyncCursor?
   savedViews    SavedView[]
+  audits        Audit[]
 
   @@index([ownerUserId, archivedAt])
   @@index([providerKind])
@@ -571,4 +572,32 @@ model SyncCursor {
   updatedAt      DateTime  @updatedAt
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+// ----------------------------------------------------------------------------
+// Audit log — append-only record of every confirmed/rejected proposal so the
+// project owner can answer "who did what when" without reading server logs.
+// ----------------------------------------------------------------------------
+
+model Audit {
+  id         String   @id @default(cuid())
+  projectId  String
+  /// Actor at the moment of the action — kept as a string id so user
+  /// deletion doesn't cascade-erase the audit trail.
+  userId     String?
+  /// 'proposal.confirm' | 'proposal.confirm.failed' | 'proposal.reject'.
+  /// Free-text so future actions can be added without a schema change.
+  action     String
+  /// Source proposal id when the action targets one. Nullable for non-
+  /// proposal actions added later.
+  proposalId String?
+  /// Free-form payload (proposal kind, providerItemId, error message on
+  /// failure, etc). Lives as JSON to keep the schema stable.
+  payload    Json     @default("{}")
+  createdAt  DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt(sort: Desc)])
+  @@index([projectId, action])
 }
