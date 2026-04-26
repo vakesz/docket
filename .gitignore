@@ -1,54 +1,53 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-*.egg-info/
-*.egg
-build/
-dist/
-.eggs/
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# Virtual envs
-.venv/
-venv/
-env/
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
 
-# uv
-.uv/
-uv.lock
+# testing
+/coverage
 
-# Test / coverage
-.pytest_cache/
-.coverage
-.coverage.*
-htmlcov/
-.tox/
-.mypy_cache/
-.ruff_cache/
+# next.js
+/.next/
+/out/
 
-# Editors
-.vscode/
-.idea/
-*.swp
-*.swo
+# production
+/build
 
-# OS
+# misc
 .DS_Store
-Thumbs.db
+*.pem
 
-# Secrets & local state
-.env
-.env.*
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# Prisma generated client (committed lockfile, generated artifacts not)
+/src/db/generated
+
+# Allow committing example env files
 !.env.example
-*.sqlite
-*.sqlite3
-*.db
+!.env.local.example
+!.env.example.*
 
-# Dev override directory (see .env.example)
-.docket-dev/
-
-# SPA bundle copied into the package tree at wheel-build time (make bundle-spa)
-src/docket/frontend_dist/
+# Local Claude Code runtime artifacts
 .claude/
+.agent-logs/
