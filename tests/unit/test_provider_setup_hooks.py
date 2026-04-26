@@ -1,17 +1,11 @@
 """Smoke tests for provider setup metadata.
 
-These pin behavior the wizard + settings surfaces depend on. After the
-provider-independence refactor (see `.docs/PROVIDER_INDEPENDENCE_PLAN.md`):
+These pin behavior the wizard + settings surfaces depend on. Phases 1
+(`label_template`) and 3 (`WizardHooks` registry) are landed; Phase 5 will
+add `scope_axes` and this file will pin the axis tuples per provider.
 
-- Phase 1 will add `label_template` to `ProviderSpec`; this file gains an
-  assertion that every spec carries one.
-- Phase 3 will introduce a `WizardHooks` registry; this file gains an
-  assertion that every spec has a registered hook.
-- Phase 5 will add `scope_axes`; this file pins the axis tuples per
-  provider.
-
-Today the test fixes the spec field shapes so a regression in the
-registry surface is caught before it bricks the wizard."""
+The tests fix the spec field shapes so a regression in the registry
+surface is caught before it bricks the wizard."""
 
 from __future__ import annotations
 
@@ -19,6 +13,7 @@ from collections.abc import Iterable
 
 import pytest
 
+from docket.config import setup_hooks
 from docket.providers import registry
 from docket.providers.base import ProviderSpec, SetupField
 
@@ -78,9 +73,9 @@ def _setup_field_keys(fields: Iterable[SetupField]) -> set[str]:
 def test_built_in_spec_keys_match_wizard_expectations() -> None:
     """Pin the field key sets so renames don't silently break the wizard.
 
-    These keys are referenced by `setup_wizard._WIZARDS` (today) and by the
-    SPA wizard form (today + post-refactor) — keep them stable across
-    Phase 2 (spec-driven settings modal) and Phase 3 (hook registry)."""
+    These keys are referenced by the SPA wizard form and by every
+    provider's `step_connection` hook — keep them stable so a rename in
+    one place can't drift away from the other."""
     ado = registry.spec("azure_devops")
     assert ado is not None
     assert _setup_field_keys(ado.setup_fields) == {"organization", "project"}
@@ -116,9 +111,10 @@ def test_built_in_label_templates_match_legacy_outputs() -> None:
     "GitHub · " prefix or rearranges the "Azure DevOps · org/project" form."""
     ado = registry.spec("azure_devops")
     assert ado is not None and ado.label_template is not None
-    assert ado.label_template(
-        {"organization": "https://dev.azure.com/contoso", "project": "Acme"}
-    ) == "Azure DevOps · contoso/Acme"
+    assert (
+        ado.label_template({"organization": "https://dev.azure.com/contoso", "project": "Acme"})
+        == "Azure DevOps · contoso/Acme"
+    )
     assert ado.label_template({"organization": "", "project": "Solo"}) == "Azure DevOps · Solo"
     assert ado.label_template({}) == "Azure DevOps"
 
@@ -134,9 +130,7 @@ def test_built_in_label_templates_match_legacy_outputs() -> None:
     )
     # api.github.com explicitly stored is still the cloud default.
     assert (
-        gh.label_template(
-            {"default_repo": "contoso/alpha", "base_url": "https://api.github.com"}
-        )
+        gh.label_template({"default_repo": "contoso/alpha", "base_url": "https://api.github.com"})
         == "GitHub · contoso/alpha"
     )
 
@@ -144,3 +138,28 @@ def test_built_in_label_templates_match_legacy_outputs() -> None:
     assert stub is not None and stub.label_template is not None
     assert stub.label_template({"default_repo": "myorg/myrepo"}) == "GitHub (stub) · myorg/myrepo"
     assert stub.label_template({}) == "GitHub (stub)"
+
+
+@pytest.mark.parametrize("type_id", BUILT_IN_TYPE_IDS)
+def test_built_in_provider_has_registered_wizard_hooks(type_id: str) -> None:
+    """Every built-in provider must own auth + connection + scope hooks.
+
+    The wizard dispatches by hook lookup (`setup_hooks.get(type_id)`); a
+    missing entry would silently degrade to the "no built-in step" stub
+    and the wizard would skip that stage entirely. Pin the contract so a
+    new provider type is forced to register before it ships."""
+    hooks = setup_hooks.get(type_id)
+    assert hooks is not None, f"{type_id!r} not registered in setup_hooks"
+    assert hooks.auth is not None, f"{type_id!r} missing wizard auth step"
+    assert hooks.connection is not None, f"{type_id!r} missing wizard connection step"
+    assert hooks.scope is not None, f"{type_id!r} missing wizard scope step"
+
+
+def test_setup_hooks_registry_lists_all_built_ins() -> None:
+    """`registered_type_ids()` must mirror the built-in registry.
+
+    Caught a class of bug in earlier drafts where a provider got a spec
+    but the corresponding `register()` call was forgotten."""
+    registered = set(setup_hooks.registered_type_ids())
+    for type_id in BUILT_IN_TYPE_IDS:
+        assert type_id in registered, f"{type_id!r} not in setup_hooks registry"

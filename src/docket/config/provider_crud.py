@@ -4,13 +4,16 @@ The first-time wizard handles the full onboarding; this module handles the
 incremental path: add a second provider, drop one, or just print what's there.
 It edits `config.toml` in place so az login / full sync aren't repeated.
 
-Shared helpers (`pick_github_host`, `pick_github_repo`, `looks_like_http_url`,
-`console`) live in `setup_utils` so both the wizard and this CRUD surface can
-import them without either depending on the other."""
+Provider-specific prompt details (which fields, which are URLs, which are
+secrets) come from `ProviderSpec.setup_fields` so adding a new provider type
+doesn't require editing this module. Discovery-driven helpers (e.g. the
+GitHub host/repo pickers from the first-run wizard) intentionally don't
+participate here — `provider add` is the headless / scriptable path."""
 
 from __future__ import annotations
 
-from pydantic import HttpUrl
+from typing import Any
+
 from rich.prompt import Confirm, Prompt
 
 from docket.config.loader import load_config, save_config
@@ -20,9 +23,8 @@ from docket.config.setup_utils import (
     build_label_suggestion,
     console,
     looks_like_http_url,
-    pick_github_host,
-    pick_github_repo,
 )
+from docket.providers import registry
 
 
 def provider_list() -> None:
@@ -52,47 +54,43 @@ def provider_add(
     display_name: str | None = None,
     make_active: bool = False,
 ) -> None:
-    """Register a new provider entry. Per-type validation lives here so the
-    registry can stay dumb — this is the single authoritative surface where
-    the wizard-shaped config emerges."""
-    from docket.providers.registry import types as registry_types
-
+    """Register a new provider entry. Prompts for each field declared in the
+    provider's `ProviderSpec.setup_fields` so the wizard-shaped config can
+    emerge without per-type code in this module."""
     paths = resolve_paths()
     paths.ensure()
-    known = registry_types()
-    if type_id not in known:
+    spec = registry.spec(type_id)
+    if spec is None:
+        known = registry.types()
         console.print(f"[red]Unknown provider type '{type_id}'[/red] (known: {', '.join(known)}).")
         raise SystemExit(2)
 
-    config: dict[str, object] = {}
-    match type_id:
-        case "azure_devops":
-            org = Prompt.ask("Azure DevOps organization URL").strip().rstrip("/")
-            if not looks_like_http_url(org):
-                console.print("[red]Organization must be a full URL.[/red]")
-                raise SystemExit(2)
-            project = Prompt.ask("Project name").strip()
-            if not project:
-                console.print("[red]Project name is required.[/red]")
-                raise SystemExit(2)
-            config = {"organization": str(HttpUrl(org)), "project": project}
-        case "github":
-            host = pick_github_host()
-            default_repo = pick_github_repo(host=host.hostname if host else None)
-            config = {"default_repo": default_repo}
-            if host and host.api_base_url != "https://api.github.com":
-                config["base_url"] = host.api_base_url
-        case "github_stub":
-            default_repo = Prompt.ask("Default repo (owner/name)", default="example/repo").strip()
-            config = {"default_repo": default_repo}
-        case _:
-            # Custom provider types (from entry points) self-validate via the
-            # factory on first build; the wizard just records an empty config
-            # so the user can hand-edit config.toml.
-            console.print(
-                f"[dim]No wizard prompts for '{type_id}' — config starts empty. "
-                "Edit config.toml to fill it in.[/dim]"
+    config: dict[str, Any] = {}
+    for setup_field in spec.setup_fields:
+        prompt_label = setup_field.label + ("" if setup_field.required else " (optional)")
+        default = setup_field.placeholder if not setup_field.required else None
+        while True:
+            raw = Prompt.ask(
+                prompt_label,
+                default=default,
+                password=setup_field.kind == "secret",
             )
+            value = (raw or "").strip()
+            if setup_field.required and not value:
+                console.print(f"[red]{setup_field.label} is required.[/red]")
+                continue
+            if setup_field.kind == "url" and value and not looks_like_http_url(value):
+                console.print("[red]Must be a full URL (http or https).[/red]")
+                continue
+            config[setup_field.key] = value
+            break
+
+    try:
+        config = registry.normalize_config(type_id, config)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise SystemExit(2) from exc
+
     label_hint = build_label_suggestion(type_id=type_id, config=dict(config))
 
     cfg = load_config(paths, optional=True) or Config()

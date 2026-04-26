@@ -320,9 +320,7 @@ def azure_devops_discover(req: AdoDiscoverRequest) -> AdoDiscoverResultDTO:
         if req.stage == "orgs":
             return AdoDiscoverResultDTO(
                 ok=True,
-                orgs=[
-                    AdoOrgDTO(name=o.name, url=o.url) for o in setup_discovery.ado_list_orgs()
-                ],
+                orgs=[AdoOrgDTO(name=o.name, url=o.url) for o in setup_discovery.ado_list_orgs()],
             )
         if req.stage == "projects":
             if not req.org:

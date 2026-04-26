@@ -2,10 +2,14 @@
 
 The first-launch wizard (`setup_wizard.py`) and the incremental-edit surface
 (`provider_crud.py`) share the same small toolkit: the Rich console, URL
-validation, a numbered picker, and GitHub host/repo discovery pickers. This
-module is the single home for those primitives so the dependency graph is
-`setup_wizard → setup_utils` and `provider_crud → setup_utils` rather than
-`provider_crud → setup_wizard` (which made the wizard's own split harder).
+validation, a numbered picker, and an assignee picker. This module is the
+single home for those primitives so the dependency graph is `setup_wizard →
+setup_utils` and `provider_crud → setup_utils` rather than `provider_crud →
+setup_wizard` (which made the wizard's own split harder).
+
+Provider-specific discovery pickers (e.g. GitHub host / repo) live in each
+provider package's `setup.py` so this module stays free of concrete-provider
+imports and any new provider type can be added without touching it.
 
 No WizardState here — these helpers are stateless and return plain values
 the caller folds back into whatever state container it uses."""
@@ -13,7 +17,7 @@ the caller folds back into whatever state container it uses."""
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Final, Literal, overload
+from typing import Any, Final, Literal, overload
 from urllib.parse import urlparse
 
 from rich.prompt import Confirm, Prompt
@@ -21,9 +25,6 @@ from rich.prompt import Confirm, Prompt
 from docket._console import console
 from docket.providers import registry
 from docket.providers.base import ProviderAuthError
-
-if TYPE_CHECKING:
-    from docket.providers.github.discover import HostRef
 
 CUSTOM_SENTINEL: Final[Literal["__custom__"]] = "__custom__"
 """Returned by `pick` when the user chose the 'custom…' option. Callers
@@ -184,152 +185,6 @@ def pick_assignee(*, signed_in_email: str | None, current_assignee: str) -> str:
             return options[idx]
 
 
-def pick_github_host() -> HostRef | None:
-    """Offer every authenticated gh host, plus a custom-URL escape hatch.
-
-    Returns `None` only when the user has a single github.com host and we
-    don't need to disambiguate — callers treat that as "use the default
-    `api.github.com` base URL and the default `gh` host."""
-    from docket.providers.github import discover as gh_discover
-
-    hosts = gh_discover.list_hosts()
-    if not hosts:
-        # `gh auth status --json hosts` failed — assume github.com and move
-        # on; repo discovery will surface the real problem if there is one.
-        return None
-    if len(hosts) == 1 and hosts[0].hostname == "github.com":
-        return hosts[0]
-
-    console.print(
-        "[dim]Multiple GitHub hosts are signed in via `gh`. "
-        "Pick which one this provider should use.[/dim]"
-    )
-    labels = [f"{h.hostname}  [dim]→ {h.api_base_url}[/dim]" for h in hosts]
-    match pick("GitHub host", labels, allow_custom=True):
-        case "__custom__":
-            return _prompt_github_host_manual()
-        case int(idx):
-            return hosts[idx]
-
-
-def _prompt_github_host_manual() -> HostRef:
-    from docket.providers.github.discover import HostRef
-
-    while True:
-        raw = (
-            Prompt.ask(
-                "GitHub host (e.g. github.com or ghe.example.com)",
-                default="github.com",
-            )
-            .strip()
-            .lower()
-        )
-        if not raw or " " in raw or "/" in raw:
-            console.print("[red]Please enter a bare hostname, e.g. `ghe.example.com`.[/red]")
-            continue
-        if raw == "github.com":
-            return HostRef(hostname=raw, api_base_url="https://api.github.com")
-        return HostRef(hostname=raw, api_base_url=f"https://{raw}/api/v3")
-
-
-def pick_github_repo(*, host: str | None = None) -> str:
-    """Offer discovered repos for the active `gh` session, or fall back to typing.
-
-    Composition:
-      1. The authenticated user's own repos (`/user/repos`).
-      2. Every org the user is a member of — via `/orgs/{org}/repos` so
-         private repos they have access to show up too (not just the
-         public ones `/users/{login}/repos` would return).
-
-    We merge into a single de-duplicated picker ordered by discovery so
-    "my repos first, then each org in turn" reads naturally. The custom
-    option lets the user type any repo they can read — including
-    open-source repos they don't own (e.g. `anthropics/claude-code`). Any
-    discovery failure falls through to the remaining sources, and if
-    nothing comes back we drop to the manual prompt so a user without
-    `gh` (or in zero orgs and zero repos) can still finish."""
-    from docket.providers.github import discover as gh_discover
-
-    seen: set[str] = set()
-    repos: list[str] = []
-
-    def _add(refs: list[gh_discover.RepoRef]) -> None:
-        for ref in refs:
-            if ref.full_name not in seen:
-                seen.add(ref.full_name)
-                repos.append(ref.full_name)
-
-    login = gh_discover.signed_in_login(host=host)
-    host_label = host or "github.com"
-    if login:
-        console.print(
-            f"[dim]Scanning repos on [cyan]{host_label}[/cyan] for [cyan]{login}[/cyan]...[/dim]"
-        )
-    else:
-        console.print(f"[dim]Scanning repos on [cyan]{host_label}[/cyan]...[/dim]")
-
-    discovery_errors: list[str] = []
-
-    # Section 1: the user's own repos.
-    try:
-        _add(gh_discover.list_repos(host=host))
-    except gh_discover.DiscoveryError as e:
-        discovery_errors.append(f"personal repos: {e}")
-
-    # Section 2: repos in every org the user belongs to. `gh` silently
-    # returns an empty list when the user is in no orgs, so this is free.
-    try:
-        orgs = gh_discover.list_orgs(host=host)
-    except gh_discover.DiscoveryError as e:
-        discovery_errors.append(f"orgs: {e}")
-        orgs = []
-    for org in orgs:
-        before = len(repos)
-        try:
-            _add(gh_discover.list_org_repos(org.login, host=host))
-        except gh_discover.DiscoveryError as e:
-            console.print(f"[yellow]Skipping org [cyan]{org.login}[/cyan]:[/yellow] {e}")
-            continue
-        added = len(repos) - before
-        console.print(f"[dim]  · [cyan]{org.login}[/cyan]: {added} repo(s)[/dim]")
-
-    if discovery_errors:
-        # Make failures loud, not dim — if we end up at the manual prompt
-        # below, the user needs to know why discovery returned nothing.
-        for detail in discovery_errors:
-            console.print(
-                f"[yellow]GitHub discovery issue on [cyan]{host_label}[/cyan] ({detail})[/yellow]"
-            )
-
-    if not repos:
-        console.print("[yellow]No repositories discovered.[/yellow]")
-        console.print()
-        console.print(
-            "You can still type any repo you have read access to below "
-            "(including public repos you don't own, e.g. "
-            "[cyan]anthropics/claude-code[/cyan])."
-        )
-        return _prompt_github_repo_manual()
-
-    console.print(
-        "[dim]Don't see the repo you want? Choose [cyan]custom…[/cyan] to type "
-        "any repo you can read (e.g. [cyan]anthropics/claude-code[/cyan]).[/dim]"
-    )
-    match pick("GitHub repository", repos, allow_custom=True):
-        case "__custom__":
-            return _prompt_github_repo_manual()
-        case int(idx):
-            return repos[idx]
-
-
-def _prompt_github_repo_manual() -> str:
-    while True:
-        raw = Prompt.ask("Default repo (owner/name)", default="").strip()
-        if "/" in raw and not raw.startswith("/") and not raw.endswith("/"):
-            return raw
-        console.print("[red]Please enter an owner/name pair, e.g. `anthropics/claude-code`.[/red]")
-
-
 __all__ = [
     "ANY_SENTINEL",
     "CUSTOM_SENTINEL",
@@ -339,7 +194,5 @@ __all__ = [
     "next_sibling_key",
     "pick",
     "pick_assignee",
-    "pick_github_host",
-    "pick_github_repo",
     "step_auth_with_retry",
 ]

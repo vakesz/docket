@@ -1,0 +1,40 @@
+"""First-time setup hooks for the in-memory `github_stub` provider.
+
+The stub has no auth and a single config field (`default_repo`); this
+module exists so the wizard's per-provider dispatch finds a hook for the
+stub instead of falling through to the generic spec-driven path. Reuses
+the github provider's assignee-only scope step."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from rich.prompt import Prompt
+
+from docket._console import console
+from docket.config.setup_hooks import WizardHooks
+from docket.config.setup_hooks import register as register_hooks
+from docket.providers.github.setup import step_scope as github_step_scope
+
+if TYPE_CHECKING:
+    from docket.config.setup_wizard import WizardState
+
+
+def step_auth(state: WizardState) -> None:
+    console.print("[dim]No auth needed — github_stub runs entirely in-memory.[/dim]")
+
+
+def step_connection(state: WizardState) -> None:
+    current = str(state.provider_config.get("default_repo", "example/repo"))
+    repo = Prompt.ask("Default repo (owner/name)", default=current).strip() or current
+    state.provider_config = {"default_repo": repo}
+
+
+def register() -> None:
+    register_hooks(
+        "github_stub",
+        WizardHooks(auth=step_auth, connection=step_connection, scope=github_step_scope),
+    )
+
+
+__all__ = ["register", "step_auth", "step_connection"]

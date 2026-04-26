@@ -629,9 +629,7 @@ def test_cli_status_no_auth(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     assert body["gh"]["logged_in"] is True
     assert body["gh"]["identity"] == "octocat"
     assert body["az"]["present"] is False
-    assert body["gh_hosts"] == [
-        {"hostname": "github.com", "api_base_url": "api.github.com"}
-    ]
+    assert body["gh_hosts"] == [{"hostname": "github.com", "api_base_url": "api.github.com"}]
     assert body["keyring_available"] is True  # in-memory keyring autouse fixture
 
 
@@ -664,9 +662,7 @@ def test_cli_status_skips_gh_hosts_when_logged_out(
     assert r.json()["gh_hosts"] == []
 
 
-def test_azure_devops_discover_orgs_ok(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_azure_devops_discover_orgs_ok(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     paths = _mk_paths(tmp_path)
     from docket.config import setup_discovery
 
@@ -801,9 +797,7 @@ def test_azure_devops_discover_requires_setup_token(tmp_path: Path) -> None:
     assert r.status_code == 401
 
 
-def test_github_discover_repos_ok(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_github_discover_repos_ok(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     paths = _mk_paths(tmp_path)
     from docket.config import setup_discovery
 
@@ -827,9 +821,7 @@ def test_github_discover_repos_ok(
     assert body["repos"] == [{"full_name": "contoso/alpha"}, {"full_name": "contoso/bravo"}]
 
 
-def test_github_discover_orgs_ok(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_github_discover_orgs_ok(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     paths = _mk_paths(tmp_path)
     from docket.config import setup_discovery
 

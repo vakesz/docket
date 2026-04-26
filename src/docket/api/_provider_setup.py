@@ -30,9 +30,7 @@ from docket.providers.registry import build as build_provider
 from docket.providers.registry import specs as provider_specs
 
 
-def count_items_for_scope(
-    type_id: str, config: dict[str, Any], scope: ScopeFilter
-) -> int | None:
+def count_items_for_scope(type_id: str, config: dict[str, Any], scope: ScopeFilter) -> int | None:
     """Probe how many items match a scope draft, returning None on failure.
 
     Wraps `WorkItemProvider.list_changes_since(None, scope.to_core())` so the

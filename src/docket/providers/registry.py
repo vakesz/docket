@@ -114,11 +114,15 @@ def load_entry_points() -> None:
 
 
 def _register_builtins() -> None:
-    """Wire the built-in provider specs. Called at module import so the
-    registry is populated even without entry-point discovery."""
+    """Wire the built-in provider specs and their wizard hooks. Called at
+    module import so the registry is populated even without entry-point
+    discovery."""
     from docket.providers.azure_devops.provider import AzureDevOpsProvider
+    from docket.providers.azure_devops.setup import register as register_ado_hooks
     from docket.providers.github.provider import GitHubProvider
+    from docket.providers.github.setup import register as register_github_hooks
     from docket.providers.github_stub.provider import GitHubStubProvider
+    from docket.providers.github_stub.setup import register as register_github_stub_hooks
 
     def _azure_devops_factory(config: dict[str, Any], display_name: str) -> WorkItemProvider:
         organization = config.get("organization")
@@ -251,6 +255,10 @@ def _register_builtins() -> None:
             label_template=_github_stub_label,
         )
     )
+
+    register_ado_hooks()
+    register_github_hooks()
+    register_github_stub_hooks()
 
 
 _register_builtins()

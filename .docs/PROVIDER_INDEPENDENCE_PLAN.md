@@ -143,7 +143,14 @@ template outputs per built-in.
 
 ---
 
-## Phase 2 — spec-driven TUI + new SPA `ProvidersPanel`
+## Phase 2 — spec-driven TUI + new SPA `ProvidersPanel` ✅ landed
+
+**Status:** completed. `SettingsModal.compose` and `_build_config` now
+loop over `registry.spec(...).setup_fields`. The wizard's connection
+components moved to `frontend/src/components/setup/connection/` and the
+SPA settings `ProviderModal` consumes them via `<ConnectionFields>`,
+giving discovery-aware host/repo/org/project pickers in both surfaces.
+`ProviderDraft.github_host` deleted; host derived from `config.base_url`.
 
 **Goal:** kill leak #2 (settings modal hardcodes ADO inputs) and surface
 provider editing in the SPA `/settings` route.
@@ -181,7 +188,18 @@ provider editing in the SPA `/settings` route.
 
 ---
 
-## Phase 3 — wizard hook registry + per-provider `setup.py`
+## Phase 3 — wizard hook registry + per-provider `setup.py` ✅ landed
+
+**Status:** completed. `src/docket/config/setup_hooks.py` is the new
+dispatch boundary; each built-in provider package owns its own
+`setup.py` (`providers/{azure_devops,github,github_stub}/setup.py`)
+that registers `WizardHooks(auth, connection, scope)` at registry
+bootstrap. `setup_wizard.py` no longer imports any concrete provider
+symbols (verified by inspection — `setup_discovery.py` is the only
+remaining concrete-import site under `config/`, scheduled for deletion
+in Phase 4). `provider_crud.py` now collects fields generically from
+`spec.setup_fields`. Tests assert hook registration parity with the
+spec registry.
 
 **Goal:** kill leak #5 (`_WIZARDS`) and leak #1 (`provider_crud.match
 type_id:`); remove concrete-provider imports from
