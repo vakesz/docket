@@ -1,3 +1,4 @@
+import { ExternalLink } from "lucide-react";
 import Link from "next/link";
 import type { ItemKind, ItemState } from "@/core/types";
 import { ITEM_KINDS, ITEM_STATES } from "@/core/types";
@@ -6,8 +7,10 @@ import { displayTag, formatKind, formatRelative, providerProfileUrl } from "@/li
 import { cn } from "@/lib/utils";
 import { ChatToggleButton } from "@/ui/items/chat-toggle-button";
 import { CommentComposer } from "@/ui/items/comment-composer";
+import { CopyIdButton } from "@/ui/items/copy-id-button";
 import { FreshnessStamp } from "@/ui/items/freshness";
 import { PinButton } from "@/ui/items/pin-button";
+import { RecentRecorder } from "@/ui/items/recent-recorder";
 import { RefreshItemButton } from "@/ui/items/refresh-item-button";
 import { StatePill } from "@/ui/items/state-pill";
 import { SuggestActionButton } from "@/ui/items/suggest-action-button";
@@ -61,11 +64,12 @@ export function DetailPane({
   const authorProfileUrl = providerProfileUrl(providerKind, item.author);
   return (
     <div className="flex h-full flex-col overflow-auto bg-bg">
+      <RecentRecorder projectId={projectId} itemId={item.id} />
       <header className="flex flex-col gap-3 border-b border-border p-4">
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <span className={metaLabelClass}>{formatKind(item.kind)}</span>
           <StatePill state={item.state} />
-          <span className="font-mono text-[10px] text-fg-faint">{item.providerItemId}</span>
+          <CopyIdButton value={item.providerItemId} />
           <span className="inline-flex items-center gap-1">
             <span className="font-mono text-[10px] text-fg-faint">Updated</span>
             <FreshnessStamp updatedAt={item.updatedAt} thresholdDays={staleThresholdDays} />
@@ -166,9 +170,10 @@ export function DetailPane({
                   href={item.url}
                   target="_blank"
                   rel="noreferrer noopener"
-                  className="text-accent hover:underline"
+                  className="inline-flex items-center gap-1 text-accent hover:underline"
                 >
-                  Open in provider ↗
+                  Open in provider
+                  <ExternalLink aria-hidden="true" className="h-3 w-3" />
                 </a>
               </dd>
             </>

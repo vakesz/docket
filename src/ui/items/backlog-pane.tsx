@@ -1,11 +1,13 @@
 "use client";
 
+import { ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ItemKind, StateBucket } from "@/core/types";
 import { metaLabelFaintClass } from "@/lib/form-classes";
 import { displayTag, formatKind } from "@/lib/format";
+import { useRecentItemIds } from "@/lib/recent-items";
 import { freshnessTone } from "@/lib/staleness";
 import { trpc } from "@/lib/trpc-client";
 import { cn } from "@/lib/utils";
@@ -14,6 +16,10 @@ import { FreshnessStamp } from "@/ui/items/freshness";
 import { StatePill } from "@/ui/items/state-pill";
 
 const KINDS: Array<ItemKind | "all"> = ["all", "epic", "feature", "story", "task", "bug"];
+
+const ITEMS_QUERY_LIMIT = 200;
+const PINNED_QUERY_LIMIT = 50;
+const FILTER_DEBOUNCE_MS = 150;
 
 /**
  * Left pane of the workspace shell: search + filter chips on top of the
@@ -41,13 +47,22 @@ export function BacklogPane({
   const [kind, setKind] = useState<ItemKind | "all">("all");
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [tagsExpanded, setTagsExpanded] = useState(false);
 
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedQuery(query), FILTER_DEBOUNCE_MS);
+    return () => window.clearTimeout(t);
+  }, [query]);
+
   const items = trpc.items.list.useQuery(
-    { projectId, bucket, archived: showArchived, limit: 200 },
+    { projectId, bucket, archived: showArchived, limit: ITEMS_QUERY_LIMIT },
     { staleTime: 30_000 },
   );
-  const pinned = trpc.watchlist.list.useQuery({ projectId, limit: 50 }, { staleTime: 30_000 });
+  const pinned = trpc.watchlist.list.useQuery(
+    { projectId, limit: PINNED_QUERY_LIMIT },
+    { staleTime: 30_000 },
+  );
   const settings = trpc.settings.list.useQuery(undefined, { staleTime: 60_000 });
   const maxVisibleTags = (() => {
     const raw = settings.data?.find((r) => r.key === "items.max-visible-tags")?.value;
@@ -65,7 +80,21 @@ export function BacklogPane({
     [pinned.data],
   );
 
+  const recentIds = useRecentItemIds(projectId);
+
   const data = items.data ?? [];
+
+  const recentItems = useMemo(() => {
+    if (recentIds.length === 0) return [];
+    const byId = new Map(data.map((it) => [it.id, it]));
+    const out: ListItem[] = [];
+    for (const id of recentIds) {
+      if (id === selectedId) continue;
+      const it = byId.get(id);
+      if (it) out.push(it);
+    }
+    return out;
+  }, [recentIds, data, selectedId]);
 
   const kindCounts = useMemo(() => {
     const counts = new Map<ItemKind, number>();
@@ -89,7 +118,7 @@ export function BacklogPane({
   }, [data]);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = debouncedQuery.trim().toLowerCase();
     return data.filter((it) => {
       if (kind !== "all" && it.kind !== kind) return false;
       if (activeTag && !(it.tags ?? []).includes(activeTag)) return false;
@@ -99,7 +128,7 @@ export function BacklogPane({
       }
       return true;
     });
-  }, [data, kind, activeTag, query]);
+  }, [data, kind, activeTag, debouncedQuery]);
 
   const tagCollapseLimit = maxVisibleTags;
 
@@ -222,6 +251,23 @@ export function BacklogPane({
         )}
       </div>
 
+      {recentItems.length > 0 && (
+        <div className="border-b border-border bg-surface">
+          <div className={cn("flex items-center gap-2 px-3 pt-2 pb-1", metaLabelFaintClass)}>
+            <span>Recent</span>
+            <span className="text-fg-faint">{recentItems.length}</span>
+          </div>
+          {recentItems.map((it) => (
+            <PinnedRow
+              key={`recent-${it.id}`}
+              projectId={projectId}
+              item={it}
+              selected={selectedId === it.id}
+            />
+          ))}
+        </div>
+      )}
+
       {pinned.data && pinned.data.length > 0 && (
         <div className="border-b border-border bg-surface">
           <div className={cn("flex items-center gap-2 px-3 pt-2 pb-1", metaLabelFaintClass)}>
@@ -299,47 +345,66 @@ function ItemRow({
   const tone = freshnessTone(item.updatedAt, staleThresholdDays);
 
   return (
-    <Link
-      href={`/projects/${projectId}/items/${item.id}`}
-      className={cn(
-        "flex w-full flex-col gap-1 border-b border-border px-3 py-2 text-left transition-colors",
-        "hover:bg-surface-alt",
-        selected && "bg-surface-alt",
-        tone === "warning" && "bg-warning-bg/40 hover:bg-warning-bg/70",
-        tone === "stale" && "bg-danger-bg/40 hover:bg-danger-bg/70",
-      )}
-    >
-      <div className="flex items-center gap-2 text-xs">
-        <span className={metaLabelFaintClass}>{formatKind(item.kind)}</span>
-        <StatePill state={item.state} />
-        {pinned && (
-          <span className="font-mono text-[10px] text-accent" title="Pinned">
-            ●
-          </span>
+    <div className="group/row relative border-b border-border">
+      <Link
+        href={`/projects/${projectId}/items/${item.id}`}
+        className={cn(
+          "flex w-full flex-col gap-1 px-3 py-2 text-left transition-colors",
+          "hover:bg-surface-alt",
+          selected && "bg-surface-alt",
+          tone === "warning" && "bg-warning-bg/40 hover:bg-warning-bg/70",
+          tone === "stale" && "bg-danger-bg/40 hover:bg-danger-bg/70",
         )}
-        <span className="ml-auto flex items-center gap-2 font-mono text-[10px] text-fg-faint">
-          <FreshnessStamp updatedAt={item.updatedAt} thresholdDays={staleThresholdDays} />
-          <span>{item.providerItemId}</span>
-        </span>
-      </div>
-      <div className="line-clamp-2 text-sm text-fg">{item.title}</div>
-      {hasMeta && (
-        <div className="flex flex-wrap items-center gap-1.5 font-mono text-[10px] text-fg-faint">
-          {item.assignee && <span className="truncate">{item.assignee}</span>}
-          {item.assignee && tags.length > 0 && (
-            <span aria-hidden className="text-fg-faint">
-              ·
+      >
+        <div className="flex items-center gap-2 text-xs">
+          <span className={metaLabelFaintClass}>{formatKind(item.kind)}</span>
+          <StatePill state={item.state} />
+          {pinned && (
+            <span className="font-mono text-[10px] text-accent" title="Pinned">
+              ●
             </span>
           )}
-          {shownTags.map((t) => (
-            <span key={t} title={t} className="rounded bg-surface-alt px-1.5 py-0.5 text-fg-muted">
-              {displayTag(t)}
-            </span>
-          ))}
-          {extraTags > 0 && <span className="text-fg-faint">+{extraTags}</span>}
+          <span className="ml-auto flex items-center gap-2 font-mono text-[10px] text-fg-faint">
+            <FreshnessStamp updatedAt={item.updatedAt} thresholdDays={staleThresholdDays} />
+            <span>{item.providerItemId}</span>
+          </span>
         </div>
-      )}
-    </Link>
+        <div className="line-clamp-2 text-sm text-fg">{item.title}</div>
+        {hasMeta && (
+          <div className="flex flex-wrap items-center gap-1.5 font-mono text-[10px] text-fg-faint">
+            {item.assignee && <span className="truncate">{item.assignee}</span>}
+            {item.assignee && tags.length > 0 && (
+              <span aria-hidden className="text-fg-faint">
+                ·
+              </span>
+            )}
+            {shownTags.map((t) => (
+              <span
+                key={t}
+                title={t}
+                className="rounded bg-surface-alt px-1.5 py-0.5 text-fg-muted"
+              >
+                {displayTag(t)}
+              </span>
+            ))}
+            {extraTags > 0 && <span className="text-fg-faint">+{extraTags}</span>}
+          </div>
+        )}
+      </Link>
+      {item.url ? (
+        <a
+          href={item.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          title="Open in provider (new tab)"
+          aria-label={`Open ${item.providerItemId} in a new tab`}
+          className="absolute right-1.5 top-1.5 rounded bg-surface p-1 text-fg-faint opacity-0 transition-opacity hover:text-fg focus-visible:opacity-100 group-hover/row:opacity-100"
+        >
+          <ExternalLink aria-hidden="true" className="h-3 w-3" />
+        </a>
+      ) : null}
+    </div>
   );
 }
 

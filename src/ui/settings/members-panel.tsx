@@ -69,12 +69,14 @@ export function MembersPanel({ projectId }: Props) {
             value={email}
             disabled={!canManage || add.isPending}
             onChange={(e) => setEmail(e.target.value)}
+            aria-label="Member email address"
             className={`${fieldClass} max-w-[20rem]`}
           />
           <SelectField
             value={role}
             disabled={!canManage || add.isPending}
             onChange={(e) => setRole(e.target.value as Role)}
+            aria-label="Member role"
             wrapperClassName="max-w-[10rem]"
           >
             {ROLES.map((r) => (
@@ -137,6 +139,7 @@ export function MembersPanel({ projectId }: Props) {
                               role: e.target.value as Role,
                             })
                           }
+                          aria-label={`Role for ${m.email ?? m.name ?? "member"}`}
                           wrapperClassName="max-w-[8rem]"
                           className="h-8 py-1 text-xs"
                         >

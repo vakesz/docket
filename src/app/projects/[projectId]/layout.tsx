@@ -7,6 +7,7 @@ import { loadGlobalSetting } from "@/server/settings/effective";
 import { requireSetupComplete } from "@/server/setup/guard";
 import { createCaller } from "@/server/trpc-caller";
 import { CommandPalette } from "@/ui/shell/command-palette";
+import { ShortcutHelp } from "@/ui/shell/shortcut-help";
 import { StatusFooter } from "@/ui/shell/status-footer";
 import { TopBar } from "@/ui/shell/top-bar";
 import { WorkspaceProviders } from "@/ui/shell/workspace-providers";
@@ -78,6 +79,7 @@ export default async function ProjectLayout({
           readOnly={readOnly}
         />
         <CommandPalette projectId={project.id} projects={projectOptions} />
+        <ShortcutHelp />
       </WorkspaceProviders>
     </div>
   );

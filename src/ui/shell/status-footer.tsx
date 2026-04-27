@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { formatRelative } from "@/lib/format";
 import { trpc } from "@/lib/trpc-client";
 import { cn } from "@/lib/utils";
+import { PaletteHint } from "@/ui/shell/palette-hint";
 
 /**
  * Compact status bar pinned to the bottom of the workspace. Shows browser
@@ -132,6 +133,7 @@ export function StatusFooter({
           </span>
         </>
       ) : null}
+      <PaletteHint className="ml-auto" />
     </footer>
   );
 }
