@@ -1,7 +1,9 @@
 /**
- * Dev-only seed run by the `predev` script. Mirrors values from `.env.local`
- * into DB tables so the runtime auth / LLM paths (DB-driven, no env fallback)
- * have something to read on `bun run dev`.
+ * Bootstrap seed. Mirrors values from environment variables (`.env.local` in
+ * dev, the docker-compose env file in prod) into DB tables so the runtime
+ * auth / LLM paths (DB-driven, no env fallback) have something to read on
+ * the very first boot. Wired to `predev` for dev and to the docker entrypoint
+ * for production self-host.
  *
  * Branches (each is independent and idempotent):
  *   - `DEV_OPENAI_API_KEY` → `LlmProvider` row (kind=openai). First row wins
@@ -10,16 +12,14 @@
  *   - `DEV_GITHUB_CLIENT_ID` + `DEV_GITHUB_CLIENT_SECRET` → an
  *     `OauthProviderConfig` row (kind=github).
  *
- * Gating (per Phase 11 spec):
- *   - `NODE_ENV === "production"` → bail out, do nothing. A prod build that
- *     accidentally inherits `DEV_*` env vars must be a no-op.
- *   - `setup.complete` global Setting already true → also bail out. The
- *     wizard / first real boot has decided what's authoritative; the seed
- *     never overwrites a finished setup.
+ * Gating: once the global `setup.complete` Setting is true (one LLM and one
+ * OAuth provider have both been observed), the seed short-circuits. The DB
+ * is the source of truth from then on; admin UI edits are never stomped,
+ * even if the env vars still hold older values.
  *
  * Missing env or unavailable DB just logs a warning and exits 0 — never
- * blocks the dev server. Secrets land via `encryptSecret` so the on-disk
- * row matches whatever `SECRETS_KEY` policy is in effect.
+ * blocks the server. Secrets land via `encryptSecret` so the on-disk row
+ * matches whatever `SECRETS_KEY` policy is in effect.
  */
 
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -31,11 +31,6 @@ import { decodeSettingValue } from "../src/server/settings/catalog";
 loadEnv({ path: ".env.local" });
 
 async function main() {
-  if (process.env.NODE_ENV === "production") {
-    console.warn("[seed-dev] NODE_ENV=production — refusing to seed.");
-    return;
-  }
-
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
     console.warn("[seed-dev] DATABASE_URL not set — skipping.");

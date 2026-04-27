@@ -18,6 +18,12 @@ export const metadata: Metadata = {
   description: "Provider-agnostic project tracker",
 };
 
+// Every page in the app touches the DB (auth, setup status, project data),
+// so static prerendering at `next build` time has nothing useful to do and
+// would crash on the lazy DB proxy when DATABASE_URL isn't set in the build
+// environment. Keep everything request-time.
+export const dynamic = "force-dynamic";
+
 export default function RootLayout({
   children,
 }: Readonly<{
