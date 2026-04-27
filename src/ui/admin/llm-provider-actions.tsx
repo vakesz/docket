@@ -1,5 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
+import { xsBorderButtonClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
 
 export function LlmProviderActions({
@@ -27,12 +28,12 @@ export function LlmProviderActions({
           type="button"
           disabled={pending}
           onClick={() => setDefault.mutate({ id })}
-          className="rounded-full border border-zinc-300 px-3 py-0.5 text-zinc-700 hover:border-zinc-500 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300"
+          className={xsBorderButtonClass}
         >
           Set default
         </button>
       ) : (
-        <span className="rounded-full bg-emerald-100 px-3 py-0.5 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-100">
+        <span className="rounded-md bg-accent px-2 py-1 text-xs font-semibold text-accent-fg">
           default
         </span>
       )}
@@ -40,7 +41,7 @@ export function LlmProviderActions({
         type="button"
         disabled={pending}
         onClick={() => setEnabled.mutate({ id, enabled: !enabled })}
-        className="rounded-full border border-zinc-300 px-3 py-0.5 text-zinc-700 hover:border-zinc-500 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300"
+        className={xsBorderButtonClass}
       >
         {enabled ? "Disable" : "Enable"}
       </button>
@@ -56,7 +57,7 @@ export function LlmProviderActions({
             del.mutate({ id });
           }
         }}
-        className="rounded-full border border-red-300 px-3 py-0.5 text-red-700 hover:border-red-500 disabled:opacity-50 dark:border-red-900 dark:text-red-300"
+        className="inline-flex items-center gap-1 rounded-md border border-danger/40 bg-surface px-2 py-1 text-xs text-danger-fg hover:bg-danger-bg/40 disabled:cursor-not-allowed disabled:opacity-60"
       >
         Delete
       </button>

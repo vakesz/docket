@@ -1,6 +1,12 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
+import {
+  fieldClass,
+  fieldMonoClass,
+  primaryButtonClass,
+  settingsPanelClass,
+} from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
 
 const KINDS = ["github", "azure_devops"] as const;
@@ -60,19 +66,16 @@ export function OauthProviderForm() {
   }
 
   return (
-    <form
-      onSubmit={onSubmit}
-      className="flex flex-col gap-3 rounded-md border border-zinc-200 p-4 text-sm dark:border-zinc-800"
-    >
-      <h2 className="text-base font-medium">Add OAuth provider</h2>
+    <form onSubmit={onSubmit} className={`${settingsPanelClass} flex flex-col gap-4 text-sm`}>
+      <h2 className="text-base font-medium text-fg">Add OAuth provider</h2>
 
-      <div className="flex gap-2">
+      <div className="flex gap-3">
         <label className="flex w-40 flex-col gap-1">
-          <span className="text-xs text-zinc-500">Kind</span>
+          <span className="text-xs text-fg-muted">Kind</span>
           <select
             value={kind}
             onChange={(e) => onKindChange(e.target.value as Kind)}
-            className="rounded-md border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-950"
+            className={fieldClass}
           >
             {KINDS.map((k) => (
               <option key={k} value={k}>
@@ -82,60 +85,60 @@ export function OauthProviderForm() {
           </select>
         </label>
         <label className="flex flex-1 flex-col gap-1">
-          <span className="text-xs text-zinc-500">Label</span>
+          <span className="text-xs text-fg-muted">Label</span>
           <input
             required
             value={label}
             onChange={(e) => setLabel(e.target.value)}
-            className="rounded-md border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-950"
+            className={fieldClass}
           />
         </label>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex gap-3">
         <label className="flex flex-1 flex-col gap-1">
-          <span className="text-xs text-zinc-500">Client ID</span>
+          <span className="text-xs text-fg-muted">Client ID</span>
           <input
             required
             value={clientId}
             onChange={(e) => setClientId(e.target.value)}
-            className="rounded-md border border-zinc-300 px-2 py-1 font-mono dark:border-zinc-700 dark:bg-zinc-950"
+            className={fieldMonoClass}
           />
         </label>
         <label className="flex flex-1 flex-col gap-1">
-          <span className="text-xs text-zinc-500">Client secret</span>
+          <span className="text-xs text-fg-muted">Client secret</span>
           <input
             required
             type="password"
             autoComplete="off"
             value={clientSecret}
             onChange={(e) => setClientSecret(e.target.value)}
-            className="rounded-md border border-zinc-300 px-2 py-1 font-mono dark:border-zinc-700 dark:bg-zinc-950"
+            className={fieldMonoClass}
           />
         </label>
       </div>
 
       <label className="flex flex-col gap-1">
-        <span className="text-xs text-zinc-500">Scopes (space-separated)</span>
+        <span className="text-xs text-fg-muted">Scopes (space-separated)</span>
         <input
           value={scopes}
           onChange={(e) => setScopes(e.target.value)}
-          className="rounded-md border border-zinc-300 px-2 py-1 font-mono dark:border-zinc-700 dark:bg-zinc-950"
+          className={fieldMonoClass}
         />
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="text-xs text-zinc-500">Base URL / tenant (optional)</span>
+        <span className="text-xs text-fg-muted">Base URL / tenant (optional)</span>
         <input
           value={baseUrl}
           onChange={(e) => setBaseUrl(e.target.value)}
           placeholder={DEFAULTS[kind].baseUrlHint}
-          className="rounded-md border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-950"
+          className={fieldClass}
         />
       </label>
 
       {create.error ? (
-        <p className="rounded-md bg-red-100 px-2 py-1 text-xs text-red-900 dark:bg-red-950 dark:text-red-100">
+        <p className="rounded-md border border-danger/40 bg-danger-bg/40 px-2 py-1 text-xs text-danger-fg">
           {create.error.message}
         </p>
       ) : null}
@@ -143,7 +146,7 @@ export function OauthProviderForm() {
       <button
         type="submit"
         disabled={create.isPending}
-        className="self-start rounded-full bg-zinc-900 px-4 py-1 text-xs font-medium text-white transition hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-black dark:hover:bg-zinc-200"
+        className={`${primaryButtonClass} self-start`}
       >
         {create.isPending ? "Creating…" : "Create"}
       </button>

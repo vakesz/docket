@@ -27,16 +27,13 @@ export default async function AdminIndexPage() {
   ];
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-2xl flex-col gap-6 p-8">
+    <main className="mx-auto flex min-h-screen max-w-2xl flex-col gap-6 bg-bg p-8 text-fg">
       <header className="flex items-baseline justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Admin</h1>
-          <p className="text-sm text-zinc-500">Deployment-wide configuration.</p>
+          <p className="text-sm text-fg-muted">Deployment-wide configuration.</p>
         </div>
-        <Link
-          href="/"
-          className="text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
-        >
+        <Link href="/" className="text-sm text-fg-muted hover:text-fg">
           ← Projects
         </Link>
       </header>
@@ -45,14 +42,14 @@ export default async function AdminIndexPage() {
         {sections.map((s) => (
           <li
             key={s.href}
-            className="rounded-md border border-zinc-200 p-4 hover:border-zinc-400 dark:border-zinc-800 dark:hover:border-zinc-600"
+            className="rounded-2xl border border-border bg-surface p-4 shadow-sm transition hover:border-fg-faint"
           >
             <Link href={s.href} className="block">
               <div className="flex items-baseline justify-between">
-                <span className="font-medium">{s.label}</span>
-                <span className="text-xs text-zinc-500">→</span>
+                <span className="font-medium text-fg">{s.label}</span>
+                <span className="text-xs text-fg-faint">→</span>
               </div>
-              <p className="mt-1 text-xs text-zinc-500">{s.description}</p>
+              <p className="mt-1 text-xs text-fg-muted">{s.description}</p>
             </Link>
           </li>
         ))}
