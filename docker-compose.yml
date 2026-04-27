@@ -19,6 +19,10 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-docket}
     volumes:
       - db-data:/var/lib/postgresql/data
+    # Publish the DB port so `bun run dev` on the host can reach it. Override
+    # DB_PORT in .env if your host already has Postgres on 5432.
+    ports:
+      - "${DB_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-docket} -d ${POSTGRES_DB:-docket}"]
       interval: 5s
