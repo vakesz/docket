@@ -6,9 +6,16 @@
  *   - `state` is "open" | "closed"
  *   - `state_reason` is "completed" | "not_planned" | "reopened" | null
  *
- * The arch test in `src/providers/__arch__.test.ts` walks every `ItemState`
- * and asserts at least one GitHub `(state, state_reason)` pair maps to it.
- * That guarantees no canonical state is unreachable through GitHub.
+ * GitHub doesn't have a native concept of "blocked" or "needs info" — the
+ * provider encodes those as **labels** alongside the state field, mirroring
+ * how Azure DevOps encodes the same soft states as tags. Sync-time canonical
+ * mapping reads labels first; the executor merges add/remove plans into the
+ * existing label set so unrelated labels survive a transition.
+ *
+ * The arch test in `src/providers/github/state-map.test.ts` walks every
+ * canonical `ItemState` GitHub commits to supporting and asserts at least
+ * one `(state, stateReason, labels)` triple maps to it. That guarantees no
+ * canonical state is unreachable through GitHub.
  */
 
 import { ProviderError } from "@/core/provider";
@@ -22,46 +29,94 @@ export type GithubIssueStatus = {
   stateReason: GithubStateReason;
 };
 
+export const LABEL_BLOCKED = "blocked";
+export const LABEL_NEEDS_INFO = "needs-info";
+export const LABEL_WONTFIX = "wontfix";
+const SOFT_LABELS = [LABEL_BLOCKED, LABEL_NEEDS_INFO, LABEL_WONTFIX] as const;
+
 /**
- * Map a GitHub issue's `(state, state_reason)` to the canonical `ItemState`.
+ * Map a GitHub issue's `(state, state_reason, labels)` to the canonical
+ * `ItemState`. Labels win over the state field — an open issue tagged
+ * `blocked` is canonical-blocked, even though GitHub still shows it as open.
  *
  * `new` is reserved for items the cache has never seen before; live GitHub
- * issues are always at least `active`. `blocked` and `needs_info` have no
- * native GitHub representation — sync-time inference (e.g. label-based)
- * lives elsewhere.
+ * issues are always at least `active` (or one of the soft states).
  */
-export function toCanonicalState(status: GithubIssueStatus): ItemState {
-  if (status.state === "open") {
-    return "active";
-  }
-  if (status.stateReason === "not_planned") {
-    return "closed";
-  }
+export function toCanonicalState(status: GithubIssueStatus, labels: readonly string[]): ItemState {
+  const lower = new Set(labels.map((l) => l.toLowerCase()));
+  if (lower.has(LABEL_BLOCKED)) return "blocked";
+  if (lower.has(LABEL_NEEDS_INFO)) return "needs_info";
+  if (status.state === "open") return "active";
+  if (status.stateReason === "not_planned") return "closed";
   return "resolved";
 }
 
+export type GithubTransitionPlan = {
+  state: GithubIssueState;
+  stateReason: GithubStateReason;
+  labelsToAdd: readonly string[];
+  labelsToRemove: readonly string[];
+};
+
 /**
- * Map a `TransitionIntent` to the GitHub mutation payload.
+ * Map a `TransitionIntent` to the GitHub mutation payload — both the
+ * `(state, state_reason)` change and the soft-state label diff.
  *
- * Returns the (state, stateReason) the GitHub API expects on PATCH /issues.
- * Throws `ProviderError` for intents GitHub can't represent — the proposal
- * pipeline surfaces that as a non-applicable intent instead of attempting
- * the write.
+ * Soft states (`pause`, `block`, `needs_info`) keep the issue open and
+ * encode the canonical state via labels. `start_work` and `reopen` strip
+ * every soft label so the issue lands in canonical `active`.
  */
-export function fromTransitionIntent(intent: TransitionIntent): GithubIssueStatus {
+export function planForIntent(intent: TransitionIntent): GithubTransitionPlan {
   switch (intent) {
     case "start_work":
-      return { state: "open", stateReason: null };
-    case "reopen":
-      return { state: "open", stateReason: "reopened" };
-    case "close_done":
-      return { state: "closed", stateReason: "completed" };
-    case "close_wontfix":
-      return { state: "closed", stateReason: "not_planned" };
+      return {
+        state: "open",
+        stateReason: null,
+        labelsToAdd: [],
+        labelsToRemove: SOFT_LABELS,
+      };
     case "pause":
+      return {
+        state: "open",
+        stateReason: null,
+        labelsToAdd: [],
+        labelsToRemove: SOFT_LABELS,
+      };
     case "block":
+      return {
+        state: "open",
+        stateReason: null,
+        labelsToAdd: [LABEL_BLOCKED],
+        labelsToRemove: [LABEL_NEEDS_INFO, LABEL_WONTFIX],
+      };
     case "needs_info":
-      throw new ProviderError(`GitHub has no native representation for intent '${intent}'`);
+      return {
+        state: "open",
+        stateReason: null,
+        labelsToAdd: [LABEL_NEEDS_INFO],
+        labelsToRemove: [LABEL_BLOCKED, LABEL_WONTFIX],
+      };
+    case "close_done":
+      return {
+        state: "closed",
+        stateReason: "completed",
+        labelsToAdd: [],
+        labelsToRemove: SOFT_LABELS,
+      };
+    case "close_wontfix":
+      return {
+        state: "closed",
+        stateReason: "not_planned",
+        labelsToAdd: [LABEL_WONTFIX],
+        labelsToRemove: [LABEL_BLOCKED, LABEL_NEEDS_INFO],
+      };
+    case "reopen":
+      return {
+        state: "open",
+        stateReason: "reopened",
+        labelsToAdd: [],
+        labelsToRemove: SOFT_LABELS,
+      };
     default: {
       const exhaustive: never = intent;
       throw new ProviderError(`Unknown transition intent: ${String(exhaustive)}`);
@@ -70,10 +125,34 @@ export function fromTransitionIntent(intent: TransitionIntent): GithubIssueStatu
 }
 
 /**
- * The set of `(state, stateReason)` pairs the canonical → GitHub direction
- * can produce, used by the reverse-mapping arch test to prove every
- * canonical state we *want to support on GitHub* round-trips. `new`,
- * `blocked`, and `needs_info` are deliberately excluded — see the docstring
- * on `toCanonicalState` above.
+ * Apply a transition plan to the existing label set: drop labels in
+ * `labelsToRemove`, then add labels in `labelsToAdd`. Case-insensitive on
+ * removal so soft labels are stripped regardless of how the issue stored
+ * them. Result is sorted for deterministic API payloads.
  */
-export const REACHABLE_CANONICAL_STATES: readonly ItemState[] = ["active", "resolved", "closed"];
+export function mergeLabels(current: readonly string[], plan: GithubTransitionPlan): string[] {
+  const removeSet = new Set(plan.labelsToRemove.map((l) => l.toLowerCase()));
+  const out = new Set<string>();
+  for (const tag of current) {
+    if (!tag) continue;
+    if (removeSet.has(tag.toLowerCase())) continue;
+    out.add(tag);
+  }
+  for (const tag of plan.labelsToAdd) {
+    out.add(tag);
+  }
+  return Array.from(out).sort();
+}
+
+/**
+ * Canonical states GitHub can produce — used by the reverse-mapping arch
+ * test. With label-based soft-state encoding, GitHub now reaches the full
+ * canonical set except `new` (reserved for items the cache has never seen).
+ */
+export const REACHABLE_CANONICAL_STATES: readonly ItemState[] = [
+  "active",
+  "blocked",
+  "needs_info",
+  "resolved",
+  "closed",
+];

@@ -22,9 +22,10 @@ import type {
   TransitionIntent,
 } from "@/core/types";
 import {
-  fromTransitionIntent,
   type GithubIssueState,
   type GithubStateReason,
+  mergeLabels,
+  planForIntent,
   toCanonicalState,
 } from "@/providers/github/state-map";
 
@@ -91,6 +92,7 @@ type IssueLikePayload = {
   labels: ReadonlyArray<string | { name?: string | null }>;
   html_url: string;
   repository_url?: string | null;
+  created_at: string;
   updated_at: string;
   pull_request?: unknown;
 };
@@ -142,14 +144,18 @@ export class GitHubProvider implements WorkItemProvider {
       kind: inferKind(labels),
       title: issue.title,
       descriptionMd: issue.body ?? "",
-      state: toCanonicalState({
-        state: issue.state as GithubIssueState,
-        stateReason: (issue.state_reason ?? null) as GithubStateReason,
-      }),
+      state: toCanonicalState(
+        {
+          state: issue.state as GithubIssueState,
+          stateReason: (issue.state_reason ?? null) as GithubStateReason,
+        },
+        labels,
+      ),
       assignee: issue.assignee?.login ?? null,
       author: issue.user?.login ?? null,
       parentId: null,
       tags: labels,
+      createdAt: new Date(issue.created_at),
       updatedAt: new Date(issue.updated_at),
       url: issue.html_url,
       repositoryUrl: `https://github.com/${this.config.owner}/${this.config.repo}`,
@@ -236,14 +242,22 @@ export class GitHubProvider implements WorkItemProvider {
 
   async transition(id: string, intent: TransitionIntent): Promise<Item> {
     const { owner, repo, number } = parseProviderItemId(id);
-    const target = fromTransitionIntent(intent);
+    const plan = planForIntent(intent);
     try {
+      const touchesLabels = plan.labelsToAdd.length > 0 || plan.labelsToRemove.length > 0;
+      let labels: string[] | undefined;
+      if (touchesLabels) {
+        const current = await this.octokit.issues.get({ owner, repo, issue_number: number });
+        const currentLabels = labelsOf(current.data as unknown as IssueLikePayload);
+        labels = mergeLabels(currentLabels, plan);
+      }
       const res = await this.octokit.issues.update({
         owner,
         repo,
         issue_number: number,
-        state: target.state,
-        state_reason: target.stateReason ?? undefined,
+        state: plan.state,
+        state_reason: plan.stateReason ?? undefined,
+        ...(labels ? { labels } : {}),
       });
       return this.toCanonicalItem(res.data as unknown as IssueLikePayload);
     } catch (err) {

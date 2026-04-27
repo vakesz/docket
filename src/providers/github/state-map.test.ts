@@ -2,32 +2,40 @@
  * Bidirectional contract test for the GitHub state map.
  *
  * Every canonical `ItemState` GitHub commits to supporting must be reachable
- * from at least one provider-native `(state, state_reason)` pair.
- *
- * Catches accidental drift like "we added a new ItemState in core/types.ts
- * but never taught the GitHub map how to produce it".
+ * from at least one provider-native `(state, state_reason, labels)` triple,
+ * and every `TransitionIntent` must map cleanly via `planForIntent` — soft
+ * states ride on labels (matching the AzDO tag pattern), so no intent is
+ * silently rejected anymore.
  */
 
 import { describe, expect, it } from "vitest";
-import type { ItemState, TransitionIntent } from "@/core/types";
+import type { ItemState } from "@/core/types";
 import { ITEM_STATES, TRANSITION_INTENTS } from "@/core/types";
 import {
-  fromTransitionIntent,
   type GithubIssueState,
   type GithubStateReason,
+  LABEL_BLOCKED,
+  LABEL_NEEDS_INFO,
+  LABEL_WONTFIX,
+  mergeLabels,
+  planForIntent,
   REACHABLE_CANONICAL_STATES,
   toCanonicalState,
 } from "@/providers/github/state-map";
 
-const ALL_PAIRS: ReadonlyArray<{
-  state: GithubIssueState;
-  stateReason: GithubStateReason;
-}> = [
-  { state: "open", stateReason: null },
-  { state: "open", stateReason: "reopened" },
-  { state: "closed", stateReason: "completed" },
-  { state: "closed", stateReason: "not_planned" },
-  { state: "closed", stateReason: null },
+type Triple = {
+  status: { state: GithubIssueState; stateReason: GithubStateReason };
+  labels: readonly string[];
+};
+
+const ALL_TRIPLES: readonly Triple[] = [
+  { status: { state: "open", stateReason: null }, labels: [] },
+  { status: { state: "open", stateReason: null }, labels: [LABEL_BLOCKED] },
+  { status: { state: "open", stateReason: null }, labels: [LABEL_NEEDS_INFO] },
+  { status: { state: "open", stateReason: "reopened" }, labels: [] },
+  { status: { state: "closed", stateReason: "completed" }, labels: [] },
+  { status: { state: "closed", stateReason: "not_planned" }, labels: [] },
+  { status: { state: "closed", stateReason: null }, labels: [] },
 ];
 
 describe("github state-map", () => {
@@ -37,41 +45,50 @@ describe("github state-map", () => {
     }
   });
 
-  it("every reachable canonical state is produced by at least one GitHub pair", () => {
-    const produced = new Set<ItemState>(ALL_PAIRS.map((p) => toCanonicalState(p)));
+  it("every reachable canonical state is produced by at least one (status, labels) triple", () => {
+    const produced = new Set<ItemState>(
+      ALL_TRIPLES.map((t) => toCanonicalState(t.status, t.labels)),
+    );
     for (const state of REACHABLE_CANONICAL_STATES) {
       expect(produced.has(state)).toBe(true);
     }
   });
 
-  it("fromTransitionIntent round-trips back to a canonical state for every supported intent", () => {
-    const supported: TransitionIntent[] = ["start_work", "reopen", "close_done", "close_wontfix"];
-    for (const intent of supported) {
-      const target = fromTransitionIntent(intent);
-      const canonical = toCanonicalState(target);
+  it("labels win over the state field for soft states", () => {
+    expect(toCanonicalState({ state: "open", stateReason: null }, [LABEL_BLOCKED])).toBe("blocked");
+    expect(toCanonicalState({ state: "open", stateReason: null }, [LABEL_NEEDS_INFO])).toBe(
+      "needs_info",
+    );
+  });
+
+  it("planForIntent round-trips back to a canonical state for every intent", () => {
+    for (const intent of TRANSITION_INTENTS) {
+      const plan = planForIntent(intent);
+      const merged = mergeLabels([], plan);
+      const canonical = toCanonicalState(
+        { state: plan.state, stateReason: plan.stateReason },
+        merged,
+      );
       expect(REACHABLE_CANONICAL_STATES).toContain(canonical);
     }
   });
 
-  it("intents GitHub can't represent throw rather than silently coercing", () => {
-    const unsupported: TransitionIntent[] = ["pause", "block", "needs_info"];
-    for (const intent of unsupported) {
-      expect(() => fromTransitionIntent(intent)).toThrow();
-    }
+  it("mergeLabels strips soft labels case-insensitively and preserves unrelated labels", () => {
+    const plan = planForIntent("start_work");
+    expect(mergeLabels(["BLOCKED", "feature", "Needs-Info"], plan)).toEqual(["feature"]);
   });
 
-  it("every TransitionIntent is either mapped or explicitly rejected — no silent fall-through", () => {
-    for (const intent of TRANSITION_INTENTS) {
-      let accepted = false;
-      let rejected = false;
-      try {
-        fromTransitionIntent(intent);
-        accepted = true;
-      } catch {
-        rejected = true;
-      }
-      expect(accepted || rejected).toBe(true);
-      expect(accepted && rejected).toBe(false);
-    }
+  it("mergeLabels adds the plan's labels and dedupes against current", () => {
+    const plan = planForIntent("needs_info");
+    expect(mergeLabels(["feature"], plan)).toEqual(["feature", LABEL_NEEDS_INFO]);
+    expect(mergeLabels(["feature", LABEL_NEEDS_INFO], plan)).toEqual(["feature", LABEL_NEEDS_INFO]);
+  });
+
+  it("close_wontfix stamps the wontfix label so a re-sync still resolves to closed", () => {
+    const plan = planForIntent("close_wontfix");
+    expect(plan.state).toBe("closed");
+    const merged = mergeLabels([LABEL_BLOCKED], plan);
+    expect(merged).toContain(LABEL_WONTFIX);
+    expect(merged).not.toContain(LABEL_BLOCKED);
   });
 });

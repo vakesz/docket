@@ -249,9 +249,13 @@ model Item {
   providerRaw    Json     @default("{}")
   url            String?
   repositoryUrl  String?
+  /// Provider-side creation timestamp ("Opened" date in the UI). Nullable
+  /// because legacy/cached rows may pre-date the field and some providers
+  /// don't always surface it.
+  createdAt      DateTime?
   updatedAt      DateTime
   syncedAt       DateTime
-  archived       Boolean  @default(false)
+  archived       Boolean   @default(false)
 
   project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   comments Comment[]

@@ -17,7 +17,7 @@ export function ProjectSwitcher({
   const router = useRouter();
   return (
     <select
-      className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+      className="min-w-0 max-w-[12rem] truncate rounded-md border border-border bg-surface px-2 py-1 text-xs text-fg focus:outline-none focus:ring-1 focus:ring-accent"
       value={currentProjectId}
       onChange={(e) => {
         const next = e.target.value;

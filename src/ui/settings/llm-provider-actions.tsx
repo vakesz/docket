@@ -7,10 +7,12 @@ export function LlmProviderActions({
   id,
   isDefault,
   enabled,
+  onEdit,
 }: {
   id: string;
   isDefault: boolean;
   enabled: boolean;
+  onEdit: () => void;
 }) {
   const router = useRouter();
   const refresh = () => router.refresh();
@@ -37,6 +39,9 @@ export function LlmProviderActions({
           default
         </span>
       )}
+      <button type="button" disabled={pending} onClick={onEdit} className={xsBorderButtonClass}>
+        Edit
+      </button>
       <button
         type="button"
         disabled={pending}

@@ -31,7 +31,7 @@ export type SyncResult = {
   inboundConversations: number;
 };
 
-function toItemRow(canonical: CanonicalItem, projectId: string, syncedAt: Date) {
+export function toItemRow(canonical: CanonicalItem, projectId: string, syncedAt: Date) {
   return {
     projectId,
     providerItemId: canonical.id,
@@ -46,6 +46,7 @@ function toItemRow(canonical: CanonicalItem, projectId: string, syncedAt: Date) 
     providerRaw: canonical.providerRaw as Prisma.InputJsonValue,
     url: canonical.url,
     repositoryUrl: canonical.repositoryUrl,
+    createdAt: canonical.createdAt,
     updatedAt: canonical.updatedAt ?? syncedAt,
     syncedAt,
     archived: false,

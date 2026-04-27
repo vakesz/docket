@@ -19,6 +19,16 @@ const CreateLlmProviderInput = z.object({
   isDefault: z.boolean().default(false),
 });
 
+const UpdateLlmProviderInput = z.object({
+  id: z.string().min(1),
+  kind: LLM_KIND,
+  label: z.string().min(1).max(80),
+  /** Empty string = keep the existing key. Any other value is encrypted and stored. */
+  apiKey: z.string().max(500).default(""),
+  model: z.string().max(120).default(""),
+  baseUrl: z.string().max(500).default(""),
+});
+
 export const llmProvidersRouter = router({
   /** List all configured LLM providers. Visible to any authenticated user. */
   list: protectedProcedure.query(async ({ ctx }) => {
@@ -54,6 +64,20 @@ export const llmProvidersRouter = router({
       data: { ...input, apiKey: encryptSecret(input.apiKey) },
     });
     return { id: created.id, kind: created.kind, label: created.label };
+  }),
+
+  /**
+   * Edit label / kind / model / baseUrl, and rotate the apiKey when a
+   * non-empty one is supplied. `isDefault` and `enabled` are managed by
+   * `setDefault` / `setEnabled` so this stays a pure metadata edit.
+   */
+  update: mutationProcedure.input(UpdateLlmProviderInput).mutation(async ({ ctx, input }) => {
+    const { id, apiKey, ...rest } = input;
+    await ctx.db.llmProvider.update({
+      where: { id },
+      data: apiKey ? { ...rest, apiKey: encryptSecret(apiKey) } : rest,
+    });
+    return { ok: true } as const;
   }),
 
   /** Mark this provider as the global default; clears the flag on the others. */

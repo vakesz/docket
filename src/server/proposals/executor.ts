@@ -90,6 +90,7 @@ async function refreshCacheFromCanonical(
     providerRaw: canonical.providerRaw as Prisma.InputJsonValue,
     url: canonical.url,
     repositoryUrl: canonical.repositoryUrl,
+    createdAt: canonical.createdAt,
     updatedAt: canonical.updatedAt ?? new Date(),
     syncedAt: new Date(),
     archived: false,

@@ -18,6 +18,7 @@ export function snapshotFromRow(row: PrismaItem): CanonicalItem {
     author: row.author,
     parentId: row.parentId,
     tags: row.tags,
+    createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     url: row.url,
     repositoryUrl: row.repositoryUrl,

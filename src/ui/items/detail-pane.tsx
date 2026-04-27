@@ -1,13 +1,16 @@
 import Link from "next/link";
 import type { ItemState } from "@/core/types";
 import { metaLabelClass } from "@/lib/form-classes";
-import { displayTag, formatKind, formatRelative } from "@/lib/format";
+import { displayTag, formatKind, formatRelative, providerProfileUrl } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { ChatToggleButton } from "@/ui/items/chat-toggle-button";
+import { CommentComposer } from "@/ui/items/comment-composer";
 import { FreshnessStamp } from "@/ui/items/freshness";
-import { ItemActions } from "@/ui/items/item-actions";
 import { PinButton } from "@/ui/items/pin-button";
-import { RefreshCommentsButton } from "@/ui/items/refresh-comments-button";
+import { RefreshItemButton } from "@/ui/items/refresh-item-button";
 import { StatePill } from "@/ui/items/state-pill";
+import { TransitionActions } from "@/ui/items/transition-actions";
+import { Markdown } from "@/ui/markdown/markdown";
 
 type Comment = {
   id: string;
@@ -28,37 +31,36 @@ type DetailItem = {
   tags: string[];
   url: string | null;
   descriptionMd: string | null;
+  createdAt: Date | null;
   updatedAt: Date;
   comments: Comment[];
 };
 
 /**
- * Middle pane of the workspace shell: full item detail with header, meta
- * grid, description, action bar, and comment thread.
+ * Middle pane of the workspace shell: full item detail.
  *
- * The pane is a server component so the initial render carries the full
- * detail without a client round-trip; interactive bits (pin, refresh
- * comments, transition/comment proposals) come from existing client
- * islands so this file stays mostly markup.
- *
- * TODO(port): rich-markdown rendering for the description and comment
- * bodies (main uses a remark/rehype + highlight.js stack). For now the
- * raw markdown shows as preformatted text, which is readable but loses
- * code-block syntax highlighting and link rendering.
+ * Layout order is header → description → comments → new-comment composer,
+ * with transition actions sitting inside the header next to pin/refresh.
+ * Server component so the initial render carries the full detail without a
+ * client round-trip; interactive bits (pin, refresh, transition + comment
+ * proposals) are tiny client islands.
  */
 export function DetailPane({
   projectId,
+  providerKind,
   item,
   staleThresholdDays,
 }: {
   projectId: string;
+  providerKind: string | null;
   item: DetailItem;
   staleThresholdDays: number | null;
 }) {
+  const authorProfileUrl = providerProfileUrl(providerKind, item.author);
   return (
     <div className="flex h-full flex-col overflow-auto bg-bg">
-      <header className="flex flex-col gap-2 border-b border-border p-4">
-        <div className="flex items-center gap-2 text-xs">
+      <header className="flex flex-col gap-3 border-b border-border p-4">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
           <span className={metaLabelClass}>{formatKind(item.kind)}</span>
           <StatePill state={item.state} />
           <span className="font-mono text-[10px] text-fg-faint">{item.providerItemId}</span>
@@ -68,7 +70,8 @@ export function DetailPane({
           </span>
           <div className="ml-auto flex items-center gap-2">
             <PinButton projectId={projectId} providerItemId={item.providerItemId} />
-            <RefreshCommentsButton projectId={projectId} itemId={item.id} />
+            <RefreshItemButton projectId={projectId} itemId={item.id} />
+            <ChatToggleButton />
           </div>
         </div>
         <h1 className="text-lg font-semibold leading-snug text-fg">{item.title}</h1>
@@ -76,7 +79,33 @@ export function DetailPane({
           {item.author && (
             <>
               <dt className={metaLabelClass}>Opened by</dt>
-              <dd className="text-fg">{item.author}</dd>
+              <dd className="text-fg">
+                {authorProfileUrl ? (
+                  <a
+                    href={authorProfileUrl}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="text-accent hover:underline"
+                  >
+                    {item.author}
+                  </a>
+                ) : (
+                  item.author
+                )}
+              </dd>
+            </>
+          )}
+          {item.createdAt && (
+            <>
+              <dt className={metaLabelClass}>Opened</dt>
+              <dd className="text-fg">
+                <time
+                  dateTime={item.createdAt.toISOString()}
+                  title={item.createdAt.toLocaleString()}
+                >
+                  {formatRelative(item.createdAt)}
+                </time>
+              </dd>
             </>
           )}
           <dt className={metaLabelClass}>Assignee</dt>
@@ -128,6 +157,11 @@ export function DetailPane({
             </>
           )}
         </dl>
+        <TransitionActions
+          projectId={projectId}
+          providerItemId={item.providerItemId}
+          state={item.state as ItemState}
+        />
       </header>
 
       <section className="flex flex-col gap-3 p-4">
@@ -135,20 +169,10 @@ export function DetailPane({
           Description
         </h2>
         {item.descriptionMd ? (
-          <article className="whitespace-pre-wrap rounded-md border border-border bg-surface p-3 text-sm text-fg">
-            {item.descriptionMd}
-          </article>
+          <Markdown source={item.descriptionMd} />
         ) : (
           <p className="text-sm italic text-fg-faint">(no description)</p>
         )}
-      </section>
-
-      <section className="border-t border-border p-4">
-        <ItemActions
-          projectId={projectId}
-          providerItemId={item.providerItemId}
-          state={item.state as ItemState}
-        />
       </section>
 
       <section className="flex flex-col gap-3 border-t border-border p-4">
@@ -171,11 +195,15 @@ export function DetailPane({
                     {formatRelative(c.createdAt)}
                   </time>
                 </div>
-                <p className="whitespace-pre-wrap text-sm text-fg">{c.bodyMd}</p>
+                <Markdown source={c.bodyMd} />
               </li>
             ))}
           </ul>
         )}
+      </section>
+
+      <section className="border-t border-border p-4">
+        <CommentComposer projectId={projectId} providerItemId={item.providerItemId} />
       </section>
     </div>
   );

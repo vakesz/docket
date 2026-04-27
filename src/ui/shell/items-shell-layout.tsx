@@ -1,6 +1,6 @@
 "use client";
 
-import { Group, Panel, Separator, useDefaultLayout } from "react-resizable-panels";
+import { Group, Panel, Separator } from "react-resizable-panels";
 import { SEPARATOR } from "@/lib/form-classes";
 import { cn } from "@/lib/utils";
 
@@ -8,8 +8,11 @@ import { cn } from "@/lib/utils";
  * The 3-pane workspace: backlog (left), detail (middle), chat (right).
  *
  * If `right` is null, the chat pane collapses entirely and the middle
- * pane expands to fill it. Each layout (2-pane vs 3-pane) persists its
- * own widths in localStorage via `useDefaultLayout`, keyed off `groupId`.
+ * pane expands to fill the available space. Sizes use the Panel
+ * defaultSize fallbacks — persistence used to live here via
+ * `useDefaultLayout` but its localStorage payload outlived the layout
+ * shape and was producing nonsensical widths after any resize. Until we
+ * have a versioning story, the defaults stay deterministic.
  */
 export function ItemsShellLayout({
   left,
@@ -23,21 +26,12 @@ export function ItemsShellLayout({
   groupId?: string;
 }) {
   const showRight = right !== null;
-  const panelIds = showRight ? ["left", "middle", "right"] : ["left", "middle"];
-  const storage = typeof window !== "undefined" ? window.localStorage : undefined;
-  const { defaultLayout, onLayoutChanged } = useDefaultLayout({
-    id: `${groupId}.${showRight ? "3pane" : "2pane"}`,
-    panelIds,
-    storage,
-  });
 
   return (
     <Group
       orientation="horizontal"
-      id={groupId}
+      id={`${groupId}.${showRight ? "3pane" : "2pane"}`}
       className="group flex-1 overflow-hidden"
-      defaultLayout={defaultLayout}
-      onLayoutChanged={onLayoutChanged}
     >
       <Panel id="left" defaultSize={showRight ? 22 : 28} minSize={14} className="overflow-hidden">
         {left}

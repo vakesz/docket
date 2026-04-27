@@ -69,17 +69,17 @@ async function seedOpenAi(db: PrismaClient): Promise<void> {
     return;
   }
 
-  // Match by label so a user who has rotated their key in the admin UI
-  // still gets bumped on a re-seed. We don't compare apiKey ciphertexts
-  // (fresh IV would never byte-equal anyway).
-  const label = "Local dev (OpenAI)";
-  const existing = await db.llmProvider.findFirst({ where: { label } });
+  // Match by kind, not label, so a user who renamed the row in the admin UI
+  // still gets their apiKey bumped on a re-seed without having the label
+  // clobbered back. Ciphertexts can't be byte-compared (fresh IV).
+  const existing = await db.llmProvider.findFirst({ where: { kind: "openai" } });
   const writeKey = encryptSecret(apiKey);
 
   if (!existing) {
     // First LLM row in the deployment? Seed it as the global default so the
     // agent has an adapter to dispatch to without any further admin work.
     const anyOther = await db.llmProvider.count();
+    const label = "OpenAI";
     await db.llmProvider.create({
       data: {
         kind: "openai",
@@ -100,7 +100,7 @@ async function seedOpenAi(db: PrismaClient): Promise<void> {
     where: { id: existing.id },
     data: { apiKey: writeKey, enabled: true },
   });
-  console.log(`[seed-dev] Refreshed LlmProvider(${label}) apiKey.`);
+  console.log(`[seed-dev] Refreshed LlmProvider(${existing.label}) apiKey.`);
 }
 
 async function seedGithubOAuth(db: PrismaClient): Promise<void> {

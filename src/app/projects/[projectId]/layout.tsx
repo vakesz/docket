@@ -62,6 +62,7 @@ export default async function ProjectLayout({
       <TopBar projects={projectOptions} currentProjectId={project.id} userLabel={userLabel} />
       <main className="flex flex-1 flex-col overflow-hidden">{children}</main>
       <StatusFooter
+        projectId={project.id}
         projectName={project.name}
         providerKind={project.providerKind}
         lastSyncAt={lastSyncAt}

@@ -59,6 +59,7 @@ export type Item = {
   assignee: string | null;
   parentId: string | null;
   tags: string[];
+  createdAt: Date | null;
   updatedAt: Date | null;
   url: string | null;
   author: string | null;

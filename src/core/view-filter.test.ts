@@ -21,6 +21,7 @@ function fakeItem(overrides: Partial<Item> & { id: string }): Item {
     assignee: overrides.assignee ?? null,
     parentId: overrides.parentId ?? null,
     tags: overrides.tags ?? [],
+    createdAt: overrides.createdAt ?? null,
     updatedAt: overrides.updatedAt ?? null,
     url: overrides.url ?? null,
     author: overrides.author ?? null,

@@ -83,3 +83,23 @@ export function displayTag(raw: string): string {
       .trim() || raw
   );
 }
+
+/**
+ * Build a public profile URL for the user identifier the provider stamps
+ * into `Item.author`. GitHub stores the login (e.g. `octocat`), so the
+ * profile is `https://github.com/<login>`. Azure DevOps stamps null, and
+ * other providers don't expose a stable profile URL pattern — return null
+ * and the UI falls back to plain text.
+ */
+export function providerProfileUrl(
+  providerKind: string | null | undefined,
+  identity: string | null | undefined,
+): string | null {
+  if (!providerKind || !identity) return null;
+  const trimmed = identity.trim();
+  if (!trimmed) return null;
+  if (providerKind === "github") {
+    return `https://github.com/${encodeURIComponent(trimmed)}`;
+  }
+  return null;
+}

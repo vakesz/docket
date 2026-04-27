@@ -190,6 +190,7 @@ export class AzureDevOpsProvider implements WorkItemProvider {
       assignee: readAssignee(fields["System.AssignedTo"]),
       parentId: parent,
       tags,
+      createdAt: readDate(fields["System.CreatedDate"]),
       updatedAt: readDate(fields["System.ChangedDate"]),
       url: this.webUrl(id),
       author: null,

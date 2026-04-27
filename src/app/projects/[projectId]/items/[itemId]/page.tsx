@@ -14,8 +14,12 @@ export default async function ItemDetailPage({
   const trpc = await createCaller();
 
   let item: Awaited<ReturnType<typeof trpc.items.get>>;
+  let project: Awaited<ReturnType<typeof trpc.projects.get>>;
   try {
-    item = await trpc.items.get({ projectId, itemId });
+    [item, project] = await Promise.all([
+      trpc.items.get({ projectId, itemId }),
+      trpc.projects.get({ projectId }),
+    ]);
   } catch (err) {
     if (err instanceof TRPCError && (err.code === "FORBIDDEN" || err.code === "NOT_FOUND")) {
       notFound();
@@ -28,6 +32,7 @@ export default async function ItemDetailPage({
   return (
     <DetailPane
       projectId={projectId}
+      providerKind={project.providerKind}
       item={item}
       staleThresholdDays={staleThresholdDays > 0 ? staleThresholdDays : null}
     />

@@ -5,9 +5,10 @@ import type { Item, ItemKind, ItemState, StateBucket } from "@/core/types";
 import { STATE_BUCKETS } from "@/core/types";
 import { applyViewFilter, STATE_BUCKET_MEMBERS, type ViewFilter } from "@/core/view-filter";
 import type { Prisma, Item as PrismaItem } from "@/db/generated/client";
+import { injectExternalChange, materialDiff } from "@/server/inbound-changes/inject";
 import { getProviderSpec } from "@/server/provider-registry";
 import { buildProviderForUser } from "@/server/providers/build";
-import { runFullSync, runIncrementalSync } from "@/server/sync";
+import { runFullSync, runIncrementalSync, toItemRow } from "@/server/sync";
 import { projectScopedProcedure, router } from "@/server/trpc";
 
 const ProjectId = z.object({ projectId: z.string().min(1) });
@@ -181,6 +182,7 @@ function liftRowToCanonical(row: PrismaItem, providerKind: string): Item {
     assignee: row.assignee,
     parentId: row.parentId,
     tags: row.tags,
+    createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     url: row.url,
     author: row.author,
@@ -294,29 +296,67 @@ export const itemsRouter = router({
   }),
 
   /**
-   * Refresh comments for one item from the provider and upsert into the
-   * Comment cache. Cheap to run on detail-page open.
+   * Refresh a single item from its provider — pulls the latest item payload
+   * and comments and upserts both. Cheaper than a project-wide sync when the
+   * user just wants the open item to be current. Mirrors the sync pipeline so
+   * material changes still feed `injectExternalChange` into active
+   * conversations.
    */
-  refreshComments: projectScopedProcedure.input(ItemRef).mutation(async ({ ctx, input }) => {
+  refreshItem: projectScopedProcedure.input(ItemRef).mutation(async ({ ctx, input }) => {
     const userId = userIdOrThrow(ctx);
-    const item = await ctx.db.item.findFirst({
+    const cached = await ctx.db.item.findFirst({
       where: { id: input.itemId, projectId: ctx.projectId },
+      select: {
+        id: true,
+        providerItemId: true,
+        state: true,
+        title: true,
+        descriptionMd: true,
+        assignee: true,
+      },
     });
-    if (!item) {
+    if (!cached) {
       throw new TRPCError({ code: "NOT_FOUND", message: "item not found in this project" });
     }
     const provider = await buildProviderForUser(ctx.db, ctx.project, userId);
-    const fresh = await provider.getComments(item.providerItemId);
-    for (const c of fresh) {
+    const syncedAt = new Date();
+    const fresh = await provider.getItem(cached.providerItemId);
+    const row = toItemRow(fresh, ctx.projectId, syncedAt);
+    const upserted = await ctx.db.item.upsert({
+      where: {
+        projectId_providerItemId: {
+          projectId: ctx.projectId,
+          providerItemId: cached.providerItemId,
+        },
+      },
+      create: row,
+      update: { ...row, archived: false },
+      select: { id: true },
+    });
+
+    const changes = materialDiff(cached, fresh);
+    let inboundConversations = 0;
+    if (changes.length > 0) {
+      const result = await injectExternalChange(ctx.db, {
+        projectId: ctx.projectId,
+        itemId: upserted.id,
+        providerItemId: cached.providerItemId,
+        changes,
+      });
+      inboundConversations = result.injectedInto;
+    }
+
+    const comments = await provider.getComments(cached.providerItemId);
+    for (const c of comments) {
       await ctx.db.comment.upsert({
         where: {
           itemId_providerCommentId: {
-            itemId: item.id,
+            itemId: upserted.id,
             providerCommentId: c.id,
           },
         },
         create: {
-          itemId: item.id,
+          itemId: upserted.id,
           providerCommentId: c.id,
           author: c.author,
           bodyMd: c.bodyMd,
@@ -329,6 +369,7 @@ export const itemsRouter = router({
         },
       });
     }
-    return { count: fresh.length };
+
+    return { commentsCount: comments.length, inboundConversations };
   }),
 });

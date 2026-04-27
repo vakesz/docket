@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { LlmSwitcher } from "@/ui/conversations/llm-switcher";
 import { QuestionCard } from "@/ui/conversations/question-card";
 import { useChatStream } from "@/ui/conversations/use-chat-stream";
+import { Markdown } from "@/ui/markdown/markdown";
 import { ProposalDialog } from "@/ui/proposals/proposal-dialog";
 
 type PersistedMessage = {
@@ -27,10 +28,6 @@ type PersistedMessage = {
  * Mounted from `ChatRail` (which derives `itemId` from the URL); this
  * component itself is item-scoped so unmounting on item switch resets
  * stream + question state cleanly.
- *
- * TODO(port): render assistant + persisted message bodies as markdown
- * (main uses remark/rehype + highlight.js). For now it's whitespace-pre-
- * wrap which is readable but loses fenced code highlighting and links.
  *
  * TODO(port): main rendered staged proposals as inline cards inside the
  * chat scroll region; T3 still uses the modal `ProposalDialog`. Once
@@ -167,11 +164,6 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
           </span>
         )}
         <div className="ml-auto flex items-center gap-2">
-          <LlmSwitcher
-            projectId={projectId}
-            conversationId={conversationId}
-            currentOverrideId={detail.data?.llmProviderIdOverride ?? null}
-          />
           <button
             type="button"
             onClick={() => void startNewThread()}
@@ -272,9 +264,16 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
           }
           className="w-full resize-none rounded border border-border bg-bg p-2 text-sm text-fg focus:border-accent focus:outline-none disabled:bg-surface-alt"
         />
-        <div className={cn("mt-1 flex items-center justify-between", metaLabelFaintClass)}>
-          <span>{inFlight ? "Streaming…" : "Ready"}</span>
-          {create.error && <span className="text-danger-fg">{create.error.message}</span>}
+        <div className={cn("mt-1 flex items-center justify-between gap-2", metaLabelFaintClass)}>
+          <LlmSwitcher
+            projectId={projectId}
+            conversationId={conversationId}
+            currentOverrideId={detail.data?.llmProviderIdOverride ?? null}
+          />
+          <div className="flex items-center gap-2">
+            {create.error && <span className="text-danger-fg">{create.error.message}</span>}
+            <span>{inFlight ? "Streaming…" : "Ready"}</span>
+          </div>
         </div>
       </form>
 
@@ -316,7 +315,11 @@ function Bubble({
         {messageRole}
         {streaming ? " · streaming" : ""}
       </div>
-      <p className="whitespace-pre-wrap text-fg">{text || (streaming ? "…" : "")}</p>
+      {text ? (
+        <Markdown source={text} className="text-fg" />
+      ) : (
+        <p className="text-fg">{streaming ? "…" : ""}</p>
+      )}
     </div>
   );
 }
