@@ -24,6 +24,7 @@ import { auth } from "@/server/auth";
 import { ownsConversation } from "@/server/conversations/storage";
 import { db } from "@/server/db";
 import { logger } from "@/server/logger";
+import { projectForUser } from "@/server/projects/access";
 
 export const runtime = "nodejs"; // Prisma + openai SDK both need node, not edge.
 export const dynamic = "force-dynamic";
@@ -40,14 +41,10 @@ export async function POST(req: Request, context: RouteContext): Promise<Respons
   const userId = session.user.id;
   const { projectId, conversationId } = await context.params;
 
-  // Project membership: same shape as projectScopedProcedure.
-  const project = await db.project.findFirst({
-    where: {
-      id: projectId,
-      archivedAt: null,
-      OR: [{ ownerUserId: userId }, { memberships: { some: { userId: userId } } }],
-    },
-  });
+  // Project membership: shares `projectForUser` with the tRPC
+  // `enforceProjectMembership` middleware so both surfaces use the same
+  // access check.
+  const project = await projectForUser(db, projectId, userId);
   if (!project) {
     return NextResponse.json({ error: "no access to this project" }, { status: 403 });
   }

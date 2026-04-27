@@ -6,12 +6,21 @@ import { ZodError, z } from "zod";
 import { auth } from "@/server/auth";
 import { db } from "@/server/db";
 import { logger } from "@/server/logger";
+import { projectForUser } from "@/server/projects/access";
+import type { SettingKey, SettingValue } from "@/server/settings/catalog";
 import { loadGlobalSetting } from "@/server/settings/effective";
 
 export type Context = {
   session: Session | null;
   db: typeof db;
   log: typeof logger;
+  /**
+   * Per-request memo for global Settings reads. tRPC batches multiple
+   * procedures through a single createContext() call, so any middleware
+   * (e.g. the read-only gate that runs on every mutation) hits the DB once
+   * per HTTP request instead of once per procedure.
+   */
+  globalSettings: Map<SettingKey, unknown>;
 };
 
 export async function createContext(): Promise<Context> {
@@ -20,7 +29,20 @@ export async function createContext(): Promise<Context> {
     session,
     db,
     log: logger,
+    globalSettings: new Map(),
   };
+}
+
+async function getGlobalSettingCached<K extends SettingKey>(
+  ctx: Context,
+  key: K,
+): Promise<SettingValue<K>> {
+  if (ctx.globalSettings.has(key)) {
+    return ctx.globalSettings.get(key) as SettingValue<K>;
+  }
+  const value = await loadGlobalSetting(ctx.db, key);
+  ctx.globalSettings.set(key, value);
+  return value;
 }
 
 const t = initTRPC.context<Context>().create({
@@ -60,11 +82,11 @@ export const protectedProcedure = t.procedure.use(requireSession);
 
 /**
  * System-wide read-only gate. Reads the `app.read-only` global Setting on
- * every mutation and refuses if it's on. Cheap (one indexed query) — if it
- * shows up in profiles, layer a per-request memoizer in `createContext`.
+ * every mutation and refuses if it's on. Backed by `ctx.globalSettings` so
+ * batched mutations within one HTTP request only query the table once.
  */
 const enforceReadWrite = t.middleware(async ({ ctx, next }) => {
-  const readOnly = await loadGlobalSetting(ctx.db, "app.read-only");
+  const readOnly = await getGlobalSettingCached(ctx, "app.read-only");
   if (readOnly) {
     throw new TRPCError({
       code: "FORBIDDEN",
@@ -106,13 +128,7 @@ const enforceProjectMembership = t.middleware(async ({ ctx, getRawInput, next })
     });
   }
 
-  const project = await ctx.db.project.findFirst({
-    where: {
-      id: parsed.data.projectId,
-      archivedAt: null,
-      OR: [{ ownerUserId: userId }, { memberships: { some: { userId } } }],
-    },
-  });
+  const project = await projectForUser(ctx.db, parsed.data.projectId, userId);
   if (!project) {
     throw new TRPCError({
       code: "FORBIDDEN",

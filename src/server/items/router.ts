@@ -363,27 +363,31 @@ export const itemsRouter = router({
     }
 
     const comments = await provider.getComments(cached.providerItemId);
-    for (const c of comments) {
-      await ctx.db.comment.upsert({
-        where: {
-          itemId_providerCommentId: {
-            itemId: upserted.id,
-            providerCommentId: c.id,
-          },
-        },
-        create: {
-          itemId: upserted.id,
-          providerCommentId: c.id,
-          author: c.author,
-          bodyMd: c.bodyMd,
-          createdAt: c.createdAt,
-        },
-        update: {
-          author: c.author,
-          bodyMd: c.bodyMd,
-          createdAt: c.createdAt,
-        },
-      });
+    if (comments.length > 0) {
+      await ctx.db.$transaction(
+        comments.map((c) =>
+          ctx.db.comment.upsert({
+            where: {
+              itemId_providerCommentId: {
+                itemId: upserted.id,
+                providerCommentId: c.id,
+              },
+            },
+            create: {
+              itemId: upserted.id,
+              providerCommentId: c.id,
+              author: c.author,
+              bodyMd: c.bodyMd,
+              createdAt: c.createdAt,
+            },
+            update: {
+              author: c.author,
+              bodyMd: c.bodyMd,
+              createdAt: c.createdAt,
+            },
+          }),
+        ),
+      );
     }
 
     return { commentsCount: comments.length, inboundConversations };

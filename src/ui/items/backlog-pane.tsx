@@ -1,19 +1,14 @@
 "use client";
 
-import { ExternalLink } from "lucide-react";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { ItemKind, StateBucket } from "@/core/types";
 import { metaLabelFaintClass } from "@/lib/form-classes";
-import { displayTag, formatKind } from "@/lib/format";
 import { useRecentItemIds } from "@/lib/recent-items";
-import { freshnessTone } from "@/lib/staleness";
 import { trpc } from "@/lib/trpc-client";
 import { cn } from "@/lib/utils";
-import { CreateItemForm } from "@/ui/items/create-item-form";
-import { FreshnessStamp } from "@/ui/items/freshness";
-import { StatePill } from "@/ui/items/state-pill";
+import { FilterBar } from "@/ui/items/filter-bar";
+import { EmptyMessage, ItemRow, type ListItem, PinnedRow } from "@/ui/items/item-row";
 
 const KINDS: Array<ItemKind | "all"> = ["all", "epic", "feature", "story", "task", "bug"];
 
@@ -127,126 +122,23 @@ export function BacklogPane({
     });
   }, [data, kind, activeTag, debouncedQuery]);
 
-  const tagCollapseLimit = maxVisibleTags;
-
   return (
     <div className="flex h-full flex-col bg-bg">
-      <div className="flex flex-col gap-2 border-b border-border p-3">
-        <div className="flex items-center gap-2">
-          <input
-            type="search"
-            placeholder="Filter by title, id, tag…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="min-w-0 flex-1 rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-fg placeholder:text-fg-faint focus:border-accent focus:outline-none"
-          />
-          <CreateItemForm projectId={projectId} />
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          {visibleKinds.length > 2 &&
-            visibleKinds.map((k) => (
-              <button
-                type="button"
-                key={k}
-                onClick={() => setKind(k)}
-                className={cn(
-                  "rounded-md px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition-colors",
-                  kind === k ? "bg-fg text-bg" : "text-fg-muted hover:bg-surface-alt",
-                )}
-              >
-                {k === "all" ? "All" : formatKind(k)}
-              </button>
-            ))}
-          <label
-            className={cn(
-              "flex items-center gap-1",
-              metaLabelFaintClass,
-              visibleKinds.length > 2 && "ml-auto",
-            )}
-          >
-            <input
-              type="checkbox"
-              checked={showArchived}
-              onChange={(e) => setShowArchived(e.target.checked)}
-              className="accent-accent"
-            />
-            Archived
-          </label>
-        </div>
-        <div className="flex flex-wrap items-center gap-1">
-          {(["open", "closed", "all"] as StateBucket[]).map((b) => (
-            <button
-              type="button"
-              key={b}
-              onClick={() => setBucket(b)}
-              className={cn(
-                "rounded px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider",
-                bucket === b ? "bg-accent text-accent-fg" : "text-fg-muted hover:bg-surface-alt",
-              )}
-              title={
-                b === "open"
-                  ? "new, active, blocked, needs info"
-                  : b === "closed"
-                    ? "resolved, closed"
-                    : "every state"
-              }
-            >
-              {b === "open" ? "Open" : b === "closed" ? "Closed" : "All states"}
-            </button>
-          ))}
-        </div>
-        {tagCounts.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1">
-            <button
-              type="button"
-              onClick={() => setActiveTag(null)}
-              className={cn(
-                "rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition-colors",
-                activeTag === null ? "bg-fg text-bg" : "text-fg-faint hover:bg-surface-alt",
-              )}
-            >
-              Any tag
-            </button>
-            {(tagsExpanded ? tagCounts : tagCounts.slice(0, tagCollapseLimit)).map(([t, n]) => {
-              const label = displayTag(t);
-              const selected = activeTag === t;
-              return (
-                <button
-                  type="button"
-                  key={t}
-                  onClick={() => setActiveTag(selected ? null : t)}
-                  className={cn(
-                    "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[10px] lowercase tracking-wide transition-colors",
-                    selected
-                      ? "bg-accent text-accent-fg"
-                      : "bg-surface-alt text-fg-muted hover:bg-surface",
-                  )}
-                  title={`${t} — ${n} item${n === 1 ? "" : "s"}`}
-                >
-                  <span>{label}</span>
-                  <span
-                    className={cn(
-                      "text-[9px] tabular-nums",
-                      selected ? "text-accent-fg/75" : "text-fg-faint",
-                    )}
-                  >
-                    {n}
-                  </span>
-                </button>
-              );
-            })}
-            {tagCounts.length > tagCollapseLimit && (
-              <button
-                type="button"
-                onClick={() => setTagsExpanded((v) => !v)}
-                className="rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-faint hover:bg-surface-alt"
-              >
-                {tagsExpanded ? "Show less" : `+${tagCounts.length - tagCollapseLimit} more`}
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+      <FilterBar
+        projectId={projectId}
+        state={{ bucket, showArchived, kind, activeTag, query, tagsExpanded }}
+        handlers={{
+          setBucket,
+          setShowArchived,
+          setKind,
+          setActiveTag,
+          setQuery,
+          setTagsExpanded,
+        }}
+        visibleKinds={visibleKinds}
+        tagCounts={tagCounts}
+        tagCollapseLimit={maxVisibleTags}
+      />
 
       {recentItems.length > 0 && (
         <div className="border-b border-border bg-surface">
@@ -304,142 +196,6 @@ export function BacklogPane({
           ))
         )}
       </div>
-    </div>
-  );
-}
-
-type ListItem = {
-  id: string;
-  providerItemId: string;
-  kind: string;
-  title: string;
-  state: string;
-  assignee: string | null;
-  tags: string[];
-  url: string | null;
-  updatedAt: Date;
-};
-
-function ItemRow({
-  projectId,
-  item,
-  pinned,
-  selected,
-  staleThresholdDays,
-  maxVisibleTags,
-}: {
-  projectId: string;
-  item: ListItem;
-  pinned: boolean;
-  selected: boolean;
-  staleThresholdDays: number | null;
-  maxVisibleTags: number;
-}) {
-  const tags = item.tags ?? [];
-  const shownTags = tags.slice(0, maxVisibleTags);
-  const extraTags = tags.length - shownTags.length;
-  const hasMeta = Boolean(item.assignee) || tags.length > 0;
-  const tone = freshnessTone(item.updatedAt, staleThresholdDays);
-
-  return (
-    <div className="group/row relative border-b border-border">
-      <Link
-        href={`/projects/${projectId}/items/${item.id}`}
-        className={cn(
-          "flex w-full flex-col gap-1 px-3 py-2 text-left transition-colors",
-          "hover:bg-surface-alt",
-          selected && "bg-surface-alt",
-          tone === "warning" && "bg-warning-bg/40 hover:bg-warning-bg/70",
-          tone === "stale" && "bg-danger-bg/40 hover:bg-danger-bg/70",
-        )}
-      >
-        <div className="flex items-center gap-2 text-xs">
-          <span className={metaLabelFaintClass}>{formatKind(item.kind)}</span>
-          <StatePill state={item.state} />
-          {pinned && (
-            <span className="font-mono text-[10px] text-accent" title="Pinned">
-              ●
-            </span>
-          )}
-          <span className="ml-auto flex items-center gap-2 font-mono text-[10px] text-fg-faint">
-            <FreshnessStamp updatedAt={item.updatedAt} thresholdDays={staleThresholdDays} />
-            <span>{item.providerItemId}</span>
-          </span>
-        </div>
-        <div className="line-clamp-2 text-sm text-fg">{item.title}</div>
-        {hasMeta && (
-          <div className="flex flex-wrap items-center gap-1.5 font-mono text-[10px] text-fg-faint">
-            {item.assignee && <span className="truncate">{item.assignee}</span>}
-            {item.assignee && tags.length > 0 && (
-              <span aria-hidden className="text-fg-faint">
-                ·
-              </span>
-            )}
-            {shownTags.map((t) => (
-              <span
-                key={t}
-                title={t}
-                className="rounded bg-surface-alt px-1.5 py-0.5 text-fg-muted"
-              >
-                {displayTag(t)}
-              </span>
-            ))}
-            {extraTags > 0 && <span className="text-fg-faint">+{extraTags}</span>}
-          </div>
-        )}
-      </Link>
-      {item.url ? (
-        <a
-          href={item.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          title="Open in provider (new tab)"
-          aria-label={`Open ${item.providerItemId} in a new tab`}
-          className="absolute right-1.5 top-1.5 rounded bg-surface p-1 text-fg-faint opacity-0 transition-opacity hover:text-fg focus-visible:opacity-100 group-hover/row:opacity-100"
-        >
-          <ExternalLink aria-hidden="true" className="h-3 w-3" />
-        </a>
-      ) : null}
-    </div>
-  );
-}
-
-function PinnedRow({
-  projectId,
-  item,
-  selected,
-}: {
-  projectId: string;
-  item: { id: string; providerItemId: string; title: string; state: string; kind: string };
-  selected: boolean;
-}) {
-  return (
-    <Link
-      href={`/projects/${projectId}/items/${item.id}`}
-      className={cn(
-        "flex items-center gap-2 border-b border-border px-3 py-1.5 text-xs transition-colors",
-        "hover:bg-surface-alt",
-        selected && "bg-surface-alt",
-      )}
-    >
-      <span className={metaLabelFaintClass}>{formatKind(item.kind)}</span>
-      <StatePill state={item.state} />
-      <span className="flex-1 truncate text-fg">{item.title}</span>
-      <span className="font-mono text-[10px] text-fg-faint">{item.providerItemId}</span>
-    </Link>
-  );
-}
-
-function EmptyMessage({ text, tone }: { text: string; tone?: "error" }) {
-  return (
-    <div
-      className={cn(
-        "flex h-full items-center justify-center p-6 text-center text-sm",
-        tone === "error" ? "text-danger" : "text-fg-faint",
-      )}
-    >
-      {text}
     </div>
   );
 }

@@ -4,7 +4,6 @@ import { badgeClass, emptyStateClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
 import { useAutoRefreshIntervalMs } from "@/lib/use-auto-refresh";
 import { LlmProviderActions } from "@/ui/settings/llm-provider-actions";
-import { LlmProviderEditForm } from "@/ui/settings/llm-provider-edit-form";
 import { LlmProviderForm } from "@/ui/settings/llm-provider-form";
 
 /**
@@ -61,7 +60,8 @@ export function LlmProvidersPanel() {
                 className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4 shadow-sm"
               >
                 {editingId === row.id ? (
-                  <LlmProviderEditForm
+                  <LlmProviderForm
+                    mode="edit"
                     initial={{
                       id: row.id,
                       kind: row.kind,
@@ -115,7 +115,7 @@ export function LlmProvidersPanel() {
 
       <div aria-hidden="true" className="my-4 h-px bg-border" />
 
-      <LlmProviderForm canBeDefault={noDefaultYet} />
+      <LlmProviderForm mode="create" canBeDefault={noDefaultYet} />
     </div>
   );
 }

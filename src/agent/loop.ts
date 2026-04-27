@@ -151,21 +151,20 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
   }
 
   // 3. Build prompt prefix and tool registry. Both must be byte-stable
-  //    across turns for the prompt cache to hit.
-  const itemSummary = await loadItemSummary(db, conv);
-  const itemKind = await loadItemKind(db, conv);
-  const systemPrefix = buildSystemPrefix({ itemKind, itemSummary });
+  //    across turns for the prompt cache to hit. One DB roundtrip pulls
+  //    every Item field we need (summary text + kind + providerItemId).
+  const itemContext = await loadItemContext(db, conv);
+  const systemPrefix = buildSystemPrefix({
+    itemKind: itemContext.kind,
+    itemSummary: itemContext.summary,
+  });
 
   const toolCtx: ToolContext = {
     db,
     projectId: conv.projectId,
     userId,
     itemId: conv.itemId,
-    providerItemId: conv.itemId
-      ? ((
-          await db.item.findUnique({ where: { id: conv.itemId }, select: { providerItemId: true } })
-        )?.providerItemId ?? null)
-      : null,
+    providerItemId: itemContext.providerItemId,
   };
   const tools = await buildToolRegistry(toolCtx, { readOnly });
 
@@ -468,8 +467,16 @@ async function loadTranscriptForLlm(db: Database, conversationId: string): Promi
   return out;
 }
 
-async function loadItemSummary(db: Database, conv: Conversation): Promise<string | null> {
-  if (!conv.itemId) return null;
+type ItemContext = {
+  summary: string | null;
+  kind: ItemKind | null;
+  providerItemId: string | null;
+};
+
+async function loadItemContext(db: Database, conv: Conversation): Promise<ItemContext> {
+  if (!conv.itemId) {
+    return { summary: null, kind: null, providerItemId: null };
+  }
   const item = await db.item.findUnique({
     where: { id: conv.itemId },
     select: {
@@ -480,7 +487,7 @@ async function loadItemSummary(db: Database, conv: Conversation): Promise<string
       assignee: true,
     },
   });
-  if (!item) return null;
+  if (!item) return { summary: null, kind: null, providerItemId: null };
   const lines = [
     `id: ${item.providerItemId}`,
     `kind: ${item.kind}`,
@@ -488,15 +495,9 @@ async function loadItemSummary(db: Database, conv: Conversation): Promise<string
     `state: ${item.state}`,
     item.assignee ? `assignee: ${item.assignee}` : "assignee: (unassigned)",
   ];
-  return lines.join("\n");
-}
-
-async function loadItemKind(db: Database, conv: Conversation): Promise<ItemKind | null> {
-  if (!conv.itemId) return null;
-  const item = await db.item.findUnique({
-    where: { id: conv.itemId },
-    select: { kind: true },
-  });
-  if (!item) return null;
-  return item.kind as ItemKind;
+  return {
+    summary: lines.join("\n"),
+    kind: item.kind as ItemKind,
+    providerItemId: item.providerItemId,
+  };
 }

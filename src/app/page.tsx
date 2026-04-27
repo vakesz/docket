@@ -31,31 +31,28 @@ export default async function Home() {
     select: { defaultProjectId: true },
   });
 
-  const defaultId = me?.defaultProjectId
-    ? (
-        await db.project.findFirst({
-          where: {
-            id: me.defaultProjectId,
-            archivedAt: null,
-            OR: [{ ownerUserId: userId }, { memberships: { some: { userId } } }],
-          },
+  // Run the default-project access check and the most-recent-touched
+  // fallback in parallel. The fallback only matters when the default is
+  // missing or stale, but speculating on it shaves a roundtrip in that
+  // path and is a no-op cost when the default redirect fires.
+  const accessOr = [{ ownerUserId: userId }, { memberships: { some: { userId } } }];
+  const [defaultProject, fallback] = await Promise.all([
+    me?.defaultProjectId
+      ? db.project.findFirst({
+          where: { id: me.defaultProjectId, archivedAt: null, OR: accessOr },
           select: { id: true },
         })
-      )?.id
-    : null;
+      : Promise.resolve(null),
+    db.project.findFirst({
+      where: { archivedAt: null, OR: accessOr },
+      orderBy: [{ updatedAt: "desc" }],
+      select: { id: true },
+    }),
+  ]);
 
-  if (defaultId) {
-    redirect(`/projects/${defaultId}/items`);
+  if (defaultProject?.id) {
+    redirect(`/projects/${defaultProject.id}/items`);
   }
-
-  const fallback = await db.project.findFirst({
-    where: {
-      archivedAt: null,
-      OR: [{ ownerUserId: userId }, { memberships: { some: { userId } } }],
-    },
-    orderBy: [{ updatedAt: "desc" }],
-    select: { id: true },
-  });
   if (fallback) {
     redirect(`/projects/${fallback.id}/items`);
   }

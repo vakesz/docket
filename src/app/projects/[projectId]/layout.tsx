@@ -28,28 +28,34 @@ export default async function ProjectLayout({
   const { projectId } = await params;
   const trpc = await createCaller();
 
+  // All five fetches are independent of each other, so they fan out at
+  // once. `projects.get` is the only one that can short-circuit with a
+  // 404; the rest do unnecessary work in that error path, which is fine
+  // since the happy path (project visible) is the common case.
   let project: Awaited<ReturnType<typeof trpc.projects.get>>;
+  let projects: Awaited<ReturnType<typeof trpc.projects.list>>;
+  let readOnly: Awaited<ReturnType<typeof loadGlobalSetting<"app.read-only">>>;
+  let pendingProposals: Awaited<ReturnType<typeof trpc.proposals.list>>;
+  let syncCursor: { watermark: Date | null; lastFullSyncAt: Date | null; updatedAt: Date } | null;
   try {
-    project = await trpc.projects.get({ projectId });
+    [project, projects, readOnly, pendingProposals, syncCursor] = await Promise.all([
+      trpc.projects.get({ projectId }),
+      trpc.projects.list(),
+      loadGlobalSetting(db, "app.read-only"),
+      trpc.proposals.list({ projectId, status: "pending", limit: 100 }),
+      db.syncCursor.findUnique({
+        where: { projectId },
+        select: { watermark: true, lastFullSyncAt: true, updatedAt: true },
+      }),
+    ]);
   } catch (err) {
     if (err instanceof TRPCError && (err.code === "FORBIDDEN" || err.code === "NOT_FOUND")) {
       notFound();
     }
     throw err;
   }
-
-  const projects = await trpc.projects.list();
   const userLabel = session.user.email ?? session.user.name ?? "you";
   const userImage = session.user.image ?? null;
-
-  const [readOnly, pendingProposals, syncCursor] = await Promise.all([
-    loadGlobalSetting(db, "app.read-only"),
-    trpc.proposals.list({ projectId, status: "pending", limit: 100 }),
-    db.syncCursor.findUnique({
-      where: { projectId },
-      select: { watermark: true, lastFullSyncAt: true, updatedAt: true },
-    }),
-  ]);
 
   // Pick the most recent of (incremental watermark, full-sync timestamp,
   // row-update timestamp). The cursor row's updatedAt covers cases where a
