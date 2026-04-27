@@ -2,6 +2,8 @@ import { TRPCError } from "@trpc/server";
 import { notFound, redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { auth } from "@/server/auth";
+import { db } from "@/server/db";
+import { loadGlobalSetting } from "@/server/settings/effective";
 import { requireSetupComplete } from "@/server/setup/guard";
 import { createCaller } from "@/server/trpc-caller";
 import { StatusFooter } from "@/ui/shell/status-footer";
@@ -36,6 +38,22 @@ export default async function ProjectLayout({
   const projects = await trpc.projects.list();
   const userLabel = session.user.email ?? session.user.name ?? "you";
 
+  const [readOnly, pendingProposals, syncCursor] = await Promise.all([
+    loadGlobalSetting(db, "app.read-only"),
+    trpc.proposals.list({ projectId, status: "pending", limit: 100 }),
+    db.syncCursor.findUnique({
+      where: { projectId },
+      select: { watermark: true, lastFullSyncAt: true, updatedAt: true },
+    }),
+  ]);
+
+  // Pick the most recent of (incremental watermark, full-sync timestamp,
+  // row-update timestamp). The cursor row's updatedAt covers cases where a
+  // sync ran but didn't bump either of the two payload columns.
+  const lastSyncAt = syncCursor
+    ? mostRecent([syncCursor.watermark, syncCursor.lastFullSyncAt, syncCursor.updatedAt])
+    : null;
+
   return (
     <div className="flex min-h-screen flex-col bg-bg text-fg">
       <TopBar
@@ -43,10 +61,23 @@ export default async function ProjectLayout({
         currentProjectId={project.id}
         userLabel={userLabel}
       />
-      <main className="flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-5xl px-6 py-8">{children}</div>
-      </main>
-      <StatusFooter projectName={project.name} providerKind={project.providerKind} />
+      <main className="flex flex-1 flex-col overflow-hidden">{children}</main>
+      <StatusFooter
+        projectName={project.name}
+        providerKind={project.providerKind}
+        lastSyncAt={lastSyncAt}
+        pendingProposals={pendingProposals.length}
+        readOnly={readOnly}
+      />
     </div>
   );
+}
+
+function mostRecent(dates: Array<Date | null | undefined>): Date | null {
+  let best: Date | null = null;
+  for (const d of dates) {
+    if (!d) continue;
+    if (!best || d.getTime() > best.getTime()) best = d;
+  }
+  return best;
 }

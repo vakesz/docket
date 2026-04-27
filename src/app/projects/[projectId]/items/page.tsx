@@ -1,31 +1,25 @@
 import { TRPCError } from "@trpc/server";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createCaller } from "@/server/trpc-caller";
 import { SyncButton } from "@/ui/items/sync-button";
 import { ViewBar } from "@/ui/views/view-bar";
-import { WatchlistPane } from "@/ui/watchlist/watchlist-pane";
 
-export default async function ItemsListPage({
+/**
+ * Renders into the *middle* slot of the items shell — the BacklogPane is
+ * always visible on the left via the surrounding `layout.tsx`. With no
+ * item selected, this is the spot for project-wide controls (sync, saved
+ * views) and a friendly nudge to pick something from the backlog.
+ */
+export default async function ItemsLandingPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ projectId: string }>;
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { projectId } = await params;
-  const search = await searchParams;
-  const bucketParam = typeof search.bucket === "string" ? search.bucket : "open";
-  const bucket =
-    bucketParam === "open" || bucketParam === "closed" || bucketParam === "all"
-      ? bucketParam
-      : "open";
-  const viewId = typeof search.viewId === "string" && search.viewId ? search.viewId : undefined;
 
   const trpc = await createCaller();
-  let items: Awaited<ReturnType<typeof trpc.items.list>>;
   try {
-    items = await trpc.items.list({ projectId, bucket, viewId });
+    await trpc.projects.get({ projectId });
   } catch (err) {
     if (err instanceof TRPCError && (err.code === "FORBIDDEN" || err.code === "NOT_FOUND")) {
       notFound();
@@ -34,50 +28,20 @@ export default async function ItemsListPage({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-6 md:grid-cols-[1fr_16rem]">
-      <div className="flex flex-col gap-4">
+    <div className="flex h-full flex-col overflow-y-auto bg-bg p-6">
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
         <div className="flex items-center justify-between gap-4">
-          <h2 className="text-xl font-semibold tracking-tight">Items</h2>
+          <h2 className="text-lg font-semibold tracking-tight">Items</h2>
           <div className="flex items-center gap-2">
             <SyncButton projectId={projectId} mode="incremental" />
             <SyncButton projectId={projectId} mode="full" />
           </div>
         </div>
-
         <ViewBar projectId={projectId} />
-
-        {items.length === 0 ? (
-          <p className="rounded-md border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-500 dark:border-zinc-700">
-            No items in the cache yet — click <span className="font-medium">Refresh</span> to sync
-            from the provider.
-          </p>
-        ) : (
-          <ul className="flex flex-col gap-1">
-            {items.map((it) => (
-              <li
-                key={it.id}
-                className="rounded-md border border-zinc-200 p-3 hover:border-zinc-400 dark:border-zinc-800 dark:hover:border-zinc-600"
-              >
-                <Link
-                  href={`/projects/${projectId}/items/${it.id}`}
-                  className="flex items-baseline justify-between gap-3"
-                >
-                  <div className="flex-1 truncate">
-                    <span className="text-xs uppercase tracking-wide text-zinc-500">{it.kind}</span>
-                    <span className="ml-2 text-xs text-zinc-400">{it.providerItemId}</span>
-                    <span className="ml-3 font-medium">{it.title}</span>
-                  </div>
-                  <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-xs uppercase tracking-wide text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
-                    {it.state}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
+        <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-fg-faint">
+          Pick an item from the backlog on the left, or sync from the provider to populate it.
+        </p>
       </div>
-
-      <WatchlistPane projectId={projectId} />
     </div>
   );
 }

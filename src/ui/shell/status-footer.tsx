@@ -5,13 +5,10 @@ import { formatRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 /**
- * Compact status bar pinned to the bottom of the workspace.
- * Shows browser connectivity, the active project, last sync (when known),
- * and a placeholder for read-only / pending-proposal indicators.
- *
- * TODO(port): wire `lastSyncAt`, `pendingProposals`, and `readOnly` from
- * tRPC once the corresponding endpoints are surfaced. For Phase 1 the
- * caller passes them as static props.
+ * Compact status bar pinned to the bottom of the workspace. Shows browser
+ * connectivity, the active project, last sync, pending proposals, and
+ * read-only mode. The caller (project layout) hands in the server-side
+ * values; only `online` and the relative-time tick are client state.
  */
 export function StatusFooter({
   projectName,

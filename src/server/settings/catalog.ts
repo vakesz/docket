@@ -33,6 +33,7 @@ export type SettingDef<S extends z.ZodTypeAny> = {
 
 const ThemeSchema = z.enum(["light", "dark", "system"]);
 const BoolSchema = z.boolean();
+const PositiveIntSchema = z.number().int().min(0).max(3650);
 
 export const SETTINGS_CATALOG = {
   "ui.theme": {
@@ -69,6 +70,15 @@ export const SETTINGS_CATALOG = {
     label: "Initial setup complete",
     description:
       "Sticky bit flipped on the first request that observes at least one LLM provider and at least one OAuth provider. Middleware uses it to decide whether to redirect to /admin/setup. Manually toggle off only when reverting after a destructive admin operation.",
+  },
+  "items.stale-after-days": {
+    key: "items.stale-after-days",
+    scope: "global",
+    schema: PositiveIntSchema,
+    default: 7,
+    label: "Stale-after threshold (days)",
+    description:
+      "Backlog rows tint amber once an item has been untouched this long, and red at 2x. Set to 0 to disable the freshness tint entirely.",
   },
 } as const satisfies Record<string, SettingDef<z.ZodTypeAny>>;
 

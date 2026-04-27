@@ -21,7 +21,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 overflow-y-auto px-6 py-8">
       <div className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold tracking-tight">{project.name}</h1>
         {project.description ? (

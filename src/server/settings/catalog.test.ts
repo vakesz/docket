@@ -59,4 +59,12 @@ describe("settings catalog", () => {
     expect(decodeSettingValue("setup.complete", null)).toBe(false);
     expect(decodeSettingValue("setup.complete", JSON.stringify(true))).toBe(true);
   });
+
+  it("items.stale-after-days accepts non-negative ints, rejects negative or fractional", () => {
+    expect(decodeSettingValue("items.stale-after-days", null)).toBe(7);
+    expect(decodeSettingValue("items.stale-after-days", JSON.stringify(0))).toBe(0);
+    expect(decodeSettingValue("items.stale-after-days", JSON.stringify(30))).toBe(30);
+    expect(decodeSettingValue("items.stale-after-days", JSON.stringify(-1))).toBe(7);
+    expect(decodeSettingValue("items.stale-after-days", JSON.stringify(1.5))).toBe(7);
+  });
 });
