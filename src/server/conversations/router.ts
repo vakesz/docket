@@ -18,11 +18,6 @@ import "server-only";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
-  compactConversation,
-  getDecision,
-  loadCompactionSettings,
-} from "@/server/conversations/compaction";
-import {
   appendMessage,
   archiveConversation,
   createConversation,
@@ -136,34 +131,6 @@ export const conversationsRouter = router({
     .mutation(async ({ ctx, input }) => {
       await ensureOwn(ctx, input.conversationId, ctx.projectId);
       return archiveConversation(ctx.db, input.conversationId);
-    }),
-
-  /**
-   * Compaction status for the chat-pane "near threshold" badge. Cheap query
-   * — token count is a char-based heuristic, no LLM call.
-   */
-  compactionStatus: projectScopedProcedure.input(ConversationRef).query(async ({ ctx, input }) => {
-    await ensureOwn(ctx, input.conversationId, ctx.projectId);
-    return getDecision(ctx.db, ctx.projectId, input.conversationId);
-  }),
-
-  /**
-   * Manual compaction trigger. Always available regardless of the
-   * `llm.compaction.enabled` toggle so users can trim a runaway thread on
-   * demand. Strategy + keep-recent-turns still come from project settings.
-   */
-  compact: projectScopedMutationProcedure
-    .input(ConversationRef)
-    .mutation(async ({ ctx, input }) => {
-      await ensureOwn(ctx, input.conversationId, ctx.projectId);
-      const settings = await loadCompactionSettings(ctx.db, ctx.projectId);
-      // For manual compaction, force the threshold to 0 so the call always
-      // runs; auto-compaction in the loop respects the configured value.
-      const result = await compactConversation(ctx.db, input.conversationId, {
-        ...settings,
-        tokenThreshold: 0,
-      });
-      return result;
     }),
 
   /**

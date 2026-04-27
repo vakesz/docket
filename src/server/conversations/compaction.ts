@@ -10,8 +10,6 @@
  * - The settings catalog exposes per-project knobs under `llm.compaction.*`.
  * - The agent loop checks `shouldCompact` at turn start and calls
  *   `compactConversation` when it returns true.
- * - The conversations router exposes a manual `compact` mutation so the
- *   user can trigger it from the chat-pane header on demand.
  *
  * On-disk model:
  * - Each `Message` has `compacted: boolean`. The live transcript filters
@@ -74,10 +72,6 @@ export type CompactionDecision = {
   utilization: number;
 };
 
-/**
- * Pure decision helper — useful for the chat pane's "near threshold" badge
- * even when the user hasn't enabled auto-compaction yet.
- */
 export function evaluate(
   messages: readonly Message[],
   settings: CompactionSettings,
@@ -89,33 +83,6 @@ export function evaluate(
     estimatedTokens,
     utilization,
   };
-}
-
-export async function getDecision(
-  db: Database,
-  projectId: string,
-  conversationId: string,
-): Promise<CompactionDecision & { settings: CompactionSettings }> {
-  const settings = await loadCompactionSettings(db, projectId);
-  const messages = await db.message.findMany({
-    where: { conversationId, compacted: false },
-    orderBy: { createdAt: "asc" },
-    select: {
-      id: true,
-      conversationId: true,
-      role: true,
-      content: true,
-      toolCallsJson: true,
-      toolCallId: true,
-      toolName: true,
-      compacted: true,
-      pending: true,
-      tokensIn: true,
-      tokensOut: true,
-      createdAt: true,
-    },
-  });
-  return { ...evaluate(messages, settings), settings };
 }
 
 export type CompactionResult = {

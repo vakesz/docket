@@ -89,22 +89,6 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
       resetStream();
     },
   });
-  const compactionStatus = trpc.conversations.compactionStatus.useQuery(
-    { projectId, conversationId: conversationId ?? "" },
-    { enabled: conversationId !== null, staleTime: 0 },
-  );
-  const compact = trpc.conversations.compact.useMutation({
-    onSuccess: async () => {
-      await Promise.all([
-        utils.conversations.get.invalidate({ projectId, conversationId: conversationId ?? "" }),
-        utils.conversations.compactionStatus.invalidate({
-          projectId,
-          conversationId: conversationId ?? "",
-        }),
-      ]);
-    },
-  });
-
   const settings = trpc.settings.list.useQuery();
   const sendOnEnter = useMemo(() => {
     const row = settings.data?.find((r) => r.key === "chat.send-on-enter");
@@ -224,31 +208,7 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
             {(conversation.costCents / 100).toFixed(3)}
           </span>
         )}
-        {conversationId && compactionStatus.data && compactionStatus.data.utilization >= 0.7 && (
-          <span
-            className={cn(
-              "rounded-full border px-2 py-0.5 font-mono text-[10px]",
-              compactionStatus.data.utilization >= 1
-                ? "border-danger/40 bg-danger-bg text-danger-fg"
-                : "border-warning/40 bg-warning-bg text-warning-fg",
-            )}
-            title={`Estimated transcript ≈ ${compactionStatus.data.estimatedTokens} tokens (threshold ${compactionStatus.data.settings.tokenThreshold})`}
-          >
-            {Math.round(compactionStatus.data.utilization * 100)}% of compaction threshold
-          </span>
-        )}
         <div className="ml-auto flex items-center gap-2">
-          {conversationId && (
-            <button
-              type="button"
-              onClick={() => compact.mutate({ projectId, conversationId })}
-              disabled={compact.isPending || inFlight}
-              className={cn(microCapsButtonClass, "disabled:opacity-50")}
-              title="Fold older messages into a summary so the next prompt fits"
-            >
-              {compact.isPending ? "Compacting…" : "Compact"}
-            </button>
-          )}
           <button
             type="button"
             onClick={() => void startNewThread()}
