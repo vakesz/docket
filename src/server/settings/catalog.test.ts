@@ -25,11 +25,11 @@ describe("settings catalog", () => {
   });
 
   it("decode falls back to default on bad JSON", () => {
-    expect(decodeSettingValue("ui.theme", "{not json")).toBe("system");
+    expect(decodeSettingValue("chat.send-on-enter", "{not json")).toBe(true);
   });
 
   it("decode falls back to default on schema mismatch", () => {
-    expect(decodeSettingValue("ui.theme", JSON.stringify("solarized"))).toBe("system");
+    expect(decodeSettingValue("chat.send-on-enter", JSON.stringify("nope"))).toBe(true);
   });
 
   it("decode returns default when raw is null (no row)", () => {
@@ -37,7 +37,7 @@ describe("settings catalog", () => {
   });
 
   it("encode rejects values that fail validation", () => {
-    expect(() => encodeSettingValue("ui.theme", "solarized" as never)).toThrow();
+    expect(() => encodeSettingValue("chat.send-on-enter", "yes" as never)).toThrow();
   });
 
   it("getSettingDef throws on unknown keys", () => {

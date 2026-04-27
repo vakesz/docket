@@ -31,19 +31,14 @@ export type SettingDef<S extends z.ZodTypeAny> = {
   description: string;
 };
 
-const ThemeSchema = z.enum(["light", "dark", "system"]);
 const BoolSchema = z.boolean();
 const PositiveIntSchema = z.number().int().min(0).max(3650);
 
+// Theme is intentionally browser-local (see `src/lib/theme.ts` +
+// ThemePicker in the top bar) — same pattern main uses. Keeping it out
+// of the catalog avoids a split-brain where the DB row says "light" while
+// the user's browser is on "rose-pine-moon".
 export const SETTINGS_CATALOG = {
-  "ui.theme": {
-    key: "ui.theme",
-    scope: "user",
-    schema: ThemeSchema,
-    default: "system",
-    label: "Theme",
-    description: "Light, dark, or follow the OS preference.",
-  },
   "chat.send-on-enter": {
     key: "chat.send-on-enter",
     scope: "user",

@@ -12,16 +12,15 @@ export default async function SettingsPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-2xl flex-col gap-6 p-8">
+    <main className="mx-auto flex min-h-screen max-w-2xl flex-col gap-6 bg-bg p-8 text-fg">
       <header className="flex items-baseline justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-          <p className="text-sm text-zinc-500">Per-user preferences. Saved as you change them.</p>
+          <p className="text-sm text-fg-muted">
+            Per-user preferences. Saved as you change them. Theme lives in the top bar.
+          </p>
         </div>
-        <Link
-          href="/"
-          className="text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
-        >
+        <Link href="/" className="text-sm text-fg-muted hover:text-fg">
           ← Projects
         </Link>
       </header>
