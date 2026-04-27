@@ -33,6 +33,24 @@ export type SettingDef<S extends z.ZodTypeAny> = {
 
 const BoolSchema = z.boolean();
 const PositiveIntSchema = z.number().int().min(0).max(3650);
+const VisibleChipsSchema = z.number().int().min(0).max(20);
+const BacklogSortSchema = z.enum(["updated", "created", "priority", "title"]);
+const BacklogStateFilterSchema = z.enum(["all", "open", "in_progress", "done"]);
+const BacklogDensitySchema = z.enum(["compact", "cozy"]);
+// IANA tz names go from a couple chars ("UTC") to 30+ ("America/Argentina/ComodRivadavia").
+// 64 is generous and avoids DB-side surprises. Empty string = follow the browser.
+const TimezoneSchema = z.string().max(64);
+const CompactionTokenThresholdSchema = z.number().int().min(1_000).max(500_000);
+const CompactionKeepRecentTurnsSchema = z.number().int().min(2).max(50);
+const CompactionStrategySchema = z.enum(["summary", "drop-tools"]);
+// 0 = retain forever; positive integers cap retention to that many days.
+const AuditRetentionSchema = z.number().int().min(0).max(3650);
+// 0 = no cap; positive integers enforce a monthly spend cap in cents.
+const MonthlyCostCapSchema = z.number().int().min(0).max(10_000_000);
+const CostCapActionSchema = z.enum(["block", "warn"]);
+// 0 = disabled; otherwise a polling interval in seconds. Capped at 1 hour
+// so a stray "999999" can't pin a tab on `setInterval`.
+const AutoRefreshSecondsSchema = z.number().int().min(0).max(3600);
 
 // Theme is intentionally browser-local (see `src/lib/theme.ts` +
 // ThemePicker in the top bar) — same pattern main uses. Keeping it out
@@ -47,6 +65,15 @@ export const SETTINGS_CATALOG = {
     label: "Send chat on Enter",
     description:
       "When on, Enter sends the message and Shift-Enter inserts a newline. When off, the keys swap.",
+  },
+  "items.max-visible-tags": {
+    key: "items.max-visible-tags",
+    scope: "user",
+    schema: VisibleChipsSchema,
+    default: 2,
+    label: "Backlog — max tag chips shown",
+    description:
+      "How many tag chips render inline (on each backlog row, and in the tag-filter bar at the top of the backlog pane) before the rest collapse into a +N badge. Set to 0 to always collapse (just the count, no chips).",
   },
   "app.read-only": {
     key: "app.read-only",
@@ -74,6 +101,113 @@ export const SETTINGS_CATALOG = {
     label: "Stale-after threshold (days)",
     description:
       "Backlog rows tint amber once an item has been untouched this long, and red at 2x. Set to 0 to disable the freshness tint entirely.",
+  },
+  "backlog.default-sort": {
+    key: "backlog.default-sort",
+    scope: "user",
+    schema: BacklogSortSchema,
+    default: "updated",
+    label: "Backlog — default sort",
+    description:
+      "Initial sort order applied when a project's backlog opens. Per-view sort still wins.",
+  },
+  "backlog.default-state-filter": {
+    key: "backlog.default-state-filter",
+    scope: "user",
+    schema: BacklogStateFilterSchema,
+    default: "open",
+    label: "Backlog — default state filter",
+    description: "Initial state-bucket filter applied when the backlog opens.",
+  },
+  "backlog.density": {
+    key: "backlog.density",
+    scope: "user",
+    schema: BacklogDensitySchema,
+    default: "cozy",
+    label: "Backlog — row density",
+    description:
+      "Compact packs more rows on screen with smaller padding; cozy is the default touch-friendly height.",
+  },
+  "display.timezone": {
+    key: "display.timezone",
+    scope: "user",
+    schema: TimezoneSchema,
+    default: "",
+    label: "Display time zone",
+    description:
+      "IANA time-zone name used for relative dates and the staleness tint window (e.g. 'Europe/Stockholm', 'UTC'). Empty falls back to the browser's local zone.",
+  },
+  "llm.compaction.enabled": {
+    key: "llm.compaction.enabled",
+    scope: "project",
+    schema: BoolSchema,
+    default: false,
+    label: "Auto-compact long conversations",
+    description:
+      "When on, conversations whose transcript exceeds the token threshold get summarised before the next agent turn so the prompt fits the context window.",
+  },
+  "llm.compaction.token-threshold": {
+    key: "llm.compaction.token-threshold",
+    scope: "project",
+    schema: CompactionTokenThresholdSchema,
+    default: 60_000,
+    label: "Compaction token threshold",
+    description:
+      "Estimated transcript-token count at which compaction kicks in. The token count is approximate (4 chars ≈ 1 token); pad below your model's hard limit.",
+  },
+  "llm.compaction.keep-recent-turns": {
+    key: "llm.compaction.keep-recent-turns",
+    scope: "project",
+    schema: CompactionKeepRecentTurnsSchema,
+    default: 8,
+    label: "Compaction — recent turns to keep verbatim",
+    description:
+      "How many of the most-recent message turns are preserved as-is. Older turns get folded into the summary.",
+  },
+  "llm.compaction.strategy": {
+    key: "llm.compaction.strategy",
+    scope: "project",
+    schema: CompactionStrategySchema,
+    default: "summary",
+    label: "Compaction strategy",
+    description:
+      "'summary' replaces older turns with a single assistant-generated summary message. 'drop-tools' is cheaper: drop only stale tool-call/result pairs and keep the prose.",
+  },
+  "audit.retention-days": {
+    key: "audit.retention-days",
+    scope: "global",
+    schema: AuditRetentionSchema,
+    default: 365,
+    label: "Audit retention (days)",
+    description:
+      "Audit rows older than this are eligible for pruning by the deployment-admin. 0 disables pruning entirely (rows are retained forever).",
+  },
+  "llm.monthly-cost-cap-cents": {
+    key: "llm.monthly-cost-cap-cents",
+    scope: "global",
+    schema: MonthlyCostCapSchema,
+    default: 0,
+    label: "LLM monthly cost cap (cents)",
+    description:
+      "Hard ceiling on the sum of `Conversation.costCents` accrued in the current calendar month (UTC). 0 disables the cap. Cap is checked before each agent turn and against the action below.",
+  },
+  "ui.auto-refresh-seconds": {
+    key: "ui.auto-refresh-seconds",
+    scope: "user",
+    schema: AutoRefreshSecondsSchema,
+    default: 0,
+    label: "Auto-refresh interval (seconds)",
+    description:
+      "How often the UI re-fetches list views (LLM providers, OAuth providers, and similar dashboards) in the background. 0 disables auto-refresh; manual refetches still work. Maximum 3600 (one hour).",
+  },
+  "llm.cost-cap-action": {
+    key: "llm.cost-cap-action",
+    scope: "global",
+    schema: CostCapActionSchema,
+    default: "warn",
+    label: "Cost-cap action",
+    description:
+      "When the monthly cap is reached: 'warn' lets the turn proceed but surfaces a banner; 'block' refuses agent turns until the cap is raised or the calendar month rolls over.",
   },
 } as const satisfies Record<string, SettingDef<z.ZodTypeAny>>;
 

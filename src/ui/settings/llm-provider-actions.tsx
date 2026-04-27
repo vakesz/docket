@@ -1,6 +1,5 @@
 "use client";
-import { useRouter } from "next/navigation";
-import { xsBorderButtonClass } from "@/lib/form-classes";
+import { accentBadgeClass, xsBorderButtonClass, xsDangerButtonClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
 
 export function LlmProviderActions({
@@ -14,8 +13,8 @@ export function LlmProviderActions({
   enabled: boolean;
   onEdit: () => void;
 }) {
-  const router = useRouter();
-  const refresh = () => router.refresh();
+  const utils = trpc.useUtils();
+  const refresh = () => utils.llmProviders.list.invalidate();
 
   const setDefault = trpc.llmProviders.setDefault.useMutation({ onSuccess: refresh });
   const setEnabled = trpc.llmProviders.setEnabled.useMutation({ onSuccess: refresh });
@@ -35,9 +34,7 @@ export function LlmProviderActions({
           Set default
         </button>
       ) : (
-        <span className="rounded-md bg-accent px-2 py-1 text-xs font-semibold text-accent-fg">
-          default
-        </span>
+        <span className={accentBadgeClass}>default</span>
       )}
       <button type="button" disabled={pending} onClick={onEdit} className={xsBorderButtonClass}>
         Edit
@@ -62,7 +59,7 @@ export function LlmProviderActions({
             del.mutate({ id });
           }
         }}
-        className="inline-flex items-center gap-1 rounded-md border border-danger/40 bg-surface px-2 py-1 text-xs text-danger-fg hover:bg-danger-bg/40 disabled:cursor-not-allowed disabled:opacity-60"
+        className={xsDangerButtonClass}
       >
         Delete
       </button>

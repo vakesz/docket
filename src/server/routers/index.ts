@@ -1,3 +1,4 @@
+import { analyticsRouter } from "@/server/analytics/router";
 import { conversationsRouter } from "@/server/conversations/router";
 import { itemsRouter } from "@/server/items/router";
 import { llmProvidersRouter } from "@/server/llm/router";
@@ -29,6 +30,7 @@ export const appRouter = router({
   views: viewsRouter,
   settings: settingsRouter,
   suggestions: suggestionsRouter,
+  analytics: analyticsRouter,
 });
 
 export type AppRouter = typeof appRouter;

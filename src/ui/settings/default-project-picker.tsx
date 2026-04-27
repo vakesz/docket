@@ -1,6 +1,6 @@
 "use client";
-import { fieldClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
+import { SelectField } from "@/ui/forms/select-field";
 
 /**
  * Per-user landing-project picker. The selected project becomes the redirect
@@ -39,7 +39,7 @@ export function DefaultProjectPicker() {
         Where <code className="rounded bg-surface-alt px-1 text-fg">/</code> takes you on every
         visit. Falls back to your most-recently-touched project when unset.
       </p>
-      <select
+      <SelectField
         id="default-project"
         value={current}
         disabled={setDefault.isPending}
@@ -47,7 +47,6 @@ export function DefaultProjectPicker() {
           const next = e.target.value || null;
           setDefault.mutate({ projectId: next });
         }}
-        className={fieldClass}
       >
         <option value="">(none — auto-pick most recent)</option>
         {projects.data.map((p) => (
@@ -55,7 +54,7 @@ export function DefaultProjectPicker() {
             {p.name}
           </option>
         ))}
-      </select>
+      </SelectField>
       {setDefault.error ? (
         <p className="text-xs text-danger-fg">{setDefault.error.message}</p>
       ) : null}

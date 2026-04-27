@@ -1,9 +1,10 @@
 /**
  * Settings API.
  *
- * Per-user effective settings keyed off the `Setting` table. Clients call
- * `list` to get every catalog key with its current value (default applied
- * when no row exists), and `update` / `reset` to change/clear one key.
+ * Per-user and deployment-wide settings keyed off the `Setting` table.
+ * Clients call `list` for user-scoped keys, `globalList` for deployment-wide
+ * keys; `update`/`globalUpdate` write a single key, `reset`/`globalReset`
+ * drop the row so the catalog default takes over.
  *
  * The catalog (`./catalog.ts`) is the single source of truth for what keys
  * exist, how they validate, and where they live (user / project / global).
@@ -14,6 +15,8 @@
 import "server-only";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { getBudgetStatus } from "@/server/billing/budget";
+import { pruneAuditOlderThan } from "@/server/proposals/executor";
 import {
   decodeSettingValue,
   encodeSettingValue,
@@ -22,7 +25,14 @@ import {
   SETTINGS_CATALOG,
   type SettingKey,
 } from "@/server/settings/catalog";
-import { protectedProcedure, router } from "@/server/trpc";
+import { loadGlobalSetting } from "@/server/settings/effective";
+import {
+  mutationProcedure,
+  projectScopedMutationProcedure,
+  projectScopedProcedure,
+  protectedProcedure,
+  router,
+} from "@/server/trpc";
 
 const SettingKeyEnum = z.enum(SETTING_KEYS as [SettingKey, ...SettingKey[]]);
 
@@ -34,6 +44,17 @@ const UpdateInput = z.object({
 });
 
 const ResetInput = z.object({ key: SettingKeyEnum });
+
+const ProjectUpdateInput = z.object({
+  projectId: z.string().min(1),
+  key: SettingKeyEnum,
+  value: z.unknown(),
+});
+
+const ProjectResetInput = z.object({
+  projectId: z.string().min(1),
+  key: SettingKeyEnum,
+});
 
 function userIdOrThrow(ctx: { session: { user: { id?: string } } }): string {
   const userId = ctx.session.user.id;
@@ -127,5 +148,209 @@ export const settingsRouter = router({
       where: { key: input.key, userId, scope: "user" },
     });
     return { ok: true, value: def.default };
+  }),
+
+  /**
+   * Effective deployment-wide settings. `setup.complete` is intentionally
+   * excluded from the deployment surface — it's a sticky bootstrap flag,
+   * not a user-tunable knob, and the rest of the app already manages it.
+   */
+  globalList: protectedProcedure.query(async ({ ctx }) => {
+    const keys = SETTING_KEYS.filter(
+      (k) => SETTINGS_CATALOG[k].scope === "global" && k !== "setup.complete",
+    );
+    const rows = await ctx.db.setting.findMany({
+      where: { scope: "global", userId: null, projectId: null, key: { in: keys } },
+      select: { key: true, value: true, updatedAt: true },
+      orderBy: { updatedAt: "desc" },
+    });
+    // Postgres treats null in a unique index as unconstrained; if a duplicate
+    // landed somehow, prefer the most recently updated row (matches
+    // `loadGlobalSetting`).
+    const byKey = new Map<string, string>();
+    for (const r of rows) {
+      if (!byKey.has(r.key)) byKey.set(r.key, r.value);
+    }
+    return keys.map((key) => ({
+      key,
+      value: decodeSettingValue(key, byKey.get(key) ?? null),
+      label: getSettingDef(key).label,
+      description: getSettingDef(key).description,
+    }));
+  }),
+
+  globalUpdate: mutationProcedure.input(UpdateInput).mutation(async ({ ctx, input }) => {
+    const def = getSettingDef(input.key);
+    if (def.scope !== "global") {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: `setting '${input.key}' is ${def.scope}-scoped — use the matching surface`,
+      });
+    }
+    if (input.key === "setup.complete") {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "setup.complete is managed by the bootstrap flow",
+      });
+    }
+    let encoded: string;
+    try {
+      encoded = encodeSettingValue(input.key, input.value as never);
+    } catch (err) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: `value for '${input.key}' failed validation: ${err instanceof Error ? err.message : String(err)}`,
+      });
+    }
+    const existing = await ctx.db.setting.findFirst({
+      where: { key: input.key, scope: "global", userId: null, projectId: null },
+      orderBy: { updatedAt: "desc" },
+      select: { id: true },
+    });
+    if (existing) {
+      return ctx.db.setting.update({ where: { id: existing.id }, data: { value: encoded } });
+    }
+    return ctx.db.setting.create({ data: { key: input.key, value: encoded, scope: "global" } });
+  }),
+
+  globalReset: mutationProcedure.input(ResetInput).mutation(async ({ ctx, input }) => {
+    const def = getSettingDef(input.key);
+    if (def.scope !== "global") {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: `setting '${input.key}' is ${def.scope}-scoped — use the matching surface`,
+      });
+    }
+    if (input.key === "setup.complete") {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "setup.complete is managed by the bootstrap flow",
+      });
+    }
+    await ctx.db.setting.deleteMany({
+      where: { key: input.key, scope: "global", userId: null, projectId: null },
+    });
+    return { ok: true, value: def.default };
+  }),
+
+  /**
+   * Effective project-scoped settings for the requested project. Returns
+   * every project-scoped catalog key (catalog default substituted when the
+   * row is missing or invalid).
+   */
+  projectList: projectScopedProcedure
+    .input(z.object({ projectId: z.string().min(1) }))
+    .query(async ({ ctx, input }) => {
+      const projectKeys = SETTING_KEYS.filter((k) => SETTINGS_CATALOG[k].scope === "project");
+      const rows = await ctx.db.setting.findMany({
+        where: {
+          projectId: input.projectId,
+          scope: "project",
+          key: { in: projectKeys },
+        },
+        select: { key: true, value: true },
+      });
+      const byKey = new Map(rows.map((r) => [r.key, r.value]));
+      return projectKeys.map((key) => ({
+        key,
+        value: decodeSettingValue(key, byKey.get(key) ?? null),
+      }));
+    }),
+
+  projectUpdate: projectScopedMutationProcedure
+    .input(ProjectUpdateInput)
+    .mutation(async ({ ctx, input }) => {
+      const def = getSettingDef(input.key);
+      if (def.scope !== "project") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `setting '${input.key}' is ${def.scope}-scoped — use the matching surface`,
+        });
+      }
+      let encoded: string;
+      try {
+        encoded = encodeSettingValue(input.key, input.value as never);
+      } catch (err) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `value for '${input.key}' failed validation: ${err instanceof Error ? err.message : String(err)}`,
+        });
+      }
+      const existing = await ctx.db.setting.findFirst({
+        where: { key: input.key, projectId: input.projectId, scope: "project", userId: null },
+        select: { id: true },
+      });
+      if (existing) {
+        return ctx.db.setting.update({ where: { id: existing.id }, data: { value: encoded } });
+      }
+      return ctx.db.setting.create({
+        data: {
+          key: input.key,
+          value: encoded,
+          scope: "project",
+          projectId: input.projectId,
+        },
+      });
+    }),
+
+  projectReset: projectScopedMutationProcedure
+    .input(ProjectResetInput)
+    .mutation(async ({ ctx, input }) => {
+      const def = getSettingDef(input.key);
+      if (def.scope !== "project") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `setting '${input.key}' is ${def.scope}-scoped — use the matching surface`,
+        });
+      }
+      await ctx.db.setting.deleteMany({
+        where: { key: input.key, projectId: input.projectId, scope: "project" },
+      });
+      return { ok: true, value: def.default };
+    }),
+
+  /**
+   * Snapshot of audit-trail size + retention setting. Powers the
+   * deployment-hub "Audit retention" panel so the admin can see how many
+   * rows are eligible for pruning before flipping the switch.
+   */
+  auditStatus: protectedProcedure.query(async ({ ctx }) => {
+    const retentionDays = await loadGlobalSetting(ctx.db, "audit.retention-days");
+    const total = await ctx.db.audit.count();
+    let eligible = 0;
+    let cutoff: Date | null = null;
+    if (retentionDays > 0) {
+      cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+      eligible = await ctx.db.audit.count({ where: { createdAt: { lt: cutoff } } });
+    }
+    return {
+      retentionDays,
+      total,
+      eligible,
+      cutoff: cutoff ? cutoff.toISOString() : null,
+    };
+  }),
+
+  /**
+   * Drop audit rows older than the configured retention window. No-op when
+   * retention is disabled (`audit.retention-days = 0`). Mutating + global,
+   * so it only runs in read-write mode.
+   */
+  auditPrune: mutationProcedure.mutation(async ({ ctx }) => {
+    const retentionDays = await loadGlobalSetting(ctx.db, "audit.retention-days");
+    if (retentionDays <= 0) {
+      return { ok: false, reason: "retention disabled", deleted: 0 };
+    }
+    const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+    const deleted = await pruneAuditOlderThan(ctx.db, cutoff);
+    return { ok: true, deleted, cutoff: cutoff.toISOString() };
+  }),
+
+  /**
+   * Current monthly LLM spend + cap. Exposed read-only so the chat pane
+   * (or any future banner surface) can warn/block accordingly.
+   */
+  budgetStatus: protectedProcedure.query(async ({ ctx }) => {
+    return getBudgetStatus(ctx.db);
   }),
 });

@@ -99,7 +99,7 @@ export function StatusFooter({
                     : "Sync now"
               }
               className={cn(
-                "inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded border border-transparent text-fg-muted transition-colors",
+                "inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded-md border border-transparent text-fg-muted transition-colors",
                 "hover:border-border hover:bg-surface-alt hover:text-fg",
                 "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-transparent disabled:hover:bg-transparent disabled:hover:text-fg-muted",
                 "focus:outline-none focus:ring-1 focus:ring-accent",

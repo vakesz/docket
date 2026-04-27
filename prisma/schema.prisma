@@ -137,8 +137,8 @@ model LlmProvider {
   /// Default model for this provider row (e.g. 'gpt-5'). Empty falls back
   /// to the adapter's hardcoded default.
   model     String   @default("")
-  /// Optional base URL (Azure OpenAI, OpenAI-compatible Ollama endpoint,
-  /// proxies). Empty = vendor default.
+  /// Optional base URL (Azure AI Foundry v1 endpoint, OpenAI-compatible
+  /// Ollama endpoint, proxies). Empty = vendor default.
   baseUrl   String   @default("")
   /// Whether this row is the global fallback when a project has no
   /// defaultLlmProviderId. At most one row should have this true, but the
@@ -175,6 +175,9 @@ model Project {
   /// Project-level LLM choice; falls back to the global default LlmProvider
   /// if null. Per-conversation override on Conversation.llmProviderIdOverride.
   defaultLlmProviderId String?
+  /// Project-level sampling temperature for the agent loop. Null → adapter
+  /// default. Conversation/per-turn overrides still win.
+  defaultTemperature   Float?
   /// Owner has implicit membership; explicit memberships go through
   /// ProjectMembership. Owner can delete the project; members cannot.
   ownerUserId          String

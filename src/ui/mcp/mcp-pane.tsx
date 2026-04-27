@@ -1,6 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import {
+  badgeClass,
+  emptyStateClass,
+  errorMessageClass,
+  fieldClass,
+  fieldMonoClass,
+} from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
 import { Button } from "@/ui/primitives/button";
 
@@ -68,48 +75,51 @@ export function McpPane({ projectId }: { projectId: string }) {
   };
 
   return (
-    <section className="flex flex-col gap-3 rounded-md border border-zinc-200 p-4 dark:border-zinc-800">
-      <header className="flex items-center justify-between">
-        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-          MCP servers
-        </h2>
-        <span className="text-xs text-muted-foreground">{list.data?.length ?? 0} configured</span>
-      </header>
-
+    <section className="flex flex-col gap-4">
       <form
-        className="flex flex-col gap-2 rounded-md border border-dashed border-border bg-muted/20 p-3"
+        className="flex flex-col gap-2 rounded-2xl border border-dashed border-border bg-surface-alt/40 p-4"
         onSubmit={(e) => {
           e.preventDefault();
           void submitNew();
         }}
       >
         <div className="flex items-center gap-2">
-          <input
-            type="text"
-            value={draftName}
-            onChange={(e) => setDraftName(e.target.value)}
-            placeholder="server-name (lowercase, '-' or '_')"
-            className="flex-1 rounded-md border border-border bg-background p-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            maxLength={64}
-            pattern="[a-z0-9][a-z0-9_-]*"
-          />
-          <input
-            type="url"
-            value={draftUrl}
-            onChange={(e) => setDraftUrl(e.target.value)}
-            placeholder="https://mcp.example.com/sse"
-            className="flex-[2] rounded-md border border-border bg-background p-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            maxLength={500}
-          />
+          <div className="min-w-0 flex-1">
+            <input
+              type="text"
+              value={draftName}
+              onChange={(e) => setDraftName(e.target.value)}
+              placeholder="server-name (lowercase, '-' or '_')"
+              className={fieldClass}
+              maxLength={64}
+              pattern="[a-z0-9][a-z0-9_-]*"
+            />
+          </div>
+          <div className="min-w-0 flex-[2]">
+            <input
+              type="url"
+              value={draftUrl}
+              onChange={(e) => setDraftUrl(e.target.value)}
+              placeholder="https://mcp.example.com/sse"
+              className={fieldClass}
+              maxLength={500}
+            />
+          </div>
         </div>
         <textarea
           value={draftHeaders}
           onChange={(e) => setDraftHeaders(e.target.value)}
           placeholder='Optional headers JSON, e.g. {"Authorization": "Bearer ..."}'
           rows={2}
-          className="rounded-md border border-border bg-background p-2 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+          className={`${fieldMonoClass} text-xs`}
         />
-        <div className="flex items-center justify-end">
+        <p className="text-xs text-fg-muted">
+          Exposes a remote MCP server's tools to the agent. The name is the tool prefix the agent
+          sees; URL must speak SSE or streamable-HTTP MCP. Headers JSON (optional, string → string)
+          is sent on every request — typical use is a bearer token or API key.
+        </p>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-fg-muted">{list.data?.length ?? 0} configured</span>
           <Button
             type="submit"
             size="sm"
@@ -118,14 +128,14 @@ export function McpPane({ projectId }: { projectId: string }) {
             {create.isPending ? "Adding…" : "Add server"}
           </Button>
         </div>
-        {headersError && <p className="text-xs text-destructive">{headersError}</p>}
-        {create.error && <p className="text-xs text-destructive">{create.error.message}</p>}
+        {headersError && <p className={errorMessageClass}>{headersError}</p>}
+        {create.error && <p className={errorMessageClass}>{create.error.message}</p>}
       </form>
 
       {list.isPending ? (
-        <p className="text-sm italic text-muted-foreground">Loading MCP servers…</p>
+        <p className="text-sm italic text-fg-muted">Loading MCP servers…</p>
       ) : list.data?.length === 0 ? (
-        <p className="text-sm italic text-muted-foreground">
+        <p className={emptyStateClass}>
           No MCP servers configured. Add one above to expose remote tools to the agent.
         </p>
       ) : (
@@ -136,23 +146,19 @@ export function McpPane({ projectId }: { projectId: string }) {
             return (
               <li
                 key={s.id}
-                className="flex items-start justify-between gap-3 rounded-md border border-border bg-background p-3"
+                className="flex items-start justify-between gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm"
               >
                 <div className="flex min-w-0 flex-col gap-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">{s.name}</span>
-                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    <span className="text-sm font-medium text-fg">{s.name}</span>
+                    <span className="text-[10px] uppercase tracking-wide text-fg-muted">
                       {s.transport}
                     </span>
-                    {!s.enabled && (
-                      <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-[10px] uppercase tracking-wide text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                        disabled
-                      </span>
-                    )}
+                    {!s.enabled && <span className={badgeClass}>disabled</span>}
                   </div>
-                  <p className="truncate font-mono text-xs text-muted-foreground">{s.url}</p>
+                  <p className="truncate font-mono text-xs text-fg-muted">{s.url}</p>
                   {headerCount > 0 && (
-                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    <p className="text-[10px] uppercase tracking-wide text-fg-muted">
                       {headerCount} header{headerCount === 1 ? "" : "s"}
                     </p>
                   )}
@@ -189,8 +195,8 @@ export function McpPane({ projectId }: { projectId: string }) {
         </ul>
       )}
 
-      {update.error && <p className="text-xs text-destructive">{update.error.message}</p>}
-      {remove.error && <p className="text-xs text-destructive">{remove.error.message}</p>}
+      {update.error && <p className={errorMessageClass}>{update.error.message}</p>}
+      {remove.error && <p className={errorMessageClass}>{remove.error.message}</p>}
     </section>
   );
 }

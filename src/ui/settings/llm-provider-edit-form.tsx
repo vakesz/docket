@@ -1,13 +1,14 @@
 "use client";
-import { useRouter } from "next/navigation";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useId, useState } from "react";
 import {
+  errorMessageClass,
   fieldClass,
   fieldMonoClass,
   primaryButtonClass,
   xsBorderButtonClass,
 } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
+import { SelectField } from "@/ui/forms/select-field";
 
 const KINDS = ["openai", "anthropic", "gemini", "bedrock", "mistral", "ollama"] as const;
 type Kind = (typeof KINDS)[number];
@@ -27,14 +28,15 @@ export function LlmProviderEditForm({
   initial: Initial;
   onClose: () => void;
 }) {
-  const router = useRouter();
+  const utils = trpc.useUtils();
   const update = trpc.llmProviders.update.useMutation({
-    onSuccess: () => {
-      router.refresh();
+    onSuccess: async () => {
+      await utils.llmProviders.list.invalidate();
       onClose();
     },
   });
 
+  const kindId = useId();
   const [kind, setKind] = useState<Kind>(
     KINDS.includes(initial.kind as Kind) ? (initial.kind as Kind) : "openai",
   );
@@ -58,20 +60,18 @@ export function LlmProviderEditForm({
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-3 text-sm">
       <div className="flex gap-3">
-        <label className="flex w-40 flex-col gap-1">
-          <span className="text-xs text-fg-muted">Kind</span>
-          <select
-            value={kind}
-            onChange={(e) => setKind(e.target.value as Kind)}
-            className={fieldClass}
-          >
+        <div className="flex w-40 flex-col gap-1">
+          <label htmlFor={kindId} className="text-xs text-fg-muted">
+            Kind
+          </label>
+          <SelectField id={kindId} value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
             {KINDS.map((k) => (
               <option key={k} value={k}>
                 {k}
               </option>
             ))}
-          </select>
-        </label>
+          </SelectField>
+        </div>
         <label className="flex flex-1 flex-col gap-1">
           <span className="text-xs text-fg-muted">Label</span>
           <input
@@ -93,6 +93,9 @@ export function LlmProviderEditForm({
           placeholder="sk-..."
           className={fieldMonoClass}
         />
+        <p className="text-xs text-fg-muted">
+          Stored encrypted at rest. Only fill this in to rotate the key.
+        </p>
       </label>
 
       <div className="flex gap-3">
@@ -104,6 +107,9 @@ export function LlmProviderEditForm({
             placeholder="gpt-5"
             className={fieldClass}
           />
+          <p className="text-xs text-fg-muted">
+            Optional override. Empty lets the adapter pick its default.
+          </p>
         </label>
         <label className="flex flex-1 flex-col gap-1">
           <span className="text-xs text-fg-muted">Base URL</span>
@@ -113,14 +119,14 @@ export function LlmProviderEditForm({
             placeholder="https://api.openai.com/v1"
             className={fieldClass}
           />
+          <p className="text-xs text-fg-muted">
+            Only set for non-vanilla endpoints — Azure OpenAI, an internal proxy, or a self-hosted
+            Ollama. Blank uses the vendor's public endpoint.
+          </p>
         </label>
       </div>
 
-      {update.error ? (
-        <p className="rounded-md border border-danger/40 bg-danger-bg/40 px-2 py-1 text-xs text-danger-fg">
-          {update.error.message}
-        </p>
-      ) : null}
+      {update.error ? <p className={errorMessageClass}>{update.error.message}</p> : null}
 
       <div className="flex items-center gap-2">
         <button type="submit" disabled={update.isPending} className={primaryButtonClass}>

@@ -1,31 +1,33 @@
 "use client";
-import { useRouter } from "next/navigation";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useId, useState } from "react";
 import {
+  errorMessageClass,
   fieldClass,
   fieldMonoClass,
   primaryButtonClass,
   settingsPanelClass,
 } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
+import { SelectField } from "@/ui/forms/select-field";
 
 const KINDS = ["openai", "anthropic", "gemini", "bedrock", "mistral", "ollama"] as const;
 type Kind = (typeof KINDS)[number];
 
 export function LlmProviderForm({ canBeDefault }: { canBeDefault: boolean }) {
-  const router = useRouter();
+  const utils = trpc.useUtils();
   const create = trpc.llmProviders.create.useMutation({
-    onSuccess: () => {
+    onSuccess: async () => {
       setKind("openai");
       setLabel("");
       setApiKey("");
       setModel("");
       setBaseUrl("");
       setIsDefault(canBeDefault);
-      router.refresh();
+      await utils.llmProviders.list.invalidate();
     },
   });
 
+  const kindId = useId();
   const [kind, setKind] = useState<Kind>("openai");
   const [label, setLabel] = useState("");
   const [apiKey, setApiKey] = useState("");
@@ -50,20 +52,18 @@ export function LlmProviderForm({ canBeDefault }: { canBeDefault: boolean }) {
       <h2 className="text-base font-medium text-fg">Add LLM provider</h2>
 
       <div className="flex gap-3">
-        <label className="flex w-40 flex-col gap-1">
-          <span className="text-xs text-fg-muted">Kind</span>
-          <select
-            value={kind}
-            onChange={(e) => setKind(e.target.value as Kind)}
-            className={fieldClass}
-          >
+        <div className="flex w-40 flex-col gap-1">
+          <label htmlFor={kindId} className="text-xs text-fg-muted">
+            Kind
+          </label>
+          <SelectField id={kindId} value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
             {KINDS.map((k) => (
               <option key={k} value={k}>
                 {k}
               </option>
             ))}
-          </select>
-        </label>
+          </SelectField>
+        </div>
         <label className="flex flex-1 flex-col gap-1">
           <span className="text-xs text-fg-muted">Label</span>
           <input
@@ -87,6 +87,11 @@ export function LlmProviderForm({ canBeDefault }: { canBeDefault: boolean }) {
           placeholder="sk-..."
           className={fieldMonoClass}
         />
+        <p className="text-xs text-fg-muted">
+          Stored encrypted at rest. Format depends on the vendor (OpenAI starts with{" "}
+          <code className="rounded bg-surface-alt px-1 py-0.5 font-mono">sk-</code>, Anthropic with{" "}
+          <code className="rounded bg-surface-alt px-1 py-0.5 font-mono">sk-ant-</code>).
+        </p>
       </label>
 
       <div className="flex gap-3">
@@ -98,6 +103,12 @@ export function LlmProviderForm({ canBeDefault }: { canBeDefault: boolean }) {
             placeholder="gpt-5"
             className={fieldClass}
           />
+          <p className="text-xs text-fg-muted">
+            Optional override (e.g.{" "}
+            <code className="rounded bg-surface-alt px-1 py-0.5 font-mono">gpt-5</code>,{" "}
+            <code className="rounded bg-surface-alt px-1 py-0.5 font-mono">claude-sonnet-4-6</code>
+            ). Empty lets the adapter pick its default.
+          </p>
         </label>
         <label className="flex flex-1 flex-col gap-1">
           <span className="text-xs text-fg-muted">Base URL (optional)</span>
@@ -107,23 +118,29 @@ export function LlmProviderForm({ canBeDefault }: { canBeDefault: boolean }) {
             placeholder="https://api.openai.com/v1"
             className={fieldClass}
           />
+          <p className="text-xs text-fg-muted">
+            Only set for non-vanilla endpoints — Azure OpenAI, an internal proxy, or a self-hosted
+            Ollama. Blank uses the vendor's public endpoint.
+          </p>
         </label>
       </div>
 
-      <label className="flex items-center gap-2 text-xs text-fg-muted">
-        <input
-          type="checkbox"
-          checked={isDefault}
-          onChange={(e) => setIsDefault(e.target.checked)}
-        />
-        Make this the global default
+      <label className="flex flex-col gap-1">
+        <span className="inline-flex items-center gap-2 text-xs text-fg-muted">
+          <input
+            type="checkbox"
+            checked={isDefault}
+            onChange={(e) => setIsDefault(e.target.checked)}
+          />
+          Make this the global default
+        </span>
+        <p className="text-xs text-fg-muted">
+          Becomes the fallback used by any project that hasn't picked its own LLM. Per-conversation
+          overrides still win.
+        </p>
       </label>
 
-      {create.error ? (
-        <p className="rounded-md border border-danger/40 bg-danger-bg/40 px-2 py-1 text-xs text-danger-fg">
-          {create.error.message}
-        </p>
-      ) : null}
+      {create.error ? <p className={errorMessageClass}>{create.error.message}</p> : null}
 
       <button
         type="submit"

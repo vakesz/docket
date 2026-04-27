@@ -10,6 +10,7 @@ import {
   type ThemeId,
   writeStoredTheme,
 } from "@/lib/theme";
+import { SelectField } from "@/ui/forms/select-field";
 
 /**
  * Theme switcher that mirrors main's pattern: localStorage-backed,
@@ -18,19 +19,25 @@ import {
  */
 export function ThemePicker() {
   const [theme, setTheme] = useState<ThemeId>("system");
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     setTheme(readStoredTheme());
+    setLoaded(true);
   }, []);
 
+  // Boot script (theme-boot-script.tsx) applies the stored theme before
+  // hydration, so we don't re-apply on mount — that would override the
+  // user's choice with the placeholder "system" before the stored value
+  // is loaded. Only the matchMedia listener needs to drive applyTheme.
   useEffect(() => {
+    if (!loaded) return;
     if (!isAdaptiveTheme(theme)) return;
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const handler = () => applyTheme(theme);
-    handler();
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
-  }, [theme]);
+  }, [loaded, theme]);
 
   function onPick(next: ThemeId): void {
     setTheme(next);
@@ -43,39 +50,36 @@ export function ThemePicker() {
   const dark = THEMES.filter((t) => t.group === "dark");
 
   return (
-    <label className="flex items-center gap-1 text-xs">
-      <span className="text-xs uppercase tracking-wide text-fg-faint">Theme</span>
-      <select
-        value={theme}
-        onChange={(e) => onPick(e.target.value as ThemeId)}
-        className="rounded border border-border bg-surface px-2 py-0.5 text-xs text-fg focus:border-accent focus:outline-none"
-        aria-label="Color theme"
-      >
-        <optgroup label="Adaptive">
-          {adaptive.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.label}
-              {isAdaptiveTheme(t.id)
-                ? ` (${ADAPTIVE_VARIANTS[t.id].light} / ${ADAPTIVE_VARIANTS[t.id].dark})`
-                : ""}
-            </option>
-          ))}
-        </optgroup>
-        <optgroup label="Light">
-          {light.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.label}
-            </option>
-          ))}
-        </optgroup>
-        <optgroup label="Dark">
-          {dark.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.label}
-            </option>
-          ))}
-        </optgroup>
-      </select>
-    </label>
+    <SelectField
+      value={theme}
+      onChange={(e) => onPick(e.target.value as ThemeId)}
+      wrapperClassName="max-w-xs"
+      aria-label="Color theme"
+    >
+      <optgroup label="Adaptive">
+        {adaptive.map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.label}
+            {isAdaptiveTheme(t.id)
+              ? ` (${ADAPTIVE_VARIANTS[t.id].light} / ${ADAPTIVE_VARIANTS[t.id].dark})`
+              : ""}
+          </option>
+        ))}
+      </optgroup>
+      <optgroup label="Light">
+        {light.map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.label}
+          </option>
+        ))}
+      </optgroup>
+      <optgroup label="Dark">
+        {dark.map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.label}
+          </option>
+        ))}
+      </optgroup>
+    </SelectField>
   );
 }

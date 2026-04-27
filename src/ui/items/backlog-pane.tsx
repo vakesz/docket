@@ -9,6 +9,7 @@ import { displayTag, formatKind } from "@/lib/format";
 import { freshnessTone } from "@/lib/staleness";
 import { trpc } from "@/lib/trpc-client";
 import { cn } from "@/lib/utils";
+import { CreateItemForm } from "@/ui/items/create-item-form";
 import { FreshnessStamp } from "@/ui/items/freshness";
 import { StatePill } from "@/ui/items/state-pill";
 
@@ -47,6 +48,11 @@ export function BacklogPane({
     { staleTime: 30_000 },
   );
   const pinned = trpc.watchlist.list.useQuery({ projectId, limit: 50 }, { staleTime: 30_000 });
+  const settings = trpc.settings.list.useQuery(undefined, { staleTime: 60_000 });
+  const maxVisibleTags = (() => {
+    const raw = settings.data?.find((r) => r.key === "items.max-visible-tags")?.value;
+    return typeof raw === "number" ? raw : 2;
+  })();
 
   const pathname = usePathname();
   const selectedId = useMemo(() => {
@@ -95,19 +101,22 @@ export function BacklogPane({
     });
   }, [data, kind, activeTag, query]);
 
-  const tagCollapseLimit = 4;
+  const tagCollapseLimit = maxVisibleTags;
 
   return (
     <div className="flex h-full flex-col bg-bg">
-      <div className="flex flex-col gap-2 border-b border-border p-2">
-        <input
-          type="search"
-          placeholder="Filter by title, id, tag…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="min-w-0 rounded border border-border bg-bg px-2 py-1 text-sm text-fg focus:border-accent focus:outline-none"
-        />
-        <div className="flex flex-wrap items-center gap-1">
+      <div className="flex flex-col gap-2 border-b border-border p-3">
+        <div className="flex items-center gap-2">
+          <input
+            type="search"
+            placeholder="Filter by title, id, tag…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="min-w-0 flex-1 rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-fg placeholder:text-fg-faint focus:border-accent focus:outline-none"
+          />
+          <CreateItemForm projectId={projectId} />
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
           {visibleKinds.length > 2 &&
             visibleKinds.map((k) => (
               <button
@@ -115,7 +124,7 @@ export function BacklogPane({
                 key={k}
                 onClick={() => setKind(k)}
                 className={cn(
-                  "rounded px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider",
+                  "rounded-md px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition-colors",
                   kind === k ? "bg-fg text-bg" : "text-fg-muted hover:bg-surface-alt",
                 )}
               >
@@ -247,6 +256,7 @@ export function BacklogPane({
               pinned={pinnedIds.has(it.id)}
               selected={selectedId === it.id}
               staleThresholdDays={staleThresholdDays}
+              maxVisibleTags={maxVisibleTags}
             />
           ))
         )}
@@ -273,15 +283,17 @@ function ItemRow({
   pinned,
   selected,
   staleThresholdDays,
+  maxVisibleTags,
 }: {
   projectId: string;
   item: ListItem;
   pinned: boolean;
   selected: boolean;
   staleThresholdDays: number | null;
+  maxVisibleTags: number;
 }) {
   const tags = item.tags ?? [];
-  const shownTags = tags.slice(0, 2);
+  const shownTags = tags.slice(0, maxVisibleTags);
   const extraTags = tags.length - shownTags.length;
   const hasMeta = Boolean(item.assignee) || tags.length > 0;
   const tone = freshnessTone(item.updatedAt, staleThresholdDays);

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/server/auth";
 import { db } from "@/server/db";
@@ -6,12 +5,35 @@ import { requireSetupComplete } from "@/server/setup/guard";
 import { SettingsShell } from "@/ui/settings/settings-shell";
 
 /**
- * Unified settings page. One route, sidebar nav inside, no sub-routes —
- * mirrors main's `SettingsPage`. The "← back to project" link uses the
- * user's default (or most-recently-touched) project so closing settings
- * lands somewhere sensible instead of bouncing through `/`.
+ * Unified settings page. One route, sidebar nav inside, no sub-routes.
+ * The `?project=<id>` query param is the active project for the
+ * project-scoped sections (Memory, Sources, MCP). When unset, fall back
+ * to the user's default → most-recently-touched → none. The whole
+ * topbar/footer chrome lives in `./layout.tsx`.
  */
-export default async function SettingsPage() {
+const SECTION_KEYS = [
+  "memory",
+  "sources",
+  "mcp",
+  "project-llm",
+  "project-analytics",
+  "project-members",
+  "project-export",
+  "projects",
+  "profile",
+  "workspace",
+  "budget-audit",
+  "global-analytics",
+  "llm-providers",
+  "oauth-providers",
+] as const;
+type SectionKey = (typeof SECTION_KEYS)[number];
+
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ project?: string; section?: string }>;
+}) {
   await requireSetupComplete();
   const session = await auth();
   if (!session?.user) {
@@ -19,52 +41,53 @@ export default async function SettingsPage() {
   }
 
   const userId = session.user.id;
+  const params = await searchParams;
+  const requested = params.project ?? null;
+  const requestedSection: SectionKey | undefined =
+    params.section && (SECTION_KEYS as readonly string[]).includes(params.section)
+      ? (params.section as SectionKey)
+      : undefined;
+
   const me = await db.user.findUnique({
     where: { id: userId },
     select: { defaultProjectId: true },
   });
 
-  const backProject = await db.project.findFirst({
-    where: {
-      archivedAt: null,
-      id: me?.defaultProjectId ?? undefined,
-      OR: [{ ownerUserId: userId }, { memberships: { some: { userId } } }],
-    },
-    select: { id: true, name: true },
-  });
-  const fallback = backProject
-    ? null
-    : await db.project.findFirst({
+  const candidate =
+    requested ??
+    me?.defaultProjectId ??
+    (
+      await db.project.findFirst({
         where: {
           archivedAt: null,
           OR: [{ ownerUserId: userId }, { memberships: { some: { userId } } }],
         },
         orderBy: [{ updatedAt: "desc" }],
+        select: { id: true },
+      })
+    )?.id ??
+    null;
+
+  // Validate access — a stale ?project= query param should fall back to
+  // the default rather than blow up the page.
+  const project = candidate
+    ? await db.project.findFirst({
+        where: {
+          id: candidate,
+          archivedAt: null,
+          OR: [{ ownerUserId: userId }, { memberships: { some: { userId } } }],
+        },
         select: { id: true, name: true },
-      });
-  const back = backProject ?? fallback;
+      })
+    : null;
 
   const publicBase = (process.env.PUBLIC_BASE_URL ?? "http://localhost:3000").trim();
 
   return (
-    <main className="flex min-h-screen flex-col bg-bg text-fg">
-      <header className="flex items-baseline justify-between border-b border-border bg-surface px-6 py-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
-          <p className="text-sm text-fg-muted">
-            Per-user preferences plus deployment-wide configuration.
-          </p>
-        </div>
-        <Link
-          href={back ? `/projects/${back.id}/items` : "/"}
-          className="text-sm text-fg-muted hover:text-fg"
-        >
-          ← {back ? back.name : "Home"}
-        </Link>
-      </header>
-      <div className="flex flex-1 overflow-hidden">
-        <SettingsShell publicBase={publicBase} />
-      </div>
-    </main>
+    <SettingsShell
+      publicBase={publicBase}
+      project={project ? { id: project.id, name: project.name } : null}
+      initialSection={requestedSection}
+    />
   );
 }

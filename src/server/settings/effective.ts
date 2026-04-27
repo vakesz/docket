@@ -37,3 +37,20 @@ export async function loadGlobalSetting<K extends SettingKey>(
   });
   return decodeSettingValue(key, row?.value ?? null);
 }
+
+export async function loadProjectSetting<K extends SettingKey>(
+  db: typeof Db,
+  projectId: string,
+  key: K,
+): Promise<SettingValue<K>> {
+  const def = getSettingDef(key);
+  if (def.scope !== "project") {
+    throw new Error(`loadProjectSetting called for non-project key '${key}'`);
+  }
+  const row = await db.setting.findFirst({
+    where: { key, scope: "project", projectId, userId: null },
+    orderBy: { updatedAt: "desc" },
+    select: { value: true },
+  });
+  return decodeSettingValue(key, row?.value ?? null);
+}

@@ -31,6 +31,8 @@ import { buildToolRegistry } from "@/agent/tools/registry";
 import type { AgentTool, ToolContext } from "@/agent/tools/types";
 import type { ItemKind } from "@/core/types";
 import type { Conversation, Message } from "@/db/generated/client";
+import { getBudgetStatus } from "@/server/billing/budget";
+import { compactConversation, loadCompactionSettings } from "@/server/conversations/compaction";
 import { appendMessage, getConversation } from "@/server/conversations/storage";
 import type { db as Db } from "@/server/db";
 
@@ -93,7 +95,20 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
     return;
   }
 
-  // 2. Persist the user message before we start streaming. If the LLM
+  // 2. Cost-cap check. The deployment-wide monthly LLM budget is enforced
+  //    here so neither the SSE handler nor any future caller can bypass it.
+  //    `block` refuses the turn outright; `warn` lets it through (the chat
+  //    pane surfaces the banner from the same status query).
+  const budget = await getBudgetStatus(db);
+  if (budget.capReached && budget.action === "block") {
+    yield {
+      kind: "error",
+      message: `monthly LLM cost cap reached (${(budget.monthCents / 100).toFixed(2)} of ${(budget.capCents / 100).toFixed(2)} USD); contact your deployment admin`,
+    };
+    return;
+  }
+
+  // 3. Persist the user message before we start streaming. If the LLM
   //    crashes mid-turn the row stays — the user can see what they sent
   //    and retry, no double-post.
   await appendMessage(db, {
@@ -101,6 +116,15 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
     role: "user",
     content: userMessage,
   });
+
+  // 2a. Auto-compaction. Runs before transcript assembly so the prompt
+  //     this turn already reflects the trimmed history. The compaction
+  //     module no-ops when the transcript is below the project's
+  //     configured threshold or the toggle is off.
+  const compactionSettings = await loadCompactionSettings(db, conv.projectId);
+  if (compactionSettings.enabled) {
+    await compactConversation(db, conversationId, compactionSettings);
+  }
 
   // 3. Build prompt prefix and tool registry. Both must be byte-stable
   //    across turns for the prompt cache to hit.

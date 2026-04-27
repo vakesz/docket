@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { emptyStateClass, errorMessageClass, fieldClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
 import { Button } from "@/ui/primitives/button";
 
@@ -54,52 +55,49 @@ export function SourcesPane({ projectId }: { projectId: string }) {
   };
 
   return (
-    <section className="flex flex-col gap-3 rounded-md border border-zinc-200 p-4 dark:border-zinc-800">
-      <header className="flex items-center justify-between">
-        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-          Sources
-        </h2>
-        <span className="text-xs text-muted-foreground">{list.data?.length ?? 0} documents</span>
-      </header>
-
+    <section className="flex flex-col gap-4">
       <form
-        className="flex flex-col gap-2 rounded-md border border-dashed border-border bg-muted/20 p-3"
+        className="flex flex-col gap-2 rounded-2xl border border-dashed border-border bg-surface-alt/40 p-4"
         onSubmit={(e) => {
           e.preventDefault();
           void submitNew();
         }}
       >
         <div className="flex items-center gap-2">
-          <input
-            type="text"
-            value={draftTitle}
-            onChange={(e) => setDraftTitle(e.target.value)}
-            placeholder="Title"
-            className="flex-1 rounded-md border border-border bg-background p-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            maxLength={200}
-          />
-          <input
-            type="text"
-            value={draftKind}
-            onChange={(e) => setDraftKind(e.target.value)}
-            placeholder="Kind (e.g. runbook)"
-            className="w-40 rounded-md border border-border bg-background p-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            maxLength={64}
-          />
+          <div className="min-w-0 flex-1">
+            <input
+              type="text"
+              value={draftTitle}
+              onChange={(e) => setDraftTitle(e.target.value)}
+              placeholder="Title"
+              className={fieldClass}
+              maxLength={200}
+            />
+          </div>
+          <div className="w-40 shrink-0">
+            <input
+              type="text"
+              value={draftKind}
+              onChange={(e) => setDraftKind(e.target.value)}
+              placeholder="Kind (e.g. runbook)"
+              className={fieldClass}
+              maxLength={64}
+            />
+          </div>
         </div>
         <textarea
           value={draftBody}
           onChange={(e) => setDraftBody(e.target.value)}
           placeholder="Paste markdown, or upload a .md / .txt file below."
           rows={4}
-          className="rounded-md border border-border bg-background p-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          className={fieldClass}
         />
         <div className="flex items-center justify-between gap-2">
           <input
             ref={fileRef}
             type="file"
             accept=".md,.markdown,.txt,.json,text/plain,text/markdown,application/json"
-            className="text-xs text-muted-foreground"
+            className="text-xs text-fg-muted"
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) void handleFile(file);
@@ -109,13 +107,13 @@ export function SourcesPane({ projectId }: { projectId: string }) {
             {create.isPending ? "Saving…" : "Save source"}
           </Button>
         </div>
-        {create.error && <p className="text-xs text-destructive">{create.error.message}</p>}
+        {create.error && <p className={errorMessageClass}>{create.error.message}</p>}
       </form>
 
       {list.isPending ? (
-        <p className="text-sm italic text-muted-foreground">Loading sources…</p>
+        <p className="text-sm italic text-fg-muted">Loading sources…</p>
       ) : list.data?.length === 0 ? (
-        <p className="text-sm italic text-muted-foreground">
+        <p className={emptyStateClass}>
           No sources yet. Add one above so the agent has material to cite.
         </p>
       ) : (
@@ -123,19 +121,19 @@ export function SourcesPane({ projectId }: { projectId: string }) {
           {list.data?.map((s) => (
             <li
               key={s.id}
-              className="flex items-start justify-between gap-3 rounded-md border border-border bg-background p-3"
+              className="flex items-start justify-between gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm"
             >
               <div className="flex min-w-0 flex-col gap-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">{s.title}</span>
+                  <span className="text-sm font-medium text-fg">{s.title}</span>
                   {s.kind && (
-                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    <span className="text-[10px] uppercase tracking-wide text-fg-muted">
                       {s.kind}
                     </span>
                   )}
                 </div>
                 {s.bodyMd && (
-                  <p className="line-clamp-2 whitespace-pre-wrap text-xs text-muted-foreground">
+                  <p className="line-clamp-2 whitespace-pre-wrap text-xs text-fg-muted">
                     {s.bodyMd}
                   </p>
                 )}
@@ -154,7 +152,7 @@ export function SourcesPane({ projectId }: { projectId: string }) {
         </ul>
       )}
 
-      {remove.error && <p className="text-xs text-destructive">{remove.error.message}</p>}
+      {remove.error && <p className={errorMessageClass}>{remove.error.message}</p>}
     </section>
   );
 }

@@ -91,6 +91,9 @@ function makeStubDb(): {
         });
         return conv;
       },
+      // Budget guard sums month-to-date costCents; the tests don't seed any
+      // history so the cap is never reached.
+      aggregate: async () => ({ _sum: { costCents: 0 } }),
     },
     message: {
       create: async (args: {
@@ -127,6 +130,11 @@ function makeStubDb(): {
       // No MCP servers in tests — keep the slot 5 builder a no-op so the
       // loop tests don't have to care about remote tool fan-out.
       findMany: async () => [] as unknown[],
+    },
+    setting: {
+      // Compaction settings load from the Setting table; tests don't seed
+      // any rows so every key falls back to its catalog default.
+      findFirst: async () => null,
     },
   };
   return {

@@ -1,11 +1,10 @@
 "use client";
-import { useRouter } from "next/navigation";
-import { xsBorderButtonClass } from "@/lib/form-classes";
+import { xsBorderButtonClass, xsDangerButtonClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
 
 export function OauthProviderActions({ id, enabled }: { id: string; enabled: boolean }) {
-  const router = useRouter();
-  const refresh = () => router.refresh();
+  const utils = trpc.useUtils();
+  const refresh = () => utils.oauthProviders.list.invalidate();
 
   const setEnabled = trpc.oauthProviders.setEnabled.useMutation({ onSuccess: refresh });
   const del = trpc.oauthProviders.delete.useMutation({ onSuccess: refresh });
@@ -34,7 +33,7 @@ export function OauthProviderActions({ id, enabled }: { id: string; enabled: boo
             del.mutate({ id });
           }
         }}
-        className="inline-flex items-center gap-1 rounded-md border border-danger/40 bg-surface px-2 py-1 text-xs text-danger-fg hover:bg-danger-bg/40 disabled:cursor-not-allowed disabled:opacity-60"
+        className={xsDangerButtonClass}
       >
         Delete
       </button>

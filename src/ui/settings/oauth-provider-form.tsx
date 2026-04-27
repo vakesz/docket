@@ -1,13 +1,14 @@
 "use client";
-import { useRouter } from "next/navigation";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useId, useState } from "react";
 import {
+  errorMessageClass,
   fieldClass,
   fieldMonoClass,
   primaryButtonClass,
   settingsPanelClass,
 } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
+import { SelectField } from "@/ui/forms/select-field";
 
 const KINDS = ["github", "azure_devops"] as const;
 type Kind = (typeof KINDS)[number];
@@ -26,18 +27,19 @@ const DEFAULTS: Record<Kind, { label: string; scopes: string; baseUrlHint: strin
 };
 
 export function OauthProviderForm() {
-  const router = useRouter();
+  const utils = trpc.useUtils();
   const create = trpc.oauthProviders.create.useMutation({
-    onSuccess: () => {
+    onSuccess: async () => {
       setLabel(DEFAULTS[kind].label);
       setClientId("");
       setClientSecret("");
       setScopes(DEFAULTS[kind].scopes);
       setBaseUrl("");
-      router.refresh();
+      await utils.oauthProviders.list.invalidate();
     },
   });
 
+  const kindId = useId();
   const [kind, setKind] = useState<Kind>("github");
   const [label, setLabel] = useState(DEFAULTS.github.label);
   const [clientId, setClientId] = useState("");
@@ -70,20 +72,22 @@ export function OauthProviderForm() {
       <h2 className="text-base font-medium text-fg">Add OAuth provider</h2>
 
       <div className="flex gap-3">
-        <label className="flex w-40 flex-col gap-1">
-          <span className="text-xs text-fg-muted">Kind</span>
-          <select
+        <div className="flex w-40 flex-col gap-1">
+          <label htmlFor={kindId} className="text-xs text-fg-muted">
+            Kind
+          </label>
+          <SelectField
+            id={kindId}
             value={kind}
             onChange={(e) => onKindChange(e.target.value as Kind)}
-            className={fieldClass}
           >
             {KINDS.map((k) => (
               <option key={k} value={k}>
                 {k.replace("_", " ")}
               </option>
             ))}
-          </select>
-        </label>
+          </SelectField>
+        </div>
         <label className="flex flex-1 flex-col gap-1">
           <span className="text-xs text-fg-muted">Label</span>
           <input
@@ -125,6 +129,9 @@ export function OauthProviderForm() {
           onChange={(e) => setScopes(e.target.value)}
           className={fieldMonoClass}
         />
+        <p className="text-xs text-fg-muted">
+          Pre-filled per kind. Only edit if you need extra capability beyond the defaults.
+        </p>
       </label>
 
       <label className="flex flex-col gap-1">
@@ -135,13 +142,18 @@ export function OauthProviderForm() {
           placeholder={DEFAULTS[kind].baseUrlHint}
           className={fieldClass}
         />
+        <p className="text-xs text-fg-muted">
+          GitHub Enterprise base URL (e.g.{" "}
+          <code className="rounded bg-surface-alt px-1 py-0.5 font-mono">
+            https://github.example.com
+          </code>
+          ), or the Entra tenant id for Azure DevOps. Blank ={" "}
+          <code className="rounded bg-surface-alt px-1 py-0.5 font-mono">github.com</code> /
+          multi-tenant <code className="rounded bg-surface-alt px-1 py-0.5 font-mono">common</code>.
+        </p>
       </label>
 
-      {create.error ? (
-        <p className="rounded-md border border-danger/40 bg-danger-bg/40 px-2 py-1 text-xs text-danger-fg">
-          {create.error.message}
-        </p>
-      ) : null}
+      {create.error ? <p className={errorMessageClass}>{create.error.message}</p> : null}
 
       <button
         type="submit"

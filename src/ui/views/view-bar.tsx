@@ -2,7 +2,15 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useMemo, useState } from "react";
 import type { StateBucket } from "@/core/types";
+import {
+  errorMessageClass,
+  fieldClass,
+  metaLabelFaintClass,
+  xsBorderButtonClass,
+} from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
+import { cn } from "@/lib/utils";
+import { SelectField } from "@/ui/forms/select-field";
 
 type Props = {
   projectId: string;
@@ -95,12 +103,12 @@ export function ViewBar({ projectId }: Props) {
   }
 
   return (
-    <section className="flex flex-col gap-3 rounded-md border border-zinc-200 p-3 text-sm dark:border-zinc-800">
+    <section className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-3 text-sm shadow-sm">
       <div className="flex flex-wrap items-center gap-3">
-        <label className="flex items-center gap-2">
-          <span className="text-xs uppercase tracking-wide text-zinc-500">View</span>
-          <select
-            className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+        <div className="flex items-center gap-2">
+          <span className={metaLabelFaintClass}>View</span>
+          <SelectField
+            aria-label="View"
             value={activeViewId}
             onChange={(e) => navigateWith({ viewId: e.target.value || undefined })}
           >
@@ -111,8 +119,8 @@ export function ViewBar({ projectId }: Props) {
                 {v.isDefault ? " ★" : ""}
               </option>
             ))}
-          </select>
-        </label>
+          </SelectField>
+        </div>
 
         <nav className="flex items-center gap-1">
           {BUCKETS.map((b) => (
@@ -120,11 +128,12 @@ export function ViewBar({ projectId }: Props) {
               key={b}
               type="button"
               onClick={() => navigateWith({ bucket: b })}
-              className={
+              className={cn(
+                "rounded-full px-3 py-1 text-xs transition-colors",
                 bucket === b
-                  ? "rounded-full bg-zinc-900 px-3 py-1 text-xs text-white dark:bg-white dark:text-black"
-                  : "rounded-full border border-zinc-300 px-3 py-1 text-xs text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-900"
-              }
+                  ? "bg-accent text-accent-fg"
+                  : "border border-border text-fg-muted hover:bg-surface-alt",
+              )}
               disabled={activeView !== null}
               title={
                 activeView
@@ -142,7 +151,7 @@ export function ViewBar({ projectId }: Props) {
             <>
               <button
                 type="button"
-                className="text-zinc-500 hover:text-zinc-800 disabled:opacity-50 dark:hover:text-zinc-200"
+                className="text-fg-muted hover:text-fg disabled:opacity-50"
                 disabled={setDefault.isPending || activeView.isDefault}
                 onClick={() => setDefault.mutate({ projectId, viewId: activeView.id })}
               >
@@ -150,7 +159,7 @@ export function ViewBar({ projectId }: Props) {
               </button>
               <button
                 type="button"
-                className="text-red-600 hover:text-red-800 disabled:opacity-50"
+                className="text-danger-fg hover:opacity-80 disabled:opacity-50"
                 disabled={remove.isPending}
                 onClick={() => {
                   if (confirm(`Delete view “${activeView.name}”?`)) {
@@ -164,7 +173,7 @@ export function ViewBar({ projectId }: Props) {
           ) : (
             <button
               type="button"
-              className="text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+              className="text-fg-muted hover:text-fg"
               onClick={() => setShowForm((v) => !v)}
             >
               {showForm ? "Cancel" : "Save current as view…"}
@@ -180,18 +189,18 @@ export function ViewBar({ projectId }: Props) {
             placeholder="View name (e.g. ‘My open work’)"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            className="flex-1 rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+            className={`${fieldClass} flex-1`}
           />
           <button
             type="submit"
             disabled={create.isPending || !newName.trim()}
-            className="rounded-md border border-zinc-300 px-3 py-1 text-xs disabled:opacity-50 dark:border-zinc-700"
+            className={xsBorderButtonClass}
           >
             {create.isPending ? "Saving…" : "Save"}
           </button>
         </form>
       ) : null}
-      {create.error ? <p className="text-xs text-red-600">{create.error.message}</p> : null}
+      {create.error ? <p className={errorMessageClass}>{create.error.message}</p> : null}
     </section>
   );
 }

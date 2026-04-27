@@ -1,5 +1,6 @@
 "use client";
 
+import { Pin, PinOff } from "lucide-react";
 import { trpc } from "@/lib/trpc-client";
 import { Button } from "@/ui/primitives/button";
 
@@ -25,12 +26,16 @@ export function PinButton({
   const pinned = status.data?.pinned ?? false;
   const busy = pin.isPending || unpin.isPending || status.isPending;
   const label = pinned ? "Unpin" : "Pin";
+  const Icon = pinned ? PinOff : Pin;
 
   return (
     <Button
+      type="button"
       variant={pinned ? "secondary" : "outline"}
-      size="sm"
+      size="xs"
+      aria-pressed={pinned}
       disabled={busy}
+      title={busy ? "…" : label}
       onClick={() => {
         if (pinned) {
           unpin.mutate({ projectId, providerItemId });
@@ -39,6 +44,7 @@ export function PinButton({
         }
       }}
     >
+      <Icon aria-hidden="true" />
       {busy ? "…" : label}
     </Button>
   );

@@ -42,7 +42,11 @@ export function TopBar({
         {currentProjectId && projects.length > 0 ? (
           <ProjectSwitcher projects={projects} currentProjectId={currentProjectId} />
         ) : null}
-        <AccountMenu userLabel={userLabel} signOutAction={handleSignOut} />
+        <AccountMenu
+          userLabel={userLabel}
+          signOutAction={handleSignOut}
+          currentProjectId={currentProjectId}
+        />
       </div>
     </header>
   );

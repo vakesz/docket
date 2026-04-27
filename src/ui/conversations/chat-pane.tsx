@@ -6,6 +6,7 @@ import { metaLabelClass, metaLabelFaintClass, microCapsButtonClass } from "@/lib
 import { trpc } from "@/lib/trpc-client";
 import { type ToolDisplayMode, useToolDisplayMode } from "@/lib/ui-prefs";
 import { cn } from "@/lib/utils";
+import { useChatPaneController } from "@/ui/conversations/chat-pane-context";
 import { LlmSwitcher } from "@/ui/conversations/llm-switcher";
 import { QuestionCard } from "@/ui/conversations/question-card";
 import { useChatStream } from "@/ui/conversations/use-chat-stream";
@@ -46,6 +47,7 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
   const { streaming, pendingProposalId, setPendingProposalId, drainStream, resetStream } =
     useChatStream();
   const [toolDisplayMode] = useToolDisplayMode();
+  const { pendingSeed, consumeSeed } = useChatPaneController();
 
   const list = trpc.conversations.list.useQuery(
     { projectId, itemId, limit: 20, archived: false },
@@ -65,6 +67,21 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
       await utils.conversations.list.invalidate({ projectId, itemId });
       setActiveId(null);
       resetStream();
+    },
+  });
+  const compactionStatus = trpc.conversations.compactionStatus.useQuery(
+    { projectId, conversationId: conversationId ?? "" },
+    { enabled: conversationId !== null, staleTime: 0 },
+  );
+  const compact = trpc.conversations.compact.useMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        utils.conversations.get.invalidate({ projectId, conversationId: conversationId ?? "" }),
+        utils.conversations.compactionStatus.invalidate({
+          projectId,
+          conversationId: conversationId ?? "",
+        }),
+      ]);
     },
   });
 
@@ -145,6 +162,29 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
     await drainStream({ projectId, itemId, conversationId: id, content: body });
   };
 
+  // Consume a queued "Suggest next action" seed: open a fresh thread and
+  // submit it as a normal user message. We start a *new* thread so the
+  // suggestion isn't appended to whatever the user was last asking about
+  // for this item — distinct entry point, distinct conversation.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: pendingSeed is the trigger; the rest is captured.
+  useEffect(() => {
+    if (!pendingSeed) return;
+    if (inFlight) return;
+    const seed = pendingSeed;
+    consumeSeed();
+    void (async () => {
+      const conv = await create.mutateAsync({ projectId, itemId });
+      setActiveId(conv.id);
+      resetStream();
+      await drainStream({
+        projectId,
+        itemId,
+        conversationId: conv.id,
+        content: seed,
+      });
+    })();
+  }, [pendingSeed, inFlight]);
+
   const startNewThread = async () => {
     if (inFlight) return;
     const conv = await create.mutateAsync({ projectId, itemId });
@@ -163,7 +203,31 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
             {(conversation.costCents / 100).toFixed(3)}
           </span>
         )}
+        {conversationId && compactionStatus.data && compactionStatus.data.utilization >= 0.7 && (
+          <span
+            className={cn(
+              "rounded-full border px-2 py-0.5 font-mono text-[10px]",
+              compactionStatus.data.utilization >= 1
+                ? "border-danger/40 bg-danger-bg text-danger-fg"
+                : "border-warning/40 bg-warning-bg text-warning-fg",
+            )}
+            title={`Estimated transcript ≈ ${compactionStatus.data.estimatedTokens} tokens (threshold ${compactionStatus.data.settings.tokenThreshold})`}
+          >
+            {Math.round(compactionStatus.data.utilization * 100)}% of compaction threshold
+          </span>
+        )}
         <div className="ml-auto flex items-center gap-2">
+          {conversationId && (
+            <button
+              type="button"
+              onClick={() => compact.mutate({ projectId, conversationId })}
+              disabled={compact.isPending || inFlight}
+              className={cn(microCapsButtonClass, "disabled:opacity-50")}
+              title="Fold older messages into a summary so the next prompt fits"
+            >
+              {compact.isPending ? "Compacting…" : "Compact"}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => void startNewThread()}

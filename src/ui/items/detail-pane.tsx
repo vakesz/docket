@@ -1,5 +1,6 @@
 import Link from "next/link";
-import type { ItemState } from "@/core/types";
+import type { ItemKind, ItemState } from "@/core/types";
+import { ITEM_KINDS, ITEM_STATES } from "@/core/types";
 import { metaLabelClass } from "@/lib/form-classes";
 import { displayTag, formatKind, formatRelative, providerProfileUrl } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -9,6 +10,7 @@ import { FreshnessStamp } from "@/ui/items/freshness";
 import { PinButton } from "@/ui/items/pin-button";
 import { RefreshItemButton } from "@/ui/items/refresh-item-button";
 import { StatePill } from "@/ui/items/state-pill";
+import { SuggestActionButton } from "@/ui/items/suggest-action-button";
 import { TransitionActions } from "@/ui/items/transition-actions";
 import { Markdown } from "@/ui/markdown/markdown";
 
@@ -71,6 +73,18 @@ export function DetailPane({
           <div className="ml-auto flex items-center gap-2">
             <PinButton projectId={projectId} providerItemId={item.providerItemId} />
             <RefreshItemButton projectId={projectId} itemId={item.id} />
+            <SuggestActionButton
+              kind={
+                (ITEM_KINDS as readonly string[]).includes(item.kind)
+                  ? (item.kind as ItemKind)
+                  : null
+              }
+              state={
+                (ITEM_STATES as readonly string[]).includes(item.state)
+                  ? (item.state as ItemState)
+                  : null
+              }
+            />
             <ChatToggleButton />
           </div>
         </div>

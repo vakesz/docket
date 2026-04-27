@@ -76,7 +76,11 @@ export async function POST(req: Request, context: RouteContext): Promise<Respons
       select: { llmProviderIdOverride: true },
     });
     adapter = await selectAdapterFor(db, {
-      project: { id: project.id, defaultLlmProviderId: project.defaultLlmProviderId },
+      project: {
+        id: project.id,
+        defaultLlmProviderId: project.defaultLlmProviderId,
+        defaultTemperature: project.defaultTemperature,
+      },
       overrideId: conv?.llmProviderIdOverride ?? null,
     });
   } catch (err) {

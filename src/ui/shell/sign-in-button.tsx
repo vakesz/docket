@@ -1,3 +1,4 @@
+import { primaryButtonClass } from "@/lib/form-classes";
 import { signIn } from "@/server/auth";
 
 export function SignInWithGitHubButton({ redirectTo = "/" }: { redirectTo?: string }) {
@@ -8,10 +9,7 @@ export function SignInWithGitHubButton({ redirectTo = "/" }: { redirectTo?: stri
         await signIn("github", { redirectTo });
       }}
     >
-      <button
-        type="submit"
-        className="rounded-full bg-zinc-900 px-5 py-2 text-sm font-medium text-white transition hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200"
-      >
+      <button type="submit" className={primaryButtonClass}>
         Sign in with GitHub
       </button>
     </form>

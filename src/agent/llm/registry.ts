@@ -30,7 +30,7 @@ export class LlmConfigError extends Error {
 
 export type AdapterContext = {
   /** Project context — defines the per-project default. */
-  project: Pick<Project, "id" | "defaultLlmProviderId">;
+  project: Pick<Project, "id" | "defaultLlmProviderId" | "defaultTemperature">;
   /** Per-conversation override id, if set. */
   overrideId?: string | null;
 };
@@ -45,10 +45,13 @@ export async function selectAdapterFor(db: Database, ctx: AdapterContext): Promi
   if (!row.enabled) {
     throw new LlmConfigError(`LLM provider '${row.label}' is disabled.`);
   }
-  return buildAdapter(row);
+  return buildAdapter(row, { defaultTemperature: ctx.project.defaultTemperature ?? null });
 }
 
-export function buildAdapter(row: LlmProvider): LlmAdapter {
+export function buildAdapter(
+  row: LlmProvider,
+  opts: { defaultTemperature?: number | null } = {},
+): LlmAdapter {
   // `apiKey` is encrypted at rest with `SECRETS_KEY`. Legacy plaintext rows
   // decrypt to themselves, so this is a no-op until the operator rolls a key.
   const apiKey = decryptSecret(row.apiKey);
@@ -59,6 +62,7 @@ export function buildAdapter(row: LlmProvider): LlmAdapter {
         label: row.label,
         model: row.model || undefined,
         baseUrl: row.baseUrl || undefined,
+        defaultTemperature: opts.defaultTemperature ?? undefined,
       });
     default:
       throw new LlmConfigError(

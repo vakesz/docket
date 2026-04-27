@@ -44,8 +44,17 @@ export type OpenAiAdapterConfig = {
   label: string;
   /** Defaults to "gpt-5". */
   model?: string;
-  /** Optional base URL for Azure / Ollama / proxies. */
+  /**
+   * Optional base URL. For Azure AI Foundry use the project's OpenAI v1
+   * endpoint ending in `/openai/v1/`; for Ollama or proxies, point at their
+   * OpenAI-compatible root.
+   */
   baseUrl?: string;
+  /**
+   * Sampling temperature applied when the per-request `temperature` is
+   * undefined. Set by the registry from `Project.defaultTemperature`.
+   */
+  defaultTemperature?: number;
 };
 
 export class OpenAiAdapter implements LlmAdapter {
@@ -53,10 +62,13 @@ export class OpenAiAdapter implements LlmAdapter {
   readonly label: string;
   private readonly client: OpenAI;
   private readonly model: string;
+  private readonly defaultTemperature: number | undefined;
 
   constructor(config: OpenAiAdapterConfig) {
     this.label = config.label;
     this.model = config.model && config.model.length > 0 ? config.model : DEFAULT_MODEL;
+    this.defaultTemperature =
+      typeof config.defaultTemperature === "number" ? config.defaultTemperature : undefined;
     this.client = new OpenAI({
       apiKey: config.apiKey,
       ...(config.baseUrl ? { baseURL: config.baseUrl } : {}),
@@ -74,6 +86,9 @@ export class OpenAiAdapter implements LlmAdapter {
 
     const input = toResponsesInput(req.messages);
 
+    const effectiveTemperature =
+      req.temperature !== undefined ? req.temperature : this.defaultTemperature;
+
     let stream: AsyncIterable<unknown>;
     try {
       stream = (await this.client.responses.create({
@@ -82,7 +97,7 @@ export class OpenAiAdapter implements LlmAdapter {
         tools: tools.length > 0 ? tools : undefined,
         stream: true,
         ...(req.maxOutputTokens ? { max_output_tokens: req.maxOutputTokens } : {}),
-        ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
+        ...(effectiveTemperature !== undefined ? { temperature: effectiveTemperature } : {}),
       } as unknown as Parameters<OpenAI["responses"]["create"]>[0])) as AsyncIterable<unknown>;
     } catch (err) {
       yield { kind: "error", message: err instanceof Error ? err.message : String(err) };
@@ -185,17 +200,35 @@ export class OpenAiAdapter implements LlmAdapter {
 }
 
 function toResponsesInput(messages: readonly import("@/agent/llm/types").LlmMessage[]) {
-  // The Responses API accepts a flat input array of role-tagged items
-  // alongside function_call / function_call_output items. Tool calls are
-  // attached to the assistant turn that produced them.
+  // The Responses API accepts a flat input array of typed items: messages,
+  // function_call, function_call_output. Tool calls are attached to the
+  // assistant turn that produced them.
+  //
+  // We emit the explicit `type: "message"` + content-parts form rather than
+  // the bare `{ role, content }` shorthand — api.openai.com infers the type,
+  // but Azure AI Foundry's stricter validator rejects items without one.
   const out: Array<Record<string, unknown>> = [];
   for (const m of messages) {
     if (m.role === "system") {
-      out.push({ role: "system", content: m.content });
+      out.push({
+        type: "message",
+        role: "system",
+        content: [{ type: "input_text", text: m.content }],
+      });
     } else if (m.role === "user") {
-      out.push({ role: "user", content: m.content });
+      out.push({
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: m.content }],
+      });
     } else if (m.role === "assistant") {
-      if (m.content) out.push({ role: "assistant", content: m.content });
+      if (m.content) {
+        out.push({
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: m.content }],
+        });
+      }
       for (const call of m.toolCalls ?? []) {
         out.push({
           type: "function_call",

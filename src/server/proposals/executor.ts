@@ -33,6 +33,19 @@ type ExecutorContext = {
   userId: string;
 };
 
+/**
+ * Audit retention prune. Lives here (not in the settings router) because
+ * `db.audit.<write>` is locked to this module by `no-audit-write-leak.test.ts`
+ * — every audit row write/delete site must be auditable in one place.
+ */
+export async function pruneAuditOlderThan(
+  db: typeof import("@/server/db").db,
+  cutoff: Date,
+): Promise<number> {
+  const res = await db.audit.deleteMany({ where: { createdAt: { lt: cutoff } } });
+  return res.count;
+}
+
 async function recordAudit(
   ctx: ExecutorContext,
   action: string,

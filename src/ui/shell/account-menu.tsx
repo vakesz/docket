@@ -1,12 +1,21 @@
 "use client";
 
+import { LogOut, Settings } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { metaLabelFaintClass } from "@/lib/form-classes";
 import { cn } from "@/lib/utils";
 
 type Props = {
   userLabel: string;
   signOutAction: () => Promise<void>;
+  /**
+   * Carried into the `/settings` link as `?project=<id>` so the unified
+   * settings page knows which project's per-project sections (memory,
+   * sources, MCP) to populate. Null when the user is on a route without
+   * an active project.
+   */
+  currentProjectId?: string | null;
 };
 
 /**
@@ -15,7 +24,7 @@ type Props = {
  * pills in the topbar; collapsing them under one affordance matches main
  * and frees the bar for the project switcher.
  */
-export function AccountMenu({ userLabel, signOutAction }: Props) {
+export function AccountMenu({ userLabel, signOutAction, currentProjectId = null }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -56,26 +65,28 @@ export function AccountMenu({ userLabel, signOutAction }: Props) {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-[calc(100%+0.375rem)] z-30 w-56 overflow-hidden rounded-md border border-border bg-surface shadow-lg"
+          className="absolute right-0 top-[calc(100%+0.375rem)] z-30 w-56 overflow-hidden rounded-xl border border-border bg-surface shadow-lg"
         >
           <div className="border-b border-border px-3 py-2 text-xs text-fg-muted">
-            <div className={metaCaps}>Signed in as</div>
+            <div className={metaLabelFaintClass}>Signed in as</div>
             <div className="truncate text-sm text-fg">{userLabel}</div>
           </div>
           <Link
-            href="/settings"
+            href={currentProjectId ? `/settings?project=${currentProjectId}` : "/settings"}
             role="menuitem"
             onClick={() => setOpen(false)}
-            className="block px-3 py-2 text-sm text-fg hover:bg-surface-alt"
+            className="flex items-center gap-2 px-3 py-2 text-sm text-fg hover:bg-surface-alt"
           >
+            <Settings aria-hidden="true" className="h-4 w-4 shrink-0 text-fg-muted" />
             Settings
           </Link>
           <form action={signOutAction} className="border-t border-border">
             <button
               type="submit"
               role="menuitem"
-              className="w-full px-3 py-2 text-left text-sm text-fg hover:bg-surface-alt"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-fg hover:bg-surface-alt"
             >
+              <LogOut aria-hidden="true" className="h-4 w-4 shrink-0 text-fg-muted" />
               Sign out
             </button>
           </form>
@@ -84,5 +95,3 @@ export function AccountMenu({ userLabel, signOutAction }: Props) {
     </div>
   );
 }
-
-const metaCaps = "text-[10px] uppercase tracking-wide text-fg-faint";
