@@ -35,7 +35,12 @@ export type StreamPayload =
 
 export type StreamingState = {
   text: string;
-  toolCalls: { callId: string; name: string; ok: boolean | null }[];
+  toolCalls: {
+    callId: string;
+    name: string;
+    arguments: Record<string, unknown>;
+    ok: boolean | null;
+  }[];
   question: { question: string; options: readonly string[] | null; multiSelect: boolean } | null;
   error: string | null;
   done: boolean;

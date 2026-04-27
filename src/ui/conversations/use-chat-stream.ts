@@ -124,7 +124,10 @@ export function useChatStream(): UseChatStream {
         } else if (p.kind === "tool_call_started") {
           setStreaming((prev) => ({
             ...prev,
-            toolCalls: [...prev.toolCalls, { callId: p.callId, name: p.name, ok: null }],
+            toolCalls: [
+              ...prev.toolCalls,
+              { callId: p.callId, name: p.name, arguments: p.arguments, ok: null },
+            ],
           }));
         } else if (p.kind === "tool_call_completed") {
           setStreaming((prev) => ({

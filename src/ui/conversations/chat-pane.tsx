@@ -588,7 +588,12 @@ function ToolCallProgress({
   mode,
   streaming,
 }: {
-  toolCalls: { callId: string; name: string; ok: boolean | null }[];
+  toolCalls: {
+    callId: string;
+    name: string;
+    arguments: Record<string, unknown>;
+    ok: boolean | null;
+  }[];
   mode: ToolDisplayMode;
   streaming: boolean;
 }) {
@@ -600,11 +605,16 @@ function ToolCallProgress({
   }
   return (
     <div className="mb-3 flex flex-col gap-1 rounded border border-dashed border-border px-3 py-1.5 font-mono text-xs text-fg-muted">
-      {toolCalls.map((tc) => (
-        <div key={tc.callId}>
-          {tc.ok === null ? "→" : tc.ok ? "✓" : "✗"} {tc.name}
-        </div>
-      ))}
+      {toolCalls.map((tc) => {
+        const arrow = tc.ok === null ? "→" : tc.ok ? "✓" : "✗";
+        const argSummary = condenseArgs(tc.arguments, 80);
+        return (
+          <div key={tc.callId} className="truncate">
+            {arrow} {tc.name}
+            {argSummary ? `(${argSummary})` : "()"}
+          </div>
+        );
+      })}
     </div>
   );
 }
