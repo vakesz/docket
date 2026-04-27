@@ -2,7 +2,7 @@ node_modules
 .next
 .git
 .gitignore
-.docs
+docs
 .claude
 .agent-logs
 .vscode

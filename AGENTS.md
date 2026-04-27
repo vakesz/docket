@@ -160,7 +160,7 @@ Aspirational direction (consistent with current refactors, not a hard rule):
 - Provider onboarding centralizes in `src/server/provider-registry.ts` + the two builders. Adding a provider should not need a grep across surface code.
 - Per-project admin (memory, sources, MCP fleet, saved views, default LLM) lives in shared services so server components and tRPC clients can't drift.
 
-> **Adding a new provider?** See **[.docs/ADDING_A_PROVIDER.md](.docs/ADDING_A_PROVIDER.md)** for the full authoring walkthrough — package layout, the `WorkItemProvider` interface, `ProviderSpec` fields, NextAuth wiring via `auth-build.ts`, registration in `provider-registry.ts`, and the testing checklist.
+> **Adding a new provider?** See **[docs/ADDING_A_PROVIDER.md](docs/ADDING_A_PROVIDER.md)** for the full authoring walkthrough — package layout, the `WorkItemProvider` interface, `ProviderSpec` fields, NextAuth wiring via `auth-build.ts`, registration in `provider-registry.ts`, and the testing checklist.
 
 ## Global Invariants
 
