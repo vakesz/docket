@@ -73,6 +73,27 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
   const inFlight = !streaming.done;
   const conversation = detail.data ?? null;
 
+  // Suppress `pendingUserMessage` once its persisted twin has landed in
+  // `messages`. Without this we'd render the same user bubble twice for
+  // the window between the initial detail.useQuery refetch (which the
+  // server has already populated via `appendMessage(role: "user")`) and
+  // the post-stream invalidate that finally clears pendingUserMessage in
+  // state. Most visible on the "Suggest next action" path because that
+  // creates a fresh conversation and forces detail to refetch from
+  // scratch mid-stream.
+  const hasStreamingActivity =
+    streaming.pendingUserMessage !== null ||
+    streaming.text.length > 0 ||
+    streaming.toolCalls.length > 0 ||
+    streaming.settledRounds.length > 0;
+  const showPendingUserMessage = useMemo(() => {
+    const pending = streaming.pendingUserMessage;
+    if (pending === null) return false;
+    const target = pending.trim();
+    if (!target) return false;
+    return !messages.some((m) => m.role === "user" && m.content.trim() === target);
+  }, [streaming.pendingUserMessage, messages]);
+
   // Reset stream + draft on item switch — closures inside the hook are bound
   // to (projectId, itemId, conversationId) for one turn, so a stale stream
   // can't bleed across items.
@@ -207,11 +228,11 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
       </header>
 
       <div ref={scrollRef} className="relative flex-1 overflow-auto px-3 py-3">
-        {!conversationId && messages.length === 0 && !streaming.text ? (
+        {!conversationId && messages.length === 0 && !hasStreamingActivity ? (
           <p className="text-sm italic text-fg-faint">
             No conversation yet. Send a message to start one.
           </p>
-        ) : detail.isPending && messages.length === 0 ? (
+        ) : detail.isPending && messages.length === 0 && !hasStreamingActivity ? (
           <p className="text-sm italic text-fg-faint">Loading messages…</p>
         ) : (
           <>
@@ -230,7 +251,7 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
                 />
               );
             })}
-            {streaming.pendingUserMessage && (
+            {showPendingUserMessage && streaming.pendingUserMessage && (
               <Bubble messageRole="user" text={streaming.pendingUserMessage} />
             )}
             {streaming.settledRounds.map((round, idx) => (
