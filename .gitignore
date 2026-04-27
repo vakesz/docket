@@ -49,7 +49,6 @@ next-env.d.ts
 
 # Allow committing example env files
 !.env.example
-!.env.local.example
 !.env.example.*
 
 # Local Claude Code runtime artifacts

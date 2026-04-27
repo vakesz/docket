@@ -15,7 +15,7 @@ This file is the load-bearing reference for anyone (or anything) editing the cod
 
 ```bash
 bun install
-cp .env.local.example .env.local        # at minimum: DATABASE_URL, AUTH_SECRET, plus DEV_* seeds
+cp .env.example .env.local              # at minimum: DATABASE_URL, AUTH_SECRET, plus DEV_* seeds
 bun run dev                             # predev seed (bin/seed-dev.ts) + next dev (Turbopack)
 
 bun run build                           # next build

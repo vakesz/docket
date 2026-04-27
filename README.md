@@ -122,7 +122,7 @@ docker compose pull && docker compose up -d --build   # update
 
 ```bash
 bun install
-cp .env.local.example .env.local
+cp .env.example .env.local
 $EDITOR .env.local       # at minimum: DATABASE_URL, AUTH_SECRET, plus DEV_* seeds for sign-in
 bun run dev              # runs predev seed + next dev (Turbopack)
 ```
