@@ -8,6 +8,13 @@ import { cn } from "@/lib/utils";
 
 type Props = {
   userLabel: string;
+  /**
+   * Avatar URL from the OAuth provider's user record (NextAuth's
+   * `User.image`). Provider-agnostic: any provider that returns an image
+   * via NextAuth's profile callback ends up here. Null means we render the
+   * fallback initial — same shape as before image support existed.
+   */
+  userImage?: string | null;
   signOutAction: () => Promise<void>;
   /**
    * Carried into the `/settings` link as `?project=<id>` so the unified
@@ -24,8 +31,14 @@ type Props = {
  * pills in the topbar; collapsing them under one affordance matches main
  * and frees the bar for the project switcher.
  */
-export function AccountMenu({ userLabel, signOutAction, currentProjectId = null }: Props) {
+export function AccountMenu({
+  userLabel,
+  userImage = null,
+  signOutAction,
+  currentProjectId = null,
+}: Props) {
   const [open, setOpen] = useState(false);
+  const [imageBroken, setImageBroken] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -46,6 +59,7 @@ export function AccountMenu({ userLabel, signOutAction, currentProjectId = null 
   }, [open]);
 
   const initial = userLabel.trim().charAt(0).toUpperCase() || "?";
+  const showImage = !!userImage && !imageBroken;
 
   return (
     <div ref={ref} className="relative inline-block shrink-0 leading-none">
@@ -55,12 +69,27 @@ export function AccountMenu({ userLabel, signOutAction, currentProjectId = null 
         aria-haspopup="menu"
         aria-expanded={open}
         className={cn(
-          "inline-flex h-7 w-7 items-center justify-center rounded-full border border-border bg-surface text-xs font-semibold text-fg",
+          "inline-flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border border-border bg-surface text-xs font-semibold text-fg",
           "hover:bg-surface-alt focus:outline-none focus:ring-2 focus:ring-accent",
         )}
         title={userLabel}
       >
-        {initial}
+        {showImage ? (
+          // Plain <img> rather than next/image: avatar URLs are provider-
+          // dependent (GitHub, Microsoft Graph, etc.) and Next's optimizer
+          // requires every host be allowlisted in next.config — that would
+          // tie this component to a fixed provider list.
+          // biome-ignore lint/performance/noImgElement: provider-agnostic remote avatar
+          <img
+            src={userImage as string}
+            alt=""
+            className="h-full w-full object-cover"
+            referrerPolicy="no-referrer"
+            onError={() => setImageBroken(true)}
+          />
+        ) : (
+          initial
+        )}
       </button>
       {open && (
         <div

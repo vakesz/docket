@@ -9,6 +9,7 @@ import { createCaller } from "@/server/trpc-caller";
 import { CommandPalette } from "@/ui/shell/command-palette";
 import { StatusFooter } from "@/ui/shell/status-footer";
 import { TopBar } from "@/ui/shell/top-bar";
+import { WorkspaceProviders } from "@/ui/shell/workspace-providers";
 
 export default async function ProjectLayout({
   children,
@@ -38,6 +39,7 @@ export default async function ProjectLayout({
 
   const projects = await trpc.projects.list();
   const userLabel = session.user.email ?? session.user.name ?? "you";
+  const userImage = session.user.image ?? null;
 
   const [readOnly, pendingProposals, syncCursor] = await Promise.all([
     loadGlobalSetting(db, "app.read-only"),
@@ -59,17 +61,24 @@ export default async function ProjectLayout({
 
   return (
     <div className="flex min-h-screen flex-col bg-bg text-fg">
-      <TopBar projects={projectOptions} currentProjectId={project.id} userLabel={userLabel} />
-      <main className="flex flex-1 flex-col overflow-hidden">{children}</main>
-      <StatusFooter
-        projectId={project.id}
-        projectName={project.name}
-        providerKind={project.providerKind}
-        lastSyncAt={lastSyncAt}
-        pendingProposals={pendingProposals.length}
-        readOnly={readOnly}
-      />
-      <CommandPalette projectId={project.id} projects={projectOptions} />
+      <WorkspaceProviders>
+        <TopBar
+          projects={projectOptions}
+          currentProjectId={project.id}
+          userLabel={userLabel}
+          userImage={userImage}
+        />
+        <main className="flex flex-1 flex-col overflow-hidden">{children}</main>
+        <StatusFooter
+          projectId={project.id}
+          projectName={project.name}
+          providerKind={project.providerKind}
+          lastSyncAt={lastSyncAt}
+          pendingProposals={pendingProposals.length}
+          readOnly={readOnly}
+        />
+        <CommandPalette projectId={project.id} projects={projectOptions} />
+      </WorkspaceProviders>
     </div>
   );
 }

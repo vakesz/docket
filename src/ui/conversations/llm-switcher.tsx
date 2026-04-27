@@ -1,6 +1,7 @@
 "use client";
 
 import { trpc } from "@/lib/trpc-client";
+import { SelectField } from "@/ui/forms/select-field";
 
 type LlmRow = {
   id: string;
@@ -49,10 +50,10 @@ export function LlmSwitcher({
   const value = currentOverrideId ?? "default";
 
   return (
-    <label className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-fg-faint">
+    <span className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-fg-faint">
       <span>LLM</span>
-      <select
-        className="rounded border border-border bg-surface px-1.5 py-0.5 text-[11px] normal-case tracking-normal text-fg disabled:cursor-not-allowed disabled:opacity-60"
+      <SelectField
+        className="rounded-md py-0.5 pl-2 pr-7 text-[11px] normal-case tracking-normal"
         value={value}
         disabled={disabled}
         onChange={(e) => {
@@ -69,8 +70,8 @@ export function LlmSwitcher({
               {formatRow(r)}
             </option>
           ))}
-      </select>
-    </label>
+      </SelectField>
+    </span>
   );
 }
 

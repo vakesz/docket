@@ -10,7 +10,6 @@ import {
   Globe,
   KeyRound,
   LineChart,
-  Menu,
   MessageSquare,
   RefreshCw,
   ScrollText,
@@ -40,6 +39,7 @@ import { ProjectsPanel } from "@/ui/settings/projects-panel";
 import { SyncPanel } from "@/ui/settings/sync-panel";
 import { WebFetchPanel } from "@/ui/settings/web-fetch-panel";
 import { WorkspacePanel } from "@/ui/settings/workspace-panel";
+import { useRegisterSidebarMount, useSidebarDrawer } from "@/ui/shell/sidebar-drawer-context";
 import { SourcesPane } from "@/ui/sources/sources-pane";
 
 type SectionKey =
@@ -277,7 +277,8 @@ export function SettingsShell({ publicBase, project, initialSection }: Props) {
   const [active, setActive] = useState<SectionKey>(
     initialSection ?? (projectId ? "memory" : "profile"),
   );
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  useRegisterSidebarMount();
+  const { open: mobileNavOpen, setOpen: setMobileNavOpen } = useSidebarDrawer();
 
   useEffect(() => {
     if (initialSection) {
@@ -400,27 +401,15 @@ export function SettingsShell({ publicBase, project, initialSection }: Props) {
 
       <section className="min-h-0 overflow-auto">
         <header className="border-b border-border bg-surface/70 px-4 py-4 backdrop-blur sm:px-6">
-          <div className="flex items-start gap-3">
-            <button
-              type="button"
-              onClick={() => setMobileNavOpen(true)}
-              aria-label="Open settings menu"
-              className="-ml-1 rounded-md p-2 text-fg hover:bg-surface-alt lg:hidden"
-            >
-              <Menu className="h-5 w-5" />
-            </button>
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-baseline gap-2">
-                <h2 className="text-lg font-semibold text-fg">{activeMeta.label}</h2>
-                {activeMeta.needsProject && project ? (
-                  <span className="rounded-full border border-border bg-surface-alt px-2 py-0.5 text-[11px] uppercase tracking-wide text-fg-muted">
-                    {project.name}
-                  </span>
-                ) : null}
-              </div>
-              <p className="mt-1 max-w-3xl text-sm text-fg-muted">{activeMeta.description}</p>
-            </div>
+          <div className="flex flex-wrap items-baseline gap-2">
+            <h2 className="text-lg font-semibold text-fg">{activeMeta.label}</h2>
+            {activeMeta.needsProject && project ? (
+              <span className="rounded-full border border-border bg-surface-alt px-2 py-0.5 text-[11px] uppercase tracking-wide text-fg-muted">
+                {project.name}
+              </span>
+            ) : null}
           </div>
+          <p className="mt-1 max-w-3xl text-sm text-fg-muted">{activeMeta.description}</p>
         </header>
 
         <div className="px-4 py-6 sm:px-6">

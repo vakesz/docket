@@ -8,6 +8,7 @@ import { createCaller } from "@/server/trpc-caller";
 import { CommandPalette } from "@/ui/shell/command-palette";
 import { StatusFooter } from "@/ui/shell/status-footer";
 import { TopBar } from "@/ui/shell/top-bar";
+import { WorkspaceProviders } from "@/ui/shell/workspace-providers";
 
 /**
  * Settings shares the workspace chrome — same TopBar (with project
@@ -56,23 +57,62 @@ export default async function SettingsLayout({
     projectOptions[0]?.id ??
     null;
 
+  const currentProject = currentProjectId
+    ? (projects.find((p) => p.id === currentProjectId) ?? null)
+    : null;
+
+  // Mirror the project layout's footer state so the user keeps the same
+  // sync/pending signal while navigating into /settings. Without this the
+  // footer shows "never synced" on settings even when the selected project
+  // has been syncing happily.
+  const [pendingProposals, syncCursor] = currentProjectId
+    ? await Promise.all([
+        trpc.proposals.list({ projectId: currentProjectId, status: "pending", limit: 100 }),
+        db.syncCursor.findUnique({
+          where: { projectId: currentProjectId },
+          select: { watermark: true, lastFullSyncAt: true, updatedAt: true },
+        }),
+      ])
+    : [[], null];
+
+  const lastSyncAt = syncCursor
+    ? mostRecent([syncCursor.watermark, syncCursor.lastFullSyncAt, syncCursor.updatedAt])
+    : null;
+
   const userLabel = session.user.email ?? session.user.name ?? "you";
+  const userImage = session.user.image ?? null;
 
   return (
     <div className="flex min-h-screen flex-col bg-bg text-fg">
-      <TopBar projects={projectOptions} currentProjectId={currentProjectId} userLabel={userLabel} />
-      <main className="flex flex-1 flex-col overflow-hidden">{children}</main>
-      <StatusFooter
-        projectId={currentProjectId}
-        projectName={projectOptions.find((p) => p.id === currentProjectId)?.name ?? null}
-        providerKind={null}
-        lastSyncAt={null}
-        pendingProposals={0}
-        readOnly={readOnly}
-      />
-      {currentProjectId ? (
-        <CommandPalette projectId={currentProjectId} projects={projectOptions} />
-      ) : null}
+      <WorkspaceProviders>
+        <TopBar
+          projects={projectOptions}
+          currentProjectId={currentProjectId}
+          userLabel={userLabel}
+          userImage={userImage}
+        />
+        <main className="flex flex-1 flex-col overflow-hidden">{children}</main>
+        <StatusFooter
+          projectId={currentProjectId}
+          projectName={currentProject?.name ?? null}
+          providerKind={currentProject?.providerKind ?? null}
+          lastSyncAt={lastSyncAt}
+          pendingProposals={pendingProposals.length}
+          readOnly={readOnly}
+        />
+        {currentProjectId ? (
+          <CommandPalette projectId={currentProjectId} projects={projectOptions} />
+        ) : null}
+      </WorkspaceProviders>
     </div>
   );
+}
+
+function mostRecent(dates: Array<Date | null | undefined>): Date | null {
+  let best: Date | null = null;
+  for (const d of dates) {
+    if (!d) continue;
+    if (!best || d.getTime() > best.getTime()) best = d;
+  }
+  return best;
 }

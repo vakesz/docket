@@ -59,7 +59,7 @@ export function StatusFooter({
   }, []);
 
   return (
-    <footer className="flex items-center gap-3 border-t border-border bg-surface px-3 py-1.5 text-[11px] text-fg-muted">
+    <footer className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border bg-surface px-3 py-1.5 text-[11px] text-fg-muted">
       <span className="flex items-center gap-1.5">
         <span
           className={cn("h-1.5 w-1.5 rounded-full", online ? "bg-success" : "bg-danger")}
@@ -69,10 +69,10 @@ export function StatusFooter({
       </span>
       {projectName ? (
         <>
-          <span className="text-fg-faint">·</span>
-          <span className="truncate font-medium text-fg">{projectName}</span>
+          <span className="hidden text-fg-faint sm:inline">·</span>
+          <span className="hidden truncate font-medium text-fg sm:inline">{projectName}</span>
           {providerKind ? (
-            <span className="rounded-full border border-border bg-surface-alt px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
+            <span className="hidden rounded-full border border-border bg-surface-alt px-1.5 py-0.5 text-[10px] uppercase tracking-wide sm:inline-block">
               {providerKind.replace("_", " ")}
             </span>
           ) : null}

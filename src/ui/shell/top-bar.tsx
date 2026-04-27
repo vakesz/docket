@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { signOut } from "@/server/auth";
 import { AccountMenu } from "@/ui/shell/account-menu";
+import { BacklogDrawerTrigger } from "@/ui/shell/backlog-drawer-trigger";
 import { ProjectSwitcher } from "@/ui/shell/project-switcher";
 
 type ProjectOption = { id: string; name: string };
@@ -15,10 +16,12 @@ export function TopBar({
   projects,
   currentProjectId,
   userLabel,
+  userImage,
 }: {
   projects: ProjectOption[];
   currentProjectId: string | null;
   userLabel: string;
+  userImage: string | null;
 }) {
   async function handleSignOut() {
     "use server";
@@ -26,7 +29,8 @@ export function TopBar({
   }
 
   return (
-    <header className="flex items-center border-b border-border bg-surface px-4 py-2">
+    <header className="flex items-center border-b border-border bg-surface px-2 py-2 sm:px-4">
+      <BacklogDrawerTrigger />
       <Link
         href="/"
         className="flex shrink-0 items-center gap-2 text-fg hover:text-accent"
@@ -47,6 +51,7 @@ export function TopBar({
         ) : null}
         <AccountMenu
           userLabel={userLabel}
+          userImage={userImage}
           signOutAction={handleSignOut}
           currentProjectId={currentProjectId}
         />

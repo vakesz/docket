@@ -9,6 +9,7 @@ import {
   xsDangerButtonClass,
 } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
+import { SelectField } from "@/ui/forms/select-field";
 
 type Props = {
   projectId: string;
@@ -70,18 +71,18 @@ export function MembersPanel({ projectId }: Props) {
             onChange={(e) => setEmail(e.target.value)}
             className={`${fieldClass} max-w-[20rem]`}
           />
-          <select
+          <SelectField
             value={role}
             disabled={!canManage || add.isPending}
             onChange={(e) => setRole(e.target.value as Role)}
-            className={`${fieldClass} max-w-[10rem]`}
+            wrapperClassName="max-w-[10rem]"
           >
             {ROLES.map((r) => (
               <option key={r} value={r}>
                 {r}
               </option>
             ))}
-          </select>
+          </SelectField>
           <button
             type="button"
             onClick={onAdd}
@@ -126,7 +127,7 @@ export function MembersPanel({ projectId }: Props) {
                   controls={
                     canManage ? (
                       <div className="flex items-center gap-2">
-                        <select
+                        <SelectField
                           value={m.role}
                           disabled={updateRole.isPending}
                           onChange={(e) =>
@@ -136,14 +137,15 @@ export function MembersPanel({ projectId }: Props) {
                               role: e.target.value as Role,
                             })
                           }
-                          className={`${fieldClass} h-8 max-w-[8rem] py-1 text-xs`}
+                          wrapperClassName="max-w-[8rem]"
+                          className="h-8 py-1 text-xs"
                         >
                           {ROLES.map((r) => (
                             <option key={r} value={r}>
                               {r}
                             </option>
                           ))}
-                        </select>
+                        </SelectField>
                         <button
                           type="button"
                           onClick={() => {

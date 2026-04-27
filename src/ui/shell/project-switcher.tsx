@@ -1,5 +1,6 @@
 "use client";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { SelectField } from "@/ui/forms/select-field";
 
 type ProjectOption = {
   id: string;
@@ -36,8 +37,9 @@ export function ProjectSwitcher({
     urlProject && projects.some((p) => p.id === urlProject) ? urlProject : currentProjectId;
 
   return (
-    <select
-      className="min-w-0 max-w-[12rem] truncate rounded-full border border-border bg-surface px-3 py-1 text-xs text-fg focus:border-accent focus:outline-none"
+    <SelectField
+      wrapperClassName="min-w-0 max-w-[12rem]"
+      className="truncate rounded-full px-3 py-1 text-xs"
       value={effective}
       onChange={(e) => {
         const next = e.target.value;
@@ -60,6 +62,6 @@ export function ProjectSwitcher({
         ──────────
       </option>
       <option value={ADD_PROJECT_VALUE}>+ Add project…</option>
-    </select>
+    </SelectField>
   );
 }
