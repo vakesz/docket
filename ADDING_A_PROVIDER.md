@@ -34,7 +34,7 @@ backlog.
 Built-in providers live under `src/providers/<type-id>/`. The canonical
 layout (mirrors `github/` and `azure-devops/`):
 
-```
+```text
 src/providers/<type-id>/
 ├── auth.ts            # NextAuth provider builder, OAuth token wiring
 ├── provider.ts        # WorkItemProvider implementation
@@ -96,6 +96,7 @@ export interface WorkItemProvider {
 ```
 
 Reference impls:
+
 - `src/providers/github/provider.ts` — Octokit-backed production reference.
 - `src/providers/azure-devops/provider.ts` — Azure DevOps SDK; demonstrates
   Markdown ↔ HTML round-tripping for description fields.
@@ -216,12 +217,14 @@ present (every provider with assignment supports it); everything else is
 declared by the spec.
 
 When to add an axis:
+
 - The provider exposes a stable narrowing dimension users actually filter
   by (team, project area, sprint, squad, component).
 - The dimension's value is in `Item.providerRaw` after sync, or cheap to
   derive from cached fields.
 
 When NOT to add an axis:
+
 - For sort orders or display preferences (those are UI concerns).
 - For values that change per-item without a stable enumeration — those
   belong in full-text search, not the chip bar.
