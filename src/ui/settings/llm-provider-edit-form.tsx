@@ -13,15 +13,24 @@ import { SelectField } from "@/ui/forms/select-field";
 const KINDS = ["openai", "anthropic", "gemini", "bedrock", "mistral", "ollama"] as const;
 type Kind = (typeof KINDS)[number];
 
-function parsePrice(raw: string): number | null {
-  const trimmed = raw.trim();
+/**
+ * Parse "$ per Mtok" form input into cents-per-Mtok for the router.
+ * Accepts both "1.25" and "1,25" — the comma is the decimal separator in
+ * many European locales and would otherwise silently parse as NaN → null.
+ */
+function parsePriceDollarsToCents(raw: string): number | null {
+  const trimmed = raw.trim().replace(",", ".");
   if (trimmed.length === 0) return null;
-  const value = Number(trimmed);
-  return Number.isFinite(value) && value >= 0 ? value : null;
+  const dollars = Number(trimmed);
+  if (!Number.isFinite(dollars) || dollars < 0) return null;
+  return Math.round(dollars * 100);
 }
 
-function formatPrice(value: number | null | undefined): string {
-  return typeof value === "number" ? String(value) : "";
+/** Render a stored cents-per-Mtok value as a dollar string for the form. */
+function formatPriceCentsAsDollars(cents: number | null | undefined): string {
+  if (typeof cents !== "number") return "";
+  // Two decimal places is plenty — vendors quote at the cent today (e.g. $0.05).
+  return (cents / 100).toFixed(2);
 }
 
 type Initial = {
@@ -57,8 +66,12 @@ export function LlmProviderEditForm({
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState(initial.model);
   const [baseUrl, setBaseUrl] = useState(initial.baseUrl);
-  const [inputPrice, setInputPrice] = useState(formatPrice(initial.inputPriceCentsPerMtok));
-  const [outputPrice, setOutputPrice] = useState(formatPrice(initial.outputPriceCentsPerMtok));
+  const [inputPrice, setInputPrice] = useState(
+    formatPriceCentsAsDollars(initial.inputPriceCentsPerMtok),
+  );
+  const [outputPrice, setOutputPrice] = useState(
+    formatPriceCentsAsDollars(initial.outputPriceCentsPerMtok),
+  );
 
   function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -69,8 +82,8 @@ export function LlmProviderEditForm({
       apiKey: apiKey.trim(),
       model: model.trim(),
       baseUrl: baseUrl.trim(),
-      inputPriceCentsPerMtok: parsePrice(inputPrice),
-      outputPriceCentsPerMtok: parsePrice(outputPrice),
+      inputPriceCentsPerMtok: parsePriceDollarsToCents(inputPrice),
+      outputPriceCentsPerMtok: parsePriceDollarsToCents(outputPrice),
     });
   }
 
@@ -145,35 +158,31 @@ export function LlmProviderEditForm({
 
       <div className="flex gap-3">
         <label className="flex flex-1 flex-col gap-1">
-          <span className="text-xs text-fg-muted">Input price (¢ / Mtok)</span>
+          <span className="text-xs text-fg-muted">Input price ($ / Mtok)</span>
           <input
-            type="number"
+            type="text"
             inputMode="decimal"
-            min={0}
-            step="any"
             value={inputPrice}
             onChange={(e) => setInputPrice(e.target.value)}
-            placeholder="200"
+            placeholder="2.00"
             className={fieldClass}
           />
         </label>
         <label className="flex flex-1 flex-col gap-1">
-          <span className="text-xs text-fg-muted">Output price (¢ / Mtok)</span>
+          <span className="text-xs text-fg-muted">Output price ($ / Mtok)</span>
           <input
-            type="number"
+            type="text"
             inputMode="decimal"
-            min={0}
-            step="any"
             value={outputPrice}
             onChange={(e) => setOutputPrice(e.target.value)}
-            placeholder="800"
+            placeholder="8.00"
             className={fieldClass}
           />
         </label>
       </div>
       <p className="-mt-2 text-xs text-fg-muted">
-        USD cents per million tokens. Leave blank if unknown — turns will then be logged with no
-        cost and budget tracking will undercount.
+        USD per million tokens — paste the vendor's published rate as-is. Leave blank if unknown —
+        turns will then be logged with no cost and budget tracking will undercount.
       </p>
 
       {update.error ? <p className={errorMessageClass}>{update.error.message}</p> : null}

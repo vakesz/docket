@@ -24,6 +24,7 @@
 
 import "server-only";
 import { mcpTools } from "@/agent/mcp/tools";
+import { discoveryTools } from "@/agent/tools/discovery";
 import { linkTools } from "@/agent/tools/links";
 import { memoryReadonlyTools } from "@/agent/tools/memory";
 import { memoryMutatingTools } from "@/agent/tools/memory-mutating";

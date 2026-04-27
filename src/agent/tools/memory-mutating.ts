@@ -20,6 +20,7 @@ import { zodToJsonSchema } from "@/agent/tools/schema";
 import type { ToolFactory } from "@/agent/tools/types";
 import { fail, ok } from "@/agent/tools/types";
 import { proposeMemoryDelete, proposeMemoryWrite } from "@/server/proposals/builders";
+import { maybeAutoAccept } from "@/server/proposals/executor";
 
 function builderCtx(ctx: Parameters<ToolFactory>[0]) {
   return { db: ctx.db, projectId: ctx.projectId, userId: ctx.userId };
@@ -56,7 +57,13 @@ export const proposeMemoryWriteTool: ToolFactory = (ctx) => ({
         tags: args.tags,
         source: "agent",
       });
-      return ok({ proposalId: row.id, kind: row.kind });
+      const final = await maybeAutoAccept(builderCtx(ctx), row);
+      return ok({
+        proposalId: final.id,
+        kind: final.kind,
+        status: final.status,
+        autoConfirmed: final.status === "confirmed",
+      });
     } catch (err) {
       return fail(err instanceof Error ? err.message : String(err));
     }
@@ -73,7 +80,13 @@ export const proposeMemoryDeleteTool: ToolFactory = (ctx) => ({
     const { memoryId } = z.object({ memoryId: z.string().min(1) }).parse(raw);
     try {
       const row = await proposeMemoryDelete(builderCtx(ctx), { memoryId });
-      return ok({ proposalId: row.id, kind: row.kind });
+      const final = await maybeAutoAccept(builderCtx(ctx), row);
+      return ok({
+        proposalId: final.id,
+        kind: final.kind,
+        status: final.status,
+        autoConfirmed: final.status === "confirmed",
+      });
     } catch (err) {
       return fail(err instanceof Error ? err.message : String(err));
     }

@@ -10,6 +10,7 @@
 
 import type {
   CIStatus,
+  CodeSearchResult,
   Comment,
   CommitDetail,
   CreateFields,
@@ -17,6 +18,7 @@ import type {
   ItemKind,
   PRMatch,
   PullRequestDetail,
+  PullRequestDiff,
   TransitionIntent,
 } from "@/core/types";
 
@@ -140,8 +142,19 @@ export interface WorkItemProvider {
   // wrappers treat that as "no PRs surfaced" rather than a hard failure.
   findRelatedPRs?(id: string): Promise<PRMatch[]>;
   getPullRequest?(prId: string): Promise<PullRequestDetail>;
+  getPullRequestDiff?(prId: string): Promise<PullRequestDiff>;
   getCommit?(sha: string): Promise<CommitDetail>;
   getCIStatus?(ref: string): Promise<CIStatus>;
+
+  /**
+   * Provider-native code search.
+   *
+   * Returns repository-scoped hits for `query`. Implementations should cap
+   * results at `limit` (or a sensible internal cap when omitted) so the
+   * agent doesn't drown in results for a vague query. Throw a
+   * `ProviderError` when the provider doesn't expose code search.
+   */
+  searchCode?(query: string, limit: number): Promise<CodeSearchResult>;
 }
 
 export const SETUP_FIELD_KINDS = ["string", "url", "secret"] as const;

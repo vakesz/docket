@@ -11,7 +11,7 @@ import { LlmSwitcher } from "@/ui/conversations/llm-switcher";
 import { QuestionCard } from "@/ui/conversations/question-card";
 import { useChatStream } from "@/ui/conversations/use-chat-stream";
 import { Markdown } from "@/ui/markdown/markdown";
-import { ProposalDialog } from "@/ui/proposals/proposal-dialog";
+import { ProposalCard } from "@/ui/proposals/proposal-card";
 
 type PersistedMessage = {
   id: string;
@@ -50,10 +50,9 @@ type RenderUnit =
  * component itself is item-scoped so unmounting on item switch resets
  * stream + question state cleanly.
  *
- * TODO(port): main rendered staged proposals as inline cards inside the
- * chat scroll region; T3 still uses the modal `ProposalDialog`. Once
- * Phase 4 ports the diff modal styling, fold ProposalCard into the
- * sticky bottom row alongside the question card.
+ * Staged proposals render inline as `ProposalCard`s in a sticky region at
+ * the bottom of the scroll area — the user reviews them without leaving
+ * the chat (no modal) and can keep typing while multiple cards stack.
  */
 export function ChatPane({ projectId, itemId }: { projectId: string; itemId: string }) {
   const utils = trpc.useUtils();
@@ -64,8 +63,7 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
   const autoscrollFrameRef = useRef<number | null>(null);
   const promptRef = useRef<HTMLTextAreaElement | null>(null);
 
-  const { streaming, pendingProposalId, setPendingProposalId, drainStream, resetStream } =
-    useChatStream();
+  const { streaming, proposalIds, dismissProposal, drainStream, resetStream } = useChatStream();
   const [toolDisplayMode] = useToolDisplayMode();
   const { pendingSeed, consumeSeed } = useChatPaneController();
 
@@ -270,13 +268,23 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
                 {streaming.error}
               </div>
             )}
-            {streaming.question && (
-              <div className="sticky bottom-0 -mx-3 mt-3 border-t border-border bg-bg/95 px-3 pb-1 pt-2 backdrop-blur-sm">
-                <QuestionCard
-                  question={streaming.question}
-                  disabled={inFlight && !streaming.question}
-                  onSubmit={(answer) => void submit(answer)}
-                />
+            {(proposalIds.length > 0 || streaming.question) && (
+              <div className="sticky bottom-0 -mx-3 mt-3 flex flex-col gap-2 border-t border-border bg-bg/95 px-3 pb-1 pt-2 backdrop-blur-sm">
+                {proposalIds.map((id) => (
+                  <ProposalCard
+                    key={id}
+                    projectId={projectId}
+                    proposalId={id}
+                    onDismiss={() => dismissProposal(id)}
+                  />
+                ))}
+                {streaming.question && (
+                  <QuestionCard
+                    question={streaming.question}
+                    disabled={inFlight && !streaming.question}
+                    onSubmit={(answer) => void submit(answer)}
+                  />
+                )}
               </div>
             )}
           </>
@@ -333,12 +341,6 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
           </div>
         </div>
       </form>
-
-      <ProposalDialog
-        projectId={projectId}
-        proposalId={pendingProposalId}
-        onClose={() => setPendingProposalId(null)}
-      />
     </div>
   );
 }

@@ -14,6 +14,7 @@ import {
   RefreshCw,
   ScrollText,
   ServerCog,
+  Shield,
   SlidersHorizontal,
   UserRound,
   Users,
@@ -24,6 +25,7 @@ import { McpPane } from "@/ui/mcp/mcp-pane";
 import { MemoryPane } from "@/ui/memory/memory-pane";
 import { ActiveProjectPicker } from "@/ui/settings/active-project-picker";
 import { AnalyticsPanel } from "@/ui/settings/analytics-panel";
+import { AutoAcceptPanel } from "@/ui/settings/auto-accept-panel";
 import { BudgetAuditPanel } from "@/ui/settings/budget-audit-panel";
 import { ChatDisplayPanel } from "@/ui/settings/chat-display-panel";
 import { ExportPanel } from "@/ui/settings/export-panel";
@@ -44,6 +46,7 @@ type SectionKey =
   | "mcp"
   | "project-llm"
   | "project-web-fetch"
+  | "project-auto-accept"
   | "project-sync"
   | "project-analytics"
   | "project-members"
@@ -109,6 +112,15 @@ const SECTIONS: SectionMeta[] = [
     description:
       "Toggle the agent's web_fetch tool, optionally restrict it to an allowlist, and cap response size.",
     icon: Globe,
+    group: "project",
+    needsProject: true,
+  },
+  {
+    key: "project-auto-accept",
+    label: "Auto-accept",
+    description:
+      "Skip the human-in-the-loop confirm step for low-stakes proposal kinds. Off by default.",
+    icon: Shield,
     group: "project",
     needsProject: true,
   },
@@ -398,6 +410,8 @@ function SectionContent({
       return projectId ? <ProjectLlmPanel projectId={projectId} /> : null;
     case "project-web-fetch":
       return projectId ? <WebFetchPanel projectId={projectId} /> : null;
+    case "project-auto-accept":
+      return projectId ? <AutoAcceptPanel projectId={projectId} /> : null;
     case "project-sync":
       return projectId ? <SyncPanel projectId={projectId} /> : null;
     case "project-analytics":

@@ -16,6 +16,7 @@ import "server-only";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { proposeMemoryDelete, proposeMemoryWrite } from "@/server/proposals/builders";
+import { maybeAutoAccept } from "@/server/proposals/executor";
 import { projectScopedMutationProcedure, projectScopedProcedure, router } from "@/server/trpc";
 
 const ProjectId = z.object({ projectId: z.string().min(1) });
@@ -82,26 +83,28 @@ export const memoryRouter = router({
   proposeWrite: projectScopedMutationProcedure
     .input(ProposeWriteInput)
     .mutation(async ({ ctx, input }) => {
-      const proposal = await proposeMemoryWrite(
-        { db: ctx.db, projectId: ctx.projectId, userId: userIdOrThrow(ctx) },
-        {
+      const c = { db: ctx.db, projectId: ctx.projectId, userId: userIdOrThrow(ctx) };
+      const proposal = await maybeAutoAccept(
+        c,
+        await proposeMemoryWrite(c, {
           memoryId: input.memoryId,
           title: input.title,
           bodyMd: input.bodyMd,
           tags: input.tags,
           source: "user",
-        },
+        }),
       );
-      return { proposalId: proposal.id, kind: proposal.kind };
+      return { proposalId: proposal.id, kind: proposal.kind, status: proposal.status };
     }),
 
   proposeDelete: projectScopedMutationProcedure
     .input(ProposeDeleteInput)
     .mutation(async ({ ctx, input }) => {
-      const proposal = await proposeMemoryDelete(
-        { db: ctx.db, projectId: ctx.projectId, userId: userIdOrThrow(ctx) },
-        { memoryId: input.memoryId },
+      const c = { db: ctx.db, projectId: ctx.projectId, userId: userIdOrThrow(ctx) };
+      const proposal = await maybeAutoAccept(
+        c,
+        await proposeMemoryDelete(c, { memoryId: input.memoryId }),
       );
-      return { proposalId: proposal.id, kind: proposal.kind };
+      return { proposalId: proposal.id, kind: proposal.kind, status: proposal.status };
     }),
 });

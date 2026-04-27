@@ -218,6 +218,46 @@ export type CIStatus = {
 };
 
 /**
+ * Per-file unified diff for a pull request — the same files list returned
+ * by `getPullRequest`, augmented with each file's patch text.
+ *
+ * `patch` is null when the provider declines to surface it (binary files,
+ * files past a size cap, or generated content). The agent treats null as
+ * "patch unavailable" rather than empty.
+ */
+export type PullRequestDiff = {
+  id: string;
+  files: Array<{
+    path: string;
+    status: string;
+    additions: number;
+    deletions: number;
+    patch: string | null;
+  }>;
+};
+
+/**
+ * One code-search hit — path inside a repository plus the live URL.
+ *
+ * Snippets are intentionally NOT modeled: GitHub gates them behind a
+ * preview accept header, ADO doesn't expose them, and the agent already
+ * has read tools to follow up on a path it cares about.
+ */
+export type CodeSearchHit = {
+  /** owner/repo or equivalent identifier the provider uses for repo scope. */
+  repository: string;
+  path: string;
+  /** Full HTML URL the user can click to read the file. */
+  url: string;
+};
+
+export type CodeSearchResult = {
+  query: string;
+  total: number;
+  items: CodeSearchHit[];
+};
+
+/**
  * A named provider. `id` is the `providerKey` — memory, sources,
  * sub-agents, and MCP servers are keyed by provider, not by scope.
  *

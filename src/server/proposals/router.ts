@@ -11,7 +11,7 @@ import {
   proposeTransition,
 } from "@/server/proposals/builders";
 import { diffOf } from "@/server/proposals/diff";
-import { confirmProposal, rejectProposal } from "@/server/proposals/executor";
+import { confirmProposal, maybeAutoAccept, rejectProposal } from "@/server/proposals/executor";
 import {
   projectScopedApproverProcedure,
   projectScopedMutationProcedure,
@@ -133,51 +133,71 @@ export const proposalsRouter = router({
   proposeTransition: projectScopedMutationProcedure
     .input(ProposeTransitionInput)
     .mutation(async ({ ctx, input }) => {
-      const row = await proposeTransition(ctxFor(ctx), {
-        providerItemId: input.providerItemId,
-        intent: input.intent,
-      });
-      return { id: row.id, diff: diffOf(hydrateProposal(row)) };
+      const c = ctxFor(ctx);
+      const row = await maybeAutoAccept(
+        c,
+        await proposeTransition(c, {
+          providerItemId: input.providerItemId,
+          intent: input.intent,
+        }),
+      );
+      return { id: row.id, status: row.status, diff: diffOf(hydrateProposal(row)) };
     }),
 
   proposeDescriptionPatch: projectScopedMutationProcedure
     .input(ProposeDescriptionPatchInput)
     .mutation(async ({ ctx, input }) => {
-      const row = await proposeDescriptionPatch(ctxFor(ctx), {
-        providerItemId: input.providerItemId,
-        newMd: input.newMd,
-      });
-      return { id: row.id, diff: diffOf(hydrateProposal(row)) };
+      const c = ctxFor(ctx);
+      const row = await maybeAutoAccept(
+        c,
+        await proposeDescriptionPatch(c, {
+          providerItemId: input.providerItemId,
+          newMd: input.newMd,
+        }),
+      );
+      return { id: row.id, status: row.status, diff: diffOf(hydrateProposal(row)) };
     }),
 
   proposeComment: projectScopedMutationProcedure
     .input(ProposeCommentInput)
     .mutation(async ({ ctx, input }) => {
-      const row = await proposeComment(ctxFor(ctx), {
-        providerItemId: input.providerItemId,
-        bodyMd: input.bodyMd,
-      });
-      return { id: row.id, diff: diffOf(hydrateProposal(row)) };
+      const c = ctxFor(ctx);
+      const row = await maybeAutoAccept(
+        c,
+        await proposeComment(c, {
+          providerItemId: input.providerItemId,
+          bodyMd: input.bodyMd,
+        }),
+      );
+      return { id: row.id, status: row.status, diff: diffOf(hydrateProposal(row)) };
     }),
 
   proposeNewItem: projectScopedMutationProcedure
     .input(ProposeNewItemInput)
     .mutation(async ({ ctx, input }) => {
-      const row = await proposeNewItem(ctxFor(ctx), {
-        itemKind: input.itemKind,
-        fields: input.fields,
-      });
-      return { id: row.id, diff: diffOf(hydrateProposal(row)) };
+      const c = ctxFor(ctx);
+      const row = await maybeAutoAccept(
+        c,
+        await proposeNewItem(c, {
+          itemKind: input.itemKind,
+          fields: input.fields,
+        }),
+      );
+      return { id: row.id, status: row.status, diff: diffOf(hydrateProposal(row)) };
     }),
 
   proposeTagsChange: projectScopedMutationProcedure
     .input(ProposeTagsChangeInput)
     .mutation(async ({ ctx, input }) => {
-      const row = await proposeTagsChange(ctxFor(ctx), {
-        providerItemId: input.providerItemId,
-        nextTags: input.nextTags,
-      });
-      return { id: row.id, diff: diffOf(hydrateProposal(row)) };
+      const c = ctxFor(ctx);
+      const row = await maybeAutoAccept(
+        c,
+        await proposeTagsChange(c, {
+          providerItemId: input.providerItemId,
+          nextTags: input.nextTags,
+        }),
+      );
+      return { id: row.id, status: row.status, diff: diffOf(hydrateProposal(row)) };
     }),
 
   confirm: projectScopedApproverProcedure

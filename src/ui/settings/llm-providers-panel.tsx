@@ -94,8 +94,8 @@ export function LlmProvidersPanel() {
                       {row.inputPriceCentsPerMtok !== null &&
                       row.outputPriceCentsPerMtok !== null ? (
                         <p className="text-xs text-fg-muted">
-                          {row.inputPriceCentsPerMtok}¢ in · {row.outputPriceCentsPerMtok}¢ out per
-                          Mtok
+                          ${(row.inputPriceCentsPerMtok / 100).toFixed(2)} in · $
+                          {(row.outputPriceCentsPerMtok / 100).toFixed(2)} out per Mtok
                         </p>
                       ) : null}
                     </div>

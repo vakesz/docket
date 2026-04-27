@@ -29,6 +29,7 @@ import {
   proposeTagsChange,
   proposeTransition,
 } from "@/server/proposals/builders";
+import { maybeAutoAccept } from "@/server/proposals/executor";
 
 const ItemKindEnum = z.enum(ITEM_KINDS);
 const TransitionIntentEnum = z.enum(TRANSITION_INTENTS);
@@ -72,7 +73,13 @@ export const proposeTransitionTool: ToolFactory = (ctx) => ({
         providerItemId,
         intent: args.intent,
       });
-      return ok({ proposalId: row.id, kind: row.kind });
+      const final = await maybeAutoAccept(builderCtx(ctx), row);
+      return ok({
+        proposalId: final.id,
+        kind: final.kind,
+        status: final.status,
+        autoConfirmed: final.status === "confirmed",
+      });
     } catch (err) {
       return fail(err instanceof Error ? err.message : String(err));
     }
@@ -107,7 +114,13 @@ export const proposeDescriptionPatchTool: ToolFactory = (ctx) => ({
         providerItemId,
         newMd: args.newMd,
       });
-      return ok({ proposalId: row.id, kind: row.kind });
+      const final = await maybeAutoAccept(builderCtx(ctx), row);
+      return ok({
+        proposalId: final.id,
+        kind: final.kind,
+        status: final.status,
+        autoConfirmed: final.status === "confirmed",
+      });
     } catch (err) {
       return fail(err instanceof Error ? err.message : String(err));
     }
@@ -142,7 +155,13 @@ export const proposeCommentTool: ToolFactory = (ctx) => ({
         providerItemId,
         bodyMd: args.bodyMd,
       });
-      return ok({ proposalId: row.id, kind: row.kind });
+      const final = await maybeAutoAccept(builderCtx(ctx), row);
+      return ok({
+        proposalId: final.id,
+        kind: final.kind,
+        status: final.status,
+        autoConfirmed: final.status === "confirmed",
+      });
     } catch (err) {
       return fail(err instanceof Error ? err.message : String(err));
     }
@@ -182,7 +201,13 @@ export const proposeNewItemTool: ToolFactory = (ctx) => ({
       .parse(raw);
     try {
       const row = await proposeNewItem(builderCtx(ctx), args);
-      return ok({ proposalId: row.id, kind: row.kind });
+      const final = await maybeAutoAccept(builderCtx(ctx), row);
+      return ok({
+        proposalId: final.id,
+        kind: final.kind,
+        status: final.status,
+        autoConfirmed: final.status === "confirmed",
+      });
     } catch (err) {
       return fail(err instanceof Error ? err.message : String(err));
     }
@@ -217,7 +242,13 @@ export const proposeItemTagsTool: ToolFactory = (ctx) => ({
         providerItemId,
         nextTags: args.nextTags,
       });
-      return ok({ proposalId: row.id, kind: row.kind });
+      const final = await maybeAutoAccept(builderCtx(ctx), row);
+      return ok({
+        proposalId: final.id,
+        kind: final.kind,
+        status: final.status,
+        autoConfirmed: final.status === "confirmed",
+      });
     } catch (err) {
       return fail(err instanceof Error ? err.message : String(err));
     }

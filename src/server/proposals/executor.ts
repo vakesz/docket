@@ -26,6 +26,8 @@ import type { Prisma, Proposal as ProposalRow } from "@/db/generated/client";
 import type { db as Db } from "@/server/db";
 import { hydrateProposal } from "@/server/proposals/builders";
 import { buildProviderForUser } from "@/server/providers/build";
+import { AUTO_ACCEPT_ELIGIBLE_KINDS_LIST } from "@/server/settings/catalog";
+import { loadGlobalSetting, loadProjectSetting } from "@/server/settings/effective";
 
 type ExecutorContext = {
   db: typeof Db;
@@ -129,8 +131,7 @@ export async function confirmProposal(
 ): Promise<ProposalRow> {
   const source: ConfirmSource = options.source ?? "user";
   const okAction = source === "auto" ? "proposal.auto_confirm" : "proposal.confirm";
-  const failAction =
-    source === "auto" ? "proposal.auto_confirm.failed" : "proposal.confirm.failed";
+  const failAction = source === "auto" ? "proposal.auto_confirm.failed" : "proposal.confirm.failed";
   const row = await loadPending(ctx, proposalId);
   const proposal = hydrateProposal(row);
 
@@ -270,6 +271,36 @@ export async function confirmProposal(
     });
     return failed;
   }
+}
+
+/**
+ * Bridge from "proposal staged" to "proposal applied" when the project's
+ * auto-accept policy includes this kind. Read-only mode short-circuits — the
+ * row stays pending so the human can inspect it once the freeze lifts.
+ *
+ * Returns the row in its terminal state: still pending if not eligible /
+ * read-only / disabled, otherwise the post-confirmProposal row (which may be
+ * `confirmed` with `executedAt` set, or `confirmed` with `errorMessage` set if
+ * the provider call failed).
+ *
+ * Defense in depth: the catalog validator already restricts the policy to
+ * Tier-A/B kinds, but the AUTO_ACCEPT_ELIGIBLE_KINDS_LIST gate here is the
+ * load-bearing check — if a stored row ever drifts to an ineligible kind, we
+ * simply ignore it.
+ */
+export async function maybeAutoAccept(
+  ctx: ExecutorContext,
+  row: ProposalRow,
+): Promise<ProposalRow> {
+  if (row.status !== "pending") return row;
+  if (!AUTO_ACCEPT_ELIGIBLE_KINDS_LIST.includes(row.kind)) return row;
+  const [policy, readOnly] = await Promise.all([
+    loadProjectSetting(ctx.db, ctx.projectId, "proposals.auto-accept-kinds"),
+    loadGlobalSetting(ctx.db, "app.read-only"),
+  ]);
+  if (readOnly) return row;
+  if (!(policy as readonly string[]).includes(row.kind)) return row;
+  return confirmProposal(ctx, row.id, { source: "auto" });
 }
 
 export async function rejectProposal(

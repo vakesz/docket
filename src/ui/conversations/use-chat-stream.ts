@@ -18,8 +18,14 @@ type DrainArgs = {
 
 type UseChatStream = {
   streaming: StreamingState;
-  pendingProposalId: string | null;
-  setPendingProposalId: (id: string | null) => void;
+  /**
+   * Proposal ids the agent has staged during this conversation, in order
+   * of arrival. Each is rendered inline as a non-blocking card so the user
+   * can keep typing while reviewing.
+   */
+  proposalIds: readonly string[];
+  /** Drop one proposal card from the inline list (e.g. after dismiss). */
+  dismissProposal: (id: string) => void;
   drainStream: (args: DrainArgs) => Promise<void>;
   /** Abort any in-flight stream and clear local stream state. */
   resetStream: () => void;
@@ -37,7 +43,7 @@ type UseChatStream = {
 export function useChatStream(): UseChatStream {
   const utils = trpc.useUtils();
   const [streaming, setStreaming] = useState<StreamingState>(EMPTY_STREAM);
-  const [pendingProposalId, setPendingProposalId] = useState<string | null>(null);
+  const [proposalIds, setProposalIds] = useState<readonly string[]>([]);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -48,7 +54,11 @@ export function useChatStream(): UseChatStream {
     abortRef.current?.abort();
     abortRef.current = null;
     setStreaming(EMPTY_STREAM);
-    setPendingProposalId(null);
+    setProposalIds([]);
+  }, []);
+
+  const dismissProposal = useCallback((id: string) => {
+    setProposalIds((prev) => prev.filter((p) => p !== id));
   }, []);
 
   const drainStream = useCallback(
@@ -137,7 +147,7 @@ export function useChatStream(): UseChatStream {
             ),
           }));
         } else if (p.kind === "proposal_staged") {
-          setPendingProposalId(p.proposalId);
+          setProposalIds((prev) => (prev.includes(p.proposalId) ? prev : [...prev, p.proposalId]));
         } else if (p.kind === "ask_user_question") {
           setStreaming((prev) => ({
             ...prev,
@@ -153,5 +163,5 @@ export function useChatStream(): UseChatStream {
     [utils.conversations.get, utils.conversations.list],
   );
 
-  return { streaming, pendingProposalId, setPendingProposalId, drainStream, resetStream };
+  return { streaming, proposalIds, dismissProposal, drainStream, resetStream };
 }

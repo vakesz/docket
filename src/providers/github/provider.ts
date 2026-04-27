@@ -12,6 +12,7 @@ import type { WorkItemProvider } from "@/core/provider";
 import { ProviderAuthError, ProviderError, ProviderUnreachableError } from "@/core/provider";
 import type {
   CIStatus,
+  CodeSearchResult,
   Comment,
   CommitDetail,
   CreateFields,
@@ -19,6 +20,7 @@ import type {
   ItemKind,
   PRMatch,
   PullRequestDetail,
+  PullRequestDiff,
   TransitionIntent,
 } from "@/core/types";
 import {
@@ -419,6 +421,55 @@ export class GitHubProvider implements WorkItemProvider {
         commentsCount: data.comments ?? 0,
         reviewCommentsCount: data.review_comments ?? 0,
         updatedAt: data.updated_at ? new Date(data.updated_at) : null,
+      };
+    } catch (err) {
+      wrapOctokitError(err);
+    }
+  }
+
+  async getPullRequestDiff(prId: string): Promise<PullRequestDiff> {
+    const { owner, repo, number } = parseProviderItemId(prId);
+    try {
+      const files = await this.octokit.pulls.listFiles({
+        owner,
+        repo,
+        pull_number: number,
+        per_page: 100,
+      });
+      return {
+        id: prId,
+        files: files.data.map((f) => ({
+          path: f.filename,
+          status: f.status,
+          additions: f.additions,
+          deletions: f.deletions,
+          patch: f.patch ?? null,
+        })),
+      };
+    } catch (err) {
+      wrapOctokitError(err);
+    }
+  }
+
+  async searchCode(query: string, limit: number): Promise<CodeSearchResult> {
+    // Constrain the search to the configured repo so the result set isn't
+    // polluted by hits from forks or unrelated public repos sharing the
+    // owner. The agent can still pass repo-qualified terms in `query` if
+    // it wants to widen the scope deliberately.
+    const scoped = `${query} repo:${this.config.owner}/${this.config.repo}`;
+    try {
+      const res = await this.octokit.search.code({
+        q: scoped,
+        per_page: Math.min(Math.max(limit, 1), 50),
+      });
+      return {
+        query,
+        total: res.data.total_count,
+        items: res.data.items.map((i) => ({
+          repository: i.repository.full_name,
+          path: i.path,
+          url: i.html_url,
+        })),
       };
     } catch (err) {
       wrapOctokitError(err);

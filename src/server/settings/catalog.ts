@@ -61,14 +61,15 @@ const WebFetchAllowedHostsSchema = z.array(z.string().min(1).max(253)).max(200);
 // pulling a multi-GB payload into the agent context.
 const WebFetchMaxBytesSchema = z.number().int().min(64_000).max(8_000_000);
 
-// Hardcoded eligibility list for auto-accept. Tier A (memory_*) only touches
-// local DB rows; Tier B (tags_change) writes a low-stakes external label set
-// the provider preserves state-encoding for. State changes, description
-// rewrites, comment posts, and item creation are deliberately NOT eligible —
-// they have non-recoverable user-visible blast radius and must keep the
-// proposal-first human-in-the-loop guarantee. Adding a kind here is a
-// security review event.
-const AUTO_ACCEPT_ELIGIBLE_KINDS = ["memory_write", "memory_delete", "tags_change"] as const;
+// Hardcoded eligibility list for auto-accept. Memory writes/deletes only
+// touch local DB rows — no provider-side blast radius, no third-party
+// visibility, and the human can manually delete a memory entry afterwards.
+// Everything else — state changes, description rewrites, comments, item
+// creation, tag/label edits, assignee changes — is deliberately NOT eligible.
+// Comments and labels feed external notifications, and reassignment changes
+// who's accountable; those need human judgement on every staging. Adding a
+// kind here is a security review event.
+const AUTO_ACCEPT_ELIGIBLE_KINDS = ["memory_write", "memory_delete"] as const;
 export const AUTO_ACCEPT_ELIGIBLE_KINDS_LIST: readonly string[] = AUTO_ACCEPT_ELIGIBLE_KINDS;
 const AutoAcceptKindsSchema = z
   .array(z.enum(AUTO_ACCEPT_ELIGIBLE_KINDS))
@@ -265,7 +266,7 @@ export const SETTINGS_CATALOG = {
     default: [] as string[],
     label: "Auto-accept proposals (per kind)",
     description:
-      "Proposal kinds that confirm automatically without a human tap. Eligible: 'memory_write' / 'memory_delete' (local DB only) and 'tags_change' (low-stakes label edit). State changes, description rewrites, comments, and new-item creation are never eligible. Read-only mode still wins.",
+      "Proposal kinds that confirm automatically without a human tap. Only memory writes/deletes are eligible — they're local DB only, no provider write. Everything that touches the provider (state changes, descriptions, comments, labels/tags, assignee changes, new items) always requires explicit human review. Read-only mode still wins.",
   },
 } as const satisfies Record<string, SettingDef<z.ZodTypeAny>>;
 

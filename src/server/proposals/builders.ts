@@ -30,8 +30,6 @@ import type { CreateFields, ItemKind, TransitionIntent } from "@/core/types";
 import type { Prisma, Proposal as ProposalRow } from "@/db/generated/client";
 import type { db as Db } from "@/server/db";
 import { snapshotFromRow } from "@/server/proposals/item-snapshot";
-import { AUTO_ACCEPT_ELIGIBLE_KINDS_LIST } from "@/server/settings/catalog";
-import { loadGlobalSetting, loadProjectSetting } from "@/server/settings/effective";
 
 type ProposalContext = {
   db: typeof Db;
@@ -85,6 +83,14 @@ function jaccardSimilarity(a: string, b: string): number {
 }
 
 const COMMENT_ECHO_THRESHOLD = 0.6;
+
+/**
+ * Soft cap for memory entry body size. Memory is loaded into every agent
+ * turn's prefix, so giant entries waste tokens and dilute the signal. We
+ * advise (not block) at ~4 KB so the human can still confirm a one-off
+ * long entry, but the banner nudges them to split it.
+ */
+const MEMORY_BODY_ADVISORY_BYTES = 4096;
 
 async function loadCachedItem(ctx: ProposalContext, providerItemId: string) {
   const row = await ctx.db.item.findFirst({
@@ -262,7 +268,12 @@ export async function proposeMemoryWrite(
     previousTitle,
     previousBodyMd,
   };
-  return persist(ctx, draft, null);
+  let advisory: string | null = null;
+  const byteLen = Buffer.byteLength(args.bodyMd, "utf8");
+  if (byteLen > MEMORY_BODY_ADVISORY_BYTES) {
+    advisory = `This entry is ${(byteLen / 1024).toFixed(1)} KB. Memory loads into every agent turn — consider splitting into multiple titled entries (one per topic) so the next conversation isn't paying the full body for an unrelated question.`;
+  }
+  return persist(ctx, draft, null, advisory);
 }
 
 export async function proposeMemoryDelete(
