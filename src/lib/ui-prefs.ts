@@ -21,6 +21,10 @@ const TOOL_DISPLAY_KEY = "docket.chat.toolDisplay";
 const VALID_MODES: ReadonlySet<string> = new Set(["show", "collapse", "hide"]);
 const PREF_EVENT = "docket:uiprefs";
 
+const RECENT_LIMIT_KEY = "docket.items.recentLimit";
+const RECENT_LIMIT_DEFAULT = 5;
+export const RECENT_LIMIT_MAX = 20;
+
 export function readToolDisplayMode(): ToolDisplayMode {
   if (typeof window === "undefined") return "collapse";
   const raw = window.localStorage.getItem(TOOL_DISPLAY_KEY);
@@ -52,6 +56,50 @@ export function useToolDisplayMode(): [ToolDisplayMode, (v: ToolDisplayMode) => 
     (next: ToolDisplayMode) => {
       writeToolDisplayMode(next);
       setValue(next);
+    },
+  ];
+}
+
+/**
+ * How many recently-viewed items to surface at the top of the backlog pane.
+ * `0` disables the Recent section entirely. Stored per-device (browser-local)
+ * because the recent ids themselves are.
+ */
+export function readRecentLimit(): number {
+  if (typeof window === "undefined") return RECENT_LIMIT_DEFAULT;
+  const raw = window.localStorage.getItem(RECENT_LIMIT_KEY);
+  if (raw === null) return RECENT_LIMIT_DEFAULT;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return RECENT_LIMIT_DEFAULT;
+  return Math.min(parsed, RECENT_LIMIT_MAX);
+}
+
+export function writeRecentLimit(value: number): void {
+  if (typeof window === "undefined") return;
+  const clamped = Math.max(0, Math.min(Math.trunc(value), RECENT_LIMIT_MAX));
+  window.localStorage.setItem(RECENT_LIMIT_KEY, String(clamped));
+  window.dispatchEvent(new CustomEvent(PREF_EVENT));
+}
+
+export function useRecentLimit(): [number, (v: number) => void] {
+  const [value, setValue] = useState<number>(RECENT_LIMIT_DEFAULT);
+
+  useEffect(() => {
+    setValue(readRecentLimit());
+    const onChange = () => setValue(readRecentLimit());
+    window.addEventListener("storage", onChange);
+    window.addEventListener(PREF_EVENT, onChange);
+    return () => {
+      window.removeEventListener("storage", onChange);
+      window.removeEventListener(PREF_EVENT, onChange);
+    };
+  }, []);
+
+  return [
+    value,
+    (next: number) => {
+      writeRecentLimit(next);
+      setValue(readRecentLimit());
     },
   ];
 }

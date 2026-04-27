@@ -97,6 +97,10 @@ export function CommandPalette({
 
   const items = trpc.items.list.useQuery({ projectId, limit: 100 }, { enabled: open });
   const pinned = trpc.watchlist.list.useQuery({ projectId, limit: 50 }, { enabled: open });
+  const pendingProposals = trpc.proposals.list.useQuery(
+    { projectId, status: "pending", limit: 100 },
+    { enabled: open },
+  );
   const isPinned = trpc.watchlist.isPinned.useQuery(
     { projectId, providerItemId: itemId ?? "" },
     { enabled: open && Boolean(itemId) },
@@ -120,6 +124,11 @@ export function CommandPalette({
   const unpin = trpc.watchlist.unpin.useMutation({
     onSuccess: async () => {
       await Promise.all([utils.watchlist.isPinned.invalidate(), utils.watchlist.list.invalidate()]);
+    },
+  });
+  const rejectProposal = trpc.proposals.reject.useMutation({
+    onSuccess: async () => {
+      await utils.proposals.list.invalidate({ projectId });
     },
   });
 
@@ -205,6 +214,25 @@ export function CommandPalette({
       },
     ];
 
+    const pendingCount = pendingProposals.data?.length ?? 0;
+    if (pendingCount > 0) {
+      list.push({
+        id: "dismiss-all-pending",
+        label: `Dismiss all pending proposals (${pendingCount})`,
+        description:
+          "Reject every staged proposal in this project — useful when an agent run errored mid-turn and left orphans behind.",
+        group: "Actions",
+        keywords: "reject clear pending proposals orphan",
+        run: () => {
+          const ids = pendingProposals.data?.map((p) => p.id) ?? [];
+          for (const id of ids) {
+            rejectProposal.mutate({ projectId, proposalId: id });
+          }
+          close();
+        },
+      });
+    }
+
     if (itemId) {
       const it = currentItem.data;
       if (it?.url) {
@@ -258,9 +286,11 @@ export function CommandPalette({
     go,
     isPinned.data?.pinned,
     itemId,
+    pendingProposals.data,
     pin,
     projectId,
     projects,
+    rejectProposal,
     sync,
     unpin,
   ]);

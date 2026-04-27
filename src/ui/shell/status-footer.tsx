@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { formatRelative } from "@/lib/format";
 import { trpc } from "@/lib/trpc-client";
 import { cn } from "@/lib/utils";
+import { ProposalDialog } from "@/ui/proposals/proposal-dialog";
 import { PaletteHint } from "@/ui/shell/palette-hint";
 
 /**
@@ -119,11 +120,8 @@ export function StatusFooter({
           </span>
         </>
       ) : null}
-      {pendingProposals > 0 ? (
-        <>
-          <span className="text-fg-faint">·</span>
-          <span className="text-warning">{pendingProposals} pending</span>
-        </>
+      {projectId ? (
+        <PendingProposalsButton projectId={projectId} initialCount={pendingProposals} />
       ) : null}
       {readOnly ? (
         <>
@@ -135,5 +133,79 @@ export function StatusFooter({
       ) : null}
       <PaletteHint className="ml-auto" />
     </footer>
+  );
+}
+
+/**
+ * "{N} pending" footer button. Click → navigate to the ticket whose
+ * proposal is next in the queue and open the confirm dialog. Acts on a
+ * single proposal at a time — to clear the next one the user taps the
+ * pending bar again. Keeps orphaned proposals (rate-limited LLM turn,
+ * abandoned chat) reachable from anywhere in the workspace.
+ *
+ * The query is `staleTime: 0` because count drift after a confirm/reject
+ * matters more here than refetch chatter — the moment the dialog closes,
+ * we want the fresh count.
+ */
+function PendingProposalsButton({
+  projectId,
+  initialCount,
+}: {
+  projectId: string;
+  initialCount: number;
+}) {
+  const router = useRouter();
+  const utils = trpc.useUtils();
+  const [activeProposalId, setActiveProposalId] = useState<string | null>(null);
+
+  const list = trpc.proposals.list.useQuery(
+    { projectId, status: "pending", limit: 100 },
+    { staleTime: 0 },
+  );
+
+  const proposals = list.data ?? [];
+  const count = list.data ? proposals.length : initialCount;
+
+  if (count === 0) return null;
+
+  const openNext = () => {
+    if (proposals.length === 0) return;
+    // Oldest-first drains the queue in the order the agent staged them,
+    // matching the user's mental model of "the one I forgot about first."
+    const next = [...proposals].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    )[0];
+    if (!next) return;
+    setActiveProposalId(next.id);
+    router.push(`/projects/${projectId}/items/${next.providerItemId}`);
+  };
+
+  return (
+    <>
+      <span className="text-fg-faint">·</span>
+      <button
+        type="button"
+        onClick={openNext}
+        aria-haspopup="dialog"
+        aria-label={`Review next of ${count} pending proposal${count === 1 ? "" : "s"}`}
+        className={cn(
+          "cursor-pointer rounded px-1 text-warning hover:bg-surface-alt",
+          "focus:outline-none focus:ring-1 focus:ring-accent",
+        )}
+      >
+        {count} pending
+      </button>
+      <ProposalDialog
+        projectId={projectId}
+        proposalId={activeProposalId}
+        onClose={() => {
+          setActiveProposalId(null);
+          // Force a fresh count: the dialog only invalidates on confirm,
+          // not on backdrop-dismiss, so a manual invalidate here keeps the
+          // footer count honest if the user closed without acting.
+          utils.proposals.list.invalidate({ projectId });
+        }}
+      />
+    </>
   );
 }

@@ -9,6 +9,7 @@ import {
   Globe,
   KeyRound,
   LineChart,
+  ListOrdered,
   MessageSquare,
   RefreshCw,
   ScrollText,
@@ -33,6 +34,7 @@ export type SectionKey =
   | "projects"
   | "profile"
   | "chat"
+  | "items-display"
   | "workspace"
   | "budget-audit"
   | "global-analytics"
@@ -157,6 +159,13 @@ export const SECTIONS: SectionMeta[] = [
     label: "Chat",
     description: "How tool calls render in the chat pane.",
     icon: MessageSquare,
+    group: "you",
+  },
+  {
+    key: "items-display",
+    label: "Items pane",
+    description: "Browser-local layout knobs for the backlog list — recents count, etc.",
+    icon: ListOrdered,
     group: "you",
   },
 

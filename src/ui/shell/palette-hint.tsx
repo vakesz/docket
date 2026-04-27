@@ -19,16 +19,11 @@ export function PaletteHint({ className }: { className?: string }) {
 
   return (
     <span
-      className={cn(
-        "hidden items-center gap-1 font-mono text-[10px] text-fg-faint sm:inline-flex",
-        className,
-      )}
+      className={cn("hidden text-[10px] text-fg-faint sm:inline", className)}
       aria-hidden="true"
       title="Open command palette"
     >
-      <kbd className="rounded border border-border bg-bg px-1.5 py-0.5">{mac ? "⌘" : "Ctrl"}</kbd>
-      <span className="text-fg-faint">+</span>
-      <kbd className="rounded border border-border bg-bg px-1.5 py-0.5">K</kbd>
+      Press {mac ? "⌘" : "Ctrl"}+K for command palette
     </span>
   );
 }

@@ -9,6 +9,7 @@ import { AutoAcceptPanel } from "@/ui/settings/auto-accept-panel";
 import { BudgetAuditPanel } from "@/ui/settings/budget-audit-panel";
 import { ChatDisplayPanel } from "@/ui/settings/chat-display-panel";
 import { ExportPanel } from "@/ui/settings/export-panel";
+import { ItemsDisplayPanel } from "@/ui/settings/items-display-panel";
 import { LlmProvidersPanel } from "@/ui/settings/llm-providers-panel";
 import { MembersPanel } from "@/ui/settings/members-panel";
 import { OauthProvidersPanel } from "@/ui/settings/oauth-providers-panel";
@@ -199,6 +200,8 @@ function SectionContent({
       return <ProfilePanel />;
     case "chat":
       return <ChatDisplayPanel />;
+    case "items-display":
+      return <ItemsDisplayPanel />;
     case "workspace":
       return <WorkspacePanel />;
     case "budget-audit":
