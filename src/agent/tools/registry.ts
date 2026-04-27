@@ -82,6 +82,14 @@ export const TOOL_ORDER = [
   // `web-fetch.enabled`. Pinned at the tail so toggling its presence
   // doesn't shift any earlier tool's position in the prompt cache key.
   "web_fetch",
+  // (9) discovery — read-only tools added after the original cohort.
+  // Appended at the tail so introducing them doesn't shift any earlier
+  // tool's slot in the prompt cache key. All four are pure reads, so they
+  // appear in both read-only and read-write modes.
+  "search_items",
+  "list_audit",
+  "get_pull_request_diff",
+  "search_code",
 ] as const satisfies readonly string[];
 
 export type RegisteredToolName = (typeof TOOL_ORDER)[number];
@@ -122,5 +130,7 @@ export async function buildToolRegistry(
   if (await loadProjectSetting(ctx.db, ctx.projectId, "web-fetch.enabled")) {
     tools.push(...webFetchTools(ctx));
   }
+  // (9) discovery — read-only, pinned at the tail. Always present.
+  tools.push(...discoveryTools(ctx));
   return tools;
 }
