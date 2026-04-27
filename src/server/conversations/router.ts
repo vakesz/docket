@@ -1,8 +1,9 @@
 /**
  * Conversations API.
  *
- * `postMessage` currently appends a stub assistant echo so the UI can be
- * exercised end-to-end; the streaming SSE route drives real agent turns.
+ * Real assistant turns flow through the SSE streaming route; this router
+ * handles transcript reads, conversation lifecycle, and the per-conversation
+ * LLM override.
  *
  * Conversations are per-project and optionally hang off a single item
  * (`itemId`). The same `Message` rows hold both human and synthetic system
@@ -18,7 +19,6 @@ import "server-only";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
-  appendMessage,
   archiveConversation,
   createConversation,
   getConversation,
@@ -38,10 +38,6 @@ const ListInput = ProjectId.extend({
 
 const CreateInput = ProjectId.extend({
   itemId: z.string().nullable().default(null),
-});
-
-const PostMessageInput = ConversationRef.extend({
-  content: z.string().min(1).max(20_000),
 });
 
 const SetLlmOverrideInput = ConversationRef.extend({
@@ -100,32 +96,6 @@ export const conversationsRouter = router({
     });
   }),
 
-  /**
-   * Append a user message and a stub assistant echo. Returns the fresh
-   * transcript so the client can swap state without a re-fetch. Real
-   * agent turns flow through the SSE streaming route.
-   */
-  postMessage: projectScopedMutationProcedure
-    .input(PostMessageInput)
-    .mutation(async ({ ctx, input }) => {
-      await ensureOwn(ctx, input.conversationId, ctx.projectId);
-      await appendMessage(ctx.db, {
-        conversationId: input.conversationId,
-        role: "user",
-        content: input.content,
-      });
-      await appendMessage(ctx.db, {
-        conversationId: input.conversationId,
-        role: "assistant",
-        content: stubReply(input.content),
-      });
-      const conv = await getConversation(ctx.db, input.conversationId);
-      if (!conv) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "conversation vanished" });
-      }
-      return conv;
-    }),
-
   archive: projectScopedMutationProcedure
     .input(ConversationRef)
     .mutation(async ({ ctx, input }) => {
@@ -164,9 +134,3 @@ export const conversationsRouter = router({
       });
     }),
 });
-
-function stubReply(userMessage: string): string {
-  const trimmed = userMessage.trim();
-  const preview = trimmed.length > 200 ? `${trimmed.slice(0, 200)}…` : trimmed;
-  return `(stub assistant — use the streaming endpoint for real agent turns)\n\nYou said: ${preview}`;
-}

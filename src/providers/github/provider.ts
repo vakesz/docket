@@ -216,13 +216,13 @@ export class GitHubProvider implements WorkItemProvider {
   async getComments(id: string): Promise<Comment[]> {
     const { owner, repo, number } = parseProviderItemId(id);
     try {
-      const res = await this.octokit.issues.listComments({
+      const all = await this.octokit.paginate(this.octokit.issues.listComments, {
         owner,
         repo,
         issue_number: number,
         per_page: 100,
       });
-      return res.data.map(
+      return all.map(
         (c): Comment => ({
           id: String(c.id),
           itemId: id,

@@ -31,9 +31,6 @@ const FILTER_DEBOUNCE_MS = 150;
  * - `bucket` and `archived` reshape the server query (sent through tRPC).
  * - `kind`, `tag`, and search live in component state and just decide
  *   which already-fetched rows render.
- *
- * TODO(port): bring back virtualization (`@tanstack/react-virtual` on
- * main) once the list grows past a few hundred rows in practice.
  */
 export function BacklogPane({
   projectId,

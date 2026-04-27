@@ -33,6 +33,7 @@ import { recordWebFetchEvent } from "@/server/web-fetch/audit";
 import { assertFetchTargetSafe } from "@/server/web-fetch/ssrf";
 
 const FETCH_TIMEOUT_MS = 10_000;
+const MAX_REDIRECTS = 5;
 
 const TEXTUAL_CONTENT_TYPE_PREFIXES: readonly string[] = [
   "text/",
@@ -111,47 +112,114 @@ export const webFetchTool: ToolFactory = (ctx) => ({
       return fail(`'${args.url}' is not a valid URL: ${detail}`);
     }
 
-    const ssrf = await assertFetchTargetSafe(parsed);
-    if (!ssrf.ok) {
-      await recordWebFetchEvent(ctx.db, {
-        ...auditBase,
-        status: ssrf.reason,
-        contentType: null,
-        bytes: 0,
-        errorMessage: ssrf.detail,
-      });
-      return fail(`fetch denied: ${ssrf.detail}`);
-    }
-
-    if (!hostAllowed(ssrf.host, allowlist)) {
-      await recordWebFetchEvent(ctx.db, {
-        ...auditBase,
-        status: "denied_host_allowlist",
-        contentType: null,
-        bytes: 0,
-        errorMessage: `'${ssrf.host}' is not in the project allowlist`,
-      });
-      return fail(`fetch denied: '${ssrf.host}' is not in the project's web-fetch host allowlist.`);
-    }
-
+    // Bounded redirect chain. SSRF + allowlist checks run on every hop —
+    // `redirect: "follow"` would let a public URL bounce to an internal
+    // target after passing the initial guard, so we drive redirects ourselves
+    // and re-validate each Location.
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     let response: Response;
+    let currentUrl = parsed;
     try {
-      response = await fetch(parsed.toString(), {
-        method: "GET",
-        signal: controller.signal,
-        redirect: "follow",
-        headers: {
-          "user-agent": "docket-agent/1.0 (+https://github.com/vakesz/docket)",
-          accept: "text/html,text/plain,application/json;q=0.9,*/*;q=0.5",
-        },
-      });
+      let hop = 0;
+      while (true) {
+        const guard = await assertFetchTargetSafe(currentUrl);
+        if (!guard.ok) {
+          clearTimeout(timeoutId);
+          await recordWebFetchEvent(ctx.db, {
+            ...auditBase,
+            url: currentUrl.toString(),
+            status: guard.reason,
+            contentType: null,
+            bytes: 0,
+            errorMessage: hop === 0 ? guard.detail : `redirect target rejected: ${guard.detail}`,
+          });
+          return fail(`fetch denied: ${guard.detail}`);
+        }
+        if (!hostAllowed(guard.host, allowlist)) {
+          clearTimeout(timeoutId);
+          await recordWebFetchEvent(ctx.db, {
+            ...auditBase,
+            url: currentUrl.toString(),
+            status: "denied_host_allowlist",
+            contentType: null,
+            bytes: 0,
+            errorMessage:
+              hop === 0
+                ? `'${guard.host}' is not in the project allowlist`
+                : `redirect to '${guard.host}' is not in the project allowlist`,
+          });
+          return fail(
+            `fetch denied: '${guard.host}' is not in the project's web-fetch host allowlist.`,
+          );
+        }
+
+        const hopResponse = await fetch(currentUrl.toString(), {
+          method: "GET",
+          signal: controller.signal,
+          redirect: "manual",
+          headers: {
+            "user-agent": "docket-agent/1.0 (+https://github.com/vakesz/docket)",
+            accept: "text/html,text/plain,application/json;q=0.9,*/*;q=0.5",
+          },
+        });
+
+        const isRedirect =
+          hopResponse.status >= 300 &&
+          hopResponse.status < 400 &&
+          hopResponse.status !== 304 &&
+          hopResponse.headers.has("location");
+        if (!isRedirect) {
+          response = hopResponse;
+          break;
+        }
+
+        // Drain the redirect body so the connection can be reused.
+        try {
+          await hopResponse.body?.cancel();
+        } catch {
+          // ignore
+        }
+
+        if (hop >= MAX_REDIRECTS) {
+          clearTimeout(timeoutId);
+          await recordWebFetchEvent(ctx.db, {
+            ...auditBase,
+            url: currentUrl.toString(),
+            status: "denied_redirect",
+            contentType: null,
+            bytes: 0,
+            errorMessage: `exceeded ${MAX_REDIRECTS} redirects`,
+          });
+          return fail(`fetch denied: exceeded ${MAX_REDIRECTS} redirects`);
+        }
+
+        const location = hopResponse.headers.get("location") ?? "";
+        let next: URL;
+        try {
+          next = new URL(location, currentUrl);
+        } catch (err) {
+          clearTimeout(timeoutId);
+          const detail = err instanceof Error ? err.message : String(err);
+          await recordWebFetchEvent(ctx.db, {
+            ...auditBase,
+            url: currentUrl.toString(),
+            status: "denied_redirect",
+            contentType: null,
+            bytes: 0,
+            errorMessage: `invalid redirect Location '${location}': ${detail}`,
+          });
+          return fail(`fetch denied: invalid redirect Location '${location}'`);
+        }
+        currentUrl = next;
+        hop += 1;
+      }
     } catch (err) {
       clearTimeout(timeoutId);
       const detail = err instanceof Error ? err.message : String(err);
       await recordWebFetchEvent(ctx.db, {
         ...auditBase,
+        url: currentUrl.toString(),
         status: "error",
         contentType: null,
         bytes: 0,

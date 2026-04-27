@@ -16,12 +16,6 @@ const OTHER_LABEL = "Other";
  * Inline `ask_user_question` card. The agent loop pauses the turn until
  * the user picks options or types free text; submission goes back through
  * the chat-pane's `send()` so the answer lands as the next user message.
- *
- * TODO(port): main shipped a richer multi-question structure
- * (`Question.questions: QuestionItem[]`) where each item has its own
- * options + allow_other. The T3 stream currently emits a flat single
- * question, so this card matches that. When the agent grows the rich
- * shape, swap to a fieldset-per-item layout (see main's QuestionCard).
  */
 export function QuestionCard({
   question,
