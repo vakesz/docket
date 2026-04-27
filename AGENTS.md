@@ -41,7 +41,7 @@ bin/generate-secrets.sh                 # mint AUTH_SECRET + SECRETS_KEY into .e
 
 1. **Routers must not import concrete provider modules.** `src/server/<feature>/router.ts` and `src/server/routers/*` go through `getProviderSpec` + `buildProviderForUser` only. The only files allowed to import `@/providers/<name>/...` are: sibling files inside the same provider package, `src/server/provider-registry.ts`, `src/server/providers/build.ts`, `src/server/providers/auth-build.ts`, and the provider's own arch tests. Enforced by `src/__arch__/no-router-provider-import.test.ts`.
 2. **Translate provider-native kinds and states at the boundary.** The rest of the app runs on canonical enums in `src/core/types.ts` (`ItemKind`, `ItemState`, `TransitionIntent`). Translation lives in each provider's `state-map.ts` (`src/providers/{github,azure-devops}/state-map.ts`).
-3. **Provider write methods are called from exactly one place.** `src/server/proposals/executor.ts` (`confirmProposal`) is the sole caller of `.transition(`, `.patchDescription(`, `.uploadAttachment(`, `.addComment(`, and `.createItem(`. Enforced by `src/__arch__/no-provider-write-leak.test.ts` — a regex scan that ignores the executor itself and the concrete provider implementations.
+3. **Provider write methods are called from exactly one place.** `src/server/proposals/executor.ts` (`confirmProposal`) is the sole caller of `.transition(`, `.patchDescription(`, `.uploadAttachment(`, `.addComment(`, `.createItem(`, and `.setTags(`. Enforced by `src/__arch__/no-provider-write-leak.test.ts` — a regex scan that ignores the executor itself and the concrete provider implementations.
 4. **Every write is proposal-first.** Build a `Proposal` row via `src/server/proposals/builders.ts`, render a diff via `src/server/proposals/diff.ts`, then dispatch through `confirmProposal`. The `proposalsRouter` (`src/server/proposals/router.ts`) is the only HTTP entry point for confirmation. UI-initiated, agent-initiated, and HTTP-initiated writes all share this path — there is no fast lane.
 5. **Agent mutating tools only stage proposals.** `src/agent/tools/mutating.ts` (provider mutations) and `src/agent/tools/memory-mutating.ts` (memory mutations) build proposal rows and return their ids. They never call provider methods or `db.memory.*` writes directly. The human still confirms via the chat UI before `confirmProposal` runs.
 6. **Project sources are read-only for the agent.** The agent gets `list_sources` / `read_source` / `search_sources` only (`src/agent/tools/source.ts`). Source writes are human-driven through the sources router (`src/server/sources/router.ts`). Enforced by `src/__arch__/no-source-mutation-tools.test.ts`.
@@ -58,6 +58,7 @@ bin/generate-secrets.sh                 # mint AUTH_SECRET + SECRETS_KEY into .e
     6. mutating provider tools (`mutating.ts`) — stripped in read-only
     7. memory mutations (`memory-mutating.ts`) — stripped in read-only
     8. out-of-band: `ask_user_question` (`question.ts`) — the loop dispatches it specially but it's still a registered tool
+    9. `web_fetch` (`web-fetch.ts`) — read-only network tool, gated by per-project `web-fetch.enabled`. Pinned at the tail so toggling its presence doesn't shift any earlier tool's slot.
 
     Pinned by `src/__arch__/tool-registration-order.test.ts`. Reorder = invalidate every open conversation's prompt cache.
 12. **Postgres `Item` rows are a cache, not the system of record.** Sync runs from the provider into Prisma (`src/server/sync/...`); confirmed writes refresh the cached row from the response inside `confirmProposal`.
@@ -104,7 +105,7 @@ const result = await confirmProposal(
 );
 ```
 
-Available proposal builders in `src/server/proposals/builders.ts`: `proposeTransition`, `proposeDescriptionPatch`, `proposeComment`, `proposeNewItem`, `proposeMemoryWrite`, `proposeMemoryDelete`. The executor dispatches each `kind` to the matching provider method (or to a memory writer for memory proposals) and refreshes the cached `Item` row from the response.
+Available proposal builders in `src/server/proposals/builders.ts`: `proposeTransition`, `proposeDescriptionPatch`, `proposeComment`, `proposeTagsChange`, `proposeNewItem`, `proposeMemoryWrite`, `proposeMemoryDelete`. The executor dispatches each `kind` to the matching provider method (or to a memory writer for memory proposals) and refreshes the cached `Item` row from the response. Builders may also attach an `advisory` string ("comment echoes description", etc.) that the confirm dialog surfaces above the diff.
 
 Surfaces:
 
@@ -164,7 +165,7 @@ Aspirational direction (consistent with current refactors, not a hard rule):
 ## Global Invariants
 
 - **Bootstrap is env-driven and idempotent.** `bin/seed-dev.ts` reads `DEV_OPENAI_API_KEY`, `DEV_GITHUB_CLIENT_ID`, `DEV_GITHUB_CLIENT_SECRET` and writes any missing `LlmProvider` / `OauthProviderConfig` rows. Once both an LLM provider and an OAuth provider exist, the `setup.complete` global Setting flips and the seed becomes a no-op forever after — admin UI edits are never stomped, even if env values change. The same script runs in dev (via `predev`) and in production (via `bin/docker-entrypoint.sh`).
-- **`setup.complete` gates middleware.** Pre-completion, the app should redirect non-bootstrap routes to a setup-pending state. Post-completion, normal auth + project membership applies.
+- **`setup.complete` gates middleware.** Pre-completion, every authenticated route redirects to `/setup-required`. Post-completion, normal auth + project membership applies. There is no separate `/admin` surface — operator-level config lives under `/settings` (LLM providers, OAuth providers, members, MCP fleet, budget, audit log).
 - **Read-only mode is system-wide.** `app.read-only` Setting → `enforceReadWrite` middleware refuses every mutation procedure → agent registry strips mutating tools. There is no per-user toggle and no per-route bypass.
 - **Audit is append-only.** Every confirmed or rejected proposal produces one `Audit` row. Foreign keys to `User` use `onDelete: SetNull` so user deletion never cascade-erases the audit trail.
 - **Watchlist rows live independently of `Item`.** Pinned ids may outlive the current cache scope (e.g. provider deleted the item).

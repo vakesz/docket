@@ -189,8 +189,8 @@ export const acmeSpec: ProviderSpec = {
 ```
 
 **`setupFields`** drive any future setup UI surface; today, the bootstrap
-seed and the admin CRUD pages (`src/app/admin/oauth-providers/`) read them
-to render forms.
+seed and the OAuth provider panel under `/settings` (`src/ui/settings/oauth-providers-panel.tsx`)
+read them to render forms.
 
 **`grouping`** controls how the UI groups the backlog tree. `"by_kind"`
 nests epics → features → stories → tasks → bugs (Azure DevOps).
@@ -365,7 +365,7 @@ bun run dev                      # next dev (Turbopack) + auto-seed
 
 Then through the UI:
 
-1. Visit `/admin/oauth-providers` and add a new row for your provider kind
+1. Visit `/settings` → OAuth providers and add a new row for your provider kind
    (or set `DEV_<KIND>_CLIENT_ID` + `DEV_<KIND>_CLIENT_SECRET` in
    `.env.local` and let the bootstrap seed write it on the next boot).
 2. Sign in via the new OAuth provider.

@@ -61,6 +61,19 @@ const WebFetchAllowedHostsSchema = z.array(z.string().min(1).max(253)).max(200);
 // pulling a multi-GB payload into the agent context.
 const WebFetchMaxBytesSchema = z.number().int().min(64_000).max(8_000_000);
 
+// Hardcoded eligibility list for auto-accept. Tier A (memory_*) only touches
+// local DB rows; Tier B (tags_change) writes a low-stakes external label set
+// the provider preserves state-encoding for. State changes, description
+// rewrites, comment posts, and item creation are deliberately NOT eligible —
+// they have non-recoverable user-visible blast radius and must keep the
+// proposal-first human-in-the-loop guarantee. Adding a kind here is a
+// security review event.
+const AUTO_ACCEPT_ELIGIBLE_KINDS = ["memory_write", "memory_delete", "tags_change"] as const;
+export const AUTO_ACCEPT_ELIGIBLE_KINDS_LIST: readonly string[] = AUTO_ACCEPT_ELIGIBLE_KINDS;
+const AutoAcceptKindsSchema = z
+  .array(z.enum(AUTO_ACCEPT_ELIGIBLE_KINDS))
+  .max(AUTO_ACCEPT_ELIGIBLE_KINDS.length);
+
 // Theme is intentionally browser-local (see `src/lib/theme.ts` +
 // ThemePicker in the top bar) — same pattern main uses. Keeping it out
 // of the catalog avoids a split-brain where the DB row says "light" while
