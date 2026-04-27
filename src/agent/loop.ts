@@ -52,6 +52,15 @@ export type LoopEvent =
       arguments: Record<string, unknown>;
     }
   | { kind: "tool_call_completed"; callId: string; ok: boolean }
+  /**
+   * Marks the end of one inner LLM round inside a multi-round turn. The
+   * server emits this after a round's assistant text + tool calls have
+   * been persisted and dispatched, just before the next round starts
+   * streaming text. The browser uses it to snapshot the round into a
+   * settled-rounds list so the next round's text deltas don't get
+   * appended to the previous round's bubble.
+   */
+  | { kind: "round_boundary" }
   | { kind: "proposal_staged"; proposalId: string; proposalKind: string; toolName: string }
   | {
       kind: "ask_user_question";
@@ -381,6 +390,11 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
       // last assistant turn; the UI marks it pending until they reply.
       break;
     }
+
+    // Round done, more rounds to come. Tell the client to snapshot the
+    // round it's been showing live (text bubble + ToolCallProgress) into
+    // its settled-rounds list and reset for the next round's deltas.
+    yield { kind: "round_boundary" };
   }
 
   if (totalTokensIn > 0 || totalTokensOut > 0) {

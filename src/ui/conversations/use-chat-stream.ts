@@ -66,7 +66,15 @@ export function useChatStream(): UseChatStream {
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
-      setStreaming({ text: "", toolCalls: [], question: null, error: null, done: false });
+      setStreaming({
+        pendingUserMessage: content,
+        settledRounds: [],
+        text: "",
+        toolCalls: [],
+        question: null,
+        error: null,
+        done: false,
+      });
 
       const url = `/api/projects/${projectId}/conversations/${conversationId}/stream`;
       let response: Response;
@@ -80,6 +88,8 @@ export function useChatStream(): UseChatStream {
       } catch (err) {
         if (controller.signal.aborted) return;
         setStreaming({
+          pendingUserMessage: null,
+          settledRounds: [],
           text: "",
           toolCalls: [],
           question: null,
@@ -90,7 +100,15 @@ export function useChatStream(): UseChatStream {
       }
       if (!response.ok || !response.body) {
         const message = response.statusText || `HTTP ${response.status}`;
-        setStreaming({ text: "", toolCalls: [], question: null, error: message, done: true });
+        setStreaming({
+          pendingUserMessage: null,
+          settledRounds: [],
+          text: "",
+          toolCalls: [],
+          question: null,
+          error: message,
+          done: true,
+        });
         return;
       }
 
@@ -119,14 +137,27 @@ export function useChatStream(): UseChatStream {
         setStreaming((prev) => ({
           ...prev,
           error: err instanceof Error ? err.message : String(err),
-          done: true,
         }));
       }
 
+      // Refetch the persisted transcript BEFORE flipping `done` so the
+      // streaming bubble + settled-rounds snapshot stay visible until
+      // detail.data has the official rows. Otherwise React would render
+      // one frame with the streaming UI gone but the persisted version
+      // not yet in place — a visible blink at end-of-stream.
       await Promise.all([
         utils.conversations.list.invalidate({ projectId, itemId }),
         utils.conversations.get.invalidate({ projectId, conversationId }),
       ]);
+      if (controller.signal.aborted) return;
+      setStreaming((prev) => ({
+        ...prev,
+        pendingUserMessage: null,
+        settledRounds: [],
+        text: "",
+        toolCalls: [],
+        done: true,
+      }));
 
       function applyPayload(p: StreamPayload) {
         if (p.kind === "text_delta") {
@@ -146,6 +177,25 @@ export function useChatStream(): UseChatStream {
               tc.callId === p.callId ? { ...tc, ok: p.ok } : tc,
             ),
           }));
+        } else if (p.kind === "round_boundary") {
+          // Snapshot the round that just finished into settledRounds and
+          // reset live state so the next round starts with a fresh bubble
+          // / progress block. The persisted rows for this round are
+          // already in the DB; the next `invalidate` will replace
+          // settledRounds with the official transcript.
+          setStreaming((prev) => {
+            const hasContent = prev.text.length > 0 || prev.toolCalls.length > 0;
+            if (!hasContent) return prev;
+            return {
+              ...prev,
+              settledRounds: [
+                ...prev.settledRounds,
+                { text: prev.text, toolCalls: prev.toolCalls },
+              ],
+              text: "",
+              toolCalls: [],
+            };
+          });
         } else if (p.kind === "proposal_staged") {
           setProposalIds((prev) => (prev.includes(p.proposalId) ? prev : [...prev, p.proposalId]));
         } else if (p.kind === "ask_user_question") {
@@ -154,10 +204,11 @@ export function useChatStream(): UseChatStream {
             question: { question: p.question, options: p.options, multiSelect: p.multiSelect },
           }));
         } else if (p.kind === "error") {
-          setStreaming((prev) => ({ ...prev, error: p.message, done: true }));
-        } else if (p.kind === "done") {
-          setStreaming((prev) => ({ ...prev, done: true }));
+          setStreaming((prev) => ({ ...prev, error: p.message }));
         }
+        // `done` is intentionally a no-op — the post-loop finalizer flips
+        // streaming.done after invalidate so the persisted view is in
+        // place before the streaming UI disappears.
       }
     },
     [utils.conversations.get, utils.conversations.list],

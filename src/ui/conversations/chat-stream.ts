@@ -12,6 +12,7 @@ export type StreamEventName =
   | "text_delta"
   | "tool_call_started"
   | "tool_call_completed"
+  | "round_boundary"
   | "proposal_staged"
   | "ask_user_question"
   | "usage"
@@ -22,6 +23,7 @@ export type StreamPayload =
   | { kind: "text_delta"; delta: string }
   | { kind: "tool_call_started"; callId: string; name: string; arguments: Record<string, unknown> }
   | { kind: "tool_call_completed"; callId: string; ok: boolean }
+  | { kind: "round_boundary" }
   | { kind: "proposal_staged"; proposalId: string; proposalKind: string; toolName: string }
   | {
       kind: "ask_user_question";
@@ -33,20 +35,46 @@ export type StreamPayload =
   | { kind: "done" }
   | { kind: "error"; message: string };
 
-export type StreamingState = {
+export type StreamingToolCall = {
+  callId: string;
+  name: string;
+  arguments: Record<string, unknown>;
+  ok: boolean | null;
+};
+
+/**
+ * One settled inner round of a multi-round turn — the assistant text + the
+ * tool calls dispatched in that round. The server has already persisted
+ * the matching rows but the client hasn't refetched yet, so we keep the
+ * snapshot visible until the post-stream `invalidate` swaps in the
+ * official transcript. Without this, the next round's text deltas would
+ * be appended to the previous round's bubble.
+ */
+export type SettledRound = {
   text: string;
-  toolCalls: {
-    callId: string;
-    name: string;
-    arguments: Record<string, unknown>;
-    ok: boolean | null;
-  }[];
+  toolCalls: readonly StreamingToolCall[];
+};
+
+export type StreamingState = {
+  /**
+   * The user's just-sent message, held locally until the post-stream
+   * `invalidate` brings the persisted row in. Without this the user's
+   * message vanishes from the textarea and only reappears when the
+   * stream finishes — looks like the message popped in above the
+   * assistant bubble.
+   */
+  pendingUserMessage: string | null;
+  settledRounds: readonly SettledRound[];
+  text: string;
+  toolCalls: StreamingToolCall[];
   question: { question: string; options: readonly string[] | null; multiSelect: boolean } | null;
   error: string | null;
   done: boolean;
 };
 
 export const EMPTY_STREAM: StreamingState = {
+  pendingUserMessage: null,
+  settledRounds: [],
   text: "",
   toolCalls: [],
   question: null,

@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { metaLabelFaintClass, microCapsButtonClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
-import { useToolDisplayMode } from "@/lib/ui-prefs";
+import { type ToolDisplayMode, useToolDisplayMode } from "@/lib/ui-prefs";
 import { cn } from "@/lib/utils";
 import { Bubble } from "@/ui/conversations/bubble";
 import { useChatPaneController } from "@/ui/conversations/chat-pane-context";
+import type { SettledRound } from "@/ui/conversations/chat-stream";
 import { LlmSwitcher } from "@/ui/conversations/llm-switcher";
 import { QuestionCard } from "@/ui/conversations/question-card";
 import { ToolCallProgress, ToolCallRow } from "@/ui/conversations/tool-call-row";
@@ -120,6 +121,8 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
     };
   }, [
     messages.length,
+    streaming.pendingUserMessage,
+    streaming.settledRounds.length,
     streaming.text,
     streaming.toolCalls.length,
     streaming.question,
@@ -227,6 +230,13 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
                 />
               );
             })}
+            {streaming.pendingUserMessage && (
+              <Bubble messageRole="user" text={streaming.pendingUserMessage} />
+            )}
+            {streaming.settledRounds.map((round, idx) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: settledRounds is append-only during one stream; index is stable for the lifetime of the snapshot.
+              <SettledRoundView key={`settled:${idx}`} round={round} mode={toolDisplayMode} />
+            ))}
             {inFlight && streaming.text && (
               <Bubble messageRole="assistant" text={streaming.text} streaming />
             )}
@@ -316,5 +326,31 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
         </div>
       </form>
     </div>
+  );
+}
+
+/**
+ * One settled inner round of a multi-round turn: the assistant's text
+ * bubble plus the tool calls it dispatched, rendered the same way the
+ * persisted view will render them once the post-stream `invalidate`
+ * brings the official rows in. Keeping this layout matched to
+ * `buildRenderUnits` is the whole point — the live → persisted swap is
+ * visually a no-op.
+ */
+function SettledRoundView({ round, mode }: { round: SettledRound; mode: ToolDisplayMode }) {
+  return (
+    <>
+      {round.text.length > 0 && <Bubble messageRole="assistant" text={round.text} />}
+      {round.toolCalls.map((tc) => (
+        <ToolCallRow
+          key={tc.callId}
+          name={tc.name}
+          args={tc.arguments}
+          result=""
+          ok={tc.ok}
+          mode={mode}
+        />
+      ))}
+    </>
   );
 }

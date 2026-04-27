@@ -42,7 +42,12 @@ export async function getConversation(
     include: {
       messages: {
         where: { compacted: false },
-        orderBy: [{ createdAt: "asc" }],
+        // Secondary `id` tiebreaker: assistant + tool-result rows are
+        // written back-to-back during a turn and can collide on
+        // microsecond `createdAt`. Without a tiebreaker the display order
+        // becomes nondeterministic across refetches — visible as messages
+        // shuffling around in the chat after the stream completes.
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       },
     },
   });
