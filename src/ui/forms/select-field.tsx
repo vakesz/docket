@@ -22,7 +22,11 @@ type Props = ComponentPropsWithoutRef<"select"> & {
 export function SelectField({ className, wrapperClassName, children, ...rest }: Props) {
   return (
     <div className={cn("relative", wrapperClassName)}>
-      <select {...rest} className={cn(selectFieldClass, className)}>
+      {/* `pr-8` is applied LAST so callers can pass padding shorthands
+          like `px-3` without collapsing the chevron clearance — twMerge
+          resolves the rightmost padding rule, so the overlay never
+          collides with the truncated label text. */}
+      <select {...rest} className={cn(selectFieldClass, className, "pr-8")}>
         {children}
       </select>
       <ChevronDown
