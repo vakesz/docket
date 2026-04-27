@@ -2,15 +2,18 @@ import { redirect } from "next/navigation";
 import { setupCardClass } from "@/lib/form-classes";
 import { db } from "@/server/db";
 import { getSetupStatus } from "@/server/setup/status";
+import { SetupWizardForm } from "@/ui/setup/wizard-form";
 
 /**
- * Friendly explanation page surfaced by `requireSetupComplete()` when the
- * deployment hasn't finished its bootstrap. Once both halves exist, this
- * page redirects home rather than show an obsolete "setup required"
- * screen — flipping the sticky bit happens inside `getSetupStatus`.
+ * In-browser bootstrap wizard. Replaces the env-edit-and-restart loop:
+ * the operator runs `docker compose up`, opens this page, fills in at
+ * least one OAuth provider (LLM is optional), and the same submit
+ * flips `setup.complete` so the next page load lands on `/`.
  *
  * Notably this page does NOT call `requireSetupComplete()` itself; that
- * would bounce the redirect against itself.
+ * would bounce the redirect against itself. Every other top-level route
+ * (`/`, `/settings/*`, `/projects/[projectId]/*`) calls the guard, so
+ * the user can't navigate around the wizard via direct URL.
  */
 
 export default async function SetupRequiredPage() {
@@ -19,53 +22,22 @@ export default async function SetupRequiredPage() {
     redirect("/");
   }
 
-  const items: Array<{ label: string; ok: boolean; hint: string }> = [
-    {
-      label: "LLM provider",
-      ok: status.hasLlm,
-      hint: "Set DEV_OPENAI_API_KEY in .env.local and restart `bun run dev`, or insert a row into LlmProvider directly.",
-    },
-    {
-      label: "OAuth provider",
-      ok: status.hasOauth,
-      hint: "Set DEV_GITHUB_CLIENT_ID + DEV_GITHUB_CLIENT_SECRET in .env.local and restart `bun run dev`, or insert a row into OauthProviderConfig directly.",
-    },
-  ];
+  const publicBaseUrl = (process.env.PUBLIC_BASE_URL ?? "http://localhost:3000").trim();
+  const githubExisting = await db.oauthProviderConfig.findFirst({ where: { kind: "github" } });
+  const azureDevopsExisting = await db.oauthProviderConfig.findFirst({
+    where: { kind: "azure_devops" },
+  });
+  const openaiExisting = await db.llmProvider.findFirst({ where: { kind: "openai" } });
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-bg p-8 text-fg">
+    <main className="flex min-h-screen items-start justify-center bg-bg p-8 text-fg">
       <div className={`${setupCardClass} flex flex-col gap-6`}>
-        <header className="flex flex-col gap-2">
-          <h1 className="text-2xl font-semibold tracking-tight text-fg">Setup required</h1>
-          <p className="text-sm text-fg-muted">
-            Docket needs at least one LLM provider and one OAuth provider before it can sign anyone
-            in or run the agent. Fill in what's missing below, then reload.
-          </p>
-        </header>
-
-        <ul className="flex flex-col gap-3">
-          {items.map((item) => (
-            <li key={item.label} className="rounded-2xl border border-border bg-surface-alt p-4">
-              <div className="flex items-baseline justify-between gap-3">
-                <span className="font-medium text-fg">{item.label}</span>
-                <span
-                  className={
-                    item.ok
-                      ? "text-xs uppercase tracking-wide text-success-fg"
-                      : "text-xs uppercase tracking-wide text-warning-fg"
-                  }
-                >
-                  {item.ok ? "configured" : "missing"}
-                </span>
-              </div>
-              {!item.ok ? <p className="mt-2 text-xs text-fg-muted">{item.hint}</p> : null}
-            </li>
-          ))}
-        </ul>
-
-        <p className="text-xs text-fg-faint">
-          Once both halves are in place this page redirects home automatically.
-        </p>
+        <SetupWizardForm
+          publicBaseUrl={publicBaseUrl}
+          hasGithub={Boolean(githubExisting)}
+          hasAzureDevops={Boolean(azureDevopsExisting)}
+          hasOpenai={Boolean(openaiExisting)}
+        />
       </div>
     </main>
   );

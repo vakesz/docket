@@ -45,74 +45,57 @@ The provider stays the source of truth. Postgres caches what the user has seen; 
 
 ## Self-hosting (Docker)
 
-The fastest way to a working Docket: `docker compose up`. The bundled stack runs Postgres 16 alongside the app, applies the schema on first boot, and seeds the initial provider rows from environment variables.
+The fastest way to a working Docket:
+
+```bash
+git clone <repo-url> docket && cd docket
+docker compose up -d
+open http://localhost:3000   # opens the in-browser setup wizard
+```
+
+That's it. The entrypoint generates `AUTH_SECRET` and `SECRETS_KEY` into a named volume on first boot, applies the schema, and the wizard at `/setup-required` collects:
+
+- **At least one OAuth provider** — GitHub, Azure DevOps, or both. The wizard shows the exact callback URL to paste into the upstream app.
+- **An optional default LLM** — OpenAI, OpenAI-compatible, or Azure AI Foundry. Skip it and add later from `/settings`.
+
+Submitting the wizard flips the global `setup.complete` flag and drops you on the home page. From `/settings`, an operator can add more LLM/OAuth providers, rotate keys, and tune projects at any time — no redeploy.
 
 ### Prerequisites
 
 - Docker Engine 27+ (with `docker compose` v2)
-- A registered **GitHub OAuth App** for sign-in:
-  - <https://github.com/settings/developers> → New OAuth App
-  - **Authorization callback URL:** `${PUBLIC_BASE_URL}/api/auth/callback/github`
-- An **OpenAI API key** for the agent (other vendors can be added once their adapter ships — see [Providers](#providers))
+- A registered OAuth App on at least one supported provider (GitHub, Azure DevOps). The wizard tells you exactly which callback URL to set.
+- An OpenAI-compatible API key if you want the agent online from day one (skippable).
 
-### First boot
+### Skipping the wizard with env
+
+If you'd rather config-file your way through, copy `.env.example` to `.env` and fill the `DEV_*` block. The bootstrap seed writes the matching rows on boot — once one OAuth row exists, the wizard is bypassed.
 
 ```bash
-git clone <repo-url> docket && cd docket
-
-# 1. Generate AUTH_SECRET and SECRETS_KEY into .env (also copies .env.example).
-bin/generate-secrets.sh
-
-# 2. Edit .env — set PUBLIC_BASE_URL, change POSTGRES_PASSWORD off the default.
-$EDITOR .env
-
-# 3. Seed the initial provider rows so you can sign in on the first boot.
-cp compose.override.example.yml compose.override.yml
-$EDITOR compose.override.yml   # paste DEV_OPENAI_API_KEY, DEV_GITHUB_CLIENT_ID/SECRET
-
-# 4. Bring up the stack. First boot pulls postgres:16, builds the app image, and runs the seed.
+cp .env.example .env
+$EDITOR .env       # PUBLIC_BASE_URL, POSTGRES_PASSWORD, plus DEV_GITHUB_* / DEV_OPENAI_API_KEY
 docker compose up -d
-
-# 5. Watch the logs the first time so you see the schema apply + seed run.
-docker compose logs -f app
 ```
 
-Visit `${PUBLIC_BASE_URL}` (default `http://localhost:3000`), sign in via GitHub, and you're in. From `/settings` an operator can add more LLM providers, more OAuth providers, and rotate keys at any time — no redeploy.
+### Where state lives
 
-### How the bootstrap works
-
-The stack ships with a single bootstrap mechanism: **the seed script reads the `DEV_*` env vars on every boot and writes any missing rows.** Once both an LLM provider and an OAuth provider exist, a global `setup.complete` sticky bit flips and the seed becomes a no-op forever after — UI edits are never stomped, even if the env vars still hold older values.
-
-This means:
-
-- Rotating a key in `compose.override.yml` *does not* update the DB after first boot. Use `/settings`.
-- Removing the seed env vars after first boot is harmless.
-- A clean `docker compose down -v` (wipes the volume) re-runs the seed from current env values on the next `up`.
-
-### What lives where
-
-| Bootstrap env (`.env`) | Purpose |
+| Volume | Purpose |
 | --- | --- |
-| `PUBLIC_BASE_URL` | Canonical URL the app is reached at — NextAuth needs it for OAuth callbacks. |
-| `AUTH_SECRET` | NextAuth session-cookie encryption. Rotating it logs everyone out. |
-| `SECRETS_KEY` | 32-byte base64 key used to AES-GCM-encrypt provider secrets at rest. Rotating it requires re-encrypting every existing row. |
-| `POSTGRES_USER`/`PASSWORD`/`DB` | Postgres credentials for the bundled `db` service. Override `DATABASE_URL` to use an external Postgres. |
+| `db-data` | Postgres data directory. |
+| `docket-secrets` | `AUTH_SECRET` and `SECRETS_KEY` auto-generated on first boot. Survives `docker compose down`; only `down -v` wipes. |
 
-| Bootstrap seed (`compose.override.yml`) | Writes |
+| Database (managed via `/settings` or the wizard) | What it stores |
 | --- | --- |
-| `DEV_OPENAI_API_KEY` | One `LlmProvider` row (kind `openai`). First row also becomes the global default. |
-| `DEV_GITHUB_CLIENT_ID` + `DEV_GITHUB_CLIENT_SECRET` | One `OauthProviderConfig` row (kind `github`). |
-
-Everything else lives in the database and is managed from `/settings`.
+| `LlmProvider` | API keys + base URL + model. AES-GCM-encrypted at rest. |
+| `OauthProviderConfig` | OAuth client id/secret per provider. AES-GCM-encrypted at rest. |
+| `Setting` | Global flags (`setup.complete`, `app.read-only`, budget limits, …). |
 
 ### Operations
 
 ```bash
 docker compose up -d          # start
 docker compose logs -f app    # follow logs
-docker compose restart app    # apply env-only changes
-docker compose down           # stop (data persists)
-docker compose down -v        # stop + wipe the database
+docker compose down           # stop (data + secrets persist)
+docker compose down -v        # stop + wipe everything
 docker compose pull && docker compose up -d --build   # update
 ```
 
@@ -123,11 +106,11 @@ docker compose pull && docker compose up -d --build   # update
 ```bash
 bun install
 cp .env.example .env.local
-$EDITOR .env.local       # at minimum: DATABASE_URL, AUTH_SECRET, plus DEV_* seeds for sign-in
+$EDITOR .env.local       # at minimum: DATABASE_URL, plus optional DEV_* seeds
 bun run dev              # runs predev seed + next dev (Turbopack)
 ```
 
-`bun run dev` runs `bin/seed-dev.ts` first, which reads `.env.local` and writes the same `LlmProvider` / `OauthProviderConfig` rows as the docker entrypoint — so the runtime path is identical to production (DB-driven, no env fallbacks).
+`bun run dev` runs `bin/seed-dev.ts` first, which reads `.env.local` and writes any matching `LlmProvider` / `OauthProviderConfig` rows (idempotent). Leave the `DEV_*` block empty and you'll land on the in-browser wizard at `http://localhost:3000` exactly as a fresh self-host would.
 
 If you don't have a local Postgres, point `DATABASE_URL` at `docker compose up -d db` running just the bundled DB service, or any reachable Postgres (Neon dev branch, etc).
 

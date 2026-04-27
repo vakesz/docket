@@ -10,6 +10,7 @@ import {
   Globe,
   KeyRound,
   LineChart,
+  Menu,
   MessageSquare,
   RefreshCw,
   ScrollText,
@@ -18,6 +19,7 @@ import {
   SlidersHorizontal,
   UserRound,
   Users,
+  X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
@@ -275,6 +277,7 @@ export function SettingsShell({ publicBase, project, initialSection }: Props) {
   const [active, setActive] = useState<SectionKey>(
     initialSection ?? (projectId ? "memory" : "profile"),
   );
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
     if (initialSection) {
@@ -319,64 +322,108 @@ export function SettingsShell({ publicBase, project, initialSection }: Props) {
   }
   const blockedByMissingProject = Boolean(activeMeta.needsProject) && !projectId;
 
+  const sidebarNav = (
+    <nav className="flex flex-col gap-4">
+      {grouped.map((group) => (
+        <div key={group.key} className="flex flex-col gap-1">
+          <div className="px-3 pb-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-fg-muted">
+            {group.label}
+          </div>
+          {group.key === "project" ? (
+            <div className="px-3 pb-2">
+              <ActiveProjectPicker currentProjectId={projectId} />
+            </div>
+          ) : null}
+          {group.sections.map((section) => {
+            const Icon = section.icon;
+            const isActive = section.key === active;
+            const disabled = Boolean(section.needsProject) && !projectId;
+            return (
+              <button
+                key={section.key}
+                type="button"
+                onClick={() => {
+                  if (disabled) return;
+                  setActive(section.key);
+                  setMobileNavOpen(false);
+                }}
+                disabled={disabled}
+                className={cn(
+                  "flex items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition-colors",
+                  isActive ? "bg-accent/10 text-accent" : "text-fg hover:bg-surface-alt",
+                  disabled && "cursor-not-allowed opacity-50 hover:bg-transparent",
+                )}
+                title={disabled ? "Pick a project above to enable" : undefined}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                <span className="flex-1 truncate font-medium">{section.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      ))}
+    </nav>
+  );
+
   return (
     <div className="grid min-h-0 w-full flex-1 grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)]">
-      <aside className="min-h-0 overflow-auto border-b border-border bg-surface/80 px-3 py-4 lg:border-b-0 lg:border-r">
-        <nav className="flex flex-col gap-4">
-          {grouped.map((group) => (
-            <div key={group.key} className="flex flex-col gap-1">
-              <div className="px-3 pb-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-fg-muted">
-                {group.label}
-              </div>
-              {group.key === "project" ? (
-                <div className="px-3 pb-2">
-                  <ActiveProjectPicker currentProjectId={projectId} />
-                </div>
-              ) : null}
-              {group.sections.map((section) => {
-                const Icon = section.icon;
-                const isActive = section.key === active;
-                const disabled = Boolean(section.needsProject) && !projectId;
-                return (
-                  <button
-                    key={section.key}
-                    type="button"
-                    onClick={() => {
-                      if (disabled) return;
-                      setActive(section.key);
-                    }}
-                    disabled={disabled}
-                    className={cn(
-                      "flex items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition-colors",
-                      isActive ? "bg-accent/10 text-accent" : "text-fg hover:bg-surface-alt",
-                      disabled && "cursor-not-allowed opacity-50 hover:bg-transparent",
-                    )}
-                    title={disabled ? "Pick a project above to enable" : undefined}
-                  >
-                    <Icon className="h-4 w-4 shrink-0" />
-                    <span className="flex-1 truncate font-medium">{section.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          ))}
-        </nav>
+      <aside className="hidden min-h-0 overflow-auto border-border bg-surface/80 px-3 py-4 lg:block lg:border-r">
+        {sidebarNav}
       </aside>
 
-      <section className="min-h-0 overflow-auto">
-        <header className="border-b border-border bg-surface/70 px-6 py-4 backdrop-blur">
-          <div className="flex flex-wrap items-baseline gap-2">
-            <h2 className="text-lg font-semibold text-fg">{activeMeta.label}</h2>
-            {activeMeta.needsProject && project ? (
-              <span className="rounded-full border border-border bg-surface-alt px-2 py-0.5 text-[11px] uppercase tracking-wide text-fg-muted">
-                {project.name}
+      {mobileNavOpen ? (
+        <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true">
+          <button
+            type="button"
+            aria-label="Close menu"
+            className="absolute inset-0 bg-fg/30 backdrop-blur-sm"
+            onClick={() => setMobileNavOpen(false)}
+          />
+          <aside className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col overflow-auto border-r border-border bg-surface px-3 py-4 shadow-xl">
+            <div className="mb-3 flex items-center justify-between px-3">
+              <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-fg-muted">
+                Settings
               </span>
-            ) : null}
+              <button
+                type="button"
+                onClick={() => setMobileNavOpen(false)}
+                aria-label="Close menu"
+                className="rounded-md p-1 text-fg-muted hover:bg-surface-alt hover:text-fg"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            {sidebarNav}
+          </aside>
+        </div>
+      ) : null}
+
+      <section className="min-h-0 overflow-auto">
+        <header className="border-b border-border bg-surface/70 px-4 py-4 backdrop-blur sm:px-6">
+          <div className="flex items-start gap-3">
+            <button
+              type="button"
+              onClick={() => setMobileNavOpen(true)}
+              aria-label="Open settings menu"
+              className="-ml-1 rounded-md p-2 text-fg hover:bg-surface-alt lg:hidden"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-baseline gap-2">
+                <h2 className="text-lg font-semibold text-fg">{activeMeta.label}</h2>
+                {activeMeta.needsProject && project ? (
+                  <span className="rounded-full border border-border bg-surface-alt px-2 py-0.5 text-[11px] uppercase tracking-wide text-fg-muted">
+                    {project.name}
+                  </span>
+                ) : null}
+              </div>
+              <p className="mt-1 max-w-3xl text-sm text-fg-muted">{activeMeta.description}</p>
+            </div>
           </div>
-          <p className="mt-1 max-w-3xl text-sm text-fg-muted">{activeMeta.description}</p>
         </header>
 
-        <div className="px-6 py-6">
+        <div className="px-4 py-6 sm:px-6">
           {blockedByMissingProject ? (
             <p className="rounded-2xl border border-dashed border-border bg-surface p-6 text-center text-sm text-fg-muted">
               Pick a project from the sidebar to manage its {activeMeta.label.toLowerCase()}.

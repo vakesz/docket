@@ -5,7 +5,7 @@
 #   deps     — install all node_modules (incl. dev deps; needed for prisma generate
 #              and next build). Cached on package.json + bun.lock.
 #   builder  — generate the Prisma client into ./src/db/generated and run `next build`.
-#   runner   — copy only the artifacts the runtime needs (node_modules, .next, public,
+#   runner   — copy only the artifacts the runtime needs (node_modules, .next,
 #              prisma schema, generated client, bin scripts) and run `next start` via bun.
 #
 # We deliberately do NOT use Next's `output: standalone` mode here — Prisma 7
@@ -35,7 +35,6 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY package.json bun.lock tsconfig.json next.config.ts postcss.config.mjs biome.json components.json ./
 COPY prisma ./prisma
 COPY prisma.config.ts ./prisma.config.ts
-COPY public ./public
 COPY src ./src
 COPY bin ./bin
 
@@ -57,13 +56,25 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+# Auth.js v5 refuses non-Vercel hosts in production unless this is set.
+# Self-host always wants it on; operators can override via env if needed.
+ENV AUTH_TRUST_HOST=true
+
+# openssl is used by the entrypoint to generate AUTH_SECRET / SECRETS_KEY
+# on first boot when the operator hasn't pre-set them. ~1.5 MB.
+RUN apk add --no-cache openssl
 
 # Non-root user
 RUN addgroup -S -g 1001 docket && adduser -S -G docket -u 1001 docket
 
+# Persisted-state directory for auto-generated boot secrets. The entrypoint
+# writes /app/data/secrets.env on first boot if AUTH_SECRET / SECRETS_KEY
+# are not set; docker-compose mounts the docket-secrets volume here so
+# they survive container removal.
+RUN mkdir -p /app/data && chown -R docket:docket /app/data
+
 COPY --from=builder --chown=docket:docket /app/node_modules ./node_modules
 COPY --from=builder --chown=docket:docket /app/.next ./.next
-COPY --from=builder --chown=docket:docket /app/public ./public
 COPY --from=builder --chown=docket:docket /app/prisma ./prisma
 COPY --from=builder --chown=docket:docket /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder --chown=docket:docket /app/src/db/generated ./src/db/generated

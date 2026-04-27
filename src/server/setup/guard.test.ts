@@ -49,17 +49,19 @@ describe("requireSetupComplete", () => {
     expect(state.writes).toEqual([]);
   });
 
-  it("redirects when only LLM is configured", async () => {
+  it("redirects when only LLM is configured (OAuth still required)", async () => {
     state.llm = 1;
     await expect(requireSetupComplete()).rejects.toThrow("REDIRECT:/setup-required");
   });
 
-  it("redirects when only OAuth is configured", async () => {
+  it("returns status (and flips sticky bit) when an OAuth row exists, even without an LLM", async () => {
     state.oauth = 1;
-    await expect(requireSetupComplete()).rejects.toThrow("REDIRECT:/setup-required");
+    const status = await requireSetupComplete();
+    expect(status).toEqual({ complete: true, hasLlm: false, hasOauth: true });
+    expect(state.writes).toEqual([JSON.stringify(true)]);
   });
 
-  it("returns status (and flips sticky bit) when both halves are configured", async () => {
+  it("returns status when both halves are configured", async () => {
     state.llm = 1;
     state.oauth = 1;
     const status = await requireSetupComplete();

@@ -38,28 +38,28 @@ function makeMockDb(state: MockState): Database {
 }
 
 describe("getSetupStatus", () => {
-  it("reports incomplete when both halves are missing — no write", async () => {
+  it("reports incomplete when no OAuth row exists — no write", async () => {
     const state: MockState = { llmCount: 0, oauthCount: 0, setupRow: null, writes: [] };
     const status = await getSetupStatus(makeMockDb(state));
     expect(status).toEqual({ complete: false, hasLlm: false, hasOauth: false });
     expect(state.writes).toEqual([]);
   });
 
-  it("reports incomplete with only an LLM row — no write", async () => {
+  it("LLM alone is not enough — bit stays unflipped without an OAuth row", async () => {
     const state: MockState = { llmCount: 1, oauthCount: 0, setupRow: null, writes: [] };
     const status = await getSetupStatus(makeMockDb(state));
     expect(status).toEqual({ complete: false, hasLlm: true, hasOauth: false });
     expect(state.writes).toEqual([]);
   });
 
-  it("reports incomplete with only an OAuth row — no write", async () => {
+  it("flips the sticky bit on first observation of an OAuth row, even without an LLM", async () => {
     const state: MockState = { llmCount: 0, oauthCount: 1, setupRow: null, writes: [] };
     const status = await getSetupStatus(makeMockDb(state));
-    expect(status).toEqual({ complete: false, hasLlm: false, hasOauth: true });
-    expect(state.writes).toEqual([]);
+    expect(status).toEqual({ complete: true, hasLlm: false, hasOauth: true });
+    expect(state.writes).toEqual([{ op: "create", value: JSON.stringify(true) }]);
   });
 
-  it("flips the sticky bit on first observation that both halves exist", async () => {
+  it("flips the sticky bit when both halves exist", async () => {
     const state: MockState = { llmCount: 1, oauthCount: 1, setupRow: null, writes: [] };
     const status = await getSetupStatus(makeMockDb(state));
     expect(status).toEqual({ complete: true, hasLlm: true, hasOauth: true });

@@ -12,10 +12,12 @@
  *   - `DEV_GITHUB_CLIENT_ID` + `DEV_GITHUB_CLIENT_SECRET` → an
  *     `OauthProviderConfig` row (kind=github).
  *
- * Gating: once the global `setup.complete` Setting is true (one LLM and one
- * OAuth provider have both been observed), the seed short-circuits. The DB
- * is the source of truth from then on; admin UI edits are never stomped,
- * even if the env vars still hold older values.
+ * Idempotency comes from each branch's own existence check. There is no
+ * gate on `setup.complete` — that bit is owned by the in-browser wizard
+ * (`src/server/setup/router.ts`) and the `getSetupStatus` reader. Setting
+ * `DEV_*` envs *after* the wizard has already flipped the bit will still
+ * fill in any missing rows (e.g. a user who finished the wizard with
+ * just an OAuth provider, then later set `DEV_OPENAI_API_KEY`).
  *
  * Missing env or unavailable DB just logs a warning and exits 0 — never
  * blocks the server. Secrets land via `encryptSecret` so the on-disk row
@@ -26,7 +28,6 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { config as loadEnv } from "dotenv";
 import { PrismaClient } from "../src/db/generated/client";
 import { encryptSecret, isEncryptionConfigured } from "../src/server/secrets/encryption";
-import { decodeSettingValue } from "../src/server/settings/catalog";
 
 loadEnv({ path: ".env.local" });
 
@@ -41,17 +42,6 @@ async function main() {
   const db = new PrismaClient({ adapter, log: ["error"] });
 
   try {
-    const setupCompleteRow = await db.setting.findFirst({
-      where: { key: "setup.complete", scope: "global", userId: null, projectId: null },
-      select: { value: true },
-      orderBy: { updatedAt: "desc" },
-    });
-    const setupComplete = decodeSettingValue("setup.complete", setupCompleteRow?.value ?? null);
-    if (setupComplete) {
-      console.log("[seed-dev] setup.complete is true — skipping (post-bootstrap).");
-      return;
-    }
-
     await seedOpenAi(db);
     await seedGithubOAuth(db);
   } catch (err) {

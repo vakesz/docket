@@ -9,6 +9,7 @@ import { projectsRouter } from "@/server/projects/router";
 import { proposalsRouter } from "@/server/proposals/router";
 import { healthRouter } from "@/server/routers/health";
 import { settingsRouter } from "@/server/settings/router";
+import { setupRouter } from "@/server/setup/router";
 import { sourcesRouter } from "@/server/sources/router";
 import { suggestionsRouter } from "@/server/suggestions/router";
 import { router } from "@/server/trpc";
@@ -29,6 +30,7 @@ export const appRouter = router({
   mcp: mcpRouter,
   views: viewsRouter,
   settings: settingsRouter,
+  setup: setupRouter,
   suggestions: suggestionsRouter,
   analytics: analyticsRouter,
 });

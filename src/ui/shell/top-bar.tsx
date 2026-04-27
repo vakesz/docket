@@ -37,6 +37,9 @@ export function TopBar({
           className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-accent"
         />
         <span className="text-[13px] font-semibold uppercase tracking-[0.18em]">DOCKET</span>
+        <span className="ml-1 hidden text-[12px] font-light italic tracking-wide text-fg-muted sm:inline">
+          build something cool together
+        </span>
       </Link>
       <div className="ml-auto flex shrink-0 items-center gap-3 text-xs text-fg-muted">
         {currentProjectId && projects.length > 0 ? (
