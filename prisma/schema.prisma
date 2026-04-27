@@ -202,6 +202,7 @@ model Project {
   sync          SyncCursor?
   savedViews    SavedView[]
   audits        Audit[]
+  webFetches    WebFetchEvent[]
 
   @@index([ownerUserId, archivedAt])
   @@index([providerKind])
@@ -472,6 +473,11 @@ model Proposal {
   /// Populated when execution failed; the proposal stays in 'confirmed'
   /// state with this message attached so the user can retry.
   errorMessage   String?
+  /// Optional non-blocking warning the builders attach when the staged write
+  /// looks suspicious — e.g. a comment whose body closely echoes the item
+  /// description. Surfaced in the confirm dialog so the human can verify
+  /// before approving. Null when nothing to flag.
+  advisory       String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
@@ -617,4 +623,37 @@ model Audit {
 
   @@index([projectId, createdAt(sort: Desc)])
   @@index([projectId, action])
+}
+
+// ----------------------------------------------------------------------------
+// WebFetchEvent — append-only log of every URL the agent's web_fetch tool
+// pulled on behalf of a user. Separate from Audit so the
+// "audit writes only from the proposal executor" invariant (CLAUDE.md rule 9)
+// stays intact: web_fetch writes to its own table.
+// ----------------------------------------------------------------------------
+
+model WebFetchEvent {
+  id          String   @id @default(cuid())
+  projectId   String
+  /// Caller at the moment of the fetch. Kept as a string id (not a relation)
+  /// so user deletion never cascade-erases this trail.
+  userId      String?
+  url         String
+  /// 'ok' | 'denied_ssrf' | 'denied_host' | 'denied_size' | 'denied_type' |
+  /// 'denied_disabled' | 'error'. Free-text so the tool can grow new failure
+  /// modes without a migration.
+  status      String
+  /// Response Content-Type header on success; null on denial / error.
+  contentType String?
+  /// Bytes returned (after truncation, before HTML stripping). 0 on denial.
+  bytes       Int      @default(0)
+  /// Error text when status != 'ok' — SSRF denial reason, host mismatch,
+  /// fetch error, etc. Null on success.
+  errorMessage String?
+  createdAt   DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt(sort: Desc)])
+  @@index([projectId, status])
 }
