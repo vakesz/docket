@@ -26,6 +26,7 @@ import {
   proposeComment,
   proposeDescriptionPatch,
   proposeNewItem,
+  proposeTagsChange,
   proposeTransition,
 } from "@/server/proposals/builders";
 
@@ -36,14 +37,21 @@ function builderCtx(ctx: Parameters<ToolFactory>[0]) {
   return { db: ctx.db, projectId: ctx.projectId, userId: ctx.userId };
 }
 
+function resolveProviderItemId(
+  ctx: Parameters<ToolFactory>[0],
+  arg: string | undefined,
+): string | null {
+  return arg ?? ctx.providerItemId;
+}
+
 export const proposeTransitionTool: ToolFactory = (ctx) => ({
   def: {
     name: "propose_transition",
     description:
-      "Stage a state transition for an item (e.g. start_work, close_done, reopen). Returns a proposal id; the human reviews and confirms in the UI.",
+      "Stage a state transition (start_work | pause | block | needs_info | close_done | close_wontfix | reopen) on the active item. Defaults to the conversation's anchored item; pass providerItemId only to act on a different item. Returns a proposal id — the human still confirms in the UI.",
     parameters: zodToJsonSchema(
       z.object({
-        providerItemId: z.string().min(1),
+        providerItemId: z.string().min(1).optional(),
         intent: TransitionIntentEnum,
       }),
     ),
@@ -51,12 +59,19 @@ export const proposeTransitionTool: ToolFactory = (ctx) => ({
   handler: async (raw) => {
     const args = z
       .object({
-        providerItemId: z.string().min(1),
+        providerItemId: z.string().min(1).optional(),
         intent: TransitionIntentEnum,
       })
       .parse(raw);
+    const providerItemId = resolveProviderItemId(ctx, args.providerItemId);
+    if (!providerItemId) {
+      return fail("providerItemId is required when no item is anchored on this conversation.");
+    }
     try {
-      const row = await proposeTransition(builderCtx(ctx), args);
+      const row = await proposeTransition(builderCtx(ctx), {
+        providerItemId,
+        intent: args.intent,
+      });
       return ok({ proposalId: row.id, kind: row.kind });
     } catch (err) {
       return fail(err instanceof Error ? err.message : String(err));
@@ -68,10 +83,10 @@ export const proposeDescriptionPatchTool: ToolFactory = (ctx) => ({
   def: {
     name: "propose_description_patch",
     description:
-      "Stage a full-text replacement of an item's description. Pass the new markdown body in `newMd`. Use get_item first to read the current body so you can preserve sections you don't intend to change.",
+      "Stage a full-text replacement of the active item's description (`newMd` is the entire new body, not a patch). Defaults to the anchored item; pass providerItemId only to edit a different item. Read the current body with get_item first so you preserve sections you don't intend to change.",
     parameters: zodToJsonSchema(
       z.object({
-        providerItemId: z.string().min(1),
+        providerItemId: z.string().min(1).optional(),
         newMd: z.string().min(1).max(50_000),
       }),
     ),
@@ -79,12 +94,19 @@ export const proposeDescriptionPatchTool: ToolFactory = (ctx) => ({
   handler: async (raw) => {
     const args = z
       .object({
-        providerItemId: z.string().min(1),
+        providerItemId: z.string().min(1).optional(),
         newMd: z.string().min(1).max(50_000),
       })
       .parse(raw);
+    const providerItemId = resolveProviderItemId(ctx, args.providerItemId);
+    if (!providerItemId) {
+      return fail("providerItemId is required when no item is anchored on this conversation.");
+    }
     try {
-      const row = await proposeDescriptionPatch(builderCtx(ctx), args);
+      const row = await proposeDescriptionPatch(builderCtx(ctx), {
+        providerItemId,
+        newMd: args.newMd,
+      });
       return ok({ proposalId: row.id, kind: row.kind });
     } catch (err) {
       return fail(err instanceof Error ? err.message : String(err));
@@ -95,10 +117,11 @@ export const proposeDescriptionPatchTool: ToolFactory = (ctx) => ({
 export const proposeCommentTool: ToolFactory = (ctx) => ({
   def: {
     name: "propose_comment",
-    description: "Stage a new comment on an item. The human confirms before the provider write.",
+    description:
+      "Stage a comment on the active item. Defaults to the anchored item; pass providerItemId only to comment on a different item. Comments should add information the description doesn't already contain — a status update, a question, a fix reference, a decision. Avoid restating the description.",
     parameters: zodToJsonSchema(
       z.object({
-        providerItemId: z.string().min(1),
+        providerItemId: z.string().min(1).optional(),
         bodyMd: z.string().min(1).max(50_000),
       }),
     ),
@@ -106,12 +129,19 @@ export const proposeCommentTool: ToolFactory = (ctx) => ({
   handler: async (raw) => {
     const args = z
       .object({
-        providerItemId: z.string().min(1),
+        providerItemId: z.string().min(1).optional(),
         bodyMd: z.string().min(1).max(50_000),
       })
       .parse(raw);
+    const providerItemId = resolveProviderItemId(ctx, args.providerItemId);
+    if (!providerItemId) {
+      return fail("providerItemId is required when no item is anchored on this conversation.");
+    }
     try {
-      const row = await proposeComment(builderCtx(ctx), args);
+      const row = await proposeComment(builderCtx(ctx), {
+        providerItemId,
+        bodyMd: args.bodyMd,
+      });
       return ok({ proposalId: row.id, kind: row.kind });
     } catch (err) {
       return fail(err instanceof Error ? err.message : String(err));
@@ -159,11 +189,47 @@ export const proposeNewItemTool: ToolFactory = (ctx) => ({
   },
 });
 
+export const proposeItemTagsTool: ToolFactory = (ctx) => ({
+  def: {
+    name: "propose_item_tags",
+    description:
+      "Stage a rewrite of the active item's user-facing tag set. Pass `nextTags` as the FULL target set (not a delta) — the executor preserves state-encoding labels (blocked / needs-info / wontfix) on its own. Defaults to the anchored item; pass providerItemId only to retag a different item. Before calling this on a project you haven't worked in, check list_memory for a 'Label conventions' entry — and if you have to derive the convention by sampling other items, offer to record it via propose_memory_write so future runs don't repeat the work.",
+    parameters: zodToJsonSchema(
+      z.object({
+        providerItemId: z.string().min(1).optional(),
+        nextTags: z.array(z.string().min(1).max(80)).max(50),
+      }),
+    ),
+  },
+  handler: async (raw) => {
+    const args = z
+      .object({
+        providerItemId: z.string().min(1).optional(),
+        nextTags: z.array(z.string().min(1).max(80)).max(50),
+      })
+      .parse(raw);
+    const providerItemId = resolveProviderItemId(ctx, args.providerItemId);
+    if (!providerItemId) {
+      return fail("providerItemId is required when no item is anchored on this conversation.");
+    }
+    try {
+      const row = await proposeTagsChange(builderCtx(ctx), {
+        providerItemId,
+        nextTags: args.nextTags,
+      });
+      return ok({ proposalId: row.id, kind: row.kind });
+    } catch (err) {
+      return fail(err instanceof Error ? err.message : String(err));
+    }
+  },
+});
+
 export function mutatingTools(ctx: Parameters<ToolFactory>[0]) {
   return [
     proposeTransitionTool(ctx),
     proposeDescriptionPatchTool(ctx),
     proposeCommentTool(ctx),
     proposeNewItemTool(ctx),
+    proposeItemTagsTool(ctx),
   ] as const;
 }

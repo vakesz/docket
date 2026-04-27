@@ -84,6 +84,9 @@ export function DetailPane({
                   ? (item.state as ItemState)
                   : null
               }
+              title={item.title}
+              bodyMd={item.descriptionMd}
+              commentCount={item.comments.length}
             />
             <ChatToggleButton />
           </div>

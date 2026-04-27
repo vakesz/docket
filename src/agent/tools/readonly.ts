@@ -88,15 +88,21 @@ export const getItemTool: ToolFactory = (ctx) => ({
   def: {
     name: "get_item",
     description:
-      "Read a cached item by its providerItemId (e.g. 'owner/repo#42'). Returns title, body, state, assignee, recent comments.",
+      "Read the active item's cached body and recent comments. Defaults to the item this conversation is anchored on; pass providerItemId (e.g. 'owner/repo#42') only to read a different item. Returns title, body, state, assignee, comments — call this before drafting any propose_* on the active item so you're not echoing stale content.",
     parameters: zodToJsonSchema(
       z.object({
-        providerItemId: z.string().min(1),
+        providerItemId: z.string().min(1).optional(),
       }),
     ),
   },
   handler: async (raw) => {
-    const { providerItemId } = z.object({ providerItemId: z.string().min(1) }).parse(raw);
+    const args = z.object({ providerItemId: z.string().min(1).optional() }).parse(raw);
+    const providerItemId = args.providerItemId ?? ctx.providerItemId;
+    if (!providerItemId) {
+      return fail(
+        "providerItemId is required when no item is anchored on this conversation; pass an explicit id like 'owner/repo#42'.",
+      );
+    }
     const item = await ctx.db.item.findFirst({
       where: { projectId: ctx.projectId, providerItemId },
       include: { comments: { orderBy: [{ createdAt: "asc" }] } },

@@ -115,6 +115,18 @@ export interface WorkItemProvider {
   createItem(kind: ItemKind, fields: CreateFields): Promise<Item>;
 
   /**
+   * Replace the item's user-facing tag set.
+   *
+   * Implementations MUST preserve any labels/tags they use to encode soft
+   * canonical states (blocked, needs-info, wontfix). The executor passes the
+   * full target set excluding state-encoding labels; the provider unions in
+   * whatever it currently uses for state encoding before writing. That keeps
+   * `setTags` from accidentally clearing a `blocked` tag and silently
+   * flipping the canonical state to `active`.
+   */
+  setTags(id: string, tags: readonly string[]): Promise<Item>;
+
+  /**
    * The string the provider stamps into `Item.assignee` for "me".
    *
    * Lets the surface-level `@me` visual filter match cached rows. Providers

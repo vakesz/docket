@@ -51,6 +51,15 @@ const CostCapActionSchema = z.enum(["block", "warn"]);
 // 0 = disabled; otherwise a polling interval in seconds. Capped at 1 hour
 // so a stray "999999" can't pin a tab on `setInterval`.
 const AutoRefreshSecondsSchema = z.number().int().min(0).max(3600);
+// Allowlist of fully-qualified hostnames the web_fetch tool may target.
+// Empty list = no allowlist (any non-SSRF host is reachable). Hosts are
+// matched case-insensitively against the URL's hostname only — no path /
+// scheme constraints. 200 entries cap protects the per-fetch O(n) check.
+const WebFetchAllowedHostsSchema = z.array(z.string().min(1).max(253)).max(200);
+// 64 KB → 8 MB body cap on web_fetch responses, after which the tool
+// truncates and reports `denied_size`. Keeps a runaway redirect from
+// pulling a multi-GB payload into the agent context.
+const WebFetchMaxBytesSchema = z.number().int().min(64_000).max(8_000_000);
 
 // Theme is intentionally browser-local (see `src/lib/theme.ts` +
 // ThemePicker in the top bar) — same pattern main uses. Keeping it out
@@ -208,6 +217,33 @@ export const SETTINGS_CATALOG = {
     label: "Cost-cap action",
     description:
       "When the monthly cap is reached: 'warn' lets the turn proceed but surfaces a banner; 'block' refuses agent turns until the cap is raised or the calendar month rolls over.",
+  },
+  "web-fetch.enabled": {
+    key: "web-fetch.enabled",
+    scope: "project",
+    schema: BoolSchema,
+    default: true,
+    label: "Allow agent to fetch web pages",
+    description:
+      "When on, the agent can call the web_fetch tool to read public URLs (docs, RFCs, vendor changelogs). SSRF guards block private addresses and cloud metadata endpoints regardless of this setting.",
+  },
+  "web-fetch.allowed-hosts": {
+    key: "web-fetch.allowed-hosts",
+    scope: "project",
+    schema: WebFetchAllowedHostsSchema,
+    default: [] as string[],
+    label: "Web-fetch host allowlist",
+    description:
+      "Optional list of hostnames the agent may fetch from (one per row, e.g. 'docs.python.org'). Empty = any public host is reachable; non-empty acts as a strict allowlist.",
+  },
+  "web-fetch.max-bytes": {
+    key: "web-fetch.max-bytes",
+    scope: "project",
+    schema: WebFetchMaxBytesSchema,
+    default: 1_000_000,
+    label: "Web-fetch response size cap (bytes)",
+    description:
+      "Upper bound on the response body web_fetch will return to the agent. Larger payloads are truncated and reported as denied_size. Range: 64 KB to 8 MB.",
   },
 } as const satisfies Record<string, SettingDef<z.ZodTypeAny>>;
 

@@ -53,6 +53,9 @@ export const TAG_NEEDS_INFO = "needs-info";
 export const TAG_WONTFIX = "wontfix";
 const SOFT_TAGS = [TAG_BLOCKED, TAG_NEEDS_INFO, TAG_WONTFIX] as const;
 
+/** Lowercased set of tags AzDO uses to encode canonical state. */
+export const STATE_ENCODING_TAGS: ReadonlySet<string> = new Set(SOFT_TAGS);
+
 /**
  * Translate an AzDO state string to canonical, taking into account the
  * tag-encoded soft states. Tags win over the state field — an "Active" item

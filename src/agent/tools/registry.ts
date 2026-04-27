@@ -32,6 +32,8 @@ import { questionTools } from "@/agent/tools/question";
 import { readonlyTools } from "@/agent/tools/readonly";
 import { sourceReadonlyTools } from "@/agent/tools/source";
 import type { AgentTool, ToolContext } from "@/agent/tools/types";
+import { webFetchTools } from "@/agent/tools/web-fetch";
+import { loadProjectSetting } from "@/server/settings/effective";
 
 export type ToolRegistryOptions = {
   readOnly: boolean;
@@ -68,12 +70,17 @@ export const TOOL_ORDER = [
   "propose_description_patch",
   "propose_comment",
   "propose_new_item",
+  "propose_item_tags",
   // (7) memory mutations (stripped in read-only)
   "propose_memory_write",
   "propose_memory_delete",
   // out-of-band: ask_user_question (the loop dispatches it specially, but
   // we still expose the tool so the model can request it like any other)
   "ask_user_question",
+  // (8) web_fetch — read-only network tool, gated by per-project
+  // `web-fetch.enabled`. Pinned at the tail so toggling its presence
+  // doesn't shift any earlier tool's position in the prompt cache key.
+  "web_fetch",
 ] as const satisfies readonly string[];
 
 export type RegisteredToolName = (typeof TOOL_ORDER)[number];
@@ -107,5 +114,12 @@ export async function buildToolRegistry(
   }
   // ask_user_question stays available in both modes; it never writes.
   tools.push(...questionTools(ctx));
+  // (8) web_fetch — appears in both modes. Stripped when the project has
+  // turned it off so the prompt prefix stays stable for projects that
+  // never use it. The handler still re-checks the flag on every call,
+  // so a flip mid-conversation is honored on the next turn.
+  if (await loadProjectSetting(ctx.db, ctx.projectId, "web-fetch.enabled")) {
+    tools.push(...webFetchTools(ctx));
+  }
   return tools;
 }

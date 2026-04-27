@@ -20,6 +20,7 @@ export const PROPOSAL_KINDS = [
   "attachment_upload",
   "item_create",
   "comment_add",
+  "tags_change",
   "memory_write",
   "memory_delete",
 ] as const;
@@ -63,6 +64,20 @@ export type CommentAddProposal = {
 };
 
 /**
+ * Stage a rewrite of the item's user-facing tag set.
+ *
+ * `nextTags` is the full target set (not a delta). The provider preserves
+ * its state-encoding labels regardless — `setTags` unions them in before
+ * writing — so this proposal only governs the user-facing portion.
+ */
+export type TagsChangeProposal = {
+  kind: "tags_change";
+  id: string;
+  item: Item;
+  nextTags: readonly string[];
+};
+
+/**
  * Stage a create-or-update of a per-project memory entry.
  *
  * `memoryId === null` means create; otherwise update. For updates, the
@@ -100,6 +115,7 @@ export type Proposal =
   | AttachmentUploadProposal
   | ItemCreateProposal
   | CommentAddProposal
+  | TagsChangeProposal
   | MemoryWriteProposal
   | MemoryDeleteProposal;
 

@@ -55,6 +55,16 @@ export type CommentAddDiff = {
   bodyMd: string;
 };
 
+export type TagsChangeDiff = {
+  kind: "tags_change";
+  itemId: string;
+  itemTitle: string;
+  before: readonly string[];
+  after: readonly string[];
+  added: readonly string[];
+  removed: readonly string[];
+};
+
 export type MemoryWriteDiff = {
   kind: "memory_write";
   memoryId: string | null;
@@ -76,6 +86,7 @@ export type ProposalDiff =
   | AttachmentUploadDiff
   | ItemCreateDiff
   | CommentAddDiff
+  | TagsChangeDiff
   | MemoryWriteDiff
   | MemoryDeleteDiff;
 
@@ -122,6 +133,21 @@ export function diffOf(proposal: Proposal): ProposalDiff {
         itemTitle: proposal.item.title,
         bodyMd: proposal.bodyMd,
       };
+    case "tags_change": {
+      const beforeSet = new Set(proposal.item.tags.map((t) => t.toLowerCase()));
+      const afterSet = new Set(proposal.nextTags.map((t) => t.toLowerCase()));
+      const added = proposal.nextTags.filter((t) => !beforeSet.has(t.toLowerCase()));
+      const removed = proposal.item.tags.filter((t) => !afterSet.has(t.toLowerCase()));
+      return {
+        kind: "tags_change",
+        itemId: proposal.item.id,
+        itemTitle: proposal.item.title,
+        before: proposal.item.tags,
+        after: proposal.nextTags,
+        added,
+        removed,
+      };
+    }
     case "memory_write":
       return {
         kind: "memory_write",

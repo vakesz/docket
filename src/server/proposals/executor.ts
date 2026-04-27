@@ -186,6 +186,9 @@ export async function confirmProposal(
       case "item_create":
         canonical = await provider.createItem(proposal.itemKind, proposal.fields);
         break;
+      case "tags_change":
+        canonical = await provider.setTags(proposal.item.id, proposal.nextTags);
+        break;
       case "attachment_upload":
         await provider.uploadAttachment(
           proposal.item.id,

@@ -7,9 +7,11 @@ import {
   Download,
   FileText,
   FolderPlus,
+  Globe,
   KeyRound,
   LineChart,
   MessageSquare,
+  RefreshCw,
   ScrollText,
   ServerCog,
   SlidersHorizontal,
@@ -31,6 +33,8 @@ import { OauthProvidersPanel } from "@/ui/settings/oauth-providers-panel";
 import { ProfilePanel } from "@/ui/settings/profile-panel";
 import { ProjectLlmPanel } from "@/ui/settings/project-llm-panel";
 import { ProjectsPanel } from "@/ui/settings/projects-panel";
+import { SyncPanel } from "@/ui/settings/sync-panel";
+import { WebFetchPanel } from "@/ui/settings/web-fetch-panel";
 import { WorkspacePanel } from "@/ui/settings/workspace-panel";
 import { SourcesPane } from "@/ui/sources/sources-pane";
 
@@ -39,6 +43,8 @@ type SectionKey =
   | "sources"
   | "mcp"
   | "project-llm"
+  | "project-web-fetch"
+  | "project-sync"
   | "project-analytics"
   | "project-members"
   | "project-export"
@@ -94,6 +100,24 @@ const SECTIONS: SectionMeta[] = [
     description:
       "Pick which LLM provider this project uses by default and the sampling temperature.",
     icon: Cpu,
+    group: "project",
+    needsProject: true,
+  },
+  {
+    key: "project-web-fetch",
+    label: "Web fetch",
+    description:
+      "Toggle the agent's web_fetch tool, optionally restrict it to an allowlist, and cap response size.",
+    icon: Globe,
+    group: "project",
+    needsProject: true,
+  },
+  {
+    key: "project-sync",
+    label: "Sync",
+    description:
+      "Refresh the cached items from the provider, or run a full walk to reconcile archived items.",
+    icon: RefreshCw,
     group: "project",
     needsProject: true,
   },
@@ -372,6 +396,10 @@ function SectionContent({
       return projectId ? <McpPane projectId={projectId} /> : null;
     case "project-llm":
       return projectId ? <ProjectLlmPanel projectId={projectId} /> : null;
+    case "project-web-fetch":
+      return projectId ? <WebFetchPanel projectId={projectId} /> : null;
+    case "project-sync":
+      return projectId ? <SyncPanel projectId={projectId} /> : null;
     case "project-analytics":
       return projectId ? <AnalyticsPanel scope="project" projectId={projectId} /> : null;
     case "project-members":

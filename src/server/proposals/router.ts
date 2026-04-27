@@ -7,6 +7,7 @@ import {
   proposeComment,
   proposeDescriptionPatch,
   proposeNewItem,
+  proposeTagsChange,
   proposeTransition,
 } from "@/server/proposals/builders";
 import { diffOf } from "@/server/proposals/diff";
@@ -51,6 +52,11 @@ const ProposeDescriptionPatchInput = ProjectId.extend({
 const ProposeCommentInput = ProjectId.extend({
   providerItemId: z.string().min(1),
   bodyMd: z.string().min(1).max(50_000),
+});
+
+const ProposeTagsChangeInput = ProjectId.extend({
+  providerItemId: z.string().min(1),
+  nextTags: z.array(z.string().min(1).max(80)).max(50),
 });
 
 const ProposeNewItemInput = ProjectId.extend({
@@ -160,6 +166,16 @@ export const proposalsRouter = router({
       const row = await proposeNewItem(ctxFor(ctx), {
         itemKind: input.itemKind,
         fields: input.fields,
+      });
+      return { id: row.id, diff: diffOf(hydrateProposal(row)) };
+    }),
+
+  proposeTagsChange: projectScopedMutationProcedure
+    .input(ProposeTagsChangeInput)
+    .mutation(async ({ ctx, input }) => {
+      const row = await proposeTagsChange(ctxFor(ctx), {
+        providerItemId: input.providerItemId,
+        nextTags: input.nextTags,
       });
       return { id: row.id, diff: diffOf(hydrateProposal(row)) };
     }),

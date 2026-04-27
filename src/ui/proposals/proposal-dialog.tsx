@@ -83,7 +83,14 @@ export function ProposalDialog({
           {query.isPending ? (
             <p className="text-sm text-fg-muted">Loading proposal…</p>
           ) : query.data ? (
-            <ProposalDiffView diff={query.data.diff} />
+            <>
+              {query.data.row.advisory ? (
+                <p className="mb-3 rounded-md border border-warning/40 bg-warning-bg/40 p-2 text-xs text-warning-fg">
+                  Heads up: {query.data.row.advisory}
+                </p>
+              ) : null}
+              <ProposalDiffView diff={query.data.diff} />
+            </>
           ) : null}
         </div>
 

@@ -296,6 +296,22 @@ export const itemsRouter = router({
   }),
 
   /**
+   * Read the project's sync cursor. Powers the settings "Sync" pane so the
+   * user can see when the last full walk happened and the watermark the
+   * incremental sync will pick up from.
+   */
+  syncStatus: projectScopedProcedure.input(ProjectId).query(async ({ ctx }) => {
+    const cursor = await ctx.db.syncCursor.findUnique({
+      where: { projectId: ctx.projectId },
+      select: { watermark: true, lastFullSyncAt: true },
+    });
+    return {
+      watermark: cursor?.watermark ?? null,
+      lastFullSyncAt: cursor?.lastFullSyncAt ?? null,
+    };
+  }),
+
+  /**
    * Refresh a single item from its provider — pulls the latest item payload
    * and comments and upserts both. Cheaper than a project-wide sync when the
    * user just wants the open item to be current. Mirrors the sync pipeline so

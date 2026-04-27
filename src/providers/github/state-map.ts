@@ -35,6 +35,13 @@ export const LABEL_WONTFIX = "wontfix";
 const SOFT_LABELS = [LABEL_BLOCKED, LABEL_NEEDS_INFO, LABEL_WONTFIX] as const;
 
 /**
+ * Lowercased set of labels that encode canonical state on GitHub. The
+ * `setTags` boundary uses this to keep state-encoding labels intact when a
+ * caller intends to rewrite the user-facing tag set.
+ */
+export const STATE_ENCODING_LABELS: ReadonlySet<string> = new Set(SOFT_LABELS);
+
+/**
  * Map a GitHub issue's `(state, state_reason, labels)` to the canonical
  * `ItemState`. Labels win over the state field — an open issue tagged
  * `blocked` is canonical-blocked, even though GitHub still shows it as open.

@@ -2,10 +2,9 @@
  * Templates for the "Suggest next action" button.
  *
  * Each template is the literal user-role message the chat pane fires after
- * opening. Kept short and directive — the agent already knows the item
- * context from the system prefix. Phrasing nudges the agent to either stage
- * a proposal or ask a clarifying question rather than producing a wall of
- * description text.
+ * opening. The seed names the active item and gives the agent a small
+ * excerpt of the body so it can spot the obvious echo trap (proposing a
+ * comment that just restates the description) without an extra round-trip.
  *
  * Lives in its own file so revising wording is one diff and the prompt
  * cache invariant stays intact (this is post-prefix user content, never
@@ -15,32 +14,75 @@
 import type { ItemKind, ItemState } from "@/core/types";
 
 const KIND_HINTS: Record<ItemKind, string> = {
-  epic: "epic — consider whether child features need movement before the epic itself",
-  feature: "feature — consider scope completion and child story state",
-  story: "story — consider acceptance criteria, blocked-on, and definition of done",
-  task: "task — consider status, assignee, and the next concrete step",
-  bug: "bug — consider reproducibility, severity, and fix verification",
+  epic: "epic — big picture; child features carry the actual work",
+  feature: "feature — coherent user-visible unit; child stories carry the work",
+  story: "story — vertical slice with acceptance criteria",
+  task: "task — single-developer-sized unit",
+  bug: "bug — defect against expected behaviour",
 };
 
 const STATE_HINTS: Record<ItemState, string> = {
-  new: "It's still in the 'new' state — start_work or needs_info are likely candidates.",
-  active: "Work is active. Lean toward progress comments or close_done if appropriate.",
-  blocked: "It's blocked — call out what's needed to unblock if visible.",
-  needs_info: "It's waiting on info — propose the question or escalate.",
-  resolved: "It's resolved; suggest a next action only if verification or cleanup is warranted.",
-  closed: "It's closed; suggest a next action only if reopen is warranted.",
+  new: "It's still in 'new' state. Likely candidates: start_work, or needs_info if the body is unclear.",
+  active:
+    "It's active. If a fix has landed, close_done with a reference; otherwise add a substantive comment only if you have new information.",
+  blocked:
+    "It's blocked. If you can identify the blocker, name it; otherwise propose needs_info or escalate.",
+  needs_info: "It's waiting on info. Frame the open question precisely or escalate.",
+  resolved: "It's resolved. Suggest reopen only if verification turned up a regression.",
+  closed: "It's closed. Suggest reopen only if there's clear new evidence.",
 };
 
-export function buildSuggestSeed(args: { kind: ItemKind | null; state: ItemState | null }): string {
-  const { kind, state } = args;
+const MAX_BODY_EXCERPT = 600;
+
+function excerpt(body: string | null): string {
+  if (!body) return "";
+  const trimmed = body.trim();
+  if (trimmed.length <= MAX_BODY_EXCERPT) return trimmed;
+  return `${trimmed.slice(0, MAX_BODY_EXCERPT)}…`;
+}
+
+export function buildSuggestSeed(args: {
+  kind: ItemKind | null;
+  state: ItemState | null;
+  title: string;
+  bodyMd: string | null;
+  commentCount: number;
+}): string {
+  const { kind, state, title, bodyMd, commentCount } = args;
   const kindHint = kind ? KIND_HINTS[kind] : null;
   const stateHint = state ? STATE_HINTS[state] : null;
+  const body = excerpt(bodyMd);
+
   const lines = [
-    "What's the next concrete action on this item?",
-    "If a state transition or comment would move it forward, stage a proposal — don't just describe the situation.",
-    "If you need information that isn't in the snapshot, ask one targeted question.",
+    `What's the next concrete action on "${title}"?`,
+    "",
+    "Process:",
+    "1. Call get_item (no args needed — it defaults to the active item) to read the full body and any comments. The body excerpt below is just a hint; the real text is what counts.",
+    '2. Decide whether moving the item forward is even your job right now. A "next action" can be: a state transition (start_work, close_done, …), a substantive comment that adds information the item lacks (status, fix reference, decision, answered question), a description patch that fills a gap, or — entirely valid — a clarifying question for the human.',
+    "3. If you have nothing new to add beyond what's already in the description, say so. Don't stage an echo comment.",
+    "",
   ];
-  if (kindHint) lines.push(`Context: ${kindHint}.`);
+
+  if (kindHint) lines.push(`Kind context: ${kindHint}.`);
   if (stateHint) lines.push(stateHint);
+  if (commentCount === 0) {
+    lines.push(
+      "Heads-up: this item has no comments yet — research the body and any linked PRs before proposing one.",
+    );
+  } else {
+    lines.push(
+      `Heads-up: this item already has ${commentCount} comment${commentCount === 1 ? "" : "s"}; read them via get_item before adding another so you don't duplicate.`,
+    );
+  }
+  if (body) {
+    lines.push(
+      "",
+      "Body excerpt (NOT the full body — call get_item for that):",
+      "```",
+      body,
+      "```",
+    );
+  }
+
   return lines.join("\n");
 }

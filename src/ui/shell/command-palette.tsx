@@ -330,6 +330,20 @@ export function CommandPalette({
           placeholder="Jump to item, run command…"
           className="w-full border-b border-border bg-transparent px-4 py-3 text-sm text-fg outline-none"
           autoFocus
+          // Keep password managers (Bitwarden, 1Password, etc.) from
+          // mistaking the palette's search input for a credential field.
+          // The non-standard data-* hints cover the password managers that
+          // ignore autoComplete="off".
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          name="docket-command-palette-search"
+          enterKeyHint="search"
+          data-form-type="other"
+          data-lpignore="true"
+          data-1p-ignore="true"
+          data-bwignore="true"
         />
         <Command.List className="max-h-[56vh] overflow-auto p-1">
           <Command.Empty className="px-4 py-6 text-center text-sm text-fg-faint">

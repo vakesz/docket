@@ -42,6 +42,47 @@ export function ProposalDiffView({ diff }: { diff: ProposalDiff }) {
         </div>
       );
 
+    case "tags_change":
+      return (
+        <div className="flex flex-col gap-3 text-sm">
+          <Field label="Item">
+            <span className="font-medium">{diff.itemTitle}</span>{" "}
+            <span className="text-muted-foreground">({diff.itemId})</span>
+          </Field>
+          {diff.added.length > 0 ? (
+            <Field label="Adding">
+              <span className="flex flex-wrap gap-1">
+                {diff.added.map((t) => (
+                  <Pill key={t} tone="primary">
+                    +{t}
+                  </Pill>
+                ))}
+              </span>
+            </Field>
+          ) : null}
+          {diff.removed.length > 0 ? (
+            <Field label="Removing">
+              <span className="flex flex-wrap gap-1">
+                {diff.removed.map((t) => (
+                  <Pill key={t}>−{t}</Pill>
+                ))}
+              </span>
+            </Field>
+          ) : null}
+          <Field label="Result">
+            {diff.after.length === 0 ? (
+              <span className="italic text-muted-foreground">(no tags)</span>
+            ) : (
+              <span className="flex flex-wrap gap-1">
+                {diff.after.map((t) => (
+                  <Pill key={t}>{t}</Pill>
+                ))}
+              </span>
+            )}
+          </Field>
+        </div>
+      );
+
     case "item_create":
       return (
         <div className="flex flex-col gap-3 text-sm">

@@ -15,14 +15,20 @@ import { Button } from "@/ui/primitives/button";
 export function SuggestActionButton({
   kind,
   state,
+  title,
+  bodyMd,
+  commentCount,
 }: {
   kind: ItemKind | null;
   state: ItemState | null;
+  title: string;
+  bodyMd: string | null;
+  commentCount: number;
 }) {
   const { requestOpenWithSeed } = useChatPaneController();
 
   const onClick = () => {
-    requestOpenWithSeed(buildSuggestSeed({ kind, state }));
+    requestOpenWithSeed(buildSuggestSeed({ kind, state, title, bodyMd, commentCount }));
   };
 
   return (

@@ -12,13 +12,24 @@
  * Both routes update `SyncCursor`. `lastFullSyncAt` is only stamped by
  * `runFullSync`; `watermark` is bumped by both to the most recent
  * `updatedAt` we observed.
+ *
+ * Items are drained from the provider's async iterable in chunks
+ * (`CHUNK_SIZE`) and persisted in bulk: one `findMany` per chunk to load
+ * the existing rows, `createMany` for new ids, and a single
+ * `$transaction` of `update`s for existing ids. On large repos this turns
+ * thousands of sequential per-item round-trips into a handful of pipelined
+ * batches — the dominant sync cost on first-time / full syncs.
  */
 
 import "server-only";
 import type { Item as CanonicalItem } from "@/core/types";
 import type { Prisma } from "@/db/generated/client";
 import type { db as Db } from "@/server/db";
-import { injectExternalChange, materialDiff } from "@/server/inbound-changes/inject";
+import {
+  injectExternalChange,
+  type MaterialChange,
+  materialDiff,
+} from "@/server/inbound-changes/inject";
 import { buildProviderForUser } from "@/server/providers/build";
 
 type ProjectArg = Parameters<typeof buildProviderForUser>[1];
@@ -30,6 +41,15 @@ export type SyncResult = {
   /** Number of (active) conversations that received an inbound-change notice. */
   inboundConversations: number;
 };
+
+const CHUNK_SIZE = 200;
+/**
+ * Cap on concurrent chunk-persist tasks. With this > 1, fetching the next
+ * page from the provider overlaps with persisting the previous chunk.
+ * Kept low so we don't hammer the DB with parallel write transactions on
+ * disjoint chunks; 2 is enough to hide one round-trip behind the other.
+ */
+const MAX_INFLIGHT_CHUNKS = 2;
 
 export function toItemRow(canonical: CanonicalItem, projectId: string, syncedAt: Date) {
   return {
@@ -53,6 +73,102 @@ export function toItemRow(canonical: CanonicalItem, projectId: string, syncedAt:
   };
 }
 
+type ChunkResult = {
+  upserted: number;
+  inboundConversations: number;
+};
+
+/**
+ * Persist a chunk of canonical items: bulk-load existing rows, split into
+ * create/update sets, then write each set in one DB call. Material diffs
+ * for already-cached items fan out into `injectExternalChange` in
+ * parallel — new items have no prior conversation context so they skip
+ * the inject step entirely.
+ */
+async function processChunk(
+  db: typeof Db,
+  projectId: string,
+  chunk: readonly CanonicalItem[],
+  syncedAt: Date,
+): Promise<ChunkResult> {
+  const ids = chunk.map((i) => i.id);
+  const cachedRows = await db.item.findMany({
+    where: { projectId, providerItemId: { in: ids } },
+    select: {
+      id: true,
+      providerItemId: true,
+      state: true,
+      title: true,
+      descriptionMd: true,
+      assignee: true,
+    },
+  });
+  const cachedMap = new Map(cachedRows.map((r) => [r.providerItemId, r]));
+
+  const toCreate: ReturnType<typeof toItemRow>[] = [];
+  const toUpdate: { providerItemId: string; row: ReturnType<typeof toItemRow> }[] = [];
+  const changedExisting: {
+    itemId: string;
+    providerItemId: string;
+    changes: MaterialChange[];
+  }[] = [];
+
+  for (const item of chunk) {
+    const row = toItemRow(item, projectId, syncedAt);
+    const cached = cachedMap.get(item.id);
+    if (cached) {
+      toUpdate.push({ providerItemId: item.id, row });
+      const changes = materialDiff(cached, item);
+      if (changes.length > 0) {
+        changedExisting.push({
+          itemId: cached.id,
+          providerItemId: item.id,
+          changes,
+        });
+      }
+    } else {
+      toCreate.push(row);
+    }
+  }
+
+  let upserted = 0;
+  if (toCreate.length > 0) {
+    // skipDuplicates guards against a concurrent insert sneaking in
+    // between the findMany above and this createMany.
+    const created = await db.item.createMany({ data: toCreate, skipDuplicates: true });
+    upserted += created.count;
+  }
+  if (toUpdate.length > 0) {
+    await db.$transaction(
+      toUpdate.map(({ providerItemId, row }) =>
+        db.item.update({
+          where: { projectId_providerItemId: { projectId, providerItemId } },
+          data: { ...row, archived: false },
+          select: { id: true },
+        }),
+      ),
+    );
+    upserted += toUpdate.length;
+  }
+
+  let inboundConversations = 0;
+  if (changedExisting.length > 0) {
+    const results = await Promise.all(
+      changedExisting.map((c) =>
+        injectExternalChange(db, {
+          projectId,
+          itemId: c.itemId,
+          providerItemId: c.providerItemId,
+          changes: c.changes,
+        }),
+      ),
+    );
+    for (const r of results) inboundConversations += r.injectedInto;
+  }
+
+  return { upserted, inboundConversations };
+}
+
 async function upsertItems(
   db: typeof Db,
   projectId: string,
@@ -68,43 +184,45 @@ async function upsertItems(
   let latestUpdatedAt: Date | null = null;
   let inboundConversations = 0;
   const seenIds = new Set<string>();
+  let buffer: CanonicalItem[] = [];
+  const inflight = new Set<Promise<void>>();
+
+  const fire = (chunk: readonly CanonicalItem[]) => {
+    const task = processChunk(db, projectId, chunk, syncedAt).then((r) => {
+      upserted += r.upserted;
+      inboundConversations += r.inboundConversations;
+    });
+    const tracked = task.finally(() => {
+      inflight.delete(tracked);
+    });
+    inflight.add(tracked);
+    return tracked;
+  };
+
   for await (const item of items) {
-    const cached = await db.item.findUnique({
-      where: {
-        projectId_providerItemId: { projectId, providerItemId: item.id },
-      },
-      select: { id: true, state: true, title: true, descriptionMd: true, assignee: true },
-    });
-
-    const row = toItemRow(item, projectId, syncedAt);
-    const upserted_row = await db.item.upsert({
-      where: {
-        projectId_providerItemId: { projectId, providerItemId: item.id },
-      },
-      create: row,
-      update: { ...row, archived: false },
-      select: { id: true },
-    });
-
-    if (cached) {
-      const changes = materialDiff(cached, item);
-      if (changes.length > 0) {
-        const result = await injectExternalChange(db, {
-          projectId,
-          itemId: upserted_row.id,
-          providerItemId: item.id,
-          changes,
-        });
-        inboundConversations += result.injectedInto;
-      }
-    }
-
-    upserted += 1;
+    buffer.push(item);
     seenIds.add(item.id);
     if (item.updatedAt && (!latestUpdatedAt || item.updatedAt > latestUpdatedAt)) {
       latestUpdatedAt = item.updatedAt;
     }
+    if (buffer.length >= CHUNK_SIZE) {
+      const chunk = buffer;
+      buffer = [];
+      fire(chunk);
+      // Bound the number of in-flight chunks so we hide one DB round-trip
+      // behind the next provider-page fetch without spawning unbounded
+      // parallel write transactions.
+      while (inflight.size >= MAX_INFLIGHT_CHUNKS) {
+        await Promise.race(inflight);
+      }
+    }
   }
+  if (buffer.length > 0) {
+    fire(buffer);
+    buffer = [];
+  }
+  await Promise.all(inflight);
+
   return { upserted, seenIds, latestUpdatedAt, inboundConversations };
 }
 

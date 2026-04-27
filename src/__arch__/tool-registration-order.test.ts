@@ -21,10 +21,15 @@ import type { ToolContext } from "@/agent/tools/types";
 // call db inside handlers. A typed-null keeps the test pure for the core
 // slots. The MCP slot reads the db at registry-build time; we stub the
 // one method it touches to return zero servers (default test posture: no
-// MCP configured).
+// MCP configured). The web-fetch enable check is also resolved at
+// registry-build time; we return the catalog default (`web-fetch.enabled`
+// = true) so the trailing slot is populated in the canonical run.
 const fakeCtx: ToolContext = {
   db: {
     mcpServerConfig: { findMany: async () => [] },
+    setting: {
+      findFirst: async () => null,
+    },
   } as unknown as ToolContext["db"],
   projectId: "proj_arch_test",
   userId: "user_arch_test",
@@ -47,6 +52,7 @@ describe("arch: agent tool registration order", () => {
       "propose_description_patch",
       "propose_comment",
       "propose_new_item",
+      "propose_item_tags",
       "propose_memory_write",
       "propose_memory_delete",
     ]);

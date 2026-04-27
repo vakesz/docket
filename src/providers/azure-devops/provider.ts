@@ -35,6 +35,7 @@ import {
   mapState,
   mergeTags,
   planForIntent,
+  STATE_ENCODING_TAGS,
   WIT_BY_KIND,
 } from "@/providers/azure-devops/state-map";
 
@@ -432,6 +433,40 @@ export class AzureDevOpsProvider implements WorkItemProvider {
         bodyMd: resp.text ?? bodyMd,
         createdAt: resp.createdDate ?? new Date(),
       };
+    } catch (err) {
+      wrapError(err);
+    }
+  }
+
+  async setTags(id: string, tags: readonly string[]): Promise<Item> {
+    const current = await this.getItem(id);
+    const preserved = current.tags.filter((t) => STATE_ENCODING_TAGS.has(t.toLowerCase()));
+    const seen = new Set(preserved.map((t) => t.toLowerCase()));
+    const out = [...preserved];
+    for (const tag of tags) {
+      const trimmed = tag.trim();
+      if (!trimmed) continue;
+      const key = trimmed.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(trimmed);
+    }
+    out.sort();
+    const patch: JsonPatchOperation[] = [
+      {
+        op: 0,
+        path: "/fields/System.Tags",
+        value: out.join("; "),
+      } as JsonPatchOperation,
+    ];
+    const wit = await this.witApi();
+    try {
+      const raw = await wit.updateWorkItem(null, patch, Number.parseInt(id, 10));
+      const item = this.toCanonicalItem(raw as unknown as WorkItemPayload);
+      if (!item) {
+        throw new ProviderError(`Work item ${id} is not a tracked type after update`);
+      }
+      return item;
     } catch (err) {
       wrapError(err);
     }

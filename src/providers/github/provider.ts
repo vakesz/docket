@@ -26,6 +26,7 @@ import {
   type GithubStateReason,
   mergeLabels,
   planForIntent,
+  STATE_ENCODING_LABELS,
   toCanonicalState,
 } from "@/providers/github/state-map";
 
@@ -308,6 +309,35 @@ export class GitHubProvider implements WorkItemProvider {
         bodyMd: c.body ?? "",
         createdAt: new Date(c.created_at),
       };
+    } catch (err) {
+      wrapOctokitError(err);
+    }
+  }
+
+  async setTags(id: string, tags: readonly string[]): Promise<Item> {
+    const { owner, repo, number } = parseProviderItemId(id);
+    try {
+      const current = await this.octokit.issues.get({ owner, repo, issue_number: number });
+      const currentLabels = labelsOf(current.data as unknown as IssueLikePayload);
+      const preserved = currentLabels.filter((l) => STATE_ENCODING_LABELS.has(l.toLowerCase()));
+      const seen = new Set(preserved.map((l) => l.toLowerCase()));
+      const out = [...preserved];
+      for (const tag of tags) {
+        const trimmed = tag.trim();
+        if (!trimmed) continue;
+        const key = trimmed.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(trimmed);
+      }
+      out.sort();
+      const res = await this.octokit.issues.update({
+        owner,
+        repo,
+        issue_number: number,
+        labels: out,
+      });
+      return this.toCanonicalItem(res.data as unknown as IssueLikePayload);
     } catch (err) {
       wrapOctokitError(err);
     }

@@ -24,6 +24,7 @@ import type {
   MemoryWriteProposal,
   Proposal,
   StateChangeProposal,
+  TagsChangeProposal,
 } from "@/core/proposal-types";
 import type { CreateFields, ItemKind, TransitionIntent } from "@/core/types";
 import type { Prisma, Proposal as ProposalRow } from "@/db/generated/client";
@@ -47,6 +48,7 @@ async function persist(
   ctx: ProposalContext,
   draft: Omit<Proposal, "id">,
   providerItemId: string | null,
+  advisory: string | null = null,
 ): Promise<ProposalRow> {
   return ctx.db.proposal.create({
     data: {
@@ -56,9 +58,31 @@ async function persist(
       providerItemId,
       payload: payloadOf({ id: "", ...draft } as Proposal) as Prisma.InputJsonValue,
       status: "pending",
+      advisory,
     },
   });
 }
+
+/**
+ * Tokenize for Jaccard: lowercase, split on non-word, drop tokens shorter
+ * than 3 chars to keep stop-words from anchoring the score.
+ */
+function tokenize(s: string): Set<string> {
+  const matches = s.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+  return new Set(matches.filter((t) => t.length >= 3));
+}
+
+function jaccardSimilarity(a: string, b: string): number {
+  const ta = tokenize(a);
+  const tb = tokenize(b);
+  if (ta.size === 0 || tb.size === 0) return 0;
+  let inter = 0;
+  for (const t of ta) if (tb.has(t)) inter += 1;
+  const union = ta.size + tb.size - inter;
+  return union === 0 ? 0 : inter / union;
+}
+
+const COMMENT_ECHO_THRESHOLD = 0.6;
 
 async function loadCachedItem(ctx: ProposalContext, providerItemId: string) {
   const row = await ctx.db.item.findFirst({
@@ -120,6 +144,57 @@ export async function proposeComment(
     kind: "comment_add",
     item,
     bodyMd: args.bodyMd,
+  };
+  // Advisory: flag a comment that closely echoes the item description. This
+  // does NOT block staging — the human can still confirm — it just surfaces
+  // a banner in the confirm dialog so the human notices an "agent is
+  // restating the body" failure mode before approving.
+  let advisory: string | null = null;
+  const sim = jaccardSimilarity(args.bodyMd, item.descriptionMd);
+  if (sim >= COMMENT_ECHO_THRESHOLD) {
+    advisory = `This comment shares ${Math.round(sim * 100)}% of its words with the item description. Confirm only if it adds new information.`;
+  }
+  return persist(ctx, draft, args.providerItemId, advisory);
+}
+
+/**
+ * Normalize a target tag set: trim, drop empties, dedupe case-insensitively
+ * (keeping the first-seen casing), and sort alphabetically. Producing a
+ * deterministic order means the same staged proposal renders identically
+ * regardless of the order the agent or UI passes labels in.
+ */
+function normalizeTags(input: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of input) {
+    const t = raw.trim();
+    if (!t) continue;
+    const key = t.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
+  }
+  return out.sort();
+}
+
+export async function proposeTagsChange(
+  ctx: ProposalContext,
+  args: { providerItemId: string; nextTags: readonly string[] },
+): Promise<ProposalRow> {
+  const row = await loadCachedItem(ctx, args.providerItemId);
+  const item = snapshotFromRow(row);
+  const next = normalizeTags(args.nextTags);
+  const current = normalizeTags(item.tags);
+  if (current.length === next.length && current.every((t, i) => t === next[i])) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "tags_change is a no-op (target tag set matches the current set)",
+    });
+  }
+  const draft: Omit<TagsChangeProposal, "id"> = {
+    kind: "tags_change",
+    item,
+    nextTags: next,
   };
   return persist(ctx, draft, args.providerItemId);
 }
