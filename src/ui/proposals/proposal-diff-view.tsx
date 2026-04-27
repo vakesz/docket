@@ -118,7 +118,9 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="w-24 shrink-0 text-xs uppercase tracking-wide text-muted-foreground">
         {label}
       </span>
-      <span className="flex flex-1 items-center gap-2">{children}</span>
+      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 break-words">
+        {children}
+      </span>
     </div>
   );
 }
@@ -148,7 +150,7 @@ function DiffBlock({
 }) {
   const border = tone === "primary" ? "border-primary/30" : "border-border";
   return (
-    <div className={`flex flex-col gap-1 rounded-md border ${border} p-2`}>
+    <div className={`flex min-w-0 flex-col gap-1 rounded-md border ${border} p-2`}>
       <span className="text-xs uppercase tracking-wide text-muted-foreground">{label}</span>
       <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs">
         {body || "(empty)"}
