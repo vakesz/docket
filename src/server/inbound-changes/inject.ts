@@ -20,6 +20,7 @@ import type { Item as CanonicalItem, ItemState } from "@/core/types";
 import type { Item as ItemRow } from "@/db/generated/client";
 import { activeConversationsForItem, appendMessage } from "@/server/conversations/storage";
 import type { db as Db } from "@/server/db";
+import { logger } from "@/server/logger";
 
 type Database = typeof Db;
 
@@ -101,6 +102,16 @@ export async function injectExternalChange(
       content: body,
     });
   }
+  logger.debug(
+    {
+      projectId: args.projectId,
+      itemId: args.itemId,
+      providerItemId: args.providerItemId,
+      conversations: conversations.length,
+      fields: args.changes.map((c) => c.field),
+    },
+    "inbound-changes: injected into active conversations",
+  );
   return { injectedInto: conversations.length };
 }
 

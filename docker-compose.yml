@@ -48,6 +48,8 @@ services:
       # Default the in-network DB URL so the operator only has to set the
       # secrets in `.env`. Override here if pointing at an external Postgres.
       DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-docket}:${POSTGRES_PASSWORD:-docket}@db:5432/${POSTGRES_DB:-docket}?schema=public}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:${APP_PORT:-3000}}
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
     ports:
       - "${APP_PORT:-3000}:3000"
     volumes:

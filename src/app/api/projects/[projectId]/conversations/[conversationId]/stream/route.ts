@@ -23,6 +23,7 @@ import { runTurn } from "@/agent/loop";
 import { auth } from "@/server/auth";
 import { ownsConversation } from "@/server/conversations/storage";
 import { db } from "@/server/db";
+import { logger } from "@/server/logger";
 
 export const runtime = "nodejs"; // Prisma + openai SDK both need node, not edge.
 export const dynamic = "force-dynamic";
@@ -84,11 +85,33 @@ export async function POST(req: Request, context: RouteContext): Promise<Respons
       overrideId: conv?.llmProviderIdOverride ?? null,
     });
   } catch (err) {
+    logger.error(
+      {
+        projectId,
+        conversationId,
+        userId,
+        err: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      },
+      "stream: LLM adapter resolution failed",
+    );
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "LLM adapter unavailable" },
       { status: 500 },
     );
   }
+
+  const streamStartedAt = Date.now();
+  logger.info(
+    {
+      projectId,
+      conversationId,
+      userId,
+      adapter: adapter.kind,
+      contentLen: content.length,
+    },
+    "stream: open",
+  );
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
@@ -96,6 +119,8 @@ export async function POST(req: Request, context: RouteContext): Promise<Respons
       const send = (event: LoopEvent) => {
         controller.enqueue(encoder.encode(formatSseEvent(event)));
       };
+      let terminal: "done" | "error" | "aborted" = "aborted";
+      let lastErrorMessage: string | undefined;
       try {
         for await (const event of runTurn({
           db,
@@ -106,15 +131,44 @@ export async function POST(req: Request, context: RouteContext): Promise<Respons
           readOnly: false,
         })) {
           send(event);
-          if (event.kind === "done" || event.kind === "error") break;
+          if (event.kind === "done") {
+            terminal = "done";
+            break;
+          }
+          if (event.kind === "error") {
+            terminal = "error";
+            lastErrorMessage = event.message;
+            break;
+          }
         }
       } catch (err) {
-        send({
-          kind: "error",
-          message: err instanceof Error ? err.message : String(err),
-        });
+        terminal = "error";
+        lastErrorMessage = err instanceof Error ? err.message : String(err);
+        logger.error(
+          {
+            projectId,
+            conversationId,
+            userId,
+            durationMs: Date.now() - streamStartedAt,
+            err: lastErrorMessage,
+            stack: err instanceof Error ? err.stack : undefined,
+          },
+          "stream: runTurn threw",
+        );
+        send({ kind: "error", message: lastErrorMessage });
       } finally {
         controller.close();
+        logger.info(
+          {
+            projectId,
+            conversationId,
+            userId,
+            terminal,
+            durationMs: Date.now() - streamStartedAt,
+            ...(lastErrorMessage ? { errMessage: lastErrorMessage } : {}),
+          },
+          "stream: closed",
+        );
       }
     },
   });

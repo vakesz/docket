@@ -22,6 +22,7 @@
  */
 
 import "server-only";
+import { randomUUID } from "node:crypto";
 import type { Item as CanonicalItem } from "@/core/types";
 import type { Prisma } from "@/db/generated/client";
 import type { db as Db } from "@/server/db";
@@ -30,7 +31,17 @@ import {
   type MaterialChange,
   materialDiff,
 } from "@/server/inbound-changes/inject";
+import { logger } from "@/server/logger";
 import { buildProviderForUser } from "@/server/providers/build";
+
+type SyncPhase = "stream" | "persist" | "archive" | "cursor";
+
+function errFields(err: unknown): { err: string; stack?: string } {
+  if (err instanceof Error) {
+    return { err: err.message, stack: err.stack };
+  }
+  return { err: String(err) };
+}
 
 type ProjectArg = Parameters<typeof buildProviderForUser>[1];
 
@@ -90,7 +101,9 @@ async function processChunk(
   projectId: string,
   chunk: readonly CanonicalItem[],
   syncedAt: Date,
+  ctx: { syncId: string; chunkIndex: number },
 ): Promise<ChunkResult> {
+  const startedAt = Date.now();
   const ids = chunk.map((i) => i.id);
   const cachedRows = await db.item.findMany({
     where: { projectId, providerItemId: { in: ids } },
@@ -166,6 +179,21 @@ async function processChunk(
     for (const r of results) inboundConversations += r.injectedInto;
   }
 
+  logger.debug(
+    {
+      syncId: ctx.syncId,
+      projectId,
+      chunkIndex: ctx.chunkIndex,
+      size: chunk.length,
+      created: toCreate.length,
+      updated: toUpdate.length,
+      materialChanges: changedExisting.length,
+      inboundConversations,
+      chunkMs: Date.now() - startedAt,
+    },
+    "sync: chunk persisted",
+  );
+
   return { upserted, inboundConversations };
 }
 
@@ -174,21 +202,31 @@ async function upsertItems(
   projectId: string,
   items: AsyncIterable<CanonicalItem>,
   syncedAt: Date,
+  syncId: string,
 ): Promise<{
   upserted: number;
   seenIds: Set<string>;
   latestUpdatedAt: Date | null;
   inboundConversations: number;
+  chunks: number;
+  itemsSeen: number;
 }> {
   let upserted = 0;
   let latestUpdatedAt: Date | null = null;
   let inboundConversations = 0;
+  let chunks = 0;
   const seenIds = new Set<string>();
   let buffer: CanonicalItem[] = [];
   const inflight = new Set<Promise<void>>();
+  let firstItemAt: number | null = null;
+  const streamStartedAt = Date.now();
 
   const fire = (chunk: readonly CanonicalItem[]) => {
-    const task = processChunk(db, projectId, chunk, syncedAt).then((r) => {
+    const chunkIndex = chunks++;
+    const task = processChunk(db, projectId, chunk, syncedAt, {
+      syncId,
+      chunkIndex,
+    }).then((r) => {
       upserted += r.upserted;
       inboundConversations += r.inboundConversations;
     });
@@ -200,6 +238,17 @@ async function upsertItems(
   };
 
   for await (const item of items) {
+    if (firstItemAt === null) {
+      firstItemAt = Date.now();
+      logger.debug(
+        {
+          syncId,
+          projectId,
+          firstItemMs: firstItemAt - streamStartedAt,
+        },
+        "sync: provider stream first item",
+      );
+    }
     buffer.push(item);
     seenIds.add(item.id);
     if (item.updatedAt && (!latestUpdatedAt || item.updatedAt > latestUpdatedAt)) {
@@ -223,7 +272,14 @@ async function upsertItems(
   }
   await Promise.all(inflight);
 
-  return { upserted, seenIds, latestUpdatedAt, inboundConversations };
+  return {
+    upserted,
+    seenIds,
+    latestUpdatedAt,
+    inboundConversations,
+    chunks,
+    itemsSeen: seenIds.size,
+  };
 }
 
 async function bumpCursor(
@@ -251,21 +307,53 @@ export async function runIncrementalSync(
   project: ProjectArg,
   userId: string,
 ): Promise<SyncResult> {
-  const provider = await buildProviderForUser(db, project, userId);
-  const cursor = await db.syncCursor.findUnique({ where: { projectId: project.id } });
-  const watermark = cursor?.watermark ?? null;
-  const syncedAt = new Date();
+  const syncId = randomUUID();
+  const startedAt = Date.now();
+  const baseCtx = {
+    syncId,
+    mode: "incremental" as const,
+    projectId: project.id,
+    providerKind: project.providerKind,
+    userId,
+  };
+  let phase: SyncPhase = "stream";
+  try {
+    const provider = await buildProviderForUser(db, project, userId);
+    const cursor = await db.syncCursor.findUnique({ where: { projectId: project.id } });
+    const watermark = cursor?.watermark ?? null;
+    const syncedAt = new Date();
 
-  const { upserted, latestUpdatedAt, inboundConversations } = await upsertItems(
-    db,
-    project.id,
-    provider.listChangesSince(watermark),
-    syncedAt,
-  );
+    logger.info({ ...baseCtx, watermark: watermark?.toISOString() ?? null }, "sync: start");
 
-  const newWatermark = latestUpdatedAt ?? watermark;
-  await bumpCursor(db, project.id, newWatermark, null);
-  return { upserted, archived: 0, watermark: newWatermark, inboundConversations };
+    phase = "persist";
+    const { upserted, latestUpdatedAt, inboundConversations, chunks, itemsSeen } =
+      await upsertItems(db, project.id, provider.listChangesSince(watermark), syncedAt, syncId);
+
+    phase = "cursor";
+    const newWatermark = latestUpdatedAt ?? watermark;
+    await bumpCursor(db, project.id, newWatermark, null);
+
+    logger.info(
+      {
+        ...baseCtx,
+        upserted,
+        archived: 0,
+        chunks,
+        itemsSeen,
+        inboundConversations,
+        newWatermark: newWatermark?.toISOString() ?? null,
+        durationMs: Date.now() - startedAt,
+      },
+      "sync: done",
+    );
+    return { upserted, archived: 0, watermark: newWatermark, inboundConversations };
+  } catch (err) {
+    logger.error(
+      { ...baseCtx, phase, durationMs: Date.now() - startedAt, ...errFields(err) },
+      "sync: failed",
+    );
+    throw err;
+  }
 }
 
 export async function runFullSync(
@@ -273,32 +361,65 @@ export async function runFullSync(
   project: ProjectArg,
   userId: string,
 ): Promise<SyncResult> {
-  const provider = await buildProviderForUser(db, project, userId);
-  const syncedAt = new Date();
-
-  const { upserted, seenIds, latestUpdatedAt, inboundConversations } = await upsertItems(
-    db,
-    project.id,
-    provider.listChangesSince(null),
-    syncedAt,
-  );
-
-  // Archive any cached row not seen in the full walk. Excluding already-
-  // archived rows keeps the update count meaningful.
-  const archive = await db.item.updateMany({
-    where: {
-      projectId: project.id,
-      providerItemId: { notIn: Array.from(seenIds) },
-      archived: false,
-    },
-    data: { archived: true },
-  });
-
-  await bumpCursor(db, project.id, latestUpdatedAt, syncedAt);
-  return {
-    upserted,
-    archived: archive.count,
-    watermark: latestUpdatedAt,
-    inboundConversations,
+  const syncId = randomUUID();
+  const startedAt = Date.now();
+  const baseCtx = {
+    syncId,
+    mode: "full" as const,
+    projectId: project.id,
+    providerKind: project.providerKind,
+    userId,
   };
+  let phase: SyncPhase = "stream";
+  try {
+    const provider = await buildProviderForUser(db, project, userId);
+    const syncedAt = new Date();
+
+    logger.info(baseCtx, "sync: start");
+
+    phase = "persist";
+    const { upserted, seenIds, latestUpdatedAt, inboundConversations, chunks, itemsSeen } =
+      await upsertItems(db, project.id, provider.listChangesSince(null), syncedAt, syncId);
+
+    // Archive any cached row not seen in the full walk. Excluding already-
+    // archived rows keeps the update count meaningful.
+    phase = "archive";
+    const archive = await db.item.updateMany({
+      where: {
+        projectId: project.id,
+        providerItemId: { notIn: Array.from(seenIds) },
+        archived: false,
+      },
+      data: { archived: true },
+    });
+
+    phase = "cursor";
+    await bumpCursor(db, project.id, latestUpdatedAt, syncedAt);
+
+    logger.info(
+      {
+        ...baseCtx,
+        upserted,
+        archived: archive.count,
+        chunks,
+        itemsSeen,
+        inboundConversations,
+        newWatermark: latestUpdatedAt?.toISOString() ?? null,
+        durationMs: Date.now() - startedAt,
+      },
+      "sync: done",
+    );
+    return {
+      upserted,
+      archived: archive.count,
+      watermark: latestUpdatedAt,
+      inboundConversations,
+    };
+  } catch (err) {
+    logger.error(
+      { ...baseCtx, phase, durationMs: Date.now() - startedAt, ...errFields(err) },
+      "sync: failed",
+    );
+    throw err;
+  }
 }

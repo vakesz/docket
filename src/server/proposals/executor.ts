@@ -24,10 +24,18 @@ import { TRPCError } from "@trpc/server";
 import type { Item as CanonicalItem } from "@/core/types";
 import type { Prisma, Proposal as ProposalRow } from "@/db/generated/client";
 import type { db as Db } from "@/server/db";
+import { logger } from "@/server/logger";
 import { hydrateProposal } from "@/server/proposals/builders";
 import { buildProviderForUser } from "@/server/providers/build";
 import { AUTO_ACCEPT_ELIGIBLE_KINDS_LIST } from "@/server/settings/catalog";
 import { loadGlobalSetting, loadProjectSetting } from "@/server/settings/effective";
+
+type ConfirmPhase = "load" | "provider_build" | "provider_call" | "cache_refresh" | "audit";
+
+function errFields(err: unknown): { err: string; stack?: string } {
+  if (err instanceof Error) return { err: err.message, stack: err.stack };
+  return { err: String(err) };
+}
 
 type ExecutorContext = {
   db: typeof Db;
@@ -55,7 +63,6 @@ async function recordAudit(
   payload: Prisma.InputJsonValue,
 ): Promise<void> {
   // Best-effort: never let audit failures swallow the user-visible result.
-  // We log via console so the surface still gets the original outcome.
   try {
     await ctx.db.audit.create({
       data: {
@@ -67,7 +74,16 @@ async function recordAudit(
       },
     });
   } catch (err) {
-    console.error("audit.write failed", { action, proposalId, err });
+    logger.error(
+      {
+        projectId: ctx.projectId,
+        userId: ctx.userId,
+        action,
+        proposalId,
+        ...errFields(err),
+      },
+      "proposals: audit write failed",
+    );
   }
 }
 
@@ -132,9 +148,23 @@ export async function confirmProposal(
   const source: ConfirmSource = options.source ?? "user";
   const okAction = source === "auto" ? "proposal.auto_confirm" : "proposal.confirm";
   const failAction = source === "auto" ? "proposal.auto_confirm.failed" : "proposal.confirm.failed";
+  const startedAt = Date.now();
+  let phase: ConfirmPhase = "load";
+
   const row = await loadPending(ctx, proposalId);
   const proposal = hydrateProposal(row);
 
+  const baseCtx = {
+    projectId: ctx.projectId,
+    userId: ctx.userId,
+    proposalId,
+    kind: row.kind,
+    providerItemId: row.providerItemId ?? null,
+    source,
+  };
+  logger.info(baseCtx, "proposals: confirm start");
+
+  phase = "provider_build";
   const project = await ctx.db.project.findUnique({
     where: { id: ctx.projectId },
   });
@@ -152,6 +182,8 @@ export async function confirmProposal(
     const provider = await buildProviderForUser(ctx.db, project, ctx.userId);
     let canonical: CanonicalItem | null = null;
     let commentId: string | null = null;
+    phase = "provider_call";
+    const providerStartedAt = Date.now();
 
     switch (proposal.kind) {
       case "state_change":
@@ -239,10 +271,14 @@ export async function confirmProposal(
       }
     }
 
+    const providerMs = Date.now() - providerStartedAt;
+
     if (canonical) {
+      phase = "cache_refresh";
       await refreshCacheFromCanonical(ctx, canonical);
     }
 
+    phase = "audit";
     const updated = await ctx.db.proposal.update({
       where: { id: row.id },
       data: {
@@ -257,6 +293,16 @@ export async function confirmProposal(
       providerItemId: row.providerItemId,
       ...(commentId ? { commentId } : {}),
     });
+    logger.info(
+      {
+        ...baseCtx,
+        action: okAction,
+        providerMs,
+        durationMs: Date.now() - startedAt,
+        ...(commentId ? { commentId } : {}),
+      },
+      "proposals: confirm done",
+    );
     return updated;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -269,6 +315,16 @@ export async function confirmProposal(
       providerItemId: row.providerItemId,
       error: message,
     });
+    logger.error(
+      {
+        ...baseCtx,
+        action: failAction,
+        phase,
+        durationMs: Date.now() - startedAt,
+        ...errFields(err),
+      },
+      "proposals: confirm failed",
+    );
     return failed;
   }
 }
@@ -316,5 +372,15 @@ export async function rejectProposal(
     kind: row.kind,
     providerItemId: row.providerItemId,
   });
+  logger.info(
+    {
+      projectId: ctx.projectId,
+      userId: ctx.userId,
+      proposalId,
+      kind: row.kind,
+      providerItemId: row.providerItemId ?? null,
+    },
+    "proposals: rejected",
+  );
   return updated;
 }

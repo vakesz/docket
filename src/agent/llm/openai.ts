@@ -25,6 +25,7 @@ import type {
   LlmToolCall,
   LlmToolResult,
 } from "@/agent/llm/types";
+import { logger } from "@/server/logger";
 
 const DEFAULT_MODEL = "gpt-5";
 
@@ -91,10 +92,24 @@ export class OpenAiAdapter implements LlmAdapter {
     const effectiveTemperature =
       req.temperature !== undefined ? req.temperature : this.defaultTemperature;
 
+    const model = req.model || this.model;
+    const requestStartedAt = Date.now();
+    logger.debug(
+      {
+        adapter: this.kind,
+        model,
+        messages: req.messages.length,
+        tools: tools.length,
+        temperature: effectiveTemperature,
+        maxOutputTokens: req.maxOutputTokens,
+      },
+      "llm: request start",
+    );
+
     let stream: AsyncIterable<unknown>;
     try {
       stream = (await this.client.responses.create({
-        model: req.model || this.model,
+        model,
         input,
         tools: tools.length > 0 ? tools : undefined,
         stream: true,
@@ -102,6 +117,16 @@ export class OpenAiAdapter implements LlmAdapter {
         ...(effectiveTemperature !== undefined ? { temperature: effectiveTemperature } : {}),
       } as unknown as Parameters<OpenAI["responses"]["create"]>[0])) as AsyncIterable<unknown>;
     } catch (err) {
+      logger.error(
+        {
+          adapter: this.kind,
+          model,
+          durationMs: Date.now() - requestStartedAt,
+          err: err instanceof Error ? err.message : String(err),
+          stack: err instanceof Error ? err.stack : undefined,
+        },
+        "llm: request failed before stream",
+      );
       yield { kind: "error", message: err instanceof Error ? err.message : String(err) };
       return;
     }
@@ -181,12 +206,31 @@ export class OpenAiAdapter implements LlmAdapter {
         if (type === "response.error" || type === "error") {
           const message =
             (evt.error as { message?: string } | undefined)?.message ?? "OpenAI stream error";
+          logger.error(
+            {
+              adapter: this.kind,
+              model,
+              durationMs: Date.now() - requestStartedAt,
+              err: message,
+            },
+            "llm: stream error event",
+          );
           yield { kind: "error", message };
           return;
         }
       }
       yield { kind: "done" };
     } catch (err) {
+      logger.error(
+        {
+          adapter: this.kind,
+          model,
+          durationMs: Date.now() - requestStartedAt,
+          err: err instanceof Error ? err.message : String(err),
+          stack: err instanceof Error ? err.stack : undefined,
+        },
+        "llm: stream threw",
+      );
       yield { kind: "error", message: err instanceof Error ? err.message : String(err) };
     }
   }

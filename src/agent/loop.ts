@@ -25,6 +25,7 @@
  */
 
 import "server-only";
+import { randomUUID } from "node:crypto";
 import type { LlmAdapter, LlmEvent, LlmMessage, LlmToolCall } from "@/agent/llm/types";
 import { buildSystemPrefix } from "@/agent/prompt";
 import { buildToolRegistry } from "@/agent/tools/registry";
@@ -35,6 +36,7 @@ import { getBudgetStatus } from "@/server/billing/budget";
 import { compactConversation, loadCompactionSettings } from "@/server/conversations/compaction";
 import { appendMessage, getConversation } from "@/server/conversations/storage";
 import type { db as Db } from "@/server/db";
+import { logger } from "@/server/logger";
 
 type Database = typeof Db;
 
@@ -83,6 +85,8 @@ export type RunTurnArgs = {
 export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
   const { db, adapter, conversationId, userId, userMessage, readOnly } = args;
   const cap = args.maxToolRounds ?? MAX_TOOL_ROUNDS;
+  const turnId = randomUUID();
+  const turnStartedAt = Date.now();
 
   // 1. Load the conversation + project so we can build the prompt prefix
   //    and the per-project tool registry.
@@ -91,9 +95,21 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
     include: { project: true },
   });
   if (!conv) {
+    logger.warn({ turnId, conversationId, userId }, "agent: conversation not found");
     yield { kind: "error", message: `conversation '${conversationId}' not found` };
     return;
   }
+
+  const baseCtx = {
+    turnId,
+    conversationId,
+    projectId: conv.projectId,
+    userId,
+    adapter: adapter.kind,
+    readOnly,
+    userMessageLen: userMessage.length,
+  };
+  logger.info(baseCtx, "agent: turn start");
 
   // 2. Cost-cap check. The deployment-wide monthly LLM budget is enforced
   //    here so neither the SSE handler nor any future caller can bypass it.
@@ -101,6 +117,14 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
   //    pane surfaces the banner from the same status query).
   const budget = await getBudgetStatus(db);
   if (budget.capReached && budget.action === "block") {
+    logger.warn(
+      {
+        ...baseCtx,
+        monthCents: budget.monthCents,
+        capCents: budget.capCents,
+      },
+      "agent: turn blocked by budget cap",
+    );
     yield {
       kind: "error",
       message: `monthly LLM cost cap reached (${(budget.monthCents / 100).toFixed(2)} of ${(budget.capCents / 100).toFixed(2)} USD); contact your deployment admin`,
@@ -164,6 +188,10 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
   while (true) {
     rounds += 1;
     if (rounds > cap) {
+      logger.warn(
+        { ...baseCtx, rounds, cap, durationMs: Date.now() - turnStartedAt },
+        "agent: tool-call cap exceeded",
+      );
       yield {
         kind: "error",
         message: `agent loop exceeded ${cap} tool-call rounds; aborting`,
@@ -173,6 +201,7 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
 
     assistantBuffer = "";
     assistantToolCalls = [];
+    const roundStartedAt = Date.now();
 
     const stream = adapter.streamMessages({
       model: "", // adapter falls back to its configured model
@@ -192,6 +221,15 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
         totalTokensOut += event.tokensOut;
         totalCostCents = (totalCostCents ?? 0) + (event.costCents ?? 0);
       } else if (event.kind === "error") {
+        logger.error(
+          {
+            ...baseCtx,
+            round: rounds,
+            roundMs: Date.now() - roundStartedAt,
+            llmError: event.message,
+          },
+          "agent: LLM stream error",
+        );
         await persistAssistantTurn(db, conversationId, assistantBuffer, assistantToolCalls, false);
         yield { kind: "error", message: event.message };
         return;
@@ -202,9 +240,24 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
     }
 
     if (!sawDone) {
+      logger.error(
+        { ...baseCtx, round: rounds, roundMs: Date.now() - roundStartedAt },
+        "agent: LLM stream ended without done",
+      );
       yield { kind: "error", message: "LLM stream ended without a done event" };
       return;
     }
+
+    logger.debug(
+      {
+        ...baseCtx,
+        round: rounds,
+        roundMs: Date.now() - roundStartedAt,
+        textLen: assistantBuffer.length,
+        toolCalls: assistantToolCalls.length,
+      },
+      "agent: LLM round done",
+    );
 
     // No tool calls → assistant is finished. Persist + emit final events.
     if (assistantToolCalls.length === 0) {
@@ -238,9 +291,14 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
       const tool = toolByName.get(call.name);
       let result: unknown;
       let dispatchOk = true;
+      const toolStartedAt = Date.now();
       if (!tool) {
         result = { ok: false, error: `unknown tool '${call.name}'` };
         dispatchOk = false;
+        logger.warn(
+          { ...baseCtx, round: rounds, callId: call.id, name: call.name },
+          "agent: unknown tool requested",
+        );
       } else {
         try {
           result = await tool.handler(call.arguments);
@@ -250,8 +308,31 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
             error: `tool '${call.name}' threw: ${err instanceof Error ? err.message : String(err)}`,
           };
           dispatchOk = false;
+          logger.error(
+            {
+              ...baseCtx,
+              round: rounds,
+              callId: call.id,
+              name: call.name,
+              toolMs: Date.now() - toolStartedAt,
+              err: err instanceof Error ? err.message : String(err),
+              stack: err instanceof Error ? err.stack : undefined,
+            },
+            "agent: tool threw",
+          );
         }
       }
+      logger.debug(
+        {
+          ...baseCtx,
+          round: rounds,
+          callId: call.id,
+          name: call.name,
+          ok: dispatchOk,
+          toolMs: Date.now() - toolStartedAt,
+        },
+        "agent: tool call",
+      );
 
       const formatted = adapter.formatToolResult(call, result);
       messages.push(formatted);
@@ -320,6 +401,18 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
     });
   }
 
+  logger.info(
+    {
+      ...baseCtx,
+      rounds,
+      tokensIn: totalTokensIn,
+      tokensOut: totalTokensOut,
+      costCents: totalCostCents,
+      askedQuestion,
+      durationMs: Date.now() - turnStartedAt,
+    },
+    "agent: turn done",
+  );
   yield { kind: "done" };
 }
 
