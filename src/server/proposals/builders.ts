@@ -30,6 +30,8 @@ import type { CreateFields, ItemKind, TransitionIntent } from "@/core/types";
 import type { Prisma, Proposal as ProposalRow } from "@/db/generated/client";
 import type { db as Db } from "@/server/db";
 import { snapshotFromRow } from "@/server/proposals/item-snapshot";
+import { AUTO_ACCEPT_ELIGIBLE_KINDS_LIST } from "@/server/settings/catalog";
+import { loadGlobalSetting, loadProjectSetting } from "@/server/settings/effective";
 
 type ProposalContext = {
   db: typeof Db;

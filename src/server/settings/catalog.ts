@@ -258,6 +258,15 @@ export const SETTINGS_CATALOG = {
     description:
       "Upper bound on the response body web_fetch will return to the agent. Larger payloads are truncated and reported as denied_size. Range: 64 KB to 8 MB.",
   },
+  "proposals.auto-accept-kinds": {
+    key: "proposals.auto-accept-kinds",
+    scope: "project",
+    schema: AutoAcceptKindsSchema,
+    default: [] as string[],
+    label: "Auto-accept proposals (per kind)",
+    description:
+      "Proposal kinds that confirm automatically without a human tap. Eligible: 'memory_write' / 'memory_delete' (local DB only) and 'tags_change' (low-stakes label edit). State changes, description rewrites, comments, and new-item creation are never eligible. Read-only mode still wins.",
+  },
 } as const satisfies Record<string, SettingDef<z.ZodTypeAny>>;
 
 export type SettingKey = keyof typeof SETTINGS_CATALOG;

@@ -120,10 +120,17 @@ async function refreshCacheFromCanonical(
   });
 }
 
+export type ConfirmSource = "user" | "auto";
+
 export async function confirmProposal(
   ctx: ExecutorContext,
   proposalId: string,
+  options: { source?: ConfirmSource } = {},
 ): Promise<ProposalRow> {
+  const source: ConfirmSource = options.source ?? "user";
+  const okAction = source === "auto" ? "proposal.auto_confirm" : "proposal.confirm";
+  const failAction =
+    source === "auto" ? "proposal.auto_confirm.failed" : "proposal.confirm.failed";
   const row = await loadPending(ctx, proposalId);
   const proposal = hydrateProposal(row);
 
@@ -244,7 +251,7 @@ export async function confirmProposal(
           : {}),
       },
     });
-    await recordAudit(ctx, "proposal.confirm", row.id, {
+    await recordAudit(ctx, okAction, row.id, {
       kind: row.kind,
       providerItemId: row.providerItemId,
       ...(commentId ? { commentId } : {}),
@@ -256,7 +263,7 @@ export async function confirmProposal(
       where: { id: row.id },
       data: { errorMessage: message },
     });
-    await recordAudit(ctx, "proposal.confirm.failed", row.id, {
+    await recordAudit(ctx, failAction, row.id, {
       kind: row.kind,
       providerItemId: row.providerItemId,
       error: message,
