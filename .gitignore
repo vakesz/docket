@@ -33,6 +33,10 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# Operator-edited docker-compose override (per-deployment secrets, port maps, etc).
+# The .example file ships; the real one stays local.
+compose.override.yml
+
 # vercel
 .vercel
 
