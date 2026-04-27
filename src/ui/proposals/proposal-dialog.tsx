@@ -81,14 +81,14 @@ export function ProposalDialog({
 
         <div className="min-h-[6rem]">
           {query.isPending ? (
-            <p className="text-sm text-muted-foreground">Loading proposal…</p>
+            <p className="text-sm text-fg-muted">Loading proposal…</p>
           ) : query.data ? (
             <ProposalDiffView diff={query.data.diff} />
           ) : null}
         </div>
 
         {errorMessage ? (
-          <p className="rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive">
+          <p className="rounded-md border border-danger/40 bg-danger-bg/40 p-2 text-xs text-danger-fg">
             {errorMessage}
           </p>
         ) : null}

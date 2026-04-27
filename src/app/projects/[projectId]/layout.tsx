@@ -6,6 +6,7 @@ import { db } from "@/server/db";
 import { loadGlobalSetting } from "@/server/settings/effective";
 import { requireSetupComplete } from "@/server/setup/guard";
 import { createCaller } from "@/server/trpc-caller";
+import { CommandPalette } from "@/ui/shell/command-palette";
 import { StatusFooter } from "@/ui/shell/status-footer";
 import { TopBar } from "@/ui/shell/top-bar";
 
@@ -54,13 +55,11 @@ export default async function ProjectLayout({
     ? mostRecent([syncCursor.watermark, syncCursor.lastFullSyncAt, syncCursor.updatedAt])
     : null;
 
+  const projectOptions = projects.map((p) => ({ id: p.id, name: p.name }));
+
   return (
     <div className="flex min-h-screen flex-col bg-bg text-fg">
-      <TopBar
-        projects={projects.map((p) => ({ id: p.id, name: p.name }))}
-        currentProjectId={project.id}
-        userLabel={userLabel}
-      />
+      <TopBar projects={projectOptions} currentProjectId={project.id} userLabel={userLabel} />
       <main className="flex flex-1 flex-col overflow-hidden">{children}</main>
       <StatusFooter
         projectName={project.name}
@@ -69,6 +68,7 @@ export default async function ProjectLayout({
         pendingProposals={pendingProposals.length}
         readOnly={readOnly}
       />
+      <CommandPalette projectId={project.id} projects={projectOptions} />
     </div>
   );
 }

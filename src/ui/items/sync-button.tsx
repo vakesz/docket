@@ -1,5 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
+import { xsBorderButtonClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
 
 export function SyncButton({
@@ -24,14 +25,14 @@ export function SyncButton({
         type="button"
         disabled={sync.isPending}
         onClick={() => sync.mutate({ projectId, mode })}
-        className="rounded-full border border-zinc-300 px-3 py-1 text-xs hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+        className={xsBorderButtonClass}
       >
         {sync.isPending ? `${label}…` : label}
       </button>
       {sync.error ? (
-        <span className="text-xs text-red-700 dark:text-red-300">{sync.error.message}</span>
+        <span className="text-xs text-danger-fg">{sync.error.message}</span>
       ) : sync.data ? (
-        <span className="text-xs text-zinc-500">
+        <span className="text-xs text-fg-faint">
           +{sync.data.upserted} upserted, {sync.data.archived} archived
         </span>
       ) : null}
