@@ -21,6 +21,8 @@ type UseChatStream = {
   pendingProposalId: string | null;
   setPendingProposalId: (id: string | null) => void;
   drainStream: (args: DrainArgs) => Promise<void>;
+  /** Abort any in-flight stream and clear local stream state. */
+  resetStream: () => void;
 };
 
 /**
@@ -40,6 +42,13 @@ export function useChatStream(): UseChatStream {
 
   useEffect(() => {
     return () => abortRef.current?.abort();
+  }, []);
+
+  const resetStream = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setStreaming(EMPTY_STREAM);
+    setPendingProposalId(null);
   }, []);
 
   const drainStream = useCallback(
@@ -141,5 +150,5 @@ export function useChatStream(): UseChatStream {
     [utils.conversations.get, utils.conversations.list],
   );
 
-  return { streaming, pendingProposalId, setPendingProposalId, drainStream };
+  return { streaming, pendingProposalId, setPendingProposalId, drainStream, resetStream };
 }

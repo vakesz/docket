@@ -1,14 +1,16 @@
 import type { ReactNode } from "react";
 import { db } from "@/server/db";
 import { loadGlobalSetting } from "@/server/settings/effective";
+import { ChatRail } from "@/ui/conversations/chat-rail";
 import { BacklogPane } from "@/ui/items/backlog-pane";
 import { ItemsShellLayout } from "@/ui/shell/items-shell-layout";
 
 /**
  * Wraps the items list and detail routes in the resizable 3-pane shell so
  * the backlog stays mounted while users click through items in the middle
- * pane. The right (chat) slot stays null until Phase 3 lands the chat
- * pane. The middle slot is whatever child route renders.
+ * pane. The right pane hosts the chat rail, which itself decides whether
+ * to mount the per-item chat (when an itemId is in the URL) or a hint
+ * placeholder. The middle slot is whatever child route renders.
  */
 export default async function ItemsLayout({
   children,
@@ -29,7 +31,7 @@ export default async function ItemsLayout({
         />
       }
       middle={children}
-      right={null}
+      right={<ChatRail projectId={projectId} />}
     />
   );
 }
