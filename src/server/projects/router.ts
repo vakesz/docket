@@ -102,4 +102,43 @@ export const projectsRouter = router({
         data: { archivedAt: new Date() },
       });
     }),
+
+  /**
+   * Per-user landing project. `null` clears it and falls landing back to
+   * "first available project". Validates that the caller still has access
+   * before persisting so a stale id doesn't get pinned.
+   */
+  setDefault: mutationProcedure
+    .input(z.object({ projectId: z.string().min(1).nullable() }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      if (input.projectId) {
+        const project = await ctx.db.project.findFirst({
+          where: {
+            id: input.projectId,
+            archivedAt: null,
+            OR: [{ ownerUserId: userId }, { memberships: { some: { userId } } }],
+          },
+          select: { id: true },
+        });
+        if (!project) {
+          throw new Error("project not found or you no longer have access");
+        }
+      }
+      await ctx.db.user.update({
+        where: { id: userId },
+        data: { defaultProjectId: input.projectId },
+      });
+      return { defaultProjectId: input.projectId };
+    }),
+
+  /** Read the caller's profile bits the UI needs (default project picker). */
+  me: protectedProcedure.query(async ({ ctx }) => {
+    const userId = ctx.session.user.id;
+    const user = await ctx.db.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, email: true, defaultProjectId: true },
+    });
+    return user;
+  }),
 });

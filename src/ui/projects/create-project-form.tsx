@@ -1,20 +1,36 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
+import { fieldClass, primaryButtonClass, settingsPanelClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
 
 type ProviderKind = "github" | "azure_devops";
 
 /**
  * Create form: name + provider kind + per-kind scope inputs that assemble
- * into the JSON the server expects.
+ * into the JSON the server expects. The "Set as default" checkbox calls
+ * `projects.setDefault` immediately after creation so the next visit to
+ * `/` lands here automatically.
  */
 export function CreateProjectForm() {
   const router = useRouter();
   const utils = trpc.useUtils();
+  const setDefault = trpc.projects.setDefault.useMutation({
+    onSuccess: async () => {
+      await utils.projects.me.invalidate();
+    },
+  });
   const create = trpc.projects.create.useMutation({
     onSuccess: async (project) => {
       await utils.projects.list.invalidate();
+      if (makeDefault) {
+        try {
+          await setDefault.mutateAsync({ projectId: project.id });
+        } catch {
+          // The project was created; pinning is best-effort. Surface the
+          // error elsewhere later if it actually matters.
+        }
+      }
       router.push(`/projects/${project.id}`);
       router.refresh();
     },
@@ -29,6 +45,7 @@ export function CreateProjectForm() {
   // Azure DevOps scope fields
   const [azdoOrg, setAzdoOrg] = useState("");
   const [azdoProject, setAzdoProject] = useState("");
+  const [makeDefault, setMakeDefault] = useState(true);
 
   function buildScope(): Record<string, string> {
     if (providerKind === "github") {
@@ -48,38 +65,35 @@ export function CreateProjectForm() {
   }
 
   return (
-    <form
-      onSubmit={onSubmit}
-      className="flex flex-col gap-3 rounded-md border border-zinc-200 p-4 text-sm dark:border-zinc-800"
-    >
-      <h2 className="text-base font-medium">Add project</h2>
+    <form onSubmit={onSubmit} className={`${settingsPanelClass} flex flex-col gap-4 text-sm`}>
+      <h2 className="text-base font-medium text-fg">Add project</h2>
 
       <label className="flex flex-col gap-1">
-        <span className="text-xs text-zinc-500">Display name</span>
+        <span className="text-xs text-fg-muted">Display name</span>
         <input
           required
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="acme / web"
-          className="rounded-md border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-950"
+          className={fieldClass}
         />
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="text-xs text-zinc-500">Description (optional)</span>
+        <span className="text-xs text-fg-muted">Description (optional)</span>
         <input
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          className="rounded-md border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-950"
+          className={fieldClass}
         />
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="text-xs text-zinc-500">Provider</span>
+        <span className="text-xs text-fg-muted">Provider</span>
         <select
           value={providerKind}
           onChange={(e) => setProviderKind(e.target.value as ProviderKind)}
-          className="rounded-md border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-950"
+          className={fieldClass}
         >
           <option value="github">GitHub</option>
           <option value="azure_devops">Azure DevOps</option>
@@ -87,63 +101,72 @@ export function CreateProjectForm() {
       </label>
 
       {providerKind === "github" ? (
-        <div className="flex gap-2">
+        <div className="flex gap-3">
           <label className="flex flex-1 flex-col gap-1">
-            <span className="text-xs text-zinc-500">Owner</span>
+            <span className="text-xs text-fg-muted">Owner</span>
             <input
               required
               value={githubOwner}
               onChange={(e) => setGithubOwner(e.target.value)}
               placeholder="acme"
-              className="rounded-md border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-950"
+              className={fieldClass}
             />
           </label>
           <label className="flex flex-1 flex-col gap-1">
-            <span className="text-xs text-zinc-500">Repo</span>
+            <span className="text-xs text-fg-muted">Repo</span>
             <input
               required
               value={githubRepo}
               onChange={(e) => setGithubRepo(e.target.value)}
               placeholder="web"
-              className="rounded-md border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-950"
+              className={fieldClass}
             />
           </label>
         </div>
       ) : (
-        <div className="flex gap-2">
+        <div className="flex gap-3">
           <label className="flex flex-1 flex-col gap-1">
-            <span className="text-xs text-zinc-500">Organization</span>
+            <span className="text-xs text-fg-muted">Organization</span>
             <input
               required
               value={azdoOrg}
               onChange={(e) => setAzdoOrg(e.target.value)}
               placeholder="contoso"
-              className="rounded-md border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-950"
+              className={fieldClass}
             />
           </label>
           <label className="flex flex-1 flex-col gap-1">
-            <span className="text-xs text-zinc-500">Project</span>
+            <span className="text-xs text-fg-muted">Project</span>
             <input
               required
               value={azdoProject}
               onChange={(e) => setAzdoProject(e.target.value)}
               placeholder="Platform"
-              className="rounded-md border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-950"
+              className={fieldClass}
             />
           </label>
         </div>
       )}
 
+      <label className="inline-flex items-center gap-2 text-sm text-fg">
+        <input
+          type="checkbox"
+          checked={makeDefault}
+          onChange={(e) => setMakeDefault(e.target.checked)}
+        />
+        <span>Set as my default project</span>
+      </label>
+
       {create.error ? (
-        <p className="rounded-md bg-red-100 px-2 py-1 text-xs text-red-900 dark:bg-red-950 dark:text-red-100">
+        <p className="rounded-md border border-danger/40 bg-danger-bg/40 px-2 py-1 text-xs text-danger-fg">
           {create.error.message}
         </p>
       ) : null}
 
       <button
         type="submit"
-        disabled={create.isPending}
-        className="self-start rounded-full bg-zinc-900 px-4 py-1 text-xs font-medium text-white transition hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-black dark:hover:bg-zinc-200"
+        disabled={create.isPending || setDefault.isPending}
+        className={`${primaryButtonClass} self-start`}
       >
         {create.isPending ? "Creating…" : "Create project"}
       </button>

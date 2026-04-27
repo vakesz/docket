@@ -174,26 +174,12 @@ export function CommandPalette({
       {
         id: "nav-settings",
         label: "Settings",
-        description: "Per-user preferences plus deployment-wide LLM and OAuth provider config.",
+        description:
+          "Per-user preferences (default project, send-on-enter) plus deployment-wide LLM and OAuth provider config.",
         group: "Navigate",
-        keywords: "config preferences llm oauth providers",
+        keywords:
+          "config preferences default project profile llm oauth openai anthropic github azure devops",
         run: () => go("/settings"),
-      },
-      {
-        id: "nav-llm-providers",
-        label: "LLM providers",
-        description: "Manage the OpenAI / Anthropic / etc. keys the agent picks from each turn.",
-        group: "Navigate",
-        keywords: "openai anthropic gemini bedrock mistral ollama default",
-        run: () => go("/settings/llm-providers"),
-      },
-      {
-        id: "nav-oauth-providers",
-        label: "OAuth providers",
-        description: "Sign-in providers — NextAuth rebuilds its list per request from these rows.",
-        group: "Navigate",
-        keywords: "github azure devops auth login signin",
-        run: () => go("/settings/oauth-providers"),
       },
       {
         id: "sync-now",

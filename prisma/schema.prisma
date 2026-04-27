@@ -36,6 +36,13 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  /// Per-user landing project. `/` redirects here when set; falls back to the
+  /// first membership if null or stale. Cleared automatically when the
+  /// referenced project is deleted (SetNull) so the redirect can re-fall-back
+  /// without an extra check.
+  defaultProjectId String?
+  defaultProject   Project? @relation("UserDefaultProject", fields: [defaultProjectId], references: [id], onDelete: SetNull)
+
   accounts      Account[]
   sessions      Session[]
   ownedProjects Project[]           @relation("ProjectOwner")
@@ -177,6 +184,7 @@ model Project {
 
   owner         User                @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
   defaultLlm    LlmProvider?        @relation("ProjectDefaultLlm", fields: [defaultLlmProviderId], references: [id], onDelete: SetNull)
+  defaultForUsers User[]            @relation("UserDefaultProject")
   memberships   ProjectMembership[]
   items         Item[]
   watchlist     WatchlistEntry[]

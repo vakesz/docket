@@ -1,24 +1,16 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/server/auth";
+import { db } from "@/server/db";
 import { requireSetupComplete } from "@/server/setup/guard";
-import { SettingsForm } from "@/ui/settings/settings-form";
+import { SettingsShell } from "@/ui/settings/settings-shell";
 
-const sections = [
-  {
-    href: "/settings/llm-providers",
-    label: "LLM providers",
-    description:
-      "OpenAI / Anthropic / etc. The agent loop picks one row per project (or the global default) on each turn.",
-  },
-  {
-    href: "/settings/oauth-providers",
-    label: "OAuth providers",
-    description:
-      "Sign-in providers. NextAuth rebuilds its provider list per request from these rows — adding a row makes its sign-in button appear immediately.",
-  },
-];
-
+/**
+ * Unified settings page. One route, sidebar nav inside, no sub-routes —
+ * mirrors main's `SettingsPage`. The "← back to project" link uses the
+ * user's default (or most-recently-touched) project so closing settings
+ * lands somewhere sensible instead of bouncing through `/`.
+ */
 export default async function SettingsPage() {
   await requireSetupComplete();
   const session = await auth();
@@ -26,41 +18,53 @@ export default async function SettingsPage() {
     redirect("/");
   }
 
+  const userId = session.user.id;
+  const me = await db.user.findUnique({
+    where: { id: userId },
+    select: { defaultProjectId: true },
+  });
+
+  const backProject = await db.project.findFirst({
+    where: {
+      archivedAt: null,
+      id: me?.defaultProjectId ?? undefined,
+      OR: [{ ownerUserId: userId }, { memberships: { some: { userId } } }],
+    },
+    select: { id: true, name: true },
+  });
+  const fallback = backProject
+    ? null
+    : await db.project.findFirst({
+        where: {
+          archivedAt: null,
+          OR: [{ ownerUserId: userId }, { memberships: { some: { userId } } }],
+        },
+        orderBy: [{ updatedAt: "desc" }],
+        select: { id: true, name: true },
+      });
+  const back = backProject ?? fallback;
+
+  const publicBase = (process.env.PUBLIC_BASE_URL ?? "http://localhost:3000").trim();
+
   return (
-    <main className="mx-auto flex min-h-screen max-w-2xl flex-col gap-6 bg-bg p-8 text-fg">
-      <header className="flex items-baseline justify-between">
+    <main className="flex min-h-screen flex-col bg-bg text-fg">
+      <header className="flex items-baseline justify-between border-b border-border bg-surface px-6 py-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
           <p className="text-sm text-fg-muted">
-            Per-user preferences plus deployment-wide configuration. Theme lives in the top bar.
+            Per-user preferences plus deployment-wide configuration.
           </p>
         </div>
-        <Link href="/" className="text-sm text-fg-muted hover:text-fg">
-          ← Projects
+        <Link
+          href={back ? `/projects/${back.id}/items` : "/"}
+          className="text-sm text-fg-muted hover:text-fg"
+        >
+          ← {back ? back.name : "Home"}
         </Link>
       </header>
-
-      <SettingsForm />
-
-      <section className="flex flex-col gap-3">
-        <h2 className="text-base font-medium text-fg">Deployment</h2>
-        <ul className="flex flex-col gap-3">
-          {sections.map((s) => (
-            <li
-              key={s.href}
-              className="rounded-2xl border border-border bg-surface p-4 shadow-sm transition hover:border-fg-faint"
-            >
-              <Link href={s.href} className="block">
-                <div className="flex items-baseline justify-between">
-                  <span className="font-medium text-fg">{s.label}</span>
-                  <span className="text-xs text-fg-faint">→</span>
-                </div>
-                <p className="mt-1 text-xs text-fg-muted">{s.description}</p>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <div className="flex flex-1 overflow-hidden">
+        <SettingsShell publicBase={publicBase} />
+      </div>
     </main>
   );
 }
