@@ -9,6 +9,7 @@ import {
   FolderPlus,
   KeyRound,
   LineChart,
+  MessageSquare,
   ScrollText,
   ServerCog,
   SlidersHorizontal,
@@ -22,6 +23,7 @@ import { MemoryPane } from "@/ui/memory/memory-pane";
 import { ActiveProjectPicker } from "@/ui/settings/active-project-picker";
 import { AnalyticsPanel } from "@/ui/settings/analytics-panel";
 import { BudgetAuditPanel } from "@/ui/settings/budget-audit-panel";
+import { ChatDisplayPanel } from "@/ui/settings/chat-display-panel";
 import { ExportPanel } from "@/ui/settings/export-panel";
 import { LlmProvidersPanel } from "@/ui/settings/llm-providers-panel";
 import { MembersPanel } from "@/ui/settings/members-panel";
@@ -42,6 +44,7 @@ type SectionKey =
   | "project-export"
   | "projects"
   | "profile"
+  | "chat"
   | "workspace"
   | "budget-audit"
   | "global-analytics"
@@ -133,6 +136,13 @@ const SECTIONS: SectionMeta[] = [
     label: "Profile",
     description: "Default project and chat send-key.",
     icon: UserRound,
+    group: "you",
+  },
+  {
+    key: "chat",
+    label: "Chat",
+    description: "How tool calls render in the chat pane.",
+    icon: MessageSquare,
     group: "you",
   },
 
@@ -372,6 +382,8 @@ function SectionContent({
       return <ProjectsPanel />;
     case "profile":
       return <ProfilePanel />;
+    case "chat":
+      return <ChatDisplayPanel />;
     case "workspace":
       return <WorkspacePanel />;
     case "budget-audit":
