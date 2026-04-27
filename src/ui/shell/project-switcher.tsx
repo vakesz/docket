@@ -6,6 +6,8 @@ type ProjectOption = {
   name: string;
 };
 
+const ADD_PROJECT_VALUE = "__add_project__";
+
 /**
  * Drop-down project switcher in the topbar. Routes into the new project's
  * items shell by default, but when the user is already on `/settings`
@@ -13,6 +15,9 @@ type ProjectOption = {
  * switching projects shouldn't kick the user out of settings. On
  * /settings the dropdown also reflects `?project=<id>` so the topbar
  * tracks the page's active project rather than the user's default.
+ *
+ * The trailing "+ Add project…" option deep-links into the settings
+ * Projects panel, the only place users can register a second repo.
  */
 export function ProjectSwitcher({
   projects,
@@ -36,6 +41,10 @@ export function ProjectSwitcher({
       value={effective}
       onChange={(e) => {
         const next = e.target.value;
+        if (next === ADD_PROJECT_VALUE) {
+          router.push("/settings?section=projects");
+          return;
+        }
         if (next && next !== effective) {
           router.push(onSettings ? `/settings?project=${next}` : `/projects/${next}/items`);
         }
@@ -47,6 +56,10 @@ export function ProjectSwitcher({
           {p.name}
         </option>
       ))}
+      <option disabled value="">
+        ──────────
+      </option>
+      <option value={ADD_PROJECT_VALUE}>+ Add project…</option>
     </select>
   );
 }
