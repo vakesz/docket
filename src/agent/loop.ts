@@ -1,5 +1,5 @@
 /**
- * Streaming agent loop — the heart of Phase 6.
+ * Streaming agent loop.
  *
  * One call to `runTurn()` handles a complete user → assistant exchange:
  * persist the user message, ask the LLM for a response, dispatch any tool

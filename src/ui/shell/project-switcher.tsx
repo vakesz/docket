@@ -6,11 +6,7 @@ type ProjectOption = {
   name: string;
 };
 
-/**
- * Drop-down project switcher in the project shell. Phase 2 uses a stock
- * `<select>` for simplicity; a richer popover lands when the dashboard /
- * shell components get a styling pass in later phases.
- */
+/** Drop-down project switcher in the project shell. */
 export function ProjectSwitcher({
   projects,
   currentProjectId,

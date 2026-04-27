@@ -1,5 +1,5 @@
 /**
- * Memory API (Phase 7).
+ * Memory API.
  *
  * Project memory entries are durable per-project facts the user (or the
  * agent through `propose_memory_write`) wants the assistant to remember.

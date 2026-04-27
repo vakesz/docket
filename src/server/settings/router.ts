@@ -1,5 +1,5 @@
 /**
- * Settings API (Phase 9).
+ * Settings API.
  *
  * Per-user effective settings keyed off the `Setting` table. Clients call
  * `list` to get every catalog key with its current value (default applied

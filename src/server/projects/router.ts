@@ -10,9 +10,7 @@ import {
 
 /**
  * Provider kinds the UI exposes in the "create project" form. Source of
- * truth for which providers exist at runtime is `provider-registry.ts`,
- * which is empty in Phase 2; this list mirrors the *planned* kinds so the
- * picker can be wired before the spec rows arrive in Phase 3 / Phase 9.
+ * truth for which providers exist at runtime is `provider-registry.ts`.
  */
 const PROVIDER_KIND = z.enum(["github", "azure_devops"]);
 
@@ -20,8 +18,7 @@ const CreateProjectInput = z.object({
   name: z.string().min(1).max(120),
   description: z.string().max(2000).default(""),
   providerKind: PROVIDER_KIND,
-  /// Free-form per-provider scope (e.g. { owner, repo } for GitHub). Phase 3
-  /// adds a provider-aware picker; Phase 2 accepts whatever the form sends.
+  /// Free-form per-provider scope (e.g. { owner, repo } for GitHub).
   providerScope: z.record(z.string(), z.unknown()),
 });
 

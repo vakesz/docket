@@ -1,17 +1,16 @@
 /**
- * Sources API (Phase 7).
+ * Sources API.
  *
  * Source documents are author material the assistant can cite from but is
- * never allowed to edit (CLAUDE.md rule 6). All writes are human-driven
+ * never allowed to edit (AGENTS.md rule 6). All writes are human-driven
  * through this router — there is intentionally no proposal pipeline here:
  * the agent's mutating-tool registry deliberately does not include a
  * `propose_source_*` family, and the architecture test
  * `src/__arch__/no-source-mutation-tools.test.ts` enforces that.
  *
- * Storage shape: `bodyMd: String`. Phase 7 keeps sources text-only (paste
- * or `.md`/`.txt` upload). The migration sketch reserves `Source.body bytea`
- * for binary uploads if/when we need them; that lands in a later phase
- * alongside text extraction.
+ * Storage shape: `bodyMd: String`. Sources are text-only today (paste or
+ * `.md`/`.txt` upload); a `Source.body bytea` column is reserved for binary
+ * uploads if/when we need them.
  */
 
 import "server-only";

@@ -2,12 +2,11 @@
  * Link-discovery tools — find pull requests / commits the provider has
  * heuristically linked to an item.
  *
- * The Python tree split this off into `link_tools.py`; the only tool that
- * actually lived there was `find_related_pull_requests`, which calls the
- * provider's optional `findRelatedPRs` method. Providers that don't model
- * PRs (Azure DevOps in some configurations) throw `ProviderError` from
- * the optional method; we surface that as a soft `fail()` rather than
- * raising — the agent treats it as "no PR signal here, move on".
+ * Today the only tool here is `find_related_pull_requests`, which calls
+ * the provider's optional `findRelatedPRs` method. Providers that don't
+ * model PRs (Azure DevOps in some configurations) throw `ProviderError`
+ * from the optional method; we surface that as a soft `fail()` rather
+ * than raising — the agent treats it as "no PR signal here, move on".
  */
 
 import "server-only";

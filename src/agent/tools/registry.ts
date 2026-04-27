@@ -8,18 +8,18 @@
  * `src/__arch__/tool-registration-order.test.ts` pins the order so a
  * silent reorder during a refactor fails CI rather than burning cache.
  *
- * The order mirrors CLAUDE.md "Preserve agent tool registration order":
+ * The order mirrors AGENTS.md "Preserve agent tool registration order":
  *   1. readonly: items → PRs → commits/CI
  *   2. link tools
  *   3. memory readonly (project-scoped)
  *   4. source readonly (project-scoped)
- *   5. (Phase 8) MCP tools — stripped in read-only
+ *   5. MCP tools — stripped in read-only
  *   6. mutating: provider mutations — stripped in read-only
- *   7. (Phase 7) memory mutations — stripped in read-only
+ *   7. memory mutations — stripped in read-only
  *
- * Read-only mode strips groups (5)–(7). The agent loop (Phase 6 task 56)
- * passes `readOnly` through here at construction time; downstream tool
- * calls don't need to re-check.
+ * Read-only mode strips groups (5)–(7). The agent loop passes `readOnly`
+ * through here at construction time; downstream tool calls don't need to
+ * re-check.
  */
 
 import "server-only";

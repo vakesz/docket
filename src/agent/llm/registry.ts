@@ -49,9 +49,8 @@ export async function selectAdapterFor(db: Database, ctx: AdapterContext): Promi
 }
 
 export function buildAdapter(row: LlmProvider): LlmAdapter {
-  // `apiKey` is encrypted at rest with `SECRETS_KEY` (Phase 11). Legacy
-  // plaintext rows decrypt to themselves, so this is a no-op until the
-  // operator rolls a key.
+  // `apiKey` is encrypted at rest with `SECRETS_KEY`. Legacy plaintext rows
+  // decrypt to themselves, so this is a no-op until the operator rolls a key.
   const apiKey = decryptSecret(row.apiKey);
   switch (row.kind) {
     case "openai":
@@ -63,7 +62,7 @@ export function buildAdapter(row: LlmProvider): LlmAdapter {
       });
     default:
       throw new LlmConfigError(
-        `Unsupported LLM kind '${row.kind}'. Phase 6 ships only 'openai'; add a sibling adapter under src/agent/llm/ for new vendors.`,
+        `Unsupported LLM kind '${row.kind}'. Only 'openai' has an adapter today; add a sibling adapter under src/agent/llm/ for new vendors.`,
       );
   }
 }

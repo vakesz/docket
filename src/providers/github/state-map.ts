@@ -6,10 +6,9 @@
  *   - `state` is "open" | "closed"
  *   - `state_reason` is "completed" | "not_planned" | "reopened" | null
  *
- * The arch test in `src/providers/__arch__.test.ts` (Phase 3) walks every
- * `ItemState` and asserts at least one GitHub `(state, state_reason)` pair
- * maps to it. That guarantees no canonical state is unreachable through
- * GitHub.
+ * The arch test in `src/providers/__arch__.test.ts` walks every `ItemState`
+ * and asserts at least one GitHub `(state, state_reason)` pair maps to it.
+ * That guarantees no canonical state is unreachable through GitHub.
  */
 
 import { ProviderError } from "@/core/provider";
@@ -28,8 +27,8 @@ export type GithubIssueStatus = {
  *
  * `new` is reserved for items the cache has never seen before; live GitHub
  * issues are always at least `active`. `blocked` and `needs_info` have no
- * native GitHub representation — sync-time inference (e.g. label-based) is a
- * Phase 9 concern.
+ * native GitHub representation — sync-time inference (e.g. label-based)
+ * lives elsewhere.
  */
 export function toCanonicalState(status: GithubIssueStatus): ItemState {
   if (status.state === "open") {
@@ -45,9 +44,9 @@ export function toCanonicalState(status: GithubIssueStatus): ItemState {
  * Map a `TransitionIntent` to the GitHub mutation payload.
  *
  * Returns the (state, stateReason) the GitHub API expects on PATCH /issues.
- * Throws `ProviderError` for intents GitHub can't represent — the caller
- * (Phase 4 proposal pipeline) surfaces that as a non-applicable intent
- * instead of attempting the write.
+ * Throws `ProviderError` for intents GitHub can't represent — the proposal
+ * pipeline surfaces that as a non-applicable intent instead of attempting
+ * the write.
  */
 export function fromTransitionIntent(intent: TransitionIntent): GithubIssueStatus {
   switch (intent) {

@@ -1,15 +1,11 @@
 /**
  * Agent prompts — bundled at build time.
  *
- * Mirrors the Python tree's `prompts/system_base.md` + `prompts/kind_*.md`
- * pair, but as TypeScript string constants. The Python tree's mtime-keyed
- * hot-reload was dropped per the simplification roadmap: prompt edits are
- * a code change → redeploy, same as everything else, and the prefix-cache
- * key is just the assembled string.
- *
- * The prefix this file emits is byte-stable: no timestamps, usernames,
- * locale-dependent text, or runtime-only data. That's what lets OpenAI's
- * automatic prompt caching hit ≥1024-token deterministic prefixes.
+ * Prompt edits are a code change → redeploy; the prefix-cache key is just
+ * the assembled string. The prefix this file emits is byte-stable: no
+ * timestamps, usernames, locale-dependent text, or runtime-only data.
+ * That's what lets OpenAI's automatic prompt caching hit ≥1024-token
+ * deterministic prefixes.
  */
 
 import type { ItemKind } from "@/core/types";

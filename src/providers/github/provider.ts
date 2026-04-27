@@ -229,8 +229,8 @@ export class GitHubProvider implements WorkItemProvider {
 
   async getLinked(_id: string): Promise<Item[]> {
     // GitHub doesn't expose explicit issue-to-issue links via the REST API
-    // beyond mentions; Phase 6's link-tools layer extracts those at agent
-    // runtime. Return empty here so the provider stays honest.
+    // beyond mentions; the link-tools layer extracts those at agent runtime.
+    // Return empty here so the provider stays honest.
     return [];
   }
 
@@ -325,7 +325,7 @@ export class GitHubProvider implements WorkItemProvider {
   }
 
   async findRelatedPRs(_id: string): Promise<PRMatch[]> {
-    // Phase 6 wires the heuristic-based PR matcher. Returning [] here keeps
+    // The heuristic-based PR matcher is not wired yet. Returning [] keeps
     // the agent's PR tools quiet rather than throwing.
     return [];
   }

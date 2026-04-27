@@ -4,8 +4,6 @@
  * Constructed from `{ orgUrl, project, accessToken }`. The token is an
  * AAD bearer issued through OAuth (`azure_devops` NextAuth provider) — same
  * token shape Microsoft accepts on the `vssps`/`dev.azure.com` REST surface.
- * The Python tree's `az` CLI fallback is dropped on purpose: every install
- * uses OAuth now, no machine-local CLI dependency.
  *
  * Soft states (`blocked`, `needs_info`, `closed-as-wontfix`) ride along as
  * **tags** because the Agile template has no native states for them. The
@@ -14,8 +12,7 @@
  *
  * Description / comment bodies are HTML on AzDO; we round-trip them as-is
  * (no HTML→Markdown converter yet — the field appears in detail panes
- * verbatim, callers prepared to render either get sane output). Adding a
- * markdownify-equivalent is a Phase 10 polish.
+ * verbatim, callers prepared to render either get sane output).
  *
  * PR / commit / CI methods are intentionally absent — AzDO Boards items
  * don't carry the same git-host signals GitHub does, and the agent's PR
@@ -410,10 +407,9 @@ export class AzureDevOpsProvider implements WorkItemProvider {
     _content: Uint8Array,
     _contentType: string,
   ): Promise<string> {
-    // Phase 9 ships read + state writes only. AzDO attachment upload requires
-    // streaming a NodeJS.ReadableStream into createAttachment, which means
-    // a Buffer→Readable shim and a second updateWorkItem to add the relation.
-    // Defer to Phase 10 polish so the rest of Phase 9 ships clean.
+    // AzDO attachment upload requires streaming a NodeJS.ReadableStream into
+    // createAttachment (Buffer→Readable shim) plus a second updateWorkItem to
+    // add the relation. Not yet implemented.
     throw new ProviderError("Azure DevOps attachment upload not implemented yet");
   }
 

@@ -1,5 +1,5 @@
 /**
- * Watchlist API (Phase 5).
+ * Watchlist API.
  *
  * Per-user, per-project pinned items. Pins are keyed by `providerItemId` so
  * a pinned item that temporarily falls outside the active scope still

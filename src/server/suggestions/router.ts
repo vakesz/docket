@@ -1,8 +1,7 @@
 /**
- * Suggestions API (Phase 9).
+ * Suggestions API.
  *
- * Two related concerns under one router (matches the migration plan's
- * "fused" note):
+ * Two related concerns under one router:
  *
  *   1. **Suggestion rows** — `duplicate` / `related` / `transition` hints
  *      surfaced to the user. Generation is upstream (sync or agent writes

@@ -21,8 +21,7 @@
  *   - **Dev**: optional. Without it, writes pass through and reads accept
  *     plaintext — but the moment the operator sets the key, new writes are
  *     encrypted; old plaintext rows still decrypt as plaintext until they
- *     are touched. A future re-encrypt script (Phase 11 acceptance) can
- *     bulk-upgrade legacy rows.
+ *     are touched. A future re-encrypt script can bulk-upgrade legacy rows.
  */
 
 import "server-only";

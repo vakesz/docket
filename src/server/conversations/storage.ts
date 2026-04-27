@@ -4,9 +4,6 @@
  * Lives separate from the router so the inbound-changes module
  * (`src/server/inbound-changes/inject.ts`) can reuse `appendMessage`
  * to inject synthetic system messages without going through tRPC.
- *
- * Replaces the Python tree's conversation_repo + message_repo split — one
- * module, one set of queries, no wrapper-of-a-wrapper.
  */
 
 import "server-only";

@@ -6,8 +6,7 @@
  * registry indirection (`getProviderSpec`) plus `buildProviderForUser`. If a
  * router starts importing `@/providers/github/...` directly, the registry
  * stops being load-bearing and adding a new provider becomes a multi-file
- * grep-and-edit. That's the same failure mode the Python tree's
- * `tests/unit/test_import_boundary.py` guards against.
+ * grep-and-edit.
  *
  * Allowed importers of `src/providers/<x>/` modules:
  *   - sibling files inside the same `src/providers/<x>/` package

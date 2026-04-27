@@ -14,8 +14,8 @@
  *      a hundred call sites aren't.
  *
  * If you genuinely need to record a non-proposal action (e.g. project
- * archival in Phase 11), extend `recordAudit` in `executor.ts` and call
- * the helper — don't add a new write site.
+ * archival), extend `recordAudit` in `executor.ts` and call the helper —
+ * don't add a new write site.
  *
  * Allowed callers of `db.audit.create(` / `prisma.audit.create(` /
  * `ctx.db.audit.create(`:

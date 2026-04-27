@@ -7,7 +7,7 @@
  * a "proposed: …" event to the chat UI; the actual provider write only
  * happens when a human clicks confirm in the diff dialog.
  *
- * CLAUDE.md rule 5 (and the arch test `no-provider-write-leak`) keeps
+ * AGENTS.md rule 5 (and the arch test `no-provider-write-leak`) keeps
  * this file from ever calling a `WorkItemProvider` write method.
  *
  * In read-only mode the tool registry strips this entire group — see

@@ -1,12 +1,10 @@
 /**
  * Read-only tools — items, comments, and (when the project is GitHub) PRs,
- * commits, CI. Fused into one file because the Python tree's separate
- * tool_defs / item_tools / pr_tools split was over-organized for the
- * actual call sites.
+ * commits, CI.
  *
  * PR / commit / CI tools route through the registry-backed provider for
  * the project so they stay provider-agnostic — Azure DevOps will satisfy
- * the same WorkItemProvider methods (Phase 9).
+ * the same WorkItemProvider methods.
  */
 
 import "server-only";

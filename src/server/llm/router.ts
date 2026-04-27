@@ -6,7 +6,7 @@ import { mutationProcedure, protectedProcedure, router } from "@/server/trpc";
 /**
  * LLM kinds the picker exposes. The DB column accepts any string so future
  * vendors land without a migration; this list is the *current* known set.
- * At launch only `openai` ships an adapter (Phase 6).
+ * Only `openai` has a wired adapter today.
  */
 const LLM_KIND = z.enum(["openai", "anthropic", "gemini", "bedrock", "mistral", "ollama"]);
 

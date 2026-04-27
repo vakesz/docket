@@ -12,8 +12,8 @@
  * Model defaults to `gpt-5` (our daily driver) but the LlmProvider row's
  * `model` overrides it. Cost is reported in USD cents when usage data is
  * available; the per-million pricing table here is intentionally
- * conservative — refine as the LlmProvider admin gains a per-row pricing
- * field in Phase 11.
+ * conservative — refine when the LlmProvider admin gains a per-row pricing
+ * field.
  */
 
 import OpenAI from "openai";

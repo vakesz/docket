@@ -77,7 +77,7 @@ function ctxFor(ctx: {
 }
 
 /**
- * Proposals API (Phase 4 + Phase 10 role gates).
+ * Proposals API.
  *
  * - Reads (`list`, `get`) live on `projectScopedProcedure` so viewers can see
  *   what the team is staging.

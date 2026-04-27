@@ -1,13 +1,11 @@
 /**
  * Bidirectional contract test for the GitHub state map.
  *
- * Mirrors the Python tree's `tests/unit/test_state_map_reverse.py`:
- * every canonical `ItemState` GitHub commits to supporting must be
- * reachable from at least one provider-native `(state, state_reason)` pair.
+ * Every canonical `ItemState` GitHub commits to supporting must be reachable
+ * from at least one provider-native `(state, state_reason)` pair.
  *
  * Catches accidental drift like "we added a new ItemState in core/types.ts
- * but never taught the GitHub map how to produce it" — the failure mode
- * the Python test was written for after a real such incident.
+ * but never taught the GitHub map how to produce it".
  */
 
 import { describe, expect, it } from "vitest";

@@ -3,11 +3,11 @@
  * `src/server/proposals/executor.ts` and the provider implementation files
  * themselves.
  *
- * Mirrors the Python tree's check that nothing outside `mutation_service`
- * touches `provider.transition` / `patch_description` / `upload_attachment`
- * / `add_comment` / `create_item`. That keeps the proposal-first mutation
- * invariant load-bearing — every provider write is preceded by a Proposal
- * row, a diff render, and a confirm step.
+ * Nothing outside the proposal executor may touch `provider.transition` /
+ * `patchDescription` / `uploadAttachment` / `addComment` / `createItem`.
+ * That keeps the proposal-first mutation invariant load-bearing — every
+ * provider write is preceded by a Proposal row, a diff render, and a
+ * confirm step.
  *
  * Allowed callers of `.transition(`, `.patchDescription(`, `.uploadAttachment(`,
  * `.addComment(`, `.createItem(`:

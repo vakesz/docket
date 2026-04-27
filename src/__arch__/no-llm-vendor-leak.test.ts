@@ -2,12 +2,12 @@
  * Architecture guard: vendor LLM SDKs are quarantined to a single
  * adapter file each.
  *
- * The whole point of `LlmAdapter` (Phase 6) is that the agent loop, the
- * prompt builder, the tool registry, and every UI surface speak only
- * to a vendor-neutral interface. If the `openai` SDK starts being
- * imported anywhere except `src/agent/llm/openai.ts`, that property is
- * silently broken — the next vendor (Anthropic, Gemini, Bedrock, …)
- * lands as a multi-file leak instead of a single sibling adapter.
+ * The whole point of `LlmAdapter` is that the agent loop, the prompt
+ * builder, the tool registry, and every UI surface speak only to a
+ * vendor-neutral interface. If the `openai` SDK starts being imported
+ * anywhere except `src/agent/llm/openai.ts`, that property is silently
+ * broken — the next vendor (Anthropic, Gemini, Bedrock, …) lands as a
+ * multi-file leak instead of a single sibling adapter.
  *
  * The test enumerates `(sdkPackage, allowedFile)` pairs, walks the
  * source tree once, and fails if any file outside its allow-list

@@ -2,12 +2,12 @@
  * Architecture guard: `@octokit/*` may only be imported from
  * `src/providers/github/`.
  *
- * Mirrors the Python tree's `tests/unit/test_import_boundary.py`. The whole
- * point of the provider boundary is that downstream layers (`core/`,
- * `server/`, `agent/`, the UI) speak only to the abstract `WorkItemProvider`
- * — they don't know GitHub exists. If a file outside the GitHub provider
- * package starts importing octokit, this test fails immediately and the
- * fix is to put that code behind a method on the provider interface.
+ * The whole point of the provider boundary is that downstream layers
+ * (`core/`, `server/`, `agent/`, the UI) speak only to the abstract
+ * `WorkItemProvider` — they don't know GitHub exists. If a file outside the
+ * GitHub provider package starts importing octokit, this test fails
+ * immediately and the fix is to put that code behind a method on the
+ * provider interface.
  *
  * Walks the source tree at test time using Node fs; no glob library
  * dependency.

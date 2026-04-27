@@ -11,8 +11,8 @@ import type { db } from "@/server/db";
  *     → the global isDefault LlmProvider row.
  *
  * Returns null when no row at all is configured (the wizard hasn't run /
- * setup is incomplete). Phase 6's `selectAdapterFor` instantiates the
- * actual adapter from this row; Phase 2 just resolves the row.
+ * setup is incomplete). `selectAdapterFor` instantiates the actual adapter
+ * from this row.
  */
 export async function resolveLlmProviderRow(
   prisma: typeof db,

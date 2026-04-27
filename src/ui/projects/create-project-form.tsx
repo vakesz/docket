@@ -6,9 +6,8 @@ import { trpc } from "@/lib/trpc-client";
 type ProviderKind = "github" | "azure_devops";
 
 /**
- * Phase 2 create form: name + provider kind + per-kind scope inputs that
- * assemble into the JSON the server expects. Phase 3 swaps the manual inputs
- * for an OAuth-driven scope picker (list orgs/repos the user can see).
+ * Create form: name + provider kind + per-kind scope inputs that assemble
+ * into the JSON the server expects.
  */
 export function CreateProjectForm() {
   const router = useRouter();

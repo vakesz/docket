@@ -1,10 +1,8 @@
 /**
- * Conversations API (Phase 5).
+ * Conversations API.
  *
- * Phase 5 ships chat-shaped infrastructure with a STUB assistant: each user
- * message echoes back as an assistant message so the UI can be built end-to-
- * end. Phase 6 swaps the stub for the real LLM-driven agent loop without
- * touching this router's public shape.
+ * `postMessage` currently appends a stub assistant echo so the UI can be
+ * exercised end-to-end; the streaming SSE route drives real agent turns.
  *
  * Conversations are per-project and optionally hang off a single item
  * (`itemId`). The same `Message` rows hold both human and synthetic system
@@ -103,8 +101,9 @@ export const conversationsRouter = router({
   }),
 
   /**
-   * Append a user message and (Phase 5 stub) an assistant echo. Returns the
-   * fresh transcript so the client can swap state without a re-fetch.
+   * Append a user message and a stub assistant echo. Returns the fresh
+   * transcript so the client can swap state without a re-fetch. Real
+   * agent turns flow through the SSE streaming route.
    */
   postMessage: projectScopedMutationProcedure
     .input(PostMessageInput)
@@ -115,7 +114,6 @@ export const conversationsRouter = router({
         role: "user",
         content: input.content,
       });
-      // Phase 6 replaces this stub with a streaming agent turn.
       await appendMessage(ctx.db, {
         conversationId: input.conversationId,
         role: "assistant",
@@ -170,5 +168,5 @@ export const conversationsRouter = router({
 function stubReply(userMessage: string): string {
   const trimmed = userMessage.trim();
   const preview = trimmed.length > 200 ? `${trimmed.slice(0, 200)}…` : trimmed;
-  return `(stub assistant — Phase 6 wires the real agent)\n\nYou said: ${preview}`;
+  return `(stub assistant — use the streaming endpoint for real agent turns)\n\nYou said: ${preview}`;
 }

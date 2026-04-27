@@ -192,20 +192,18 @@ function liftRowToCanonical(row: PrismaItem, providerKind: string): Item {
 }
 
 /**
- * Items API (Phase 3, view-filter wiring in Phase 9).
+ * Items API.
  *
  * Reads come straight from the Prisma Item cache so they never need an
  * outbound provider call. The cache is filled by `items.runSync`, which
- * the UI exposes as a "Refresh" button on the items page. Phase 4 wires
- * proposal-first writes; Phase 5 wires real-time inbound updates. Phase 9
- * adds saved-view application — `viewId` resolves to a stored
- * `(stateBucket, assignees, axes)` tuple that narrows the cache the same
- * way inline `bucket`/`assignees`/`axes` would.
+ * the UI exposes as a "Refresh" button on the items page. Saved-view
+ * application — `viewId` resolves to a stored `(stateBucket, assignees,
+ * axes)` tuple that narrows the cache the same way inline
+ * `bucket`/`assignees`/`axes` would.
  *
  * Project membership is enforced by `projectScopedProcedure`, which also
  * injects `ctx.project` so the mutating procedures don't need a second
- * lookup. (`mutationProcedure` and `projectScopedProcedure` will be
- * composed by Phase 10 once the read-only / role gates land.)
+ * lookup.
  */
 export const itemsRouter = router({
   list: projectScopedProcedure.input(ListInput).query(async ({ ctx, input }) => {

@@ -1,5 +1,5 @@
 /**
- * Thin HTTP MCP client wrapper (Phase 8).
+ * Thin HTTP MCP client wrapper.
  *
  * Wraps `@modelcontextprotocol/sdk` so the agent loop can talk to a remote
  * MCP server with one connect → list → call → close cycle per turn. We
@@ -9,8 +9,7 @@
  * and avoids drift between the cached tool schema and what the server
  * currently advertises.
  *
- * stdio is not supported. Per the migration sketch (Phase 8 entry):
- * "stdio support is dropped on purpose" — every MCP server has to be
+ * stdio is intentionally not supported — every MCP server has to be
  * reachable over HTTP / streamable HTTP.
  */
 

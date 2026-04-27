@@ -8,10 +8,10 @@ import { Button } from "@/ui/primitives/button";
  * Sources pane on the project detail page.
  *
  * Sources are author material the agent reads but never writes
- * (CLAUDE.md rule 6, enforced by `src/__arch__/no-source-mutation-tools.test.ts`).
+ * (AGENTS.md rule 6, enforced by `src/__arch__/no-source-mutation-tools.test.ts`).
  * That makes the surface intentionally simple: paste markdown OR upload a
  * `.md`/`.txt`/`.json` file and the body lands in `bodyMd`. Binary upload
- * lives in a later phase, alongside text extraction.
+ * + text extraction is intentionally deferred until a real need shows up.
  *
  * Writes hit `sources.create` / `sources.delete` directly — no proposal
  * pipeline, since there is no agent to confirm against.

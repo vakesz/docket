@@ -5,17 +5,15 @@
  *   body: { content: string }
  *
  * Drives one round of the agent loop and streams `LoopEvent`s back as
- * Server-Sent Events. Unlike the tRPC `conversations.postMessage` stub
- * (Phase 5), this route returns text/event-stream and never blocks on
- * the full assistant response — the browser sees text deltas, tool
- * calls, proposal hand-offs, and `ask_user_question` events as they
- * happen.
+ * Server-Sent Events. Unlike the tRPC `conversations.postMessage` stub,
+ * this route returns text/event-stream and never blocks on the full
+ * assistant response — the browser sees text deltas, tool calls,
+ * proposal hand-offs, and `ask_user_question` events as they happen.
  *
  * Auth + project membership are checked manually here (this route can't
  * compose tRPC middleware), but the underlying access shape is identical
  * to `projectScopedMutationProcedure`: session present, project owned or
- * membership row exists. Read-only mode lands in Phase 10 alongside the
- * tRPC mutation gate.
+ * membership row exists.
  */
 
 import { NextResponse } from "next/server";

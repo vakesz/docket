@@ -21,9 +21,9 @@ import { azureDevOpsProvider } from "@/providers/azure-devops/auth";
 import { decryptSecret } from "@/server/secrets/encryption";
 
 export function buildAuthProvider(row: OauthProviderConfig): Provider | null {
-  // `clientSecret` is encrypted at rest with `SECRETS_KEY` (Phase 11).
-  // Legacy plaintext rows (pre-Phase-11 dev setups) are returned as-is
-  // by `decryptSecret`, so this is a no-op until the operator rolls a key.
+  // `clientSecret` is encrypted at rest with `SECRETS_KEY`. Legacy plaintext
+  // rows are returned as-is by `decryptSecret`, so this is a no-op until the
+  // operator rolls a key.
   const clientSecret = decryptSecret(row.clientSecret);
   switch (row.kind) {
     case "github":

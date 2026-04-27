@@ -3,9 +3,9 @@
  *
  * Project sources (requirements docs, design notes, runbooks) are author
  * material the agent should be able to cite from but never edit. The
- * Python tree had `source_tools.py` with `list_sources` / `read_source` /
- * `search_sources` — same shape here. CLAUDE.md rule 6 (and the arch test
- * `no-provider-write-leak`) keep source writes off the agent surface.
+ * agent gets `list_sources` / `read_source` / `search_sources` only;
+ * AGENTS.md rule 6 (and the arch test `no-source-mutation-tools`) keep
+ * source writes off the agent surface.
  */
 
 import "server-only";

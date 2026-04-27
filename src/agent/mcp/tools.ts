@@ -1,5 +1,5 @@
 /**
- * Adapt configured MCP servers into AgentTool[] (Phase 8).
+ * Adapt configured MCP servers into AgentTool[].
  *
  * Pulls every enabled `McpServerConfig` for the project, lists the tools
  * each one advertises, and turns each remote tool into an `AgentTool` the

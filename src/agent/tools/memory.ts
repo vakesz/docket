@@ -4,8 +4,8 @@
  * Memory entries are per-project key facts the user has saved by hand or
  * staged through `propose_memory_write`. The agent surfaces them on
  * demand rather than baking them into the prompt prefix — that keeps the
- * prefix byte-stable (CLAUDE.md invariant 7) while still making the
- * facts reachable.
+ * prefix byte-stable (AGENTS.md "Keep the prompt prefix byte-stable")
+ * while still making the facts reachable.
  *
  * Mutations (memory_write / memory_delete) live in `memory-mutating.ts` —
  * a separate registry slot so a future "memory writes allowed but provider

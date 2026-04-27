@@ -1,10 +1,10 @@
 /**
  * Setup-status read model.
  *
- * The middleware (Phase 11c) and the (eventually) admin wizard both need
- * the same answer: *has this deployment finished its initial bootstrap?*
- * That answer is "yes" the first time the DB has at least one enabled
- * `LlmProvider` AND at least one enabled `OauthProviderConfig` row.
+ * The middleware and the (eventually) admin wizard both need the same
+ * answer: *has this deployment finished its initial bootstrap?* That answer
+ * is "yes" the first time the DB has at least one enabled `LlmProvider`
+ * AND at least one enabled `OauthProviderConfig` row.
  *
  * To keep middleware fast and stop us from re-deriving on every request,
  * the first observation flips a sticky `setup.complete` global Setting to
@@ -12,9 +12,8 @@
  * — operators who genuinely want to revert can clear the row by hand.
  *
  * The flag also lets the local `bin/seed-dev.ts` short-circuit on a
- * production environment that already finished its wizard, per the
- * Phase 11 spec ("Seed is gated by NODE_ENV !== 'production' and by the
- * absence of setup_complete = true").
+ * production environment that already finished its wizard (seed is gated
+ * by `NODE_ENV !== 'production'` and by the absence of `setup_complete`).
  */
 
 import "server-only";

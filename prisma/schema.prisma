@@ -1,11 +1,7 @@
-// Docket schema — full Phase 2 surface. Every persisted concept lives here:
-// NextAuth tables, multi-tenancy (Project / ProviderConfig), the item cache
-// + comments, conversations + messages, proposals, memory + sources,
-// watchlist, MCP server config, settings, suggestions, command-usage
-// counters, sync cursors. Phase-by-phase routers fill in the read/write
-// paths against these tables; the schema does not move from here forward
-// except to add fields when later phases introduce a feature that demands
-// them.
+// Docket schema. Every persisted concept lives here: NextAuth tables,
+// multi-tenancy (Project / ProviderConfig), the item cache + comments,
+// conversations + messages, proposals, memory + sources, watchlist, MCP
+// server config, settings, suggestions, command-usage counters, sync cursors.
 //
 // Naming conventions:
 // - camelCase fields throughout (Prisma default).
@@ -21,8 +17,8 @@ generator client {
   output   = "../src/db/generated"
 }
 
-// Prisma 7: connection URL lives in prisma.config.ts for migrations and is
-// passed to PrismaClient via a runtime adapter (@prisma/adapter-pg) at boot.
+// Connection URL lives in prisma.config.ts for migrations and is passed to
+// PrismaClient via a runtime adapter (@prisma/adapter-pg) at boot.
 datasource db {
   provider = "postgresql"
 }
@@ -92,9 +88,9 @@ model VerificationToken {
 }
 
 // ----------------------------------------------------------------------------
-// Per-deployment OAuth + LLM config — populated by the Phase 11 admin wizard
-// (Phase 2 ships a dev seed reading .env.local). Multi-row from day one;
-// `kind` accepts future vendors without a migration.
+// Per-deployment OAuth + LLM config. Bootstrap happens via env-driven seed
+// (`bin/seed-dev.ts`); afterwards the operator manages rows from `/admin`.
+// Multi-row from day one; `kind` accepts future vendors without a migration.
 // ----------------------------------------------------------------------------
 
 model OauthProviderConfig {
@@ -105,8 +101,9 @@ model OauthProviderConfig {
   /// Human-readable label shown in the sign-in button + admin list.
   label        String
   clientId     String
-  /// Encrypted at rest with SECRETS_KEY (Phase 11 helper); plaintext today
-  /// because no encryption helper exists yet. Tracked for fixup in Phase 11.
+  /// AES-256-GCM ciphertext (`enc:v1:<iv>:<ct+tag>`) when SECRETS_KEY is set;
+  /// legacy plaintext rows are still readable and re-encrypt on next write.
+  /// See `src/server/secrets/encryption.ts`.
   clientSecret String
   /// Comma-separated scope list. Provider-specific syntax.
   scopes       String   @default("")
@@ -123,11 +120,12 @@ model OauthProviderConfig {
 model LlmProvider {
   id        String   @id @default(cuid())
   /// 'openai' | future vendors ('anthropic', 'gemini', 'bedrock', 'mistral',
-  /// 'ollama', ...). The agent's selectAdapterFor switches on this; Phase 6
-  /// ships the OpenAI adapter, future adapters are one file each.
+  /// 'ollama', ...). The agent's `selectAdapterFor` dispatches on this;
+  /// the OpenAI adapter ships today, future adapters are one file each.
   kind      String
   label     String
-  /// Encrypted at rest with SECRETS_KEY (Phase 11 helper); plaintext today.
+  /// AES-256-GCM ciphertext (`enc:v1:<iv>:<ct+tag>`) when SECRETS_KEY is set;
+  /// legacy plaintext rows are still readable and re-encrypt on next write.
   apiKey    String
   /// Default model for this provider row (e.g. 'gpt-5'). Empty falls back
   /// to the adapter's hardcoded default.
@@ -198,13 +196,14 @@ model Project {
   @@index([providerKind])
 }
 
-/// Per-user role on a project. Phase 10 fills the role permission matrix;
-/// Phase 2 just creates rows so the multi-tenant join is in place.
+/// Per-user role on a project. Roles are 'viewer' | 'member' | 'approver';
+/// the permission matrix is enforced in `src/server/auth-roles.ts` and
+/// referenced by every protected procedure.
 model ProjectMembership {
   id        String   @id @default(cuid())
   projectId String
   userId    String
-  /// 'viewer' | 'member' | 'approver' — Phase 10 wires the permissions.
+  /// 'viewer' | 'member' | 'approver'.
   role      String   @default("member")
   createdAt DateTime @default(now())
 
@@ -297,8 +296,8 @@ model WatchlistEntry {
 // Saved views — per-user, per-project named visual filters
 // ----------------------------------------------------------------------------
 //
-// Phase 9 design: every narrowing dimension is a *visual* (post-cache)
-// filter — sync pulls everything the credentials see, and `view-filter.ts`
+// Every narrowing dimension is a *visual* (post-cache) filter — sync pulls
+// everything the credentials see, and `view-filter.ts`
 // decides what renders. A SavedView captures the three filter axes the
 // product surfaces:
 //   - state bucket (open / closed / all) — over the canonical ItemState enum
@@ -446,7 +445,7 @@ model Proposal {
   /// item_create (the item doesn't exist yet) and memory_* (no item).
   providerItemId String?
   /// Full proposal payload (Item snapshot + the change). Type narrowing
-  /// happens in src/server/proposals/ (Phase 4).
+  /// happens in `src/server/proposals/`.
   payload        Json
   /// 'pending' | 'confirmed' | 'rejected' | 'expired'.
   status         String    @default("pending")
@@ -476,13 +475,15 @@ model McpServerConfig {
   id          String   @id @default(cuid())
   projectId   String
   name        String
-  /// 'http' only at launch (Phase 8). The Python tree's stdio transport is
-  /// dropped for security reasons; this column accepts other transports
-  /// without a migration if we ever revisit that decision.
+  /// 'http' only — stdio transport is intentionally not supported because
+  /// running operator-supplied subprocesses server-side is a security
+  /// problem. Column shape accepts other transports without a migration if
+  /// that decision ever gets revisited.
   transport   String   @default("http")
   url         String
-  /// Optional headers (auth tokens, etc). Encrypted-at-rest deferred to
-  /// Phase 11 alongside other secrets.
+  /// Optional headers (auth tokens, etc). Plaintext at rest today; the
+  /// SECRETS_KEY encryption helper from `src/server/secrets/encryption.ts`
+  /// can be wired here when these start carrying real bearer tokens.
   headersJson Json     @default("{}")
   enabled     Boolean  @default(true)
   createdAt   DateTime @default(now())
@@ -510,7 +511,8 @@ model Setting {
   scope     String
   userId    String?
   projectId String?
-  /// True when value is encrypted with SECRETS_KEY (Phase 11). False today.
+  /// True when `value` is AES-256-GCM ciphertext (`enc:v1:<iv>:<ct+tag>`)
+  /// keyed by SECRETS_KEY. Set per-key by the consumer.
   encrypted Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -530,7 +532,7 @@ model Suggestion {
   id          String    @id @default(cuid())
   projectId   String
   /// Free-text category — the suggestion service decides what these mean.
-  /// 'duplicate' | 'related' | 'transition' at minimum (Phase 9).
+  /// 'duplicate' | 'related' | 'transition' at minimum.
   kind        String
   payload     Json
   createdAt   DateTime  @default(now())
@@ -543,7 +545,7 @@ model Suggestion {
 }
 
 /// Command palette usage counter — floats recently-used commands to the
-/// top of the picker. Phase 9 wires the surface; Phase 2 ships the table.
+/// top of the picker.
 model CommandUsage {
   id         String   @id @default(cuid())
   userId     String

@@ -1,9 +1,8 @@
 /**
  * Architecture guard: the agent has no source-mutating tools.
  *
- * CLAUDE.md rule 6 — "Project sources are read-only for the agent" — is
- * the safety property we want pinned in CI. The Python tree enforced it
- * by file structure; in the TS tree the failure mode is more subtle:
+ * AGENTS.md rule 6 — "Project sources are read-only for the agent" — is
+ * the safety property we want pinned in CI. The failure mode is subtle:
  * someone adds a `propose_create_source` or `edit_source` factory to
  * `src/agent/tools/` thinking it's a small convenience, and now the
  * agent can clobber author material the user pasted in. The arch test
@@ -81,7 +80,7 @@ describe("arch: no source-mutating agent tools", () => {
 
     expect(
       offenders,
-      `Agent tools with source-mutation names (CLAUDE.md rule 6 — sources are human-only):\n  ${offenders
+      `Agent tools with source-mutation names (AGENTS.md rule 6 — sources are human-only):\n  ${offenders
         .map((o) => `${o.file} → ${o.toolName}`)
         .join("\n  ")}`,
     ).toEqual([]);

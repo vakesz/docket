@@ -3,8 +3,8 @@
  *
  * When sync picks up a material change to an item AND the user has a live
  * conversation hanging off that item, drop a synthetic system message into
- * the transcript. The Phase 6 agent loop will see it on its next turn so
- * it doesn't keep reasoning over a stale ticket snapshot.
+ * the transcript. The agent loop will see it on its next turn so it doesn't
+ * keep reasoning over a stale ticket snapshot.
  *
  * Confirm flows write through `refreshCacheFromCanonical` in the executor,
  * not through `runSync`, so any change observed during sync is by

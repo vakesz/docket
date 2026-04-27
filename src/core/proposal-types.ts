@@ -3,9 +3,9 @@
  *
  * Every write in the system — from a tRPC mutation, a confirm modal, or an
  * LLM tool call — flows through a `Proposal` value. Builders, the diff
- * renderer, and the executor live in `src/server/proposals/` (Phase 4); this
- * file exists only so `core/` can reference proposal shapes without dragging
- * in any provider, db, or server code.
+ * renderer, and the executor live in `src/server/proposals/`; this file
+ * exists only so `core/` can reference proposal shapes without dragging in
+ * any provider, db, or server code.
  *
  * The `kind` discriminator strings are part of the wire format — they
  * appear in agent tool replies and in tRPC payloads. Renaming any value is

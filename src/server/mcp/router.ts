@@ -1,5 +1,5 @@
 /**
- * MCP server configuration API (Phase 8).
+ * MCP server configuration API.
  *
  * Per-project HTTP-only MCP servers. Stored in `McpServerConfig`; consumed
  * by `src/agent/mcp/tools.ts` when the agent loop builds the tool
@@ -7,8 +7,7 @@
  * connects on demand at registry-build time and closes at loop end, so
  * there's no daemon to keep in sync with the config table.
  *
- * Headers JSON is plain JSON for now; per-row encryption lands in
- * Phase 11 alongside other secrets-at-rest.
+ * Headers JSON is plain JSON for now; per-row encryption is not yet wired.
  */
 
 import "server-only";

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { getProviderSpec, listProviderSpecs, PROVIDER_SPECS } from "@/server/provider-registry";
 
 describe("provider-registry", () => {
-  it("ships GitHub at Phase 3; Azure DevOps lands at Phase 9", () => {
+  it("exposes GitHub and Azure DevOps in registration order", () => {
     expect(PROVIDER_SPECS.map((s) => s.typeId)).toEqual(["github", "azure_devops"]);
     expect(listProviderSpecs()).toBe(PROVIDER_SPECS);
   });

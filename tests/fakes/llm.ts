@@ -3,7 +3,7 @@
  *
  * The agent loop only sees `LlmAdapter` values, so a hand-scripted fake is
  * the cleanest way to drive deterministic loop tests without ever touching
- * the OpenAI SDK. Mirrors `tests/fakes/llm.py` from the Python tree.
+ * the OpenAI SDK.
  *
  * Usage:
  *
