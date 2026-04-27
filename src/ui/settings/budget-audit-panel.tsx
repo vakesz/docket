@@ -103,8 +103,14 @@ export function BudgetAuditPanel() {
             Save cap
           </button>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-fg-muted">When cap is reached:</span>
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-fg">
+            {action?.label ?? "When cap is reached"}
+          </span>
+          <p className="text-xs text-fg-muted">
+            {action?.description ??
+              "'warn' lets the turn proceed but surfaces a banner; 'block' refuses agent turns until the cap is raised or the calendar month rolls over."}
+          </p>
           <SelectField
             value={typeof action?.value === "string" ? action.value : "warn"}
             disabled={list.isPending || update.isPending}
