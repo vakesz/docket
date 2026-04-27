@@ -11,9 +11,10 @@
  *
  * Model defaults to `gpt-5` (our daily driver) but the LlmProvider row's
  * `model` overrides it. Cost is reported in USD cents when usage data is
- * available; the per-million pricing table here is intentionally
- * conservative — refine when the LlmProvider admin gains a per-row pricing
- * field.
+ * available and the LlmProvider row carries `inputPriceCentsPerMtok` /
+ * `outputPriceCentsPerMtok`. Without prices the cost is left undefined and
+ * budget tracking silently undercounts that turn — fill the price fields
+ * when adding a model.
  */
 
 import OpenAI from "openai";
@@ -26,17 +27,6 @@ import type {
 } from "@/agent/llm/types";
 
 const DEFAULT_MODEL = "gpt-5";
-
-/**
- * Conservative per-million-tokens pricing in USD cents (input, output).
- * Used only when the API doesn't surface a precomputed cost. Keep this
- * table small — wrong is better than overconfident.
- */
-const PRICE_TABLE_CENTS_PER_MTOK: Record<string, { in: number; out: number }> = {
-  "gpt-5": { in: 1250, out: 10000 },
-  "gpt-5-mini": { in: 25, out: 200 },
-  "gpt-5-nano": { in: 5, out: 40 },
-};
 
 export type OpenAiAdapterConfig = {
   apiKey: string;
@@ -55,6 +45,10 @@ export type OpenAiAdapterConfig = {
    * undefined. Set by the registry from `Project.defaultTemperature`.
    */
   defaultTemperature?: number;
+  /** USD cents per million prompt tokens. Null/undefined = no cost reported. */
+  inputPriceCentsPerMtok?: number | null;
+  /** USD cents per million output tokens. Null/undefined = no cost reported. */
+  outputPriceCentsPerMtok?: number | null;
 };
 
 export class OpenAiAdapter implements LlmAdapter {
@@ -63,12 +57,20 @@ export class OpenAiAdapter implements LlmAdapter {
   private readonly client: OpenAI;
   private readonly model: string;
   private readonly defaultTemperature: number | undefined;
+  private readonly inputPriceCentsPerMtok: number | undefined;
+  private readonly outputPriceCentsPerMtok: number | undefined;
 
   constructor(config: OpenAiAdapterConfig) {
     this.label = config.label;
     this.model = config.model && config.model.length > 0 ? config.model : DEFAULT_MODEL;
     this.defaultTemperature =
       typeof config.defaultTemperature === "number" ? config.defaultTemperature : undefined;
+    this.inputPriceCentsPerMtok =
+      typeof config.inputPriceCentsPerMtok === "number" ? config.inputPriceCentsPerMtok : undefined;
+    this.outputPriceCentsPerMtok =
+      typeof config.outputPriceCentsPerMtok === "number"
+        ? config.outputPriceCentsPerMtok
+        : undefined;
     this.client = new OpenAI({
       apiKey: config.apiKey,
       ...(config.baseUrl ? { baseURL: config.baseUrl } : {}),
@@ -169,7 +171,7 @@ export class OpenAiAdapter implements LlmAdapter {
               kind: "usage",
               tokensIn,
               tokensOut,
-              costCents: estimateCostCents(req.model || this.model, tokensIn, tokensOut),
+              costCents: this.estimateCostCents(tokensIn, tokensOut),
             };
           }
           yield { kind: "done" };
@@ -187,6 +189,13 @@ export class OpenAiAdapter implements LlmAdapter {
     } catch (err) {
       yield { kind: "error", message: err instanceof Error ? err.message : String(err) };
     }
+  }
+
+  private estimateCostCents(tokensIn: number, tokensOut: number): number | undefined {
+    const priceIn = this.inputPriceCentsPerMtok;
+    const priceOut = this.outputPriceCentsPerMtok;
+    if (priceIn === undefined || priceOut === undefined) return undefined;
+    return Math.round((tokensIn * priceIn + tokensOut * priceOut) / 1_000_000);
   }
 
   formatToolResult(call: LlmToolCall, result: unknown): LlmToolResult {
@@ -246,10 +255,4 @@ function toResponsesInput(messages: readonly import("@/agent/llm/types").LlmMess
     }
   }
   return out;
-}
-
-function estimateCostCents(model: string, tokensIn: number, tokensOut: number): number | undefined {
-  const price = PRICE_TABLE_CENTS_PER_MTOK[model];
-  if (!price) return undefined;
-  return Math.round((tokensIn * price.in + tokensOut * price.out) / 1_000_000);
 }

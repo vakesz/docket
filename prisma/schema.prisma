@@ -140,6 +140,12 @@ model LlmProvider {
   /// Optional base URL (Azure AI Foundry v1 endpoint, OpenAI-compatible
   /// Ollama endpoint, proxies). Empty = vendor default.
   baseUrl   String   @default("")
+  /// Per-million-tokens prompt-side price in USD cents. Null = unknown,
+  /// in which case `estimateCostCents` returns undefined for any turn the
+  /// API doesn't surface a precomputed cost for, and budget tracking
+  /// silently undercounts. Set both fields when adding a new model.
+  inputPriceCentsPerMtok  Float?
+  outputPriceCentsPerMtok Float?
   /// Whether this row is the global fallback when a project has no
   /// defaultLlmProviderId. At most one row should have this true, but the
   /// constraint is application-level (no DB unique partial index for now).

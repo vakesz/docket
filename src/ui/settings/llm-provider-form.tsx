@@ -13,6 +13,13 @@ import { SelectField } from "@/ui/forms/select-field";
 const KINDS = ["openai", "anthropic", "gemini", "bedrock", "mistral", "ollama"] as const;
 type Kind = (typeof KINDS)[number];
 
+function parsePrice(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return null;
+  const value = Number(trimmed);
+  return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
 export function LlmProviderForm({ canBeDefault }: { canBeDefault: boolean }) {
   const utils = trpc.useUtils();
   const create = trpc.llmProviders.create.useMutation({
@@ -22,6 +29,8 @@ export function LlmProviderForm({ canBeDefault }: { canBeDefault: boolean }) {
       setApiKey("");
       setModel("");
       setBaseUrl("");
+      setInputPrice("");
+      setOutputPrice("");
       setIsDefault(canBeDefault);
       await utils.llmProviders.list.invalidate();
     },
@@ -33,6 +42,8 @@ export function LlmProviderForm({ canBeDefault }: { canBeDefault: boolean }) {
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
+  const [inputPrice, setInputPrice] = useState("");
+  const [outputPrice, setOutputPrice] = useState("");
   const [isDefault, setIsDefault] = useState(canBeDefault);
 
   function onSubmit(e: FormEvent<HTMLFormElement>) {
@@ -43,6 +54,8 @@ export function LlmProviderForm({ canBeDefault }: { canBeDefault: boolean }) {
       apiKey: apiKey.trim(),
       model: model.trim(),
       baseUrl: baseUrl.trim(),
+      inputPriceCentsPerMtok: parsePrice(inputPrice),
+      outputPriceCentsPerMtok: parsePrice(outputPrice),
       isDefault,
     });
   }
@@ -124,6 +137,40 @@ export function LlmProviderForm({ canBeDefault }: { canBeDefault: boolean }) {
           </p>
         </label>
       </div>
+
+      <div className="flex gap-3">
+        <label className="flex flex-1 flex-col gap-1">
+          <span className="text-xs text-fg-muted">Input price (¢ / Mtok)</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step="any"
+            value={inputPrice}
+            onChange={(e) => setInputPrice(e.target.value)}
+            placeholder="200"
+            className={fieldClass}
+          />
+        </label>
+        <label className="flex flex-1 flex-col gap-1">
+          <span className="text-xs text-fg-muted">Output price (¢ / Mtok)</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step="any"
+            value={outputPrice}
+            onChange={(e) => setOutputPrice(e.target.value)}
+            placeholder="800"
+            className={fieldClass}
+          />
+        </label>
+      </div>
+      <p className="-mt-2 text-xs text-fg-muted">
+        USD cents per million tokens. Leave blank if unknown — turns will then be logged with no
+        cost and budget tracking will undercount. Look up vendor pricing and convert to cents (e.g.
+        OpenAI gpt-4.1 input $2 / Mtok = <code className="font-mono">200</code>).
+      </p>
 
       <label className="flex flex-col gap-1">
         <span className="inline-flex items-center gap-2 text-xs text-fg-muted">

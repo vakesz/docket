@@ -13,12 +13,25 @@ import { SelectField } from "@/ui/forms/select-field";
 const KINDS = ["openai", "anthropic", "gemini", "bedrock", "mistral", "ollama"] as const;
 type Kind = (typeof KINDS)[number];
 
+function parsePrice(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return null;
+  const value = Number(trimmed);
+  return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function formatPrice(value: number | null | undefined): string {
+  return typeof value === "number" ? String(value) : "";
+}
+
 type Initial = {
   id: string;
   kind: string;
   label: string;
   model: string;
   baseUrl: string;
+  inputPriceCentsPerMtok: number | null;
+  outputPriceCentsPerMtok: number | null;
 };
 
 export function LlmProviderEditForm({
@@ -44,6 +57,8 @@ export function LlmProviderEditForm({
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState(initial.model);
   const [baseUrl, setBaseUrl] = useState(initial.baseUrl);
+  const [inputPrice, setInputPrice] = useState(formatPrice(initial.inputPriceCentsPerMtok));
+  const [outputPrice, setOutputPrice] = useState(formatPrice(initial.outputPriceCentsPerMtok));
 
   function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -54,6 +69,8 @@ export function LlmProviderEditForm({
       apiKey: apiKey.trim(),
       model: model.trim(),
       baseUrl: baseUrl.trim(),
+      inputPriceCentsPerMtok: parsePrice(inputPrice),
+      outputPriceCentsPerMtok: parsePrice(outputPrice),
     });
   }
 
@@ -125,6 +142,39 @@ export function LlmProviderEditForm({
           </p>
         </label>
       </div>
+
+      <div className="flex gap-3">
+        <label className="flex flex-1 flex-col gap-1">
+          <span className="text-xs text-fg-muted">Input price (¢ / Mtok)</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step="any"
+            value={inputPrice}
+            onChange={(e) => setInputPrice(e.target.value)}
+            placeholder="200"
+            className={fieldClass}
+          />
+        </label>
+        <label className="flex flex-1 flex-col gap-1">
+          <span className="text-xs text-fg-muted">Output price (¢ / Mtok)</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step="any"
+            value={outputPrice}
+            onChange={(e) => setOutputPrice(e.target.value)}
+            placeholder="800"
+            className={fieldClass}
+          />
+        </label>
+      </div>
+      <p className="-mt-2 text-xs text-fg-muted">
+        USD cents per million tokens. Leave blank if unknown — turns will then be logged with no
+        cost and budget tracking will undercount.
+      </p>
 
       {update.error ? <p className={errorMessageClass}>{update.error.message}</p> : null}
 

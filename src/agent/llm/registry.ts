@@ -63,6 +63,8 @@ export function buildAdapter(
         model: row.model || undefined,
         baseUrl: row.baseUrl || undefined,
         defaultTemperature: opts.defaultTemperature ?? undefined,
+        inputPriceCentsPerMtok: row.inputPriceCentsPerMtok,
+        outputPriceCentsPerMtok: row.outputPriceCentsPerMtok,
       });
     default:
       throw new LlmConfigError(

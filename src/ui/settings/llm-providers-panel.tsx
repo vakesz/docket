@@ -68,6 +68,8 @@ export function LlmProvidersPanel() {
                       label: row.label,
                       model: row.model ?? "",
                       baseUrl: row.baseUrl ?? "",
+                      inputPriceCentsPerMtok: row.inputPriceCentsPerMtok ?? null,
+                      outputPriceCentsPerMtok: row.outputPriceCentsPerMtok ?? null,
                     }}
                     onClose={() => setEditingId(null)}
                   />
@@ -80,11 +82,22 @@ export function LlmProvidersPanel() {
                           {row.kind}
                         </span>
                         {!row.enabled ? <span className={badgeClass}>disabled</span> : null}
+                        {row.inputPriceCentsPerMtok === null ||
+                        row.outputPriceCentsPerMtok === null ? (
+                          <span className={badgeClass}>no price</span>
+                        ) : null}
                       </div>
                       <p className="text-xs text-fg-muted">
                         {row.model || "(default model)"}
                         {row.baseUrl ? ` · ${row.baseUrl}` : ""}
                       </p>
+                      {row.inputPriceCentsPerMtok !== null &&
+                      row.outputPriceCentsPerMtok !== null ? (
+                        <p className="text-xs text-fg-muted">
+                          {row.inputPriceCentsPerMtok}¢ in · {row.outputPriceCentsPerMtok}¢ out per
+                          Mtok
+                        </p>
+                      ) : null}
                     </div>
                     <LlmProviderActions
                       id={row.id}

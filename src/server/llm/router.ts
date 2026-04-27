@@ -10,12 +10,21 @@ import { mutationProcedure, protectedProcedure, router } from "@/server/trpc";
  */
 const LLM_KIND = z.enum(["openai", "anthropic", "gemini", "bedrock", "mistral", "ollama"]);
 
+/**
+ * Per-million-tokens price in USD cents. Null clears the value (cost stays
+ * unknown for that provider). The model is non-negative — there's no
+ * legitimate "negative cents per Mtok".
+ */
+const PriceCentsPerMtok = z.number().min(0).max(1_000_000).nullable();
+
 const CreateLlmProviderInput = z.object({
   kind: LLM_KIND,
   label: z.string().min(1).max(80),
   apiKey: z.string().min(1),
   model: z.string().max(120).default(""),
   baseUrl: z.string().max(500).default(""),
+  inputPriceCentsPerMtok: PriceCentsPerMtok.default(null),
+  outputPriceCentsPerMtok: PriceCentsPerMtok.default(null),
   isDefault: z.boolean().default(false),
 });
 
@@ -27,6 +36,8 @@ const UpdateLlmProviderInput = z.object({
   apiKey: z.string().max(500).default(""),
   model: z.string().max(120).default(""),
   baseUrl: z.string().max(500).default(""),
+  inputPriceCentsPerMtok: PriceCentsPerMtok.default(null),
+  outputPriceCentsPerMtok: PriceCentsPerMtok.default(null),
 });
 
 export const llmProvidersRouter = router({
@@ -40,6 +51,8 @@ export const llmProvidersRouter = router({
         label: true,
         model: true,
         baseUrl: true,
+        inputPriceCentsPerMtok: true,
+        outputPriceCentsPerMtok: true,
         isDefault: true,
         enabled: true,
         createdAt: true,
