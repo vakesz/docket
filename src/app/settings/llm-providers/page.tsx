@@ -2,10 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/server/auth";
 import { createCaller } from "@/server/trpc-caller";
-import { LlmProviderActions } from "@/ui/admin/llm-provider-actions";
-import { LlmProviderForm } from "@/ui/admin/llm-provider-form";
+import { LlmProviderActions } from "@/ui/settings/llm-provider-actions";
+import { LlmProviderForm } from "@/ui/settings/llm-provider-form";
 
-export default async function LlmProvidersAdminPage() {
+export default async function LlmProvidersSettingsPage() {
   const session = await auth();
   if (!session?.user) {
     redirect("/");
@@ -25,8 +25,8 @@ export default async function LlmProvidersAdminPage() {
             project hasn&rsquo;t picked its own.
           </p>
         </div>
-        <Link href="/admin" className="text-sm text-fg-muted hover:text-fg">
-          ← Admin
+        <Link href="/settings" className="text-sm text-fg-muted hover:text-fg">
+          ← Settings
         </Link>
       </header>
 

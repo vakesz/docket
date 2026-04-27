@@ -64,7 +64,7 @@ export const SETTINGS_CATALOG = {
     default: false,
     label: "Initial setup complete",
     description:
-      "Sticky bit flipped on the first request that observes at least one LLM provider and at least one OAuth provider. Middleware uses it to decide whether to redirect to /admin/setup. Manually toggle off only when reverting after a destructive admin operation.",
+      "Sticky bit flipped on the first request that observes at least one LLM provider and at least one OAuth provider. Middleware uses it to decide whether to redirect to /setup-required. Manually toggle off only when reverting after a destructive deployment-config operation.",
   },
   "items.stale-after-days": {
     key: "items.stale-after-days",

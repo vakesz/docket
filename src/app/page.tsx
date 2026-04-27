@@ -29,9 +29,6 @@ export default async function Home() {
         <h1 className="text-2xl font-semibold tracking-tight">docket</h1>
         <div className="flex items-center gap-3 text-sm text-zinc-500">
           <span>{session.user.email ?? session.user.name}</span>
-          <Link href="/admin" className="hover:text-zinc-800 dark:hover:text-zinc-200">
-            Admin
-          </Link>
           <Link href="/settings" className="hover:text-zinc-800 dark:hover:text-zinc-200">
             Settings
           </Link>

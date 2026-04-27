@@ -84,9 +84,11 @@ describe("secrets encryption", () => {
   });
 
   it("assertEncryptionConfigured throws with a context label when unset", () => {
-    expect(() => assertEncryptionConfigured("admin/setup")).toThrow(/admin\/setup.*SECRETS_KEY/);
+    expect(() => assertEncryptionConfigured("settings/llm-providers")).toThrow(
+      /settings\/llm-providers.*SECRETS_KEY/,
+    );
     setKey(freshKey());
-    expect(() => assertEncryptionConfigured("admin/setup")).not.toThrow();
+    expect(() => assertEncryptionConfigured("settings/llm-providers")).not.toThrow();
   });
 
   it("empty plaintext stays empty (avoids storing a useless payload)", () => {

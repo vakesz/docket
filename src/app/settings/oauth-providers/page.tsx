@@ -2,8 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/server/auth";
 import { createCaller } from "@/server/trpc-caller";
-import { OauthProviderActions } from "@/ui/admin/oauth-provider-actions";
-import { OauthProviderForm } from "@/ui/admin/oauth-provider-form";
+import { OauthProviderActions } from "@/ui/settings/oauth-provider-actions";
+import { OauthProviderForm } from "@/ui/settings/oauth-provider-form";
 
 const CALLBACK_PATHS: Record<string, string> = {
   github: "/api/auth/callback/github",
@@ -15,7 +15,7 @@ function callbackUrl(kind: string, base: string): string {
   return `${base.replace(/\/$/, "")}${path}`;
 }
 
-export default async function OauthProvidersAdminPage() {
+export default async function OauthProvidersSettingsPage() {
   const session = await auth();
   if (!session?.user) {
     redirect("/");
@@ -34,8 +34,8 @@ export default async function OauthProvidersAdminPage() {
             Sign-in providers. NextAuth rebuilds its provider list per request from these rows.
           </p>
         </div>
-        <Link href="/admin" className="text-sm text-fg-muted hover:text-fg">
-          ← Admin
+        <Link href="/settings" className="text-sm text-fg-muted hover:text-fg">
+          ← Settings
         </Link>
       </header>
 
