@@ -1,22 +1,67 @@
+# Keep the build context clean: nothing built locally is allowed in.
+# Every artifact the runtime image needs is produced inside the builder stage.
+
+# Dependencies (reinstalled in the deps stage from package.json + bun.lock).
 node_modules
+**/node_modules
+
+# Next.js build outputs and caches.
 .next
+out
+.turbo
+.vercel
+
+# Generic build/output dirs that some tools emit.
+build
+dist
+.cache
+
+# TypeScript incremental build artifacts.
+*.tsbuildinfo
+next-env.d.ts
+
+# Prisma client (regenerated inside the builder stage).
+src/db/generated
+
+# Locally-bundled seed (the builder stage rebuilds bin/seed-dev.js from .ts).
+bin/seed-dev.js
+
+# Test / coverage artifacts.
+coverage
+tests
+.vitest
+
+# VCS / IDE / OS noise.
 .git
 .gitignore
-docs
-.claude
-.agent-logs
 .vscode
 .idea
 .DS_Store
+
+# Docs and project metadata not needed inside the runtime image.
+docs
+README.md
+AGENTS.md
+CLAUDE.md
+
+# Local env files. The runtime gets env via docker-compose / env_file.
 .env
 .env.*
 !.env.example
-coverage
-*.tsbuildinfo
-next-env.d.ts
-README.md
-src/db/generated
-tests
+
+# Local Claude Code / agent runtime state.
+.claude
+.agent-logs
+
+# Bun / package-manager caches and logs.
+.bun
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Compose + Docker files don't belong inside the image itself.
 docker-compose.yml
 compose.override.yml
 compose.override.example.yml

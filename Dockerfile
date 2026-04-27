@@ -38,6 +38,13 @@ COPY prisma.config.ts ./prisma.config.ts
 COPY src ./src
 COPY bin ./bin
 
+# Defense-in-depth against a stale .dockerignore: scrub any locally-built
+# artifact that may have slipped into the build context before we generate
+# our own. If these existed in the context, they shouldn't influence the
+# image we ship.
+RUN rm -rf .next out .turbo .vercel build dist src/db/generated bin/seed-dev.js \
+    && find . -name '*.tsbuildinfo' -delete
+
 RUN bunx prisma generate
 RUN bun run build
 # Bundle the bootstrap seed into a single self-contained JS file so the
