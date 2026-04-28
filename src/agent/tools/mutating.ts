@@ -49,7 +49,7 @@ export const proposeTransitionTool: ToolFactory = (ctx) => ({
   def: {
     name: "propose_transition",
     description:
-      "Stage a state transition (start_work | pause | block | needs_info | close_done | close_wontfix | reopen) on the active item. Defaults to the conversation's anchored item; pass providerItemId only to act on a different item. Returns a proposal id — the human still confirms in the UI.",
+      "Stage a state transition on the active item. Pass the transition name in `intent` (one of: start_work | pause | block | needs_info | close_done | close_wontfix | reopen). Defaults to the conversation's anchored item; pass providerItemId only to act on a different item. Returns a proposal id — the human still confirms in the UI.",
     parameters: zodToJsonSchema(
       z.object({
         providerItemId: z.string().min(1).optional(),
@@ -131,7 +131,7 @@ export const proposeCommentTool: ToolFactory = (ctx) => ({
   def: {
     name: "propose_comment",
     description:
-      "Stage a comment on the active item. Defaults to the anchored item; pass providerItemId only to comment on a different item. Comments should add information the description doesn't already contain — a status update, a question, a fix reference, a decision. Avoid restating the description.",
+      "Stage a comment on the active item. Pass the markdown text in `bodyMd` (not `comment`/`body`/`text`). Defaults to the anchored item; pass providerItemId only to comment on a different item. Comments should add information the description doesn't already contain — a status update, a question, a fix reference, a decision. Avoid restating the description.",
     parameters: zodToJsonSchema(
       z.object({
         providerItemId: z.string().min(1).optional(),
@@ -172,7 +172,7 @@ export const proposeNewItemTool: ToolFactory = (ctx) => ({
   def: {
     name: "propose_new_item",
     description:
-      "Stage creation of a new item (epic | feature | story | task | bug). Title is required; descriptionMd, parentId, assignee, tags optional.",
+      "Stage creation of a new item. Pass the kind in `itemKind` (one of: epic | feature | story | task | bug) and the rest under a nested `fields` object: `{ title, descriptionMd?, parentId?, assignee?, tags? }`. Only `title` is required.",
     parameters: zodToJsonSchema(
       z.object({
         itemKind: ItemKindEnum,

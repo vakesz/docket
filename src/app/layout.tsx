@@ -15,7 +15,9 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "docket",
+  // `template` lets child pages export `title: "Foo"` and have Next stitch
+  // in the suffix; `default` covers routes that don't set their own title.
+  title: { default: "docket", template: "%s — docket" },
   description: "Provider-agnostic project tracker",
 };
 

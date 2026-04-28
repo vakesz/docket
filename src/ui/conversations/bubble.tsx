@@ -2,7 +2,7 @@
 
 import { metaLabelClass } from "@/lib/form-classes";
 import { cn } from "@/lib/utils";
-import { Markdown } from "@/ui/markdown/markdown";
+import { MarkdownLazy } from "@/ui/markdown/markdown-lazy";
 
 export function Bubble({
   messageRole,
@@ -21,7 +21,7 @@ export function Bubble({
         {streaming ? " · streaming" : ""}
       </div>
       {text ? (
-        <Markdown source={text} className="text-fg" />
+        <MarkdownLazy source={text} className="text-fg" />
       ) : (
         <p className="text-fg">{streaming ? "…" : ""}</p>
       )}

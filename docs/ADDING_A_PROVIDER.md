@@ -32,11 +32,12 @@ backlog.
 ## 2. Package layout
 
 Built-in providers live under `src/providers/<type-id>/`. The canonical
-layout (mirrors `github/` and `azure-devops/`):
+layout (mirrors `azure-devops/`; `github/` skips `auth.ts` because it
+reuses NextAuth's built-in provider directly):
 
 ```text
 src/providers/<type-id>/
-├── auth.ts            # NextAuth provider builder, OAuth token wiring
+├── auth.ts            # NextAuth provider builder, OAuth token wiring (omit if you reuse a built-in NextAuth provider)
 ├── provider.ts        # WorkItemProvider implementation
 ├── spec.ts            # ProviderSpec — declares fields, axes, factory
 ├── state-map.ts       # provider-native state ↔ canonical ItemState/TransitionIntent
@@ -82,16 +83,20 @@ export interface WorkItemProvider {
   ): Promise<string>;
   addComment(id: string, bodyMd: string): Promise<Comment>;
   createItem(kind: ItemKind, fields: CreateFields): Promise<Item>;
+  setTags(id: string, tags: readonly string[]): Promise<Item>;
 
-  // Optional but recommended — enables the @me visual filter.
-  currentUserIdentity?(): Promise<string | null>;
+  // Required — backs the @me visual filter. Return null when the provider
+  // can't resolve its own identity cheaply; @me then degrades to "no filter".
+  currentUserIdentity(): Promise<string | null>;
 
   // Optional — agent tools fall back gracefully if the provider doesn't
   // have the concept (throw `ProviderError("not supported")`).
-  getPullRequest?(id: string): Promise<PullRequestDetail>;
+  findRelatedPRs?(id: string): Promise<PRMatch[]>;
+  getPullRequest?(prId: string): Promise<PullRequestDetail>;
+  getPullRequestDiff?(prId: string): Promise<PullRequestDiff>;
   getCommit?(sha: string): Promise<CommitDetail>;
-  getCiStatus?(ref: string): Promise<CIStatus>;
-  findRelatedPullRequests?(item: Item): Promise<PRMatch[]>;
+  getCIStatus?(ref: string): Promise<CIStatus>;
+  searchCode?(query: string, limit: number): Promise<CodeSearchResult>;
 }
 ```
 
@@ -182,7 +187,7 @@ export const acmeSpec: ProviderSpec = {
   supportedKinds: ["story", "task", "bug"],
   scopeAxes: [
     { key: "squad", label: "Squad", discoveryStage: "squads" },
-    { key: "component", label: "Component" },  // discoveryStage absent → free-form
+    { key: "component", label: "Component", discoveryStage: null },  // null → free-form
   ],
   axisMatcher: acmeAxisMatcher,     // required iff scopeAxes is non-empty
   axisExtract: acmeAxisExtract,     // required iff scopeAxes is non-empty
@@ -234,8 +239,9 @@ Each axis carries:
 - `key` — wire id stored in `SavedView` and sent over the tRPC wire.
 - `label` — rendered to humans in saved-view editors and chip bars.
 - `discoveryStage` — when set, names a discovery callback that lists
-  candidate values for autocomplete. Leave unset for free-form axes (the
-  UI falls back to a plain text input).
+  candidate values for autocomplete. Set to `null` for free-form axes (the
+  UI falls back to a plain text input). Always required; the field is
+  nullable, not optional.
 
 `axisMatcher` is the view-time predicate the visual filter calls for each
 constrained axis:
@@ -311,8 +317,10 @@ splices it into the spec factory's config as `accessToken`.
 
 ## 8. Registration
 
-**In-tree (built-in):** add the spec to `PROVIDER_SPECS` in
-`src/server/provider-registry.ts`:
+**In-tree (built-in):** add the spec to `PROVIDER_SPECS` and append the
+matching type id to `PROVIDER_TYPE_IDS` in
+`src/server/provider-registry.ts` (the runtime drift check refuses to
+import the module if the two arrays disagree):
 
 ```ts
 import { acmeSpec } from "@/providers/acme/spec";
@@ -322,6 +330,8 @@ export const PROVIDER_SPECS: readonly ProviderSpec[] = [
   azureDevOpsSpec,
   acmeSpec,
 ];
+
+export const PROVIDER_TYPE_IDS = ["github", "azure_devops", "acme"] as const;
 ```
 
 Then add the NextAuth case in `buildAuthProvider` (§7). That's it for
@@ -346,6 +356,9 @@ Architectural guards that should keep passing without changes:
 - `src/__arch__/no-provider-write-leak.test.ts` — fails if any file
   outside `src/server/proposals/executor.ts` and your own provider package
   starts calling provider write methods.
+- `src/__arch__/no-nextauth-provider-leak.test.ts` — fails if a
+  concrete `next-auth/providers/<name>` import lands anywhere outside
+  `src/server/providers/auth-build.ts` or `src/providers/<x>/**`.
 - `src/__arch__/no-octokit-leak.test.ts` (GitHub-specific equivalent) —
   if you bring in a vendor SDK with similar leak risk, add a sibling test
   scoped to your provider's package.
@@ -389,7 +402,8 @@ axis label, that's a missed leak — file it.
   `AxisExtractor`, `ProviderError`/`ProviderUnreachableError`/`ProviderAuthError`.
 - `src/core/types.ts` — `Item`, `ItemKind`, `ItemState`,
   `TransitionIntent`, `CreateFields`, `Comment`, `PullRequestDetail`,
-  `CommitDetail`, `CIStatus`, `PRMatch`.
+  `PullRequestDiff`, `CommitDetail`, `CIStatus`, `PRMatch`,
+  `CodeSearchResult`.
 - `src/server/provider-registry.ts` — `PROVIDER_SPECS`, `getProviderSpec`,
   `listProviderSpecs`.
 - `src/server/providers/build.ts` — `buildProviderForUser` (work-item

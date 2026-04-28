@@ -10,7 +10,7 @@ import {
   DialogPanel,
 } from "@headlessui/react";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { metaLabelClass, metaLabelFaintClass } from "@/lib/form-classes";
 import { formatKind } from "@/lib/format";
 import { shortcut } from "@/lib/platform";
@@ -96,6 +96,11 @@ export function CommandPalette({
   const [open, setOpen] = useState(false);
   const [recents, setRecents] = useState<string[]>(() => loadRecents());
   const [query, setQuery] = useState("");
+  // The combobox input stays bound to `query` (instant typing feedback);
+  // the heavier filter pass that runs against every item/command/proposal
+  // reads `deferredQuery`, letting React skip stale work when the user is
+  // still typing fast.
+  const deferredQuery = useDeferredValue(query);
 
   const router = useRouter();
   const pathname = usePathname();
@@ -377,7 +382,7 @@ export function CommandPalette({
       });
     }
 
-    const q = query.trim().toLowerCase();
+    const q = deferredQuery.trim().toLowerCase();
     const filterEntries = (entries: Entry[]) =>
       q === "" ? entries : entries.filter((e) => e.searchText.toLowerCase().includes(q));
 
@@ -389,7 +394,7 @@ export function CommandPalette({
       pinned: filterEntries(grouped.Pinned),
       items: filterEntries(grouped.Items),
     };
-  }, [commands, recentCommands, recentIds, pinnedItems, itemList, query]);
+  }, [commands, recentCommands, recentIds, pinnedItems, itemList, deferredQuery]);
 
   const totalMatches =
     sections.recent.length +

@@ -30,7 +30,7 @@ export const proposeMemoryWriteTool: ToolFactory = (ctx) => ({
   def: {
     name: "propose_memory_write",
     description:
-      "Stage a project-memory entry (create or update). If memoryId is null a new entry is staged; otherwise the named entry is overwritten. The human reviews the diff and confirms before anything lands.",
+      "Stage a project-memory entry (create or update). Pass `title` (short headline), `bodyMd` (markdown body — not `body`/`content`/`text`), and optional `tags`. If `memoryId` is null a new entry is staged; otherwise the named entry is overwritten. The human reviews the diff and confirms before anything lands.",
     parameters: zodToJsonSchema(
       z.object({
         memoryId: z.string().nullable().default(null),

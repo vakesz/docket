@@ -75,7 +75,10 @@ async function seedOpenAi(db: PrismaClient): Promise<void> {
         kind: "openai",
         label,
         apiKey: writeKey,
-        model: "gpt-5",
+        model: process.env.DEV_OPENAI_MODEL?.trim() || "gpt-5",
+        baseUrl: process.env.DEV_OPENAI_BASE_URL?.trim() || "",
+        inputPriceCentsPerMtok: parsePrice(process.env.DEV_OPENAI_INPUT_PRICE_CENTS_PER_MTOK),
+        outputPriceCentsPerMtok: parsePrice(process.env.DEV_OPENAI_OUTPUT_PRICE_CENTS_PER_MTOK),
         isDefault: anyOther === 0,
         enabled: true,
       },
@@ -86,11 +89,41 @@ async function seedOpenAi(db: PrismaClient): Promise<void> {
     return;
   }
 
-  await db.llmProvider.update({
-    where: { id: existing.id },
-    data: { apiKey: writeKey, enabled: true },
-  });
-  console.log(`[seed-dev] Refreshed LlmProvider(${existing.label}) apiKey.`);
+  // Fill in fields that are still at their schema defaults (empty / null) from
+  // env without stomping admin edits — once a value is in the row, it wins.
+  const envModel = process.env.DEV_OPENAI_MODEL?.trim();
+  const envBaseUrl = process.env.DEV_OPENAI_BASE_URL?.trim();
+  const envInputPrice = parsePrice(process.env.DEV_OPENAI_INPUT_PRICE_CENTS_PER_MTOK);
+  const envOutputPrice = parsePrice(process.env.DEV_OPENAI_OUTPUT_PRICE_CENTS_PER_MTOK);
+
+  const data: Record<string, unknown> = { apiKey: writeKey, enabled: true };
+  const filled: string[] = [];
+  if (envModel && existing.model === "") {
+    data.model = envModel;
+    filled.push("model");
+  }
+  if (envBaseUrl && existing.baseUrl === "") {
+    data.baseUrl = envBaseUrl;
+    filled.push("baseUrl");
+  }
+  if (envInputPrice !== null && existing.inputPriceCentsPerMtok === null) {
+    data.inputPriceCentsPerMtok = envInputPrice;
+    filled.push("inputPriceCentsPerMtok");
+  }
+  if (envOutputPrice !== null && existing.outputPriceCentsPerMtok === null) {
+    data.outputPriceCentsPerMtok = envOutputPrice;
+    filled.push("outputPriceCentsPerMtok");
+  }
+
+  await db.llmProvider.update({ where: { id: existing.id }, data });
+  const extras = filled.length ? ` + filled blanks: ${filled.join(", ")}` : "";
+  console.log(`[seed-dev] Refreshed LlmProvider(${existing.label}) apiKey${extras}.`);
+}
+
+function parsePrice(raw: string | undefined): number | null {
+  if (!raw) return null;
+  const n = Number.parseFloat(raw);
+  return Number.isFinite(n) ? n : null;
 }
 
 async function seedGithubOAuth(db: PrismaClient): Promise<void> {

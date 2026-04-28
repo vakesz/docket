@@ -189,8 +189,9 @@ Next.js App Router  ── server components query tRPC via src/server/trpc-call
         v
 tRPC routers (src/server/routers/index.ts)  ── one per feature (items, conversations,
         |                                       proposals, memory, sources, mcp,
-        |                                       views, settings, llm, oauth, watchlist,
-        |                                       suggestions, projects, analytics, health)
+        |                                       views, settings, setup, llmProviders,
+        |                                       oauthProviders, watchlist, suggestions,
+        |                                       projects, analytics, health)
         |
         +--> per-feature service modules (src/server/<feature>/...)
         |       - reads/writes Prisma via src/server/db.ts
@@ -219,8 +220,10 @@ Forbidden edges (each one has a regex-scanning arch test under `src/__arch__/`):
 - Anyone → `db.audit.create`, except `proposals/executor.ts` (`no-audit-write-leak.test.ts`)
 - Anyone → Octokit, except `src/providers/github/**` (`no-octokit-leak.test.ts`)
 - Anyone → LLM vendor SDKs, except `src/agent/llm/**` (`no-llm-vendor-leak.test.ts`)
+- Anyone → concrete `next-auth/providers/<name>` imports, except `src/server/providers/auth-build.ts` and `src/providers/<x>/**` (`no-nextauth-provider-leak.test.ts`)
 - Agent → source mutation paths (`no-source-mutation-tools.test.ts`)
 - Tool registration order (`tool-registration-order.test.ts`) — pinned because the ordered list contributes to the prompt-cache key.
+- Every `LLM_KINDS` entry must have a `case` in the registry dispatch (`llm-kinds-have-adapters.test.ts`).
 
 For the full contract — invariants, the proposal-first mutation pattern, tRPC procedure layers, tool-registration order, testing conventions — see [AGENTS.md](AGENTS.md).
 

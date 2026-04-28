@@ -58,7 +58,8 @@ bin/generate-secrets.sh                 # mint AUTH_SECRET + SECRETS_KEY into .e
     6. mutating provider tools (`mutating.ts`) — stripped in read-only
     7. memory mutations (`memory-mutating.ts`) — stripped in read-only
     8. out-of-band: `ask_user_question` (`question.ts`) — the loop dispatches it specially but it's still a registered tool
-    9. `web_fetch` (`web-fetch.ts`) — read-only network tool, gated by per-project `web-fetch.enabled`. Pinned at the tail so toggling its presence doesn't shift any earlier tool's slot.
+    9. `web_fetch` (`web-fetch.ts`) — read-only network tool, gated by per-project `web-fetch.enabled`. Pinned after `ask_user_question` so toggling its presence doesn't shift any earlier tool's slot.
+    10. discovery (`discovery.ts`) — read-only tools added after the original cohort (`search_items`, `list_audit`, `get_pull_request_diff`, `search_code`). Pinned at the tail so introducing more later doesn't shift any earlier tool's slot.
 
     Pinned by `src/__arch__/tool-registration-order.test.ts`. Reorder = invalidate every open conversation's prompt cache.
 12. **Postgres `Item` rows are a cache, not the system of record.** Sync runs from the provider into Prisma (`src/server/sync/...`); confirmed writes refresh the cached row from the response inside `confirmProposal`.
@@ -124,8 +125,9 @@ Next.js App Router  ── server components query tRPC via src/server/trpc-call
         v
 tRPC routers (src/server/routers/index.ts)  ── one per feature (items, conversations,
         |                                       proposals, memory, sources, mcp,
-        |                                       views, settings, llm, oauth, watchlist,
-        |                                       suggestions, projects, health)
+        |                                       views, settings, setup, llmProviders,
+        |                                       oauthProviders, watchlist, suggestions,
+        |                                       projects, analytics, health)
         |
         +--> per-feature service modules (src/server/<feature>/...)
         |       - reads/writes Prisma via src/server/db.ts
@@ -152,7 +154,9 @@ Forbidden edges (each one has a regex-scanning arch test under `src/__arch__/`):
 - Anyone → `db.audit.create`, except `proposals/executor.ts` (`no-audit-write-leak.test.ts`)
 - Anyone → Octokit, except `src/providers/github/**` (`no-octokit-leak.test.ts`)
 - Anyone → LLM vendor SDKs, except `src/agent/llm/**` (`no-llm-vendor-leak.test.ts`)
+- Anyone → concrete `next-auth/providers/<name>` imports, except `src/server/providers/auth-build.ts` and `src/providers/<x>/**` (`no-nextauth-provider-leak.test.ts`)
 - Agent → source mutation paths (`no-source-mutation-tools.test.ts`)
+- Every `LLM_KINDS` entry must have a `case` in the registry dispatch (`llm-kinds-have-adapters.test.ts`)
 
 Aspirational direction (consistent with current refactors, not a hard rule):
 
@@ -179,7 +183,7 @@ Aspirational direction (consistent with current refactors, not a hard rule):
 
 - **Layout by intent.** `src/__arch__/` for architectural guards (regex-scanning tests that fail CI on forbidden imports). Co-located `*.test.ts` files for unit/service tests next to the module they cover. Integration tests against a test Postgres go in `tests/` if the surface area grows.
 - **Stack.** Vitest, with `bun run test` driving it. The arch tests are pure file-system scans — no DB, no fixtures. Service tests use Vitest mocking + a per-test Prisma transaction where touching the DB.
-- **Architecture tests are not optional.** `src/__arch__/no-router-provider-import.test.ts`, `no-provider-write-leak.test.ts`, `no-audit-write-leak.test.ts`, `no-octokit-leak.test.ts`, `no-llm-vendor-leak.test.ts`, `no-source-mutation-tools.test.ts`, `tool-registration-order.test.ts`. If they fail, fix the leak — don't relax the test.
+- **Architecture tests are not optional.** `src/__arch__/no-router-provider-import.test.ts`, `no-provider-write-leak.test.ts`, `no-audit-write-leak.test.ts`, `no-octokit-leak.test.ts`, `no-llm-vendor-leak.test.ts`, `no-nextauth-provider-leak.test.ts`, `no-source-mutation-tools.test.ts`, `tool-registration-order.test.ts`, `llm-kinds-have-adapters.test.ts`. If they fail, fix the leak — don't relax the test.
 - **When you change agent tooling, prompt loading, or the proposal executor**, cover both the pure unit and at least one router-level path that exercises the same flow.
 
 ## Linting and Code Style
