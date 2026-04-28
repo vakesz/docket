@@ -8,9 +8,10 @@
  */
 
 import { Octokit } from "@octokit/rest";
-import type { WorkItemProvider } from "@/core/provider";
+import type { ReactionTarget, WorkItemProvider } from "@/core/provider";
 import { ProviderAuthError, ProviderError, ProviderUnreachableError } from "@/core/provider";
 import type {
+  ChangedItem,
   CIStatus,
   CodeSearchResult,
   Comment,
@@ -21,8 +22,10 @@ import type {
   PRMatch,
   PullRequestDetail,
   PullRequestDiff,
+  Reactions,
   TransitionIntent,
 } from "@/core/types";
+import { GITHUB_REACTION_KINDS, type GithubReactionKind } from "@/providers/github/reactions";
 import {
   type GithubIssueState,
   type GithubStateReason,
@@ -84,6 +87,17 @@ function inferKind(labels: readonly string[]): ItemKind {
   return "task";
 }
 
+type GithubReactionsSummary = {
+  "+1"?: number;
+  "-1"?: number;
+  laugh?: number;
+  hooray?: number;
+  confused?: number;
+  heart?: number;
+  rocket?: number;
+  eyes?: number;
+} | null;
+
 type IssueLikePayload = {
   number: number;
   title: string;
@@ -92,11 +106,16 @@ type IssueLikePayload = {
   state_reason?: string | null;
   user?: { login?: string | null } | null;
   assignee?: { login?: string | null } | null;
+  assignees?: ReadonlyArray<{ login?: string | null } | null> | null;
   labels: ReadonlyArray<string | { name?: string | null }>;
   html_url: string;
   repository_url?: string | null;
   created_at: string;
   updated_at: string;
+  closed_at?: string | null;
+  milestone?: { title?: string | null } | null;
+  comments?: number;
+  reactions?: GithubReactionsSummary;
   pull_request?: unknown;
 };
 
@@ -104,6 +123,30 @@ function labelsOf(issue: IssueLikePayload): string[] {
   return issue.labels
     .map((label) => (typeof label === "string" ? label : (label.name ?? "")))
     .filter((name): name is string => Boolean(name));
+}
+
+/**
+ * Extract a `Reactions` count map from a GitHub reaction summary blob.
+ * Returns null when the field is missing entirely (older payload shape);
+ * an empty `{}` when there are no reactions yet.
+ */
+function reactionsOf(raw: GithubReactionsSummary | undefined): Reactions | null {
+  if (!raw) return null;
+  const out: Reactions = {};
+  for (const key of GITHUB_REACTION_KINDS) {
+    const v = raw[key];
+    if (typeof v === "number" && v > 0) out[key] = v;
+  }
+  return out;
+}
+
+function assertGithubReaction(reaction: string): GithubReactionKind {
+  if ((GITHUB_REACTION_KINDS as readonly string[]).includes(reaction)) {
+    return reaction as GithubReactionKind;
+  }
+  throw new ProviderError(
+    `GitHub does not support reaction kind '${reaction}'. Supported: ${GITHUB_REACTION_KINDS.join(", ")}`,
+  );
 }
 
 function wrapOctokitError(err: unknown): never {
@@ -142,6 +185,10 @@ export class GitHubProvider implements WorkItemProvider {
       throw new ProviderError("Refusing to translate a PR as an issue");
     }
     const labels = labelsOf(issue);
+    const assignees = (issue.assignees ?? [])
+      .map((a) => a?.login ?? "")
+      .filter((login): login is string => Boolean(login));
+    const singleAssignee = issue.assignee?.login ?? null;
     return {
       id: makeProviderItemId(this.config.owner, this.config.repo, issue.number),
       kind: inferKind(labels),
@@ -154,12 +201,21 @@ export class GitHubProvider implements WorkItemProvider {
         },
         labels,
       ),
-      assignee: issue.assignee?.login ?? null,
+      assignee: singleAssignee,
+      assignees: assignees.length > 0 ? assignees : singleAssignee ? [singleAssignee] : [],
+      reviewers: [],
+      linkedItemIds: [],
+      reactions: reactionsOf(issue.reactions),
+      milestone: issue.milestone?.title ?? null,
+      iteration: null,
+      area: null,
+      ciSummary: null,
       author: issue.user?.login ?? null,
       parentId: null,
       tags: labels,
       createdAt: new Date(issue.created_at),
       updatedAt: new Date(issue.updated_at),
+      closedAt: issue.closed_at ? new Date(issue.closed_at) : null,
       url: issue.html_url,
       repositoryUrl: `https://github.com/${this.config.owner}/${this.config.repo}`,
       attachments: [],
@@ -176,7 +232,7 @@ export class GitHubProvider implements WorkItemProvider {
     }
   }
 
-  async *listChangesSince(watermark: Date | null): AsyncIterable<Item> {
+  async *listChangesSince(watermark: Date | null): AsyncIterable<ChangedItem> {
     const params: Parameters<typeof this.octokit.issues.listForRepo>[0] = {
       owner: this.config.owner,
       repo: this.config.repo,
@@ -195,12 +251,54 @@ export class GitHubProvider implements WorkItemProvider {
       )) {
         for (const issue of page.data as IssueLikePayload[]) {
           if (issue.pull_request) continue;
-          yield this.toCanonicalItem(issue);
+          const item = this.toCanonicalItem(issue);
+          // Fetch comments inline so the cache stays current without an extra
+          // refresh round-trip from the UI. Skip the call entirely when the
+          // payload's `comments` count is 0 — common path on small issues.
+          let comments: Comment[] | null;
+          if ((issue.comments ?? 0) === 0) {
+            comments = [];
+          } else {
+            try {
+              comments = await this.fetchComments(item.id);
+            } catch {
+              // Don't let one issue's comment fetch fail the whole sync; fall
+              // through to "skip comment reconciliation" so the next refresh
+              // tries again.
+              comments = null;
+            }
+          }
+          yield { item, comments };
         }
       }
     } catch (err) {
       wrapOctokitError(err);
     }
+  }
+
+  private async fetchComments(id: string): Promise<Comment[]> {
+    const { owner, repo, number } = parseProviderItemId(id);
+    const all = await this.octokit.paginate(this.octokit.issues.listComments, {
+      owner,
+      repo,
+      issue_number: number,
+      per_page: 100,
+    });
+    return all.map((c): Comment => {
+      const created = new Date(c.created_at);
+      const updated = c.updated_at ? new Date(c.updated_at) : null;
+      const reactions = reactionsOf((c as { reactions?: GithubReactionsSummary }).reactions);
+      return {
+        id: String(c.id),
+        itemId: id,
+        author: c.user?.login ?? "",
+        bodyMd: c.body ?? "",
+        createdAt: created,
+        updatedAt: updated,
+        edited: updated ? updated.getTime() > created.getTime() : false,
+        reactions,
+      };
+    });
   }
 
   async getItem(id: string): Promise<Item> {
@@ -214,23 +312,8 @@ export class GitHubProvider implements WorkItemProvider {
   }
 
   async getComments(id: string): Promise<Comment[]> {
-    const { owner, repo, number } = parseProviderItemId(id);
     try {
-      const all = await this.octokit.paginate(this.octokit.issues.listComments, {
-        owner,
-        repo,
-        issue_number: number,
-        per_page: 100,
-      });
-      return all.map(
-        (c): Comment => ({
-          id: String(c.id),
-          itemId: id,
-          author: c.user?.login ?? "",
-          bodyMd: c.body ?? "",
-          createdAt: new Date(c.created_at),
-        }),
-      );
+      return await this.fetchComments(id);
     } catch (err) {
       wrapOctokitError(err);
     }
@@ -304,12 +387,124 @@ export class GitHubProvider implements WorkItemProvider {
         body: bodyMd,
       });
       const c = res.data;
+      const created = new Date(c.created_at);
+      const updated = c.updated_at ? new Date(c.updated_at) : null;
       return {
         id: String(c.id),
         itemId: id,
         author: c.user?.login ?? "",
         bodyMd: c.body ?? "",
-        createdAt: new Date(c.created_at),
+        createdAt: created,
+        updatedAt: updated,
+        edited: updated ? updated.getTime() > created.getTime() : false,
+        reactions: reactionsOf((c as { reactions?: GithubReactionsSummary }).reactions),
+      };
+    } catch (err) {
+      wrapOctokitError(err);
+    }
+  }
+
+  async addReaction(target: ReactionTarget, reaction: string): Promise<{ reactions: Reactions }> {
+    const content = assertGithubReaction(reaction);
+    try {
+      if (target.kind === "item") {
+        const { owner, repo, number } = parseProviderItemId(target.id);
+        await this.octokit.reactions.createForIssue({
+          owner,
+          repo,
+          issue_number: number,
+          content,
+        });
+        const updated = await this.octokit.issues.get({ owner, repo, issue_number: number });
+        return {
+          reactions:
+            reactionsOf((updated.data as { reactions?: GithubReactionsSummary }).reactions) ?? {},
+        };
+      }
+      const commentNumber = Number.parseInt(target.id, 10);
+      await this.octokit.reactions.createForIssueComment({
+        owner: this.config.owner,
+        repo: this.config.repo,
+        comment_id: commentNumber,
+        content,
+      });
+      const refreshed = await this.octokit.issues.getComment({
+        owner: this.config.owner,
+        repo: this.config.repo,
+        comment_id: commentNumber,
+      });
+      return {
+        reactions:
+          reactionsOf((refreshed.data as { reactions?: GithubReactionsSummary }).reactions) ?? {},
+      };
+    } catch (err) {
+      wrapOctokitError(err);
+    }
+  }
+
+  async removeReaction(
+    target: ReactionTarget,
+    reaction: string,
+  ): Promise<{ reactions: Reactions }> {
+    // GitHub's reaction-delete endpoints take a reaction id, not a (target,
+    // content) pair. We list the user's reactions on the target, find the one
+    // matching `reaction`, and DELETE it. The list is small (one row per
+    // user/content combination), so the round-trip is cheap.
+    const content = assertGithubReaction(reaction);
+    try {
+      if (target.kind === "item") {
+        const { owner, repo, number } = parseProviderItemId(target.id);
+        const me = await this.octokit.users.getAuthenticated();
+        const myLogin = me.data.login;
+        const reactions = await this.octokit.paginate(this.octokit.reactions.listForIssue, {
+          owner,
+          repo,
+          issue_number: number,
+          per_page: 100,
+          content,
+        });
+        const mine = reactions.find((r) => r.user?.login === myLogin);
+        if (mine) {
+          await this.octokit.reactions.deleteForIssue({
+            owner,
+            repo,
+            issue_number: number,
+            reaction_id: mine.id,
+          });
+        }
+        const updated = await this.octokit.issues.get({ owner, repo, issue_number: number });
+        return {
+          reactions:
+            reactionsOf((updated.data as { reactions?: GithubReactionsSummary }).reactions) ?? {},
+        };
+      }
+      const commentNumber = Number.parseInt(target.id, 10);
+      const me = await this.octokit.users.getAuthenticated();
+      const myLogin = me.data.login;
+      const reactions = await this.octokit.paginate(this.octokit.reactions.listForIssueComment, {
+        owner: this.config.owner,
+        repo: this.config.repo,
+        comment_id: commentNumber,
+        per_page: 100,
+        content,
+      });
+      const mine = reactions.find((r) => r.user?.login === myLogin);
+      if (mine) {
+        await this.octokit.reactions.deleteForIssueComment({
+          owner: this.config.owner,
+          repo: this.config.repo,
+          comment_id: commentNumber,
+          reaction_id: mine.id,
+        });
+      }
+      const refreshed = await this.octokit.issues.getComment({
+        owner: this.config.owner,
+        repo: this.config.repo,
+        comment_id: commentNumber,
+      });
+      return {
+        reactions:
+          reactionsOf((refreshed.data as { reactions?: GithubReactionsSummary }).reactions) ?? {},
       };
     } catch (err) {
       wrapOctokitError(err);

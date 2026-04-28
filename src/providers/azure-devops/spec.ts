@@ -135,4 +135,10 @@ export const azureDevOpsSpec: ProviderSpec = {
   ],
   axisMatcher,
   axisExtract,
+  capabilities: {
+    supportedReactions: [],
+    ciStatus: false,
+    pullRequestDiffs: false,
+    linkedItems: true,
+  },
 };

@@ -61,15 +61,22 @@ const WebFetchAllowedHostsSchema = z.array(z.string().min(1).max(253)).max(200);
 // pulling a multi-GB payload into the agent context.
 const WebFetchMaxBytesSchema = z.number().int().min(64_000).max(8_000_000);
 
-// Hardcoded eligibility list for auto-accept. Memory writes/deletes only
-// touch local DB rows — no provider-side blast radius, no third-party
-// visibility, and the human can manually delete a memory entry afterwards.
-// Everything else — state changes, description rewrites, comments, item
-// creation, tag/label edits, assignee changes — is deliberately NOT eligible.
-// Comments and labels feed external notifications, and reassignment changes
-// who's accountable; those need human judgement on every staging. Adding a
-// kind here is a security review event.
-const AUTO_ACCEPT_ELIGIBLE_KINDS = ["memory_write", "memory_delete"] as const;
+// Hardcoded eligibility list for auto-accept. The kinds here are restricted
+// to those the user can low-risk emit through the UI as direct interactions:
+// memory writes/deletes (local DB only, no provider blast radius), comment
+// adds and reaction toggles (Tier-A enrichment — additive, easy to delete
+// from the provider side, never silent state changes). Everything else —
+// state transitions, description rewrites, item creation, tag/label edits,
+// assignee changes — is deliberately NOT eligible. Origin-aware: the executor
+// also gates on `Proposal.origin === "ui"` so agent-staged proposals never
+// auto-confirm regardless of the policy. Adding a kind here is a security
+// review event.
+const AUTO_ACCEPT_ELIGIBLE_KINDS = [
+  "memory_write",
+  "memory_delete",
+  "comment_add",
+  "reaction_toggle",
+] as const;
 export const AUTO_ACCEPT_ELIGIBLE_KINDS_LIST: readonly string[] = AUTO_ACCEPT_ELIGIBLE_KINDS;
 const AutoAcceptKindsSchema = z
   .array(z.enum(AUTO_ACCEPT_ELIGIBLE_KINDS))
@@ -272,10 +279,10 @@ export const SETTINGS_CATALOG = {
     key: "proposals.auto-accept-kinds",
     scope: "project",
     schema: AutoAcceptKindsSchema,
-    default: [] as string[],
+    default: ["comment_add", "reaction_toggle"] as string[],
     label: "Auto-accept proposals (per kind)",
     description:
-      "Proposal kinds that confirm automatically without a human tap. Only memory writes/deletes are eligible — they're local DB only, no provider write. Everything that touches the provider (state changes, descriptions, comments, labels/tags, assignee changes, new items) always requires explicit human review. Read-only mode still wins.",
+      "Proposal kinds that confirm automatically without a human tap when the user originates them in the UI. Eligible: memory writes/deletes (local DB only) and Tier-A enrichment (comment_add, reaction_toggle — additive, reversible). State changes, descriptions, labels/tags, assignee changes, and new items always require explicit review. Agent-staged proposals never auto-confirm regardless of this list. Read-only mode still wins.",
   },
 } as const satisfies Record<string, SettingDef<z.ZodTypeAny>>;
 

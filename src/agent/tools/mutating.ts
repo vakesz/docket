@@ -35,7 +35,12 @@ const ItemKindEnum = z.enum(ITEM_KINDS);
 const TransitionIntentEnum = z.enum(TRANSITION_INTENTS);
 
 function builderCtx(ctx: Parameters<ToolFactory>[0]) {
-  return { db: ctx.db, projectId: ctx.projectId, userId: ctx.userId };
+  return {
+    db: ctx.db,
+    projectId: ctx.projectId,
+    userId: ctx.userId,
+    origin: "agent" as const,
+  };
 }
 
 function resolveProviderItemId(

@@ -65,6 +65,16 @@ export type TagsChangeDiff = {
   removed: readonly string[];
 };
 
+export type ReactionToggleDiff = {
+  kind: "reaction_toggle";
+  itemId: string;
+  itemTitle: string;
+  targetKind: "item" | "comment";
+  targetId: string;
+  reaction: string;
+  op: "add" | "remove";
+};
+
 export type MemoryWriteDiff = {
   kind: "memory_write";
   memoryId: string | null;
@@ -87,6 +97,7 @@ export type ProposalDiff =
   | ItemCreateDiff
   | CommentAddDiff
   | TagsChangeDiff
+  | ReactionToggleDiff
   | MemoryWriteDiff
   | MemoryDeleteDiff;
 
@@ -117,6 +128,7 @@ export function isEmptyDiff(diff: ProposalDiff): boolean {
     case "item_create":
     case "memory_delete":
     case "attachment_upload":
+    case "reaction_toggle":
       return false;
   }
 }
@@ -163,6 +175,16 @@ export function diffOf(proposal: Proposal): ProposalDiff {
         itemId: proposal.item.id,
         itemTitle: proposal.item.title,
         bodyMd: proposal.bodyMd,
+      };
+    case "reaction_toggle":
+      return {
+        kind: "reaction_toggle",
+        itemId: proposal.item.id,
+        itemTitle: proposal.item.title,
+        targetKind: proposal.targetKind,
+        targetId: proposal.targetId,
+        reaction: proposal.reaction,
+        op: proposal.op,
       };
     case "tags_change": {
       const beforeSet = new Set(proposal.item.tags.map((t) => t.toLowerCase()));

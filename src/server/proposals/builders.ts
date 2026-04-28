@@ -23,6 +23,8 @@ import type {
   MemoryDeleteProposal,
   MemoryWriteProposal,
   Proposal,
+  ProposalOrigin,
+  ReactionToggleProposal,
   StateChangeProposal,
   TagsChangeProposal,
 } from "@/core/proposal-types";
@@ -31,10 +33,18 @@ import type { Prisma, Proposal as ProposalRow } from "@/db/generated/client";
 import type { db as Db } from "@/server/db";
 import { snapshotFromRow } from "@/server/proposals/item-snapshot";
 
+/**
+ * Caller context for proposal builders. `origin` distinguishes a human button
+ * click (`"ui"`) from a staged LLM tool call (`"agent"`); the executor's
+ * `maybeAutoAccept` allows auto-confirm only on UI-origin rows so the agent
+ * can never bypass the human-in-the-loop gate. `origin` is persisted on the
+ * `Proposal` row so an audit query later can answer "who staged this".
+ */
 type ProposalContext = {
   db: typeof Db;
   projectId: string;
   userId: string;
+  origin: ProposalOrigin;
 };
 
 function payloadOf(proposal: Proposal): Record<string, unknown> {
@@ -55,6 +65,7 @@ async function persist(
       projectId: ctx.projectId,
       userId: ctx.userId,
       kind: draft.kind,
+      origin: ctx.origin,
       providerItemId,
       payload: payloadOf({ id: "", ...draft } as Proposal) as Prisma.InputJsonValue,
       status: "pending",
@@ -253,6 +264,29 @@ export async function proposeNewItem(
     fields: args.fields,
   };
   return persist(ctx, draft, null);
+}
+
+export async function proposeReactionToggle(
+  ctx: ProposalContext,
+  args: {
+    providerItemId: string;
+    targetKind: "item" | "comment";
+    targetId: string;
+    reaction: string;
+    op: "add" | "remove";
+  },
+): Promise<ProposalRow> {
+  const row = await loadCachedItem(ctx, args.providerItemId);
+  const item = snapshotFromRow(row);
+  const draft: Omit<ReactionToggleProposal, "id"> = {
+    kind: "reaction_toggle",
+    item,
+    targetKind: args.targetKind,
+    targetId: args.targetId,
+    reaction: args.reaction,
+    op: args.op,
+  };
+  return persist(ctx, draft, args.providerItemId);
 }
 
 export async function proposeMemoryWrite(

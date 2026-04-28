@@ -9,7 +9,7 @@ import { asPlainObject } from "@/lib/json";
 import { injectExternalChange, materialDiff } from "@/server/inbound-changes/inject";
 import { getProviderSpec } from "@/server/provider-registry";
 import { buildProviderForUser } from "@/server/providers/build";
-import { runFullSync, runIncrementalSync, toItemRow } from "@/server/sync";
+import { reconcileComments, runFullSync, runIncrementalSync, toItemRow } from "@/server/sync";
 import { projectIdSchema, projectScopedProcedure, router, userIdOrThrow } from "@/server/trpc";
 
 const BacklogBucketEnum = z.enum(BACKLOG_BUCKETS);
@@ -302,6 +302,7 @@ export const itemsRouter = router({
         parentId: true,
         tags: true,
         url: true,
+        reactions: true,
         createdAt: true,
         updatedAt: true,
         syncedAt: true,
@@ -309,8 +310,10 @@ export const itemsRouter = router({
           orderBy: [{ createdAt: "asc" }],
           select: {
             id: true,
+            providerCommentId: true,
             author: true,
             bodyMd: true,
+            reactions: true,
             createdAt: true,
           },
         },
@@ -433,32 +436,7 @@ export const itemsRouter = router({
     }
 
     const comments = await provider.getComments(cached.providerItemId);
-    if (comments.length > 0) {
-      await ctx.db.$transaction(
-        comments.map((c) =>
-          ctx.db.comment.upsert({
-            where: {
-              itemId_providerCommentId: {
-                itemId: upserted.id,
-                providerCommentId: c.id,
-              },
-            },
-            create: {
-              itemId: upserted.id,
-              providerCommentId: c.id,
-              author: c.author,
-              bodyMd: c.bodyMd,
-              createdAt: c.createdAt,
-            },
-            update: {
-              author: c.author,
-              bodyMd: c.bodyMd,
-              createdAt: c.createdAt,
-            },
-          }),
-        ),
-      );
-    }
+    await reconcileComments(ctx.db, upserted.id, comments);
 
     return { commentsCount: comments.length, inboundConversations };
   }),

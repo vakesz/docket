@@ -10,12 +10,22 @@ const baseClass =
 const inactiveClass = "border-border bg-surface text-fg hover:bg-surface-alt";
 const activeClass = "border-border bg-surface-alt text-fg hover:bg-surface";
 
+const ghostClass =
+  "inline-flex h-7 w-7 items-center justify-center rounded-md text-fg-muted hover:bg-surface-alt hover:text-fg disabled:cursor-not-allowed disabled:opacity-60 aria-pressed:bg-surface-alt aria-pressed:text-fg";
+
+/**
+ * Pin/unpin toggle. `compact` collapses to a borderless icon-only button
+ * for the detail header utility cluster; the full pill stays for places
+ * that want the label (backlog rows, etc.).
+ */
 export function PinButton({
   projectId,
   providerItemId,
+  compact = false,
 }: {
   projectId: string;
   providerItemId: string;
+  compact?: boolean;
 }) {
   const utils = trpc.useUtils();
   const status = trpc.watchlist.isPinned.useQuery({ projectId, providerItemId }, { staleTime: 0 });
@@ -34,6 +44,30 @@ export function PinButton({
   const label = pinned ? "Unpin" : "Pin";
   const Icon = pinned ? PinOff : Pin;
 
+  const onClick = () => {
+    if (pinned) {
+      unpin.mutate({ projectId, providerItemId });
+    } else {
+      pin.mutate({ projectId, providerItemId });
+    }
+  };
+
+  if (compact) {
+    return (
+      <Button
+        type="button"
+        aria-pressed={pinned}
+        aria-label={label}
+        disabled={busy}
+        title={busy ? "…" : label}
+        className={ghostClass}
+        onClick={onClick}
+      >
+        <Icon aria-hidden="true" className="size-4" />
+      </Button>
+    );
+  }
+
   return (
     <Button
       type="button"
@@ -41,13 +75,7 @@ export function PinButton({
       disabled={busy}
       title={busy ? "…" : label}
       className={cn(baseClass, pinned ? activeClass : inactiveClass)}
-      onClick={() => {
-        if (pinned) {
-          unpin.mutate({ projectId, providerItemId });
-        } else {
-          pin.mutate({ projectId, providerItemId });
-        }
-      }}
+      onClick={onClick}
     >
       <Icon aria-hidden="true" className="size-3" />
       {busy ? "…" : label}

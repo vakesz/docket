@@ -23,7 +23,12 @@ import { proposeMemoryDelete, proposeMemoryWrite } from "@/server/proposals/buil
 import { maybeAutoAccept } from "@/server/proposals/executor";
 
 function builderCtx(ctx: Parameters<ToolFactory>[0]) {
-  return { db: ctx.db, projectId: ctx.projectId, userId: ctx.userId };
+  return {
+    db: ctx.db,
+    projectId: ctx.projectId,
+    userId: ctx.userId,
+    origin: "agent" as const,
+  };
 }
 
 export const proposeMemoryWriteTool: ToolFactory = (ctx) => ({

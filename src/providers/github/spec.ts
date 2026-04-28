@@ -14,6 +14,7 @@
 
 import type { LabelTemplate, ProviderSpec } from "@/core/provider";
 import { GitHubProvider } from "@/providers/github/provider";
+import { GITHUB_REACTION_KINDS } from "@/providers/github/reactions";
 
 const labelTemplate: LabelTemplate = (config) => {
   const owner = typeof config.owner === "string" ? config.owner.trim() : "";
@@ -64,4 +65,10 @@ export const githubSpec: ProviderSpec = {
   scopeAxes: [],
   axisMatcher: null,
   axisExtract: null,
+  capabilities: {
+    supportedReactions: GITHUB_REACTION_KINDS,
+    ciStatus: true,
+    pullRequestDiffs: true,
+    linkedItems: true,
+  },
 };

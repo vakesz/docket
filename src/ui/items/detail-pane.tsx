@@ -1,15 +1,15 @@
-import { ExternalLink } from "lucide-react";
+import { Clock, ExternalLink, GitBranch, Tag, User, UserX } from "lucide-react";
 import Link from "next/link";
 import type { ItemKind, ItemState } from "@/core/types";
 import { ITEM_KINDS, ITEM_STATES } from "@/core/types";
 import { metaLabelClass } from "@/lib/form-classes";
 import { displayTag, formatKind, formatRelative, providerProfileUrl } from "@/lib/format";
-import { cn } from "@/lib/utils";
 import { ChatToggleButton } from "@/ui/items/chat-toggle-button";
 import { CommentComposer } from "@/ui/items/comment-composer";
 import { CopyIdButton } from "@/ui/items/copy-id-button";
 import { FreshnessStamp } from "@/ui/items/freshness";
 import { PinButton } from "@/ui/items/pin-button";
+import { ReactionRow } from "@/ui/items/reaction-row";
 import { RecentRecorder } from "@/ui/items/recent-recorder";
 import { RefreshItemButton } from "@/ui/items/refresh-item-button";
 import { StatePill } from "@/ui/items/state-pill";
@@ -19,8 +19,10 @@ import { Markdown } from "@/ui/markdown/markdown";
 
 type Comment = {
   id: string;
+  providerCommentId: string;
   author: string | null;
   bodyMd: string;
+  reactions: unknown;
   createdAt: Date;
 };
 
@@ -36,6 +38,7 @@ type DetailItem = {
   tags: string[];
   url: string | null;
   descriptionMd: string | null;
+  reactions: unknown;
   createdAt: Date | null;
   updatedAt: Date;
   comments: Comment[];
@@ -53,30 +56,36 @@ type DetailItem = {
 export function DetailPane({
   projectId,
   providerKind,
+  capabilities,
   item,
   staleThresholdDays,
 }: {
   projectId: string;
   providerKind: string | null;
+  capabilities: { supportedReactions: readonly string[] };
   item: DetailItem;
   staleThresholdDays: number | null;
 }) {
   const authorProfileUrl = providerProfileUrl(providerKind, item.author);
+  const assigneeProfileUrl = providerProfileUrl(providerKind, item.assignee);
   return (
     <div className="flex h-full flex-col overflow-auto bg-bg">
       <RecentRecorder projectId={projectId} itemId={item.id} />
       <header className="flex flex-col gap-3 border-b border-border p-4">
+        {/* Row 1: chips left, utility cluster + primary CTAs right */}
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <span className={metaLabelClass}>{formatKind(item.kind)}</span>
           <StatePill state={item.state} />
           <CopyIdButton value={item.providerItemId} />
-          <span className="inline-flex items-center gap-1">
-            <span className="font-mono text-[10px] text-fg-faint">Updated</span>
+          <span className="ml-auto inline-flex items-center gap-1 text-fg-faint">
+            <span className="font-mono text-[10px]">Updated</span>
             <FreshnessStamp updatedAt={item.updatedAt} thresholdDays={staleThresholdDays} />
           </span>
-          <div className="ml-auto flex items-center gap-2">
-            <PinButton projectId={projectId} providerItemId={item.providerItemId} />
-            <RefreshItemButton projectId={projectId} itemId={item.id} />
+          <div className="flex items-center gap-1">
+            <PinButton projectId={projectId} providerItemId={item.providerItemId} compact />
+            <RefreshItemButton projectId={projectId} itemId={item.id} compact />
+          </div>
+          <div className="flex items-center gap-2">
             <SuggestActionButton
               kind={
                 (ITEM_KINDS as readonly string[]).includes(item.kind)
@@ -95,77 +104,99 @@ export function DetailPane({
             <ChatToggleButton />
           </div>
         </div>
-        <h1 className="text-lg font-semibold leading-snug text-fg">{item.title}</h1>
-        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs text-fg-muted">
-          {item.author && (
-            <>
-              <dt className={metaLabelClass}>Opened by</dt>
-              <dd className="text-fg">
+
+        {/* Rows 2 + 3: title and meta — meta sits tight under the title (mt-1) */}
+        <div className="flex flex-col gap-1">
+          <h1 className="text-lg font-semibold leading-snug text-fg">{item.title}</h1>
+
+          {/* inline meta line — icons replace dl labels, missing fields omitted */}
+          <ul className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-muted">
+            {item.author ? (
+              <li className="inline-flex items-center gap-1">
+                <User aria-hidden="true" className="size-3" />
+                <span className="sr-only">Opened by</span>
                 {authorProfileUrl ? (
                   <a
                     href={authorProfileUrl}
                     target="_blank"
                     rel="noreferrer noopener"
-                    className="text-accent hover:underline"
+                    className="text-fg hover:text-accent hover:underline"
                   >
                     {item.author}
                   </a>
                 ) : (
-                  item.author
+                  <span className="text-fg">{item.author}</span>
                 )}
-              </dd>
-            </>
-          )}
-          {item.createdAt && (
-            <>
-              <dt className={metaLabelClass}>Opened</dt>
-              <dd className="text-fg">
+              </li>
+            ) : null}
+            {item.createdAt ? (
+              <li className="inline-flex items-center gap-1">
+                <Clock aria-hidden="true" className="size-3" />
+                <span className="sr-only">Opened</span>
                 <time
                   dateTime={item.createdAt.toISOString()}
                   title={item.createdAt.toLocaleString()}
                 >
-                  {formatRelative(item.createdAt)}
+                  opened {formatRelative(item.createdAt)}
                 </time>
-              </dd>
-            </>
-          )}
-          <dt className={metaLabelClass}>Assignee</dt>
-          <dd className={cn(!item.assignee && "italic text-fg-faint")}>
-            {item.assignee ?? "Unassigned"}
-          </dd>
-          {item.parentId && (
-            <>
-              <dt className={metaLabelClass}>Parent</dt>
-              <dd>
+              </li>
+            ) : null}
+            <li className="inline-flex items-center gap-1">
+              {item.assignee ? (
+                <>
+                  <User aria-hidden="true" className="size-3" />
+                  <span className="sr-only">Assignee</span>
+                  {assigneeProfileUrl ? (
+                    <a
+                      href={assigneeProfileUrl}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="text-fg hover:text-accent hover:underline"
+                    >
+                      {item.assignee}
+                    </a>
+                  ) : (
+                    <span className="text-fg">{item.assignee}</span>
+                  )}
+                </>
+              ) : (
+                <>
+                  <UserX aria-hidden="true" className="size-3" />
+                  <span className="italic text-fg-faint">unassigned</span>
+                </>
+              )}
+            </li>
+            {item.parentId ? (
+              <li className="inline-flex items-center gap-1">
+                <GitBranch aria-hidden="true" className="size-3" />
+                <span className="sr-only">Parent</span>
                 <Link
                   href={`/projects/${projectId}/items/${item.parentId}`}
                   className="text-accent hover:underline"
                 >
-                  Parent: {item.parentId}
+                  {item.parentId}
                 </Link>
-              </dd>
-            </>
-          )}
-          {item.tags.length > 0 && (
-            <>
-              <dt className={metaLabelClass}>Labels</dt>
-              <dd className="flex flex-wrap gap-1">
-                {item.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    title={tag}
-                    className="rounded bg-surface-alt px-1.5 py-0.5 font-mono text-[10px] text-fg-muted"
-                  >
-                    {displayTag(tag)}
-                  </span>
-                ))}
-              </dd>
-            </>
-          )}
-          {item.url && (
-            <>
-              <dt className={metaLabelClass}>Link</dt>
-              <dd>
+              </li>
+            ) : null}
+            {item.tags.length > 0 ? (
+              <li className="inline-flex items-center gap-1">
+                <Tag aria-hidden="true" className="size-3" />
+                <span className="sr-only">Labels</span>
+                <span className="inline-flex flex-wrap items-center gap-1">
+                  {item.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      title={tag}
+                      className="rounded bg-surface-alt px-1.5 py-0.5 font-mono text-[10px] text-fg-muted"
+                    >
+                      {displayTag(tag)}
+                    </span>
+                  ))}
+                </span>
+              </li>
+            ) : null}
+            {item.url ? (
+              <li className="inline-flex items-center gap-1">
                 <a
                   href={item.url}
                   target="_blank"
@@ -173,17 +204,45 @@ export function DetailPane({
                   className="inline-flex items-center gap-1 text-accent hover:underline"
                 >
                   Open in provider
-                  <ExternalLink aria-hidden="true" className="h-3 w-3" />
+                  <ExternalLink aria-hidden="true" className="size-3" />
                 </a>
-              </dd>
-            </>
-          )}
-        </dl>
-        <TransitionActions
-          projectId={projectId}
-          providerItemId={item.providerItemId}
-          state={item.state as ItemState}
-        />
+              </li>
+            ) : null}
+          </ul>
+        </div>
+
+        {/* Actions and reactions groups — each labelled with a small heading
+            so the header reads title-block / actions-block / reactions-block. */}
+        <div className="flex flex-col gap-3 border-t border-border pt-3">
+          <div className="flex flex-col gap-1.5">
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              <h3 className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                Actions
+              </h3>
+              <span className="text-[11px] italic text-fg-faint">will require approval</span>
+            </div>
+            <TransitionActions
+              projectId={projectId}
+              providerItemId={item.providerItemId}
+              state={item.state as ItemState}
+            />
+          </div>
+          {capabilities.supportedReactions.length > 0 ? (
+            <div className="flex flex-col gap-1.5">
+              <h3 className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                Reactions
+              </h3>
+              <ReactionRow
+                projectId={projectId}
+                providerItemId={item.providerItemId}
+                targetKind="item"
+                targetId={item.providerItemId}
+                reactions={item.reactions}
+                supportedReactions={capabilities.supportedReactions}
+              />
+            </div>
+          ) : null}
+        </div>
       </header>
 
       <section className="flex flex-col gap-3 p-4">
@@ -218,6 +277,18 @@ export function DetailPane({
                   </time>
                 </div>
                 <Markdown source={c.bodyMd} />
+                {capabilities.supportedReactions.length > 0 ? (
+                  <div className="mt-2">
+                    <ReactionRow
+                      projectId={projectId}
+                      providerItemId={item.providerItemId}
+                      targetKind="comment"
+                      targetId={c.providerCommentId}
+                      reactions={c.reactions}
+                      supportedReactions={capabilities.supportedReactions}
+                    />
+                  </div>
+                ) : null}
               </li>
             ))}
           </ul>

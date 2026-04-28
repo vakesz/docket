@@ -7,6 +7,7 @@ import {
   proposeComment,
   proposeDescriptionPatch,
   proposeNewItem,
+  proposeReactionToggle,
   proposeTagsChange,
   proposeTransition,
 } from "@/server/proposals/builders";
@@ -22,6 +23,13 @@ import {
 
 const ItemKindEnum = z.enum(ITEM_KINDS);
 const TransitionIntentEnum = z.enum(TRANSITION_INTENTS);
+const ReactionTargetKindEnum = z.enum(["item", "comment"]);
+const ReactionOpEnum = z.enum(["add", "remove"]);
+// Reaction kinds are provider-declared (capabilities.supportedReactions); the
+// router takes any opaque non-empty string and the provider validates against
+// its own list inside addReaction/removeReaction. 64 is comfortably above
+// every real-world reaction shortcode.
+const ReactionKindSchema = z.string().min(1).max(64);
 
 const ListInput = projectIdSchema.extend({
   status: z.enum(["pending", "confirmed", "rejected", "all"]).default("pending"),
@@ -62,6 +70,14 @@ const ProposeTagsChangeInput = projectIdSchema.extend({
   nextTags: z.array(z.string().min(1).max(80)).max(50),
 });
 
+const ProposeReactionToggleInput = projectIdSchema.extend({
+  providerItemId: z.string().min(1),
+  targetKind: ReactionTargetKindEnum,
+  targetId: z.string().min(1),
+  reaction: ReactionKindSchema,
+  op: ReactionOpEnum,
+});
+
 const ProposeNewItemInput = projectIdSchema.extend({
   itemKind: ItemKindEnum,
   fields: z.object({
@@ -82,7 +98,7 @@ function ctxFor(ctx: {
   if (!userId) {
     throw new TRPCError({ code: "UNAUTHORIZED" });
   }
-  return { db: ctx.db, projectId: ctx.projectId, userId };
+  return { db: ctx.db, projectId: ctx.projectId, userId, origin: "ui" as const };
 }
 
 /**
@@ -208,6 +224,23 @@ export const proposalsRouter = router({
         await proposeTagsChange(c, {
           providerItemId: input.providerItemId,
           nextTags: input.nextTags,
+        }),
+      );
+      return { id: row.id, status: row.status, diff: diffOf(hydrateProposal(row)) };
+    }),
+
+  proposeReactionToggle: projectScopedMutationProcedure
+    .input(ProposeReactionToggleInput)
+    .mutation(async ({ ctx, input }) => {
+      const c = ctxFor(ctx);
+      const row = await maybeAutoAccept(
+        c,
+        await proposeReactionToggle(c, {
+          providerItemId: input.providerItemId,
+          targetKind: input.targetKind,
+          targetId: input.targetId,
+          reaction: input.reaction,
+          op: input.op,
         }),
       );
       return { id: row.id, status: row.status, diff: diffOf(hydrateProposal(row)) };

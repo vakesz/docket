@@ -78,6 +78,7 @@ export default async function ItemDetailPage({
     <DetailPane
       projectId={projectId}
       providerKind={project.providerKind}
+      capabilities={project.capabilities}
       item={item}
       staleThresholdDays={staleThresholdDays > 0 ? staleThresholdDays : null}
     />

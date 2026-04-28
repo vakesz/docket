@@ -52,6 +52,21 @@ export type Attachment = {
 };
 
 /**
+ * Reaction count summary, keyed by an opaque provider-declared identifier.
+ *
+ * Core deliberately does NOT enumerate reaction kinds — the set differs by
+ * provider (GitHub has eight emoji shortcodes; another provider might use a
+ * shop of award emoji, or numeric vote tallies). Providers expose their
+ * supported set via `ProviderSpec.capabilities.supportedReactions`; surfaces
+ * (UI, agent tools) read from that list rather than a core-pinned enum.
+ *
+ * Missing keys mean zero; `{}` means "no reactions yet on a provider that
+ * supports them". `null` (only valid where this type is `Reactions | null`)
+ * means "provider does not model reactions".
+ */
+export type Reactions = Partial<Record<string, number>>;
+
+/**
  * Cached canonical work item. The provider boundary translates native types
  * into this shape; nothing downstream sees provider-native state strings
  * (those live in `providerRaw` for the rare consumer that needs them).
@@ -66,10 +81,44 @@ export type Item = {
   descriptionMd: string;
   state: ItemState;
   assignee: string | null;
+  /**
+   * Canonical plural assignee list. Providers without multi-assignee fill
+   * `[assignee]` when assignee is non-null, `[]` otherwise. Surfaces should
+   * migrate to reading this over `assignee` (singular) over time.
+   */
+  assignees?: string[];
+  /**
+   * Optional reviewer logins (e.g. GitHub PR requested_reviewers). Empty on
+   * providers that don't model reviewers.
+   */
+  reviewers?: string[];
+  /**
+   * Provider-native ids of items linked to this one (cross-references, AzDO
+   * relations). Empty when the provider doesn't surface linked items.
+   */
+  linkedItemIds?: string[];
   parentId: string | null;
   tags: string[];
+  /**
+   * Reaction counts. `null` = provider doesn't model reactions; `{}` = no
+   * reactions yet on a provider that does.
+   */
+  reactions?: Reactions | null;
+  /**
+   * Canonical milestone label (free-text). Null when the provider doesn't
+   * model milestones or none is set.
+   */
+  milestone?: string | null;
+  /** Canonical sprint/iteration label. Null when not modelled. */
+  iteration?: string | null;
+  /** Canonical area / component label. Null when not modelled. */
+  area?: string | null;
+  /** Latest CI summary on the item's linked ref, when surfaced. */
+  ciSummary?: { state: "success" | "failure" | "pending"; url: string | null } | null;
   createdAt: Date | null;
   updatedAt: Date | null;
+  /** Provider-side closure timestamp. Null while open or unsupported. */
+  closedAt?: Date | null;
   url: string | null;
   author: string | null;
   /**
@@ -89,6 +138,29 @@ export type Comment = {
   author: string;
   bodyMd: string;
   createdAt: Date;
+  /** Last-touched timestamp from the provider; null when not surfaced. */
+  updatedAt?: Date | null;
+  /** True when provider reports the comment was edited after creation. */
+  edited?: boolean;
+  /** Reaction counts. `null` = unsupported on this provider. */
+  reactions?: Reactions | null;
+};
+
+/**
+ * A fully-hydrated change set for one item, yielded by
+ * `WorkItemProvider.listChangesSince`. Sync upserts the item plus its
+ * comments in one pass so the cache stays fresh on both fronts without a
+ * second round-trip.
+ *
+ * Providers that can't fetch comments cheaply for every change may yield an
+ * empty `comments` array; the cache then keeps whatever it last saw for
+ * that item. `comments: null` means "skip comment reconciliation for this
+ * item" (e.g. provider listing returned an item where comments are
+ * known-unchanged); `[]` means "no comments exist".
+ */
+export type ChangedItem = {
+  item: Item;
+  comments: Comment[] | null;
 };
 
 export type Conversation = {

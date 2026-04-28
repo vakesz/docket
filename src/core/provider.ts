@@ -9,6 +9,7 @@
  */
 
 import type {
+  ChangedItem,
   CIStatus,
   CodeSearchResult,
   Comment,
@@ -19,6 +20,7 @@ import type {
   PRMatch,
   PullRequestDetail,
   PullRequestDiff,
+  Reactions,
   TransitionIntent,
 } from "@/core/types";
 
@@ -90,10 +92,27 @@ export class ProviderAuthError extends ProviderError {
  * for this provider"); the agent tools that call them treat such throws
  * as "skip this signal" rather than a hard failure.
  */
+/**
+ * Target of a reaction proposal: the item itself or one of its comments.
+ *
+ * `id` is the provider-native id (item id or comment id). For `kind: "comment"`,
+ * the comment id is scoped under its item — providers that need both look up
+ * the parent item via the cached `Comment.itemId` join.
+ */
+export type ReactionTarget = { kind: "item" | "comment"; id: string };
+
 export interface WorkItemProvider {
   healthCheck(): Promise<void>;
 
-  listChangesSince(watermark: Date | null): AsyncIterable<Item>;
+  /**
+   * Stream changes since the watermark as fully-hydrated bundles (item +
+   * comments). Sync upserts both in a single pass. Providers that can't
+   * cheaply fetch comments for every changed item may yield bundles with
+   * `comments: null` ("skip comment reconciliation") or `[]` ("no comments
+   * exist"). Reactions on the item and on each comment ride along inside
+   * the canonical `Item.reactions` / `Comment.reactions` fields.
+   */
+  listChangesSince(watermark: Date | null): AsyncIterable<ChangedItem>;
 
   getItem(id: string): Promise<Item>;
 
@@ -155,6 +174,22 @@ export interface WorkItemProvider {
    * `ProviderError` when the provider doesn't expose code search.
    */
   searchCode?(query: string, limit: number): Promise<CodeSearchResult>;
+
+  /**
+   * Add a reaction on the target. Only implemented by providers whose
+   * `ProviderSpec.capabilities.supportedReactions` is non-empty. The
+   * `reaction` string MUST be a member of that list — providers should
+   * validate and throw `ProviderError` on unknown kinds. Returns the
+   * post-write reaction summary so the proposal executor can refresh the
+   * cache without a separate fetch.
+   */
+  addReaction?(target: ReactionTarget, reaction: string): Promise<{ reactions: Reactions }>;
+
+  /**
+   * Remove a reaction on the target. Same capability gate and validation
+   * rules as `addReaction`. Returns the post-write reaction summary.
+   */
+  removeReaction?(target: ReactionTarget, reaction: string): Promise<{ reactions: Reactions }>;
 }
 
 export const SETUP_FIELD_KINDS = ["string", "url", "secret"] as const;
@@ -250,6 +285,33 @@ export type ScopeAxis = {
  * `axisMatcher` and `axisExtract` must both be set whenever `scopeAxes` is
  * non-empty — if you can match an axis you can extract it.
  */
+/**
+ * Per-provider capability flags. The UI reads these to decide whether to
+ * render reaction affordances, the PR diff link, etc. Keeps the
+ * provider-agnostic story honest: features come from a registry-driven
+ * capabilities map, not from `if (providerKind === 'github')` scattered
+ * through views.
+ */
+export type ProviderCapabilities = {
+  /**
+   * Reaction kinds the provider supports on items and comments. Empty array
+   * means the provider doesn't model reactions at all (UI omits the
+   * reaction strip entirely). The list is the wire format — values flow
+   * straight through to `addReaction` / `removeReaction` and are stored as
+   * keys in `Item.reactions` / `Comment.reactions`. Order is the order the
+   * UI renders them in. Each provider declares its own set; core stays
+   * agnostic.
+   */
+  supportedReactions: readonly string[];
+  /** Provider exposes a CI run summary on the item's linked ref. */
+  ciStatus: boolean;
+  /** Provider exposes per-file unified diffs for PRs. */
+  pullRequestDiffs: boolean;
+  /** Provider surfaces explicit linked-item references (cross-refs,
+   *  relations). When false, `Item.linkedItemIds` is always empty. */
+  linkedItems: boolean;
+};
+
 export type ProviderSpec = {
   typeId: string;
   displayName: string;
@@ -263,4 +325,5 @@ export type ProviderSpec = {
   scopeAxes: readonly ScopeAxis[];
   axisMatcher: AxisMatcher | null;
   axisExtract: AxisExtractor | null;
+  capabilities: ProviderCapabilities;
 };

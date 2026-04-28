@@ -78,8 +78,24 @@ export const projectsRouter = router({
     });
   }),
 
-  /** Get a single project the user has access to. */
-  get: projectScopedProcedure.input(projectIdSchema).query(({ ctx }) => ctx.project),
+  /**
+   * Get a single project the user has access to. Includes the provider's
+   * capability map so client surfaces can branch on
+   * `capabilities.supportedReactions.length` (etc.) without re-importing the
+   * registry.
+   */
+  get: projectScopedProcedure.input(projectIdSchema).query(({ ctx }) => {
+    const spec = getProviderSpec(ctx.project.providerKind);
+    return {
+      ...ctx.project,
+      capabilities: spec?.capabilities ?? {
+        supportedReactions: [],
+        ciStatus: false,
+        pullRequestDiffs: false,
+        linkedItems: false,
+      },
+    };
+  }),
 
   /**
    * Create a project. The session user becomes the owner and gets an

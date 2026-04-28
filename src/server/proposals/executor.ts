@@ -22,13 +22,14 @@
 import "server-only";
 import { TRPCError } from "@trpc/server";
 import type { Item as CanonicalItem } from "@/core/types";
-import type { Prisma, Proposal as ProposalRow } from "@/db/generated/client";
+import { Prisma, type Proposal as ProposalRow } from "@/db/generated/client";
 import type { db as Db } from "@/server/db";
 import { logger } from "@/server/logger";
 import { hydrateProposal } from "@/server/proposals/builders";
 import { buildProviderForUser } from "@/server/providers/build";
 import { AUTO_ACCEPT_ELIGIBLE_KINDS_LIST } from "@/server/settings/catalog";
 import { loadGlobalSetting, loadProjectSetting } from "@/server/settings/effective";
+import { reconcileComments, toItemRow } from "@/server/sync";
 
 type ConfirmPhase = "load" | "provider_build" | "provider_call" | "cache_refresh" | "audit";
 
@@ -105,25 +106,7 @@ async function refreshCacheFromCanonical(
   ctx: ExecutorContext,
   canonical: CanonicalItem,
 ): Promise<void> {
-  const data = {
-    projectId: ctx.projectId,
-    providerItemId: canonical.id,
-    kind: canonical.kind,
-    title: canonical.title,
-    descriptionMd: canonical.descriptionMd,
-    state: canonical.state,
-    assignee: canonical.assignee,
-    author: canonical.author,
-    parentId: canonical.parentId,
-    tags: canonical.tags,
-    providerRaw: canonical.providerRaw as Prisma.InputJsonValue,
-    url: canonical.url,
-    repositoryUrl: canonical.repositoryUrl,
-    createdAt: canonical.createdAt,
-    updatedAt: canonical.updatedAt ?? new Date(),
-    syncedAt: new Date(),
-    archived: false,
-  };
+  const row = toItemRow(canonical, ctx.projectId, new Date());
   await ctx.db.item.upsert({
     where: {
       projectId_providerItemId: {
@@ -131,8 +114,8 @@ async function refreshCacheFromCanonical(
         providerItemId: canonical.id,
       },
     },
-    create: data,
-    update: data,
+    create: row,
+    update: { ...row, archived: false },
   });
 }
 
@@ -150,6 +133,16 @@ export async function confirmProposal(
   let phase: ConfirmPhase = "load";
 
   const row = await loadPending(ctx, proposalId);
+  // Defense in depth: agent-origin rows must never reach the provider via
+  // the auto-confirm path. `maybeAutoAccept` already filters them, but a
+  // future caller could call confirmProposal directly with source="auto" —
+  // refuse loudly so we notice in tests instead of silently approving.
+  if (source === "auto" && row.origin !== "ui") {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: `auto-confirm is only allowed for ui-originated proposals (got origin='${row.origin}')`,
+    });
+  }
   const proposal = hydrateProposal(row);
 
   const baseCtx = {
@@ -193,40 +186,18 @@ export async function confirmProposal(
       case "comment_add": {
         const comment = await provider.addComment(proposal.item.id, proposal.bodyMd);
         commentId = comment.id;
-        // Cached-item lookup + comment upsert run in one transaction so the
-        // comment row can never reference a stale or missing Item id.
-        await ctx.db.$transaction(async (tx) => {
-          const cachedItem = await tx.item.findUnique({
-            where: {
-              projectId_providerItemId: {
-                projectId: ctx.projectId,
-                providerItemId: proposal.item.id,
-              },
+        const cachedItem = await ctx.db.item.findUnique({
+          where: {
+            projectId_providerItemId: {
+              projectId: ctx.projectId,
+              providerItemId: proposal.item.id,
             },
-            select: { id: true },
-          });
-          if (!cachedItem) return;
-          await tx.comment.upsert({
-            where: {
-              itemId_providerCommentId: {
-                itemId: cachedItem.id,
-                providerCommentId: comment.id,
-              },
-            },
-            create: {
-              itemId: cachedItem.id,
-              providerCommentId: comment.id,
-              author: comment.author,
-              bodyMd: comment.bodyMd,
-              createdAt: comment.createdAt,
-            },
-            update: {
-              author: comment.author,
-              bodyMd: comment.bodyMd,
-              createdAt: comment.createdAt,
-            },
-          });
+          },
+          select: { id: true },
         });
+        if (cachedItem) {
+          await reconcileComments(ctx.db, cachedItem.id, [comment]);
+        }
         break;
       }
       case "item_create":
@@ -235,6 +206,47 @@ export async function confirmProposal(
       case "tags_change":
         canonical = await provider.setTags(proposal.item.id, proposal.nextTags);
         break;
+      case "reaction_toggle": {
+        const fn = proposal.op === "add" ? provider.addReaction : provider.removeReaction;
+        if (!fn) {
+          throw new Error(
+            `provider does not support reactions (op='${proposal.op}'); check capabilities.supportedReactions before staging`,
+          );
+        }
+        const target = { kind: proposal.targetKind, id: proposal.targetId } as const;
+        const result = await fn.call(provider, target, proposal.reaction);
+        const reactionsJson = (result.reactions ?? Prisma.JsonNull) as
+          | Prisma.InputJsonValue
+          | typeof Prisma.JsonNull;
+        if (proposal.targetKind === "item") {
+          await ctx.db.item.update({
+            where: {
+              projectId_providerItemId: {
+                projectId: ctx.projectId,
+                providerItemId: proposal.item.id,
+              },
+            },
+            data: { reactions: reactionsJson },
+          });
+        } else {
+          const cachedItem = await ctx.db.item.findUnique({
+            where: {
+              projectId_providerItemId: {
+                projectId: ctx.projectId,
+                providerItemId: proposal.item.id,
+              },
+            },
+            select: { id: true },
+          });
+          if (cachedItem) {
+            await ctx.db.comment.updateMany({
+              where: { itemId: cachedItem.id, providerCommentId: proposal.targetId },
+              data: { reactions: reactionsJson },
+            });
+          }
+        }
+        break;
+      }
       case "attachment_upload":
         await provider.uploadAttachment(
           proposal.item.id,
@@ -345,16 +357,19 @@ export async function confirmProposal(
  * `confirmed` with `executedAt` set, or `confirmed` with `errorMessage` set if
  * the provider call failed).
  *
- * Defense in depth: the catalog validator already restricts the policy to
- * Tier-A/B kinds, but the AUTO_ACCEPT_ELIGIBLE_KINDS_LIST gate here is the
- * load-bearing check — if a stored row ever drifts to an ineligible kind, we
- * simply ignore it.
+ * Defense in depth:
+ *   - Origin gate: agent-staged rows never auto-confirm, regardless of the
+ *     policy. Only the human (origin === "ui") can opt into auto-accept.
+ *   - The catalog validator already restricts the policy to Tier-A kinds,
+ *     but the AUTO_ACCEPT_ELIGIBLE_KINDS_LIST gate here is load-bearing —
+ *     if a stored row ever drifts to an ineligible kind we simply ignore it.
  */
 export async function maybeAutoAccept(
   ctx: ExecutorContext,
   row: ProposalRow,
 ): Promise<ProposalRow> {
   if (row.status !== "pending") return row;
+  if (row.origin !== "ui") return row;
   if (!AUTO_ACCEPT_ELIGIBLE_KINDS_LIST.includes(row.kind)) return row;
   const [policy, readOnly] = await Promise.all([
     loadProjectSetting(ctx.db, ctx.projectId, "proposals.auto-accept-kinds"),

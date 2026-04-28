@@ -21,10 +21,22 @@ export const PROPOSAL_KINDS = [
   "item_create",
   "comment_add",
   "tags_change",
+  "reaction_toggle",
   "memory_write",
   "memory_delete",
 ] as const;
 export type ProposalKind = (typeof PROPOSAL_KINDS)[number];
+
+/**
+ * Origin of a staged proposal. UI-origin proposals from a human button click
+ * may auto-confirm under the policy in `src/server/proposals/policy.ts`;
+ * agent-origin proposals always require explicit human confirmation.
+ *
+ * Default at the storage layer is `agent`, so a missing/invalid value fails
+ * safe rather than silently auto-confirming.
+ */
+export const PROPOSAL_ORIGINS = ["ui", "agent"] as const;
+export type ProposalOrigin = (typeof PROPOSAL_ORIGINS)[number];
 
 export type StateChangeProposal = {
   kind: "state_change";
@@ -78,6 +90,27 @@ export type TagsChangeProposal = {
 };
 
 /**
+ * Stage an add-or-remove of a single reaction on either an item or one of
+ * its comments. The `op` discriminator decides direction; `reaction` is the
+ * provider-declared kind identifier (validated by the provider against its
+ * `capabilities.supportedReactions` list — core stays kind-agnostic).
+ * `targetKind === "item"` carries the item snapshot in `item`;
+ * `targetKind === "comment"` carries the parent item plus the
+ * provider-native comment id.
+ */
+export type ReactionToggleProposal = {
+  kind: "reaction_toggle";
+  id: string;
+  item: Item;
+  targetKind: "item" | "comment";
+  /** Provider-native id of the reaction target (item id or comment id). */
+  targetId: string;
+  /** Provider-declared kind identifier. */
+  reaction: string;
+  op: "add" | "remove";
+};
+
+/**
  * Stage a create-or-update of a per-project memory entry.
  *
  * `memoryId === null` means create; otherwise update. For updates, the
@@ -116,6 +149,7 @@ export type Proposal =
   | ItemCreateProposal
   | CommentAddProposal
   | TagsChangeProposal
+  | ReactionToggleProposal
   | MemoryWriteProposal
   | MemoryDeleteProposal;
 

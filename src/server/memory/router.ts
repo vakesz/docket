@@ -79,7 +79,12 @@ export const memoryRouter = router({
   proposeWrite: projectScopedMutationProcedure
     .input(ProposeWriteInput)
     .mutation(async ({ ctx, input }) => {
-      const c = { db: ctx.db, projectId: ctx.projectId, userId: userIdOrThrow(ctx) };
+      const c = {
+        db: ctx.db,
+        projectId: ctx.projectId,
+        userId: userIdOrThrow(ctx),
+        origin: "ui" as const,
+      };
       const proposal = await maybeAutoAccept(
         c,
         await proposeMemoryWrite(c, {
@@ -96,7 +101,12 @@ export const memoryRouter = router({
   proposeDelete: projectScopedMutationProcedure
     .input(ProposeDeleteInput)
     .mutation(async ({ ctx, input }) => {
-      const c = { db: ctx.db, projectId: ctx.projectId, userId: userIdOrThrow(ctx) };
+      const c = {
+        db: ctx.db,
+        projectId: ctx.projectId,
+        userId: userIdOrThrow(ctx),
+        origin: "ui" as const,
+      };
       const proposal = await maybeAutoAccept(
         c,
         await proposeMemoryDelete(c, { memoryId: input.memoryId }),

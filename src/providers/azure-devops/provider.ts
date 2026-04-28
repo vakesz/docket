@@ -29,7 +29,14 @@ import {
 import type { IWorkItemTrackingApi } from "azure-devops-node-api/WorkItemTrackingApi.js";
 import type { WorkItemProvider } from "@/core/provider";
 import { ProviderAuthError, ProviderError, ProviderUnreachableError } from "@/core/provider";
-import type { Comment, CreateFields, Item, ItemKind, TransitionIntent } from "@/core/types";
+import type {
+  ChangedItem,
+  Comment,
+  CreateFields,
+  Item,
+  ItemKind,
+  TransitionIntent,
+} from "@/core/types";
 import {
   KIND_BY_WIT,
   mapState,
@@ -55,10 +62,13 @@ const DEFAULT_FIELDS = [
   "System.Parent",
   "System.Tags",
   "System.ChangedDate",
+  "System.CreatedDate",
+  "System.CommentCount",
   "System.AreaPath",
   "System.IterationPath",
   "System.TeamProject",
   "System.NodeName",
+  "Microsoft.VSTS.Common.ClosedDate",
 ] as const;
 
 const MAX_BATCH_IDS = 200;
@@ -179,6 +189,23 @@ export class AzureDevOpsProvider implements WorkItemProvider {
         : typeof parentRaw === "string" && parentRaw
           ? parentRaw
           : null;
+    const assignee = readAssignee(fields["System.AssignedTo"]);
+    const linkedItemIds: string[] = [];
+    for (const rel of payload.relations ?? []) {
+      const relType = rel.rel ?? "";
+      if (!relType.startsWith("System.LinkTypes.") && !relType.startsWith("Microsoft.VSTS")) {
+        continue;
+      }
+      const url = rel.url ?? "";
+      const tail = url.replace(/\/+$/, "").split("/").pop() ?? "";
+      if (/^\d+$/.test(tail) && tail !== id) linkedItemIds.push(tail);
+    }
+    const iteration =
+      typeof fields["System.IterationPath"] === "string"
+        ? (fields["System.IterationPath"] as string)
+        : null;
+    const area =
+      typeof fields["System.AreaPath"] === "string" ? (fields["System.AreaPath"] as string) : null;
     return {
       id,
       kind,
@@ -188,11 +215,20 @@ export class AzureDevOpsProvider implements WorkItemProvider {
           ? (fields["System.Description"] as string)
           : "",
       state: mapState(kind, stateString, tags),
-      assignee: readAssignee(fields["System.AssignedTo"]),
+      assignee,
+      assignees: assignee ? [assignee] : [],
+      reviewers: [],
+      linkedItemIds,
+      reactions: null,
+      milestone: null,
+      iteration,
+      area,
+      ciSummary: null,
       parentId: parent,
       tags,
       createdAt: readDate(fields["System.CreatedDate"]),
       updatedAt: readDate(fields["System.ChangedDate"]),
+      closedAt: readDate(fields["Microsoft.VSTS.Common.ClosedDate"]),
       url: this.webUrl(id),
       author: null,
       repositoryUrl: null,
@@ -234,7 +270,7 @@ export class AzureDevOpsProvider implements WorkItemProvider {
     }
   }
 
-  async *listChangesSince(watermark: Date | null): AsyncIterable<Item> {
+  async *listChangesSince(watermark: Date | null): AsyncIterable<ChangedItem> {
     const wit = await this.witApi();
     const types = Object.keys(KIND_BY_WIT)
       .map((t) => `'${t.replaceAll("'", "''")}'`)
@@ -260,11 +296,13 @@ export class AzureDevOpsProvider implements WorkItemProvider {
       const chunk = ids.slice(i, i + MAX_BATCH_IDS);
       let batch: Awaited<ReturnType<typeof wit.getWorkItems>>;
       try {
+        // Pass `expand: All` (instead of the field projection) so relations
+        // ride along — toCanonicalItem reads them to populate linkedItemIds.
         batch = await wit.getWorkItems(
           chunk,
-          [...DEFAULT_FIELDS],
           undefined,
           undefined,
+          WorkItemExpand.All,
           WorkItemErrorPolicy.Omit,
         );
       } catch (err) {
@@ -272,10 +310,46 @@ export class AzureDevOpsProvider implements WorkItemProvider {
       }
       for (const raw of batch ?? []) {
         if (!raw) continue;
-        const item = this.toCanonicalItem(raw as unknown as WorkItemPayload);
-        if (item) yield item;
+        const payload = raw as unknown as WorkItemPayload;
+        const item = this.toCanonicalItem(payload);
+        if (!item) continue;
+        const commentCount = payload.fields?.["System.CommentCount"];
+        const numericCount = typeof commentCount === "number" ? commentCount : 0;
+        let comments: Comment[] | null;
+        if (numericCount === 0) {
+          comments = [];
+        } else {
+          try {
+            comments = await this.fetchComments(item.id);
+          } catch {
+            comments = null;
+          }
+        }
+        yield { item, comments };
       }
     }
+  }
+
+  private async fetchComments(id: string): Promise<Comment[]> {
+    const wit = await this.witApi();
+    const resp = await wit.getComments(this.config.project, Number.parseInt(id, 10));
+    const comments: AzdoComment[] = resp.comments ?? [];
+    return comments.map((c) => {
+      const author =
+        (c.createdBy?.uniqueName as string | undefined) || c.createdBy?.displayName || "unknown";
+      const created = c.createdDate ?? new Date();
+      const modified = (c as { modifiedDate?: Date }).modifiedDate ?? null;
+      return {
+        id: String(c.id ?? ""),
+        itemId: id,
+        author,
+        bodyMd: c.text ?? "",
+        createdAt: created,
+        updatedAt: modified ?? null,
+        edited: modified ? modified.getTime() > created.getTime() : false,
+        reactions: null,
+      };
+    });
   }
 
   async getItem(id: string): Promise<Item> {
@@ -298,21 +372,8 @@ export class AzureDevOpsProvider implements WorkItemProvider {
   }
 
   async getComments(id: string): Promise<Comment[]> {
-    const wit = await this.witApi();
     try {
-      const resp = await wit.getComments(this.config.project, Number.parseInt(id, 10));
-      const comments: AzdoComment[] = resp.comments ?? [];
-      return comments.map((c) => {
-        const author =
-          (c.createdBy?.uniqueName as string | undefined) || c.createdBy?.displayName || "unknown";
-        return {
-          id: String(c.id ?? ""),
-          itemId: id,
-          author,
-          bodyMd: c.text ?? "",
-          createdAt: c.createdDate ?? new Date(),
-        };
-      });
+      return await this.fetchComments(id);
     } catch (err) {
       wrapError(err);
     }
@@ -423,6 +484,8 @@ export class AzureDevOpsProvider implements WorkItemProvider {
         this.config.project,
         Number.parseInt(id, 10),
       );
+      const created = resp.createdDate ?? new Date();
+      const modified = (resp as { modifiedDate?: Date }).modifiedDate ?? null;
       return {
         id: String(resp.id ?? ""),
         itemId: id,
@@ -431,7 +494,10 @@ export class AzureDevOpsProvider implements WorkItemProvider {
           resp.createdBy?.displayName ||
           "unknown",
         bodyMd: resp.text ?? bodyMd,
-        createdAt: resp.createdDate ?? new Date(),
+        createdAt: created,
+        updatedAt: modified ?? null,
+        edited: modified ? modified.getTime() > created.getTime() : false,
+        reactions: null,
       };
     } catch (err) {
       wrapError(err);

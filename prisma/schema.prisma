@@ -251,11 +251,27 @@ model Item {
   /// strings are translated by each provider's state-map.ts.
   state          String
   assignee       String?
+  /// Canonical plural assignee list. Providers without multi-assignee fill
+  /// `[assignee]` when assignee is non-null, `[]` otherwise. Surfaces should
+  /// move to reading this column over time; `assignee` (singular) is kept
+  /// during the transition.
+  assignees      String[] @default([])
+  /// Optional reviewer logins (GitHub PR requested_reviewers, etc). Empty on
+  /// providers that don't model reviewers.
+  reviewers      String[] @default([])
+  /// Provider-native ids of items linked to this one (cross-references,
+  /// AzDO relations). Empty when the provider doesn't surface linked items.
+  linkedItemIds  String[] @default([])
   author         String?
   /// Parent's providerItemId, not the surrogate cuid. Resolved at query
   /// time; null when no parent or parent is outside the synced cache.
   parentId       String?
   tags           String[] @default([])
+  /// TODO: providerRaw became a catch-all before typed slots existed. Once
+  /// header/list/detail surfaces all read from typed columns (reactions,
+  /// assignees, reviewers, milestone, iteration, area, ciSummary, etc.),
+  /// audit consumers (agent tools, sync upserts) and shrink this to truly
+  /// bespoke fields.
   providerRaw    Json     @default("{}")
   url            String?
   repositoryUrl  String?
@@ -264,8 +280,26 @@ model Item {
   /// don't always surface it.
   createdAt      DateTime?
   updatedAt      DateTime
+  /// Provider-side closure timestamp. Null while the item is open or when
+  /// the provider doesn't expose one.
+  closedAt       DateTime?
   syncedAt       DateTime
   archived       Boolean   @default(false)
+  /// Reaction summary keyed by ReactionKind ("+1", "heart", ...) → integer
+  /// count. Null when the provider doesn't model reactions (Azure DevOps
+  /// work items today). Empty object means "no reactions yet" on a provider
+  /// that does support them.
+  reactions      Json?
+  /// GitHub: milestone title. AzDO: null (sprint/iteration lives in
+  /// `iteration`). Free-text on either side.
+  milestone      String?
+  /// AzDO: System.IterationPath. GitHub: null.
+  iteration      String?
+  /// AzDO: System.AreaPath. GitHub: null.
+  area           String?
+  /// `{ state: "success"|"failure"|"pending", url: string|null }` summary
+  /// of the latest CI run on the linked ref, when the provider exposes one.
+  ciSummary      Json?
 
   project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   comments Comment[]
@@ -284,6 +318,18 @@ model Comment {
   author            String
   bodyMd            String
   createdAt         DateTime
+  /// Last-touched timestamp from the provider. Null when the provider
+  /// doesn't surface one or for legacy rows pre-dating the field. Sync
+  /// uses this as a skip-rewrite cursor: comments whose providerUpdatedAt
+  /// matches the cached row are not re-upserted.
+  providerUpdatedAt DateTime?
+  /// True when the provider reports the comment was edited after creation
+  /// (GitHub: `updated_at` > `created_at`). Informational; the cached body
+  /// silently overwrites on the next sync.
+  edited            Boolean  @default(false)
+  /// Reaction summary keyed by ReactionKind → count. Null when the
+  /// provider doesn't model per-comment reactions.
+  reactions         Json?
 
   item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
@@ -460,9 +506,15 @@ model Proposal {
   projectId      String
   userId         String
   /// One of: state_change, description_patch, attachment_upload,
-  /// item_create, comment_add, memory_write, memory_delete. Source of truth
-  /// at the type layer is src/core/proposal-types.ts.
+  /// item_create, comment_add, tags_change, reaction_toggle, memory_write,
+  /// memory_delete. Source of truth at the type layer is
+  /// src/core/proposal-types.ts.
   kind           String
+  /// 'ui' | 'agent'. Stamped at stage time so `maybeAutoAccept` can
+  /// distinguish a human button click from an LLM-tool stage. Defaults to
+  /// 'agent' so missing values fail safe (agent-origin requires explicit
+  /// human confirmation).
+  origin         String    @default("agent")
   /// Provider-native item id this proposal targets, when relevant. Null for
   /// item_create (the item doesn't exist yet) and memory_* (no item).
   providerItemId String?

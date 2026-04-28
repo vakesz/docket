@@ -3,7 +3,7 @@
 import { Button } from "@headlessui/react";
 import { Sparkles } from "lucide-react";
 import type { ItemKind, ItemState } from "@/core/types";
-import { xsBorderButtonClass } from "@/lib/form-classes";
+import { xsAccentButtonClass } from "@/lib/form-classes";
 import { cn } from "@/lib/utils";
 import { useChatPaneController } from "@/ui/conversations/chat-pane-context";
 import { buildSuggestSeed } from "@/ui/items/suggest-seeds";
@@ -43,7 +43,7 @@ export function SuggestActionButton({
       onClick={onClick}
       disabled={seedPending}
       title={seedPending ? "Opening chat…" : "Open chat with a 'next action' prompt"}
-      className={cn(xsBorderButtonClass, "disabled:cursor-not-allowed disabled:opacity-60")}
+      className={cn(xsAccentButtonClass, "disabled:cursor-not-allowed disabled:opacity-60")}
     >
       <Sparkles aria-hidden="true" className="size-3" />
       Suggest next action

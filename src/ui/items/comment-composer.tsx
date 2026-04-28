@@ -1,6 +1,7 @@
 "use client";
 
 import { Button, Textarea } from "@headlessui/react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { xsAccentButtonClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
@@ -8,8 +9,10 @@ import { ProposalDialog } from "@/ui/proposals/proposal-dialog";
 
 /**
  * "Add comment" composer rendered at the bottom of the detail pane. Stages
- * a `comment_add` proposal so the user can review the diff before the
- * provider write fires.
+ * a `comment_add` proposal. UI-origin comment proposals auto-confirm by
+ * default (`proposals.auto-accept-kinds` ships with `comment_add` enabled),
+ * so the typical flow is "type → submit → comment lands". The dialog only
+ * opens when the project has opted out of auto-accept for comments.
  */
 export function CommentComposer({
   projectId,
@@ -18,13 +21,20 @@ export function CommentComposer({
   projectId: string;
   providerItemId: string;
 }) {
+  const router = useRouter();
+  const utils = trpc.useUtils();
   const [pendingProposalId, setPendingProposalId] = useState<string | null>(null);
   const [body, setBody] = useState("");
 
   const propose = trpc.proposals.proposeComment.useMutation({
-    onSuccess: (res) => {
-      setPendingProposalId(res.id);
+    onSuccess: async (res) => {
       setBody("");
+      if (res.status === "confirmed") {
+        await Promise.all([utils.items.get.invalidate(), utils.proposals.list.invalidate()]);
+        router.refresh();
+        return;
+      }
+      setPendingProposalId(res.id);
     },
   });
 
@@ -51,7 +61,7 @@ export function CommentComposer({
         value={body}
         onChange={(e) => setBody(e.target.value)}
         rows={3}
-        placeholder="Stage a comment for review…"
+        placeholder="Write a comment…"
         className="rounded-md border border-border bg-surface p-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent"
         disabled={propose.isPending}
       />
@@ -61,7 +71,7 @@ export function CommentComposer({
           disabled={propose.isPending || !body.trim()}
           className={xsAccentButtonClass}
         >
-          {propose.isPending ? "Staging…" : "Stage comment"}
+          {propose.isPending ? "Posting…" : "Post comment"}
         </Button>
         {error ? <span className="text-xs text-danger-fg">{error}</span> : null}
       </div>

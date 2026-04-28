@@ -23,8 +23,8 @@
 
 import "server-only";
 import { randomUUID } from "node:crypto";
-import type { Item as CanonicalItem } from "@/core/types";
-import type { Prisma } from "@/db/generated/client";
+import type { Comment as CanonicalComment, Item as CanonicalItem, ChangedItem } from "@/core/types";
+import { Prisma } from "@/db/generated/client";
 import type { db as Db } from "@/server/db";
 import {
   injectExternalChange,
@@ -63,6 +63,11 @@ const CHUNK_SIZE = 200;
 const MAX_INFLIGHT_CHUNKS = 2;
 
 export function toItemRow(canonical: CanonicalItem, projectId: string, syncedAt: Date) {
+  // The plural assignee column always reflects the singular: providers
+  // without multi-assignee surface a single login through `assignee`, and
+  // we want both columns coherent so callers can transition reads at their
+  // own pace.
+  const assignees = canonical.assignees ?? (canonical.assignee ? [canonical.assignee] : []);
   return {
     projectId,
     providerItemId: canonical.id,
@@ -71,6 +76,9 @@ export function toItemRow(canonical: CanonicalItem, projectId: string, syncedAt:
     descriptionMd: canonical.descriptionMd,
     state: canonical.state,
     assignee: canonical.assignee,
+    assignees,
+    reviewers: canonical.reviewers ?? [],
+    linkedItemIds: canonical.linkedItemIds ?? [],
     author: canonical.author,
     parentId: canonical.parentId,
     tags: canonical.tags,
@@ -79,32 +87,45 @@ export function toItemRow(canonical: CanonicalItem, projectId: string, syncedAt:
     repositoryUrl: canonical.repositoryUrl,
     createdAt: canonical.createdAt,
     updatedAt: canonical.updatedAt ?? syncedAt,
+    closedAt: canonical.closedAt ?? null,
     syncedAt,
     archived: false,
+    reactions: (canonical.reactions ?? Prisma.JsonNull) as
+      | Prisma.InputJsonValue
+      | typeof Prisma.JsonNull,
+    milestone: canonical.milestone ?? null,
+    iteration: canonical.iteration ?? null,
+    area: canonical.area ?? null,
+    ciSummary: (canonical.ciSummary ?? Prisma.JsonNull) as
+      | Prisma.InputJsonValue
+      | typeof Prisma.JsonNull,
   };
 }
 
 type ChunkResult = {
   upserted: number;
   inboundConversations: number;
+  commentsReconciled: number;
 };
 
 /**
- * Persist a chunk of canonical items: bulk-load existing rows, split into
- * create/update sets, then write each set in one DB call. Material diffs
- * for already-cached items fan out into `injectExternalChange` in
- * parallel — new items have no prior conversation context so they skip
- * the inject step entirely.
+ * Persist a chunk of bundled changes (item + optional comments): bulk-load
+ * existing item rows, split into create/update sets, then write each set
+ * in one DB call. Material diffs for already-cached items fan out into
+ * `injectExternalChange` in parallel — new items have no prior conversation
+ * context so they skip the inject step entirely. Once items are persisted
+ * (and surrogate ids known), comment bundles where `comments !== null`
+ * reconcile against the cache with a per-comment skip-rewrite.
  */
 async function processChunk(
   db: typeof Db,
   projectId: string,
-  chunk: readonly CanonicalItem[],
+  bundles: readonly ChangedItem[],
   syncedAt: Date,
   ctx: { syncId: string; chunkIndex: number },
 ): Promise<ChunkResult> {
   const startedAt = Date.now();
-  const ids = chunk.map((i) => i.id);
+  const ids = bundles.map((b) => b.item.id);
   const cachedRows = await db.item.findMany({
     where: { projectId, providerItemId: { in: ids } },
     select: {
@@ -126,7 +147,8 @@ async function processChunk(
     changes: MaterialChange[];
   }[] = [];
 
-  for (const item of chunk) {
+  for (const bundle of bundles) {
+    const item = bundle.item;
     const row = toItemRow(item, projectId, syncedAt);
     const cached = cachedMap.get(item.id);
     if (cached) {
@@ -179,28 +201,117 @@ async function processChunk(
     for (const r of results) inboundConversations += r.injectedInto;
   }
 
+  let commentsReconciled = 0;
+  const bundlesWithComments = bundles.filter((b) => b.comments !== null);
+  if (bundlesWithComments.length > 0) {
+    // Re-fetch the surrogate ids: createMany doesn't return them, and the
+    // first findMany only saw the rows that already existed.
+    const surrogateRows = await db.item.findMany({
+      where: { projectId, providerItemId: { in: ids } },
+      select: { id: true, providerItemId: true },
+    });
+    const surrogateMap = new Map(surrogateRows.map((r) => [r.providerItemId, r.id]));
+    const results = await Promise.all(
+      bundlesWithComments.map(async (b) => {
+        const surrogate = surrogateMap.get(b.item.id);
+        if (!surrogate) return 0;
+        const comments = b.comments ?? [];
+        return reconcileComments(db, surrogate, comments);
+      }),
+    );
+    for (const n of results) commentsReconciled += n;
+  }
+
   logger.debug(
     {
       syncId: ctx.syncId,
       projectId,
       chunkIndex: ctx.chunkIndex,
-      size: chunk.length,
+      size: bundles.length,
       created: toCreate.length,
       updated: toUpdate.length,
       materialChanges: changedExisting.length,
       inboundConversations,
+      commentsReconciled,
       chunkMs: Date.now() - startedAt,
     },
     "sync: chunk persisted",
   );
 
-  return { upserted, inboundConversations };
+  return { upserted, inboundConversations, commentsReconciled };
+}
+
+/**
+ * Reconcile cached comments for a single item against the provider snapshot.
+ * Skip-rewrite: comments whose `providerUpdatedAt` matches the cached row
+ * (and whose body matches) are left untouched. Returns the number of writes.
+ *
+ * Deletions: not handled here. Providers don't reliably surface comment
+ * deletions through their listing endpoints, and an over-eager delete would
+ * silently erase user history. The next full refresh of the item can run a
+ * stricter reconciliation if/when needed.
+ */
+export async function reconcileComments(
+  db: typeof Db,
+  itemSurrogate: string,
+  comments: readonly CanonicalComment[],
+): Promise<number> {
+  if (comments.length === 0) return 0;
+  const existing = await db.comment.findMany({
+    where: { itemId: itemSurrogate },
+    select: { providerCommentId: true, providerUpdatedAt: true, bodyMd: true },
+  });
+  const existingMap = new Map(existing.map((e) => [e.providerCommentId, e]));
+  const ops: Promise<unknown>[] = [];
+  for (const c of comments) {
+    const prev = existingMap.get(c.id);
+    const incomingPu = c.updatedAt ?? null;
+    const reactions = (c.reactions ?? Prisma.JsonNull) as
+      | Prisma.InputJsonValue
+      | typeof Prisma.JsonNull;
+    if (prev) {
+      const prevMs = prev.providerUpdatedAt?.getTime() ?? null;
+      const incMs = incomingPu?.getTime() ?? null;
+      if (prevMs === incMs && prev.bodyMd === c.bodyMd) continue;
+    }
+    ops.push(
+      db.comment.upsert({
+        where: {
+          itemId_providerCommentId: {
+            itemId: itemSurrogate,
+            providerCommentId: c.id,
+          },
+        },
+        create: {
+          itemId: itemSurrogate,
+          providerCommentId: c.id,
+          author: c.author,
+          bodyMd: c.bodyMd,
+          createdAt: c.createdAt,
+          providerUpdatedAt: incomingPu,
+          edited: c.edited ?? false,
+          reactions,
+        },
+        update: {
+          author: c.author,
+          bodyMd: c.bodyMd,
+          createdAt: c.createdAt,
+          providerUpdatedAt: incomingPu,
+          edited: c.edited ?? false,
+          reactions,
+        },
+      }),
+    );
+  }
+  if (ops.length === 0) return 0;
+  await Promise.all(ops);
+  return ops.length;
 }
 
 async function upsertItems(
   db: typeof Db,
   projectId: string,
-  items: AsyncIterable<CanonicalItem>,
+  bundles: AsyncIterable<ChangedItem>,
   syncedAt: Date,
   syncId: string,
 ): Promise<{
@@ -208,20 +319,22 @@ async function upsertItems(
   seenIds: Set<string>;
   latestUpdatedAt: Date | null;
   inboundConversations: number;
+  commentsReconciled: number;
   chunks: number;
   itemsSeen: number;
 }> {
   let upserted = 0;
   let latestUpdatedAt: Date | null = null;
   let inboundConversations = 0;
+  let commentsReconciled = 0;
   let chunks = 0;
   const seenIds = new Set<string>();
-  let buffer: CanonicalItem[] = [];
+  let buffer: ChangedItem[] = [];
   const inflight = new Set<Promise<void>>();
   let firstItemAt: number | null = null;
   const streamStartedAt = Date.now();
 
-  const fire = (chunk: readonly CanonicalItem[]) => {
+  const fire = (chunk: readonly ChangedItem[]) => {
     const chunkIndex = chunks++;
     const task = processChunk(db, projectId, chunk, syncedAt, {
       syncId,
@@ -229,6 +342,7 @@ async function upsertItems(
     }).then((r) => {
       upserted += r.upserted;
       inboundConversations += r.inboundConversations;
+      commentsReconciled += r.commentsReconciled;
     });
     const tracked = task.finally(() => {
       inflight.delete(tracked);
@@ -237,7 +351,8 @@ async function upsertItems(
     return tracked;
   };
 
-  for await (const item of items) {
+  for await (const bundle of bundles) {
+    const item = bundle.item;
     if (firstItemAt === null) {
       firstItemAt = Date.now();
       logger.debug(
@@ -249,7 +364,7 @@ async function upsertItems(
         "sync: provider stream first item",
       );
     }
-    buffer.push(item);
+    buffer.push(bundle);
     seenIds.add(item.id);
     if (item.updatedAt && (!latestUpdatedAt || item.updatedAt > latestUpdatedAt)) {
       latestUpdatedAt = item.updatedAt;
@@ -277,6 +392,7 @@ async function upsertItems(
     seenIds,
     latestUpdatedAt,
     inboundConversations,
+    commentsReconciled,
     chunks,
     itemsSeen: seenIds.size,
   };
@@ -326,8 +442,14 @@ export async function runIncrementalSync(
     logger.info({ ...baseCtx, watermark: watermark?.toISOString() ?? null }, "sync: start");
 
     phase = "persist";
-    const { upserted, latestUpdatedAt, inboundConversations, chunks, itemsSeen } =
-      await upsertItems(db, project.id, provider.listChangesSince(watermark), syncedAt, syncId);
+    const {
+      upserted,
+      latestUpdatedAt,
+      inboundConversations,
+      commentsReconciled,
+      chunks,
+      itemsSeen,
+    } = await upsertItems(db, project.id, provider.listChangesSince(watermark), syncedAt, syncId);
 
     phase = "cursor";
     const newWatermark = latestUpdatedAt ?? watermark;
@@ -341,6 +463,7 @@ export async function runIncrementalSync(
         chunks,
         itemsSeen,
         inboundConversations,
+        commentsReconciled,
         newWatermark: newWatermark?.toISOString() ?? null,
         durationMs: Date.now() - startedAt,
       },
@@ -378,8 +501,15 @@ export async function runFullSync(
     logger.info(baseCtx, "sync: start");
 
     phase = "persist";
-    const { upserted, seenIds, latestUpdatedAt, inboundConversations, chunks, itemsSeen } =
-      await upsertItems(db, project.id, provider.listChangesSince(null), syncedAt, syncId);
+    const {
+      upserted,
+      seenIds,
+      latestUpdatedAt,
+      inboundConversations,
+      commentsReconciled,
+      chunks,
+      itemsSeen,
+    } = await upsertItems(db, project.id, provider.listChangesSince(null), syncedAt, syncId);
 
     // Archive any cached row not seen in the full walk. Excluding already-
     // archived rows keeps the update count meaningful.
@@ -404,6 +534,7 @@ export async function runFullSync(
         chunks,
         itemsSeen,
         inboundConversations,
+        commentsReconciled,
         newWatermark: latestUpdatedAt?.toISOString() ?? null,
         durationMs: Date.now() - startedAt,
       },
