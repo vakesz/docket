@@ -20,18 +20,25 @@ export const findRelatedPullRequestsTool: ToolFactory = (ctx) => ({
   def: {
     name: "find_related_pull_requests",
     description:
-      "Find pull requests the provider heuristically links to a cached item (id mention, branch name, keyword overlap). Use this before drilling into a specific PR with get_pull_request.",
+      "Find pull requests the provider heuristically links to a cached item (id mention, branch name, keyword overlap). Defaults to the conversation's anchored item; pass providerItemId only to look up a different one. Use this before drilling into a specific PR with get_pull_request.",
     parameters: zodToJsonSchema(
       z.object({
         providerItemId: z
           .string()
           .min(1)
-          .describe("Cached item id, e.g. 'owner/repo#42' on GitHub."),
+          .optional()
+          .describe(
+            "Cached item id, e.g. 'owner/repo#42' on GitHub. Defaults to the conversation's anchored item.",
+          ),
       }),
     ),
   },
   handler: async (raw) => {
-    const { providerItemId } = z.object({ providerItemId: z.string().min(1) }).parse(raw);
+    const args = z.object({ providerItemId: z.string().min(1).optional() }).parse(raw);
+    const providerItemId = args.providerItemId ?? ctx.providerItemId;
+    if (!providerItemId) {
+      return fail("providerItemId is required when no item is anchored on this conversation.");
+    }
     const project = await ctx.db.project.findUnique({ where: { id: ctx.projectId } });
     if (!project) return fail(`project ${ctx.projectId} not found`);
     const provider = await buildProviderForUser(ctx.db, project, ctx.userId);

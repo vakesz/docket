@@ -173,7 +173,7 @@ export const SETTINGS_CATALOG = {
     key: "llm.compaction.enabled",
     scope: "project",
     schema: BoolSchema,
-    default: false,
+    default: true,
     label: "Auto-compact long conversations",
     description:
       "When on, conversations whose transcript exceeds the token threshold get summarised before the next agent turn so the prompt fits the context window.",
@@ -191,7 +191,7 @@ export const SETTINGS_CATALOG = {
     key: "llm.compaction.keep-recent-turns",
     scope: "project",
     schema: CompactionKeepRecentTurnsSchema,
-    default: 8,
+    default: 6,
     label: "Compaction — recent turns to keep verbatim",
     description:
       "How many of the most-recent message turns are preserved as-is. Older turns get folded into the summary.",
@@ -263,10 +263,10 @@ export const SETTINGS_CATALOG = {
     key: "web-fetch.max-bytes",
     scope: "project",
     schema: WebFetchMaxBytesSchema,
-    default: 1_000_000,
+    default: 200_000,
     label: "Web-fetch response size cap (bytes)",
     description:
-      "Upper bound on the response body web_fetch will return to the agent. Larger payloads are truncated and reported as denied_size. Range: 64 KB to 8 MB.",
+      "Upper bound on the response body web_fetch will return to the agent. Larger payloads are truncated and reported as denied_size. Range: 64 KB to 8 MB. Keep small — a single turn can fan out to several fetches, and each one's body lands in the model's context window.",
   },
   "proposals.auto-accept-kinds": {
     key: "proposals.auto-accept-kinds",

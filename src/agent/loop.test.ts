@@ -96,6 +96,7 @@ function makeStubDb(): {
       aggregate: async () => ({ _sum: { costCents: 0 } }),
     },
     message: {
+      findMany: async () => messages.filter((m) => !m.compacted),
       create: async (args: {
         data: {
           conversationId: string;
