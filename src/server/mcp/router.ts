@@ -13,6 +13,7 @@
 import "server-only";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { Prisma } from "@/db/generated/client";
 import {
   projectIdSchema,
   projectScopedMutationProcedure,
@@ -75,8 +76,9 @@ export const mcpRouter = router({
       });
     } catch (err) {
       // Prisma unique constraint (projectId, name) — surface as a friendly
-      // 409 instead of leaking the raw P2002.
-      if (err instanceof Error && err.message.includes("Unique constraint")) {
+      // 409 instead of leaking the raw P2002. Matching on the error class +
+      // code is robust to localized message strings.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
         throw new TRPCError({
           code: "CONFLICT",
           message: `An MCP server named '${input.name}' already exists in this project.`,

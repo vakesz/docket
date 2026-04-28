@@ -152,7 +152,3 @@ export type Proposal =
   | ReactionToggleProposal
   | MemoryWriteProposal
   | MemoryDeleteProposal;
-
-export function kindOf(proposal: Proposal): ProposalKind {
-  return proposal.kind;
-}

@@ -1,0 +1,37 @@
+/**
+ * Guardrail settings loader — pulls per-project knobs from the catalog
+ * and folds them into the shape `selectGuardrailFor` expects. Mirrors
+ * `loadCompactionSettings` in the conversations module.
+ */
+
+import "server-only";
+import type { GuardrailSettings } from "@/agent/guardrail/registry";
+import type { db as Db } from "@/server/db";
+import { loadProjectSetting } from "@/server/settings/effective";
+
+type Database = typeof Db;
+
+export type { GuardrailSettings };
+
+export async function loadGuardrailSettings(
+  db: Database,
+  projectId: string,
+): Promise<GuardrailSettings> {
+  const [enabled, kind, blockOnInjection, blockOffTopic, scopeCheckEnabled, outputCheckEnabled] =
+    await Promise.all([
+      loadProjectSetting(db, projectId, "guardrail.enabled"),
+      loadProjectSetting(db, projectId, "guardrail.kind"),
+      loadProjectSetting(db, projectId, "guardrail.block-on-injection"),
+      loadProjectSetting(db, projectId, "guardrail.block-off-topic"),
+      loadProjectSetting(db, projectId, "guardrail.scope-check-enabled"),
+      loadProjectSetting(db, projectId, "guardrail.output-check-enabled"),
+    ]);
+  return {
+    enabled,
+    kind,
+    blockOnInjection,
+    blockOffTopic,
+    scopeCheckEnabled,
+    outputCheckEnabled,
+  };
+}

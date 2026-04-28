@@ -43,7 +43,7 @@ export function ProviderToggle({
           {help ? <span className="text-xs text-fg-muted">{help}</span> : null}
         </Label>
       </Field>
-      {checked && !disabled ? <div className="flex flex-col gap-3 pl-12">{children}</div> : null}
+      {checked && !disabled ? <div className="flex flex-col gap-3">{children}</div> : null}
     </div>
   );
 }

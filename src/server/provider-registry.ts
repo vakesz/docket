@@ -6,28 +6,26 @@ import { githubSpec } from "@/providers/github/spec";
 /**
  * Static registry of provider specs.
  *
- * Third-party providers add their spec to this array directly (or, if we
+ * Third-party providers add their spec to this tuple directly (or, if we
  * ever want a plugin shape, we'd add a build-time include). Tests use vi
  * mocks against `WorkItemProvider` instead of a stub provider.
+ *
+ * Each spec uses `satisfies ProviderSpec` so its `typeId` literal flows
+ * through this `as const` tuple — `ProviderTypeId` and `PROVIDER_TYPE_IDS`
+ * below are derived from it, so adding a provider only needs an entry here.
  */
-export const PROVIDER_SPECS: readonly ProviderSpec[] = [githubSpec, azureDevOpsSpec];
+export const PROVIDER_SPECS = [githubSpec, azureDevOpsSpec] as const;
+
+export type ProviderTypeId = (typeof PROVIDER_SPECS)[number]["typeId"];
 
 /**
- * Const tuple of provider type ids, kept in sync with `PROVIDER_SPECS`. The
- * `as const` narrowing lets `z.enum` consume it directly without an unsafe
- * cast — adding a provider here is a compile error if the spec doesn't match.
+ * Tuple of provider type ids derived from `PROVIDER_SPECS`. The asserted
+ * non-empty-tuple shape lets `z.enum` consume it directly.
  */
-export const PROVIDER_TYPE_IDS = ["github", "azure_devops"] as const;
-export type ProviderTypeId = (typeof PROVIDER_TYPE_IDS)[number];
-
-if (
-  PROVIDER_SPECS.length !== PROVIDER_TYPE_IDS.length ||
-  PROVIDER_SPECS.some((s, i) => s.typeId !== PROVIDER_TYPE_IDS[i])
-) {
-  throw new Error(
-    `provider-registry: PROVIDER_TYPE_IDS drift; got [${PROVIDER_SPECS.map((s) => s.typeId).join(", ")}], expected [${PROVIDER_TYPE_IDS.join(", ")}]`,
-  );
-}
+export const PROVIDER_TYPE_IDS = PROVIDER_SPECS.map((s) => s.typeId) as unknown as readonly [
+  ProviderTypeId,
+  ...ProviderTypeId[],
+];
 
 export function getProviderSpec(typeId: string): ProviderSpec | null {
   return PROVIDER_SPECS.find((spec) => spec.typeId === typeId) ?? null;

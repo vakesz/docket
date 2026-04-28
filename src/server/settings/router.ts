@@ -13,17 +13,16 @@
  */
 
 import "server-only";
-import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getBudgetStatus } from "@/server/billing/budget";
 import { pruneAuditOlderThan } from "@/server/proposals/executor";
 import {
   decodeSettingValue,
-  encodeSettingValue,
   getSettingDef,
   SETTING_KEYS,
   SETTINGS_CATALOG,
   type SettingKey,
+  type SettingScope,
 } from "@/server/settings/catalog";
 import { loadGlobalSetting } from "@/server/settings/effective";
 import {
@@ -36,25 +35,56 @@ import {
   userIdOrThrow,
 } from "@/server/trpc";
 
-const SettingKeyEnum = z.enum(SETTING_KEYS as [SettingKey, ...SettingKey[]]);
+/**
+ * Build a discriminated union over `(key, value)` pairs for one scope —
+ * each branch pins `key` to the literal catalog id and `value` to that
+ * key's catalog schema. The router can't be called with a wrong-scope
+ * key (the union doesn't include it) or a malformed value (Zod parses it
+ * against the per-key schema), so the procedure bodies don't carry a
+ * scope check or a try/catch around encoding.
+ *
+ * `setup.complete` is excluded from the global union — it's a sticky
+ * bootstrap flag, not a router-writable setting.
+ */
+function scopedUpdateOptions(scope: SettingScope) {
+  return SETTING_KEYS.filter(
+    (k) => SETTINGS_CATALOG[k].scope === scope && k !== "setup.complete",
+  ).map((k) =>
+    z.object({
+      key: z.literal(k),
+      value: SETTINGS_CATALOG[k].schema as z.ZodTypeAny,
+    }),
+  );
+}
 
-const UpdateInput = z.object({
-  key: SettingKeyEnum,
-  /// Pre-typed JSON-equivalent value. The router re-validates against the
-  /// catalog schema before writing so a malformed payload can't slip in.
-  value: z.unknown(),
-});
+type UpdateOption = z.ZodObject<{ key: z.ZodLiteral<SettingKey>; value: z.ZodTypeAny }>;
+type UpdateOptions = readonly [UpdateOption, ...UpdateOption[]];
 
-const ResetInput = z.object({ key: SettingKeyEnum });
+const UserUpdateInput = z.discriminatedUnion(
+  "key",
+  scopedUpdateOptions("user") as unknown as UpdateOptions,
+);
 
-const ProjectUpdateInput = projectIdSchema.extend({
-  key: SettingKeyEnum,
-  value: z.unknown(),
-});
+const GlobalUpdateInput = z.discriminatedUnion(
+  "key",
+  scopedUpdateOptions("global") as unknown as UpdateOptions,
+);
 
-const ProjectResetInput = projectIdSchema.extend({
-  key: SettingKeyEnum,
-});
+const ProjectUpdateInput = projectIdSchema.and(
+  z.discriminatedUnion("key", scopedUpdateOptions("project") as unknown as UpdateOptions),
+);
+
+function scopedKeys(scope: SettingScope): SettingKey[] {
+  return SETTING_KEYS.filter((k) => SETTINGS_CATALOG[k].scope === scope && k !== "setup.complete");
+}
+
+const UserKeyEnum = z.enum(scopedKeys("user") as [SettingKey, ...SettingKey[]]);
+const GlobalKeyEnum = z.enum(scopedKeys("global") as [SettingKey, ...SettingKey[]]);
+const ProjectKeyEnum = z.enum(scopedKeys("project") as [SettingKey, ...SettingKey[]]);
+
+const UserResetInput = z.object({ key: UserKeyEnum });
+const GlobalResetInput = z.object({ key: GlobalKeyEnum });
+const ProjectResetInput = projectIdSchema.extend({ key: ProjectKeyEnum });
 
 export const settingsRouter = router({
   /**
@@ -94,24 +124,9 @@ export const settingsRouter = router({
     }));
   }),
 
-  update: protectedProcedure.input(UpdateInput).mutation(async ({ ctx, input }) => {
+  update: protectedProcedure.input(UserUpdateInput).mutation(async ({ ctx, input }) => {
     const userId = userIdOrThrow(ctx);
-    const def = getSettingDef(input.key);
-    if (def.scope !== "user") {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: `setting '${input.key}' is ${def.scope}-scoped — use the matching surface`,
-      });
-    }
-    let encoded: string;
-    try {
-      encoded = encodeSettingValue(input.key, input.value as never);
-    } catch (err) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: `value for '${input.key}' failed validation: ${err instanceof Error ? err.message : String(err)}`,
-      });
-    }
+    const encoded = JSON.stringify(input.value);
     // Prisma's `upsert` won't accept `null` in a compound-unique `where`,
     // and Postgres treats `null` columns in a unique as unconstrained — so
     // a per-user (projectId == null) Setting needs find-then-update/create.
@@ -127,15 +142,9 @@ export const settingsRouter = router({
     });
   }),
 
-  reset: protectedProcedure.input(ResetInput).mutation(async ({ ctx, input }) => {
+  reset: protectedProcedure.input(UserResetInput).mutation(async ({ ctx, input }) => {
     const userId = userIdOrThrow(ctx);
     const def = getSettingDef(input.key);
-    if (def.scope !== "user") {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: `setting '${input.key}' is ${def.scope}-scoped — use the matching surface`,
-      });
-    }
     await ctx.db.setting.deleteMany({
       where: { key: input.key, userId, scope: "user" },
     });
@@ -171,29 +180,8 @@ export const settingsRouter = router({
     }));
   }),
 
-  globalUpdate: mutationProcedure.input(UpdateInput).mutation(async ({ ctx, input }) => {
-    const def = getSettingDef(input.key);
-    if (def.scope !== "global") {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: `setting '${input.key}' is ${def.scope}-scoped — use the matching surface`,
-      });
-    }
-    if (input.key === "setup.complete") {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "setup.complete is managed by the bootstrap flow",
-      });
-    }
-    let encoded: string;
-    try {
-      encoded = encodeSettingValue(input.key, input.value as never);
-    } catch (err) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: `value for '${input.key}' failed validation: ${err instanceof Error ? err.message : String(err)}`,
-      });
-    }
+  globalUpdate: mutationProcedure.input(GlobalUpdateInput).mutation(async ({ ctx, input }) => {
+    const encoded = JSON.stringify(input.value);
     const existing = await ctx.db.setting.findFirst({
       where: { key: input.key, scope: "global", userId: null, projectId: null },
       orderBy: { updatedAt: "desc" },
@@ -205,20 +193,8 @@ export const settingsRouter = router({
     return ctx.db.setting.create({ data: { key: input.key, value: encoded, scope: "global" } });
   }),
 
-  globalReset: mutationProcedure.input(ResetInput).mutation(async ({ ctx, input }) => {
+  globalReset: mutationProcedure.input(GlobalResetInput).mutation(async ({ ctx, input }) => {
     const def = getSettingDef(input.key);
-    if (def.scope !== "global") {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: `setting '${input.key}' is ${def.scope}-scoped — use the matching surface`,
-      });
-    }
-    if (input.key === "setup.complete") {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "setup.complete is managed by the bootstrap flow",
-      });
-    }
     await ctx.db.setting.deleteMany({
       where: { key: input.key, scope: "global", userId: null, projectId: null },
     });
@@ -250,22 +226,7 @@ export const settingsRouter = router({
   projectUpdate: projectScopedMutationProcedure
     .input(ProjectUpdateInput)
     .mutation(async ({ ctx, input }) => {
-      const def = getSettingDef(input.key);
-      if (def.scope !== "project") {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: `setting '${input.key}' is ${def.scope}-scoped — use the matching surface`,
-        });
-      }
-      let encoded: string;
-      try {
-        encoded = encodeSettingValue(input.key, input.value as never);
-      } catch (err) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: `value for '${input.key}' failed validation: ${err instanceof Error ? err.message : String(err)}`,
-        });
-      }
+      const encoded = JSON.stringify(input.value);
       const existing = await ctx.db.setting.findFirst({
         where: { key: input.key, projectId: input.projectId, scope: "project", userId: null },
         select: { id: true },
@@ -287,12 +248,6 @@ export const settingsRouter = router({
     .input(ProjectResetInput)
     .mutation(async ({ ctx, input }) => {
       const def = getSettingDef(input.key);
-      if (def.scope !== "project") {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: `setting '${input.key}' is ${def.scope}-scoped — use the matching surface`,
-        });
-      }
       await ctx.db.setting.deleteMany({
         where: { key: input.key, projectId: input.projectId, scope: "project" },
       });

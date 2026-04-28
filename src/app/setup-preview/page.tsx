@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { publicBaseUrl } from "@/lib/public-base-url";
 import { SetupWizardForm } from "@/ui/setup/wizard-form";
 
 /**
@@ -17,17 +18,18 @@ export default function SetupPreviewPage() {
   if (process.env.NODE_ENV === "production") {
     notFound();
   }
-  const publicBaseUrl = (process.env.PUBLIC_BASE_URL ?? "http://localhost:3000").trim();
+  const baseUrl = publicBaseUrl();
   return (
     <main className="relative min-h-screen bg-bg text-fg">
       <p className="fixed top-2 left-1/2 z-10 -translate-x-1/2 rounded-md border border-border bg-surface-alt px-3 py-1.5 text-xs text-fg-muted shadow-sm">
         Preview mode — read-only, navigation only.
       </p>
       <SetupWizardForm
-        publicBaseUrl={publicBaseUrl}
+        publicBaseUrl={baseUrl}
         hasGithub={false}
         hasAzureDevops={false}
-        hasOpenai={false}
+        hasOpenaiChat={false}
+        hasOpenaiGuardrail={false}
         previewMode
       />
     </main>

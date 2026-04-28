@@ -196,10 +196,28 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
   }, [pendingSeed, inFlight]);
 
   const startNewThread = async () => {
-    if (inFlight) return;
+    // Snapshot whether we were streaming BEFORE we touch any state. The
+    // call to resetStream() below aborts the in-flight fetch
+    // synchronously, which propagates through Next.js's req.signal into
+    // the OpenAI SDK and stops upstream token generation on the next
+    // event-loop tick. Doing this *before* any await guarantees the LLM
+    // is cut off immediately even if the create / invalidate calls below
+    // take a moment.
+    const wasInFlight = inFlight;
+    const priorConvId = conversationId;
+    resetStream();
+    // If a stream was running, the agent loop's persistAssistantTurn
+    // catch handler will have flushed any partial output. Refetch so the
+    // prior thread shows what it managed to produce.
+    if (wasInFlight && priorConvId) {
+      await Promise.all([
+        utils.conversations.list.invalidate({ projectId, itemId }),
+        utils.conversations.get.invalidate({ projectId, conversationId: priorConvId }),
+      ]);
+    }
     const conv = await create.mutateAsync({ projectId, itemId });
     setActiveId(conv.id);
-    resetStream();
+    await utils.conversations.list.invalidate({ projectId, itemId });
     promptRef.current?.focus();
   };
 
@@ -217,8 +235,9 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
           <button
             type="button"
             onClick={() => void startNewThread()}
-            disabled={inFlight || create.isPending}
+            disabled={create.isPending}
             className={cn(microCapsButtonClass, "disabled:opacity-50")}
+            title={inFlight ? "Stop this thread and start a new one" : "Start a new thread"}
           >
             New thread
           </button>
@@ -287,6 +306,26 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
               />
             )}
             {inFlight && !streaming.question && <ThinkingDots />}
+            {streaming.guardrailNotices.length > 0 && (
+              <div className="mt-1 flex flex-col gap-1">
+                {streaming.guardrailNotices.map((notice, idx) => (
+                  <div
+                    // biome-ignore lint/suspicious/noArrayIndexKey: notices are append-only within one stream.
+                    key={`guardrail:${idx}`}
+                    className={
+                      notice.blocked
+                        ? "rounded border border-danger/40 bg-danger-bg px-3 py-2 text-xs text-danger-fg"
+                        : "rounded border border-warning/40 bg-warning-bg/60 px-3 py-2 text-xs text-warning-fg"
+                    }
+                  >
+                    <span className="font-medium uppercase tracking-wide">
+                      {notice.blocked ? "Blocked" : "Flagged"} · {notice.stage.replace("_", " ")}
+                    </span>
+                    <span className="ml-2">{notice.reason}</span>
+                  </div>
+                ))}
+              </div>
+            )}
             {streaming.error && (
               <div className="mt-2 rounded border border-danger/40 bg-danger-bg px-3 py-2 text-xs text-danger-fg">
                 {streaming.error}

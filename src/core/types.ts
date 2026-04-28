@@ -13,6 +13,10 @@
 export const ITEM_KINDS = ["epic", "feature", "story", "task", "bug"] as const;
 export type ItemKind = (typeof ITEM_KINDS)[number];
 
+export function isItemKind(value: string): value is ItemKind {
+  return (ITEM_KINDS as readonly string[]).includes(value);
+}
+
 export const ITEM_STATES = [
   "new",
   "active",
@@ -22,6 +26,10 @@ export const ITEM_STATES = [
   "closed",
 ] as const;
 export type ItemState = (typeof ITEM_STATES)[number];
+
+export function isItemState(value: string): value is ItemState {
+  return (ITEM_STATES as readonly string[]).includes(value);
+}
 
 export const TRANSITION_INTENTS = [
   "start_work",
@@ -33,6 +41,10 @@ export const TRANSITION_INTENTS = [
   "reopen",
 ] as const;
 export type TransitionIntent = (typeof TRANSITION_INTENTS)[number];
+
+export function isTransitionIntent(value: string): value is TransitionIntent {
+  return (TRANSITION_INTENTS as readonly string[]).includes(value);
+}
 
 export const STATE_BUCKETS = ["open", "closed", "all"] as const;
 export type StateBucket = (typeof STATE_BUCKETS)[number];

@@ -1,7 +1,7 @@
 "use client";
-import { Field, Input, Label } from "@headlessui/react";
-import { fieldClass } from "@/lib/form-classes";
+import { Field, Label } from "@headlessui/react";
 import { trpc } from "@/lib/trpc-client";
+import { NumberField } from "@/ui/forms/number-field";
 import { DefaultProjectPicker } from "@/ui/settings/default-project-picker";
 import { TimezonePicker } from "@/ui/settings/timezone-picker";
 import { ThemePicker } from "@/ui/shell/theme-picker";
@@ -29,7 +29,8 @@ export function ProfilePanel() {
   const timezoneRaw = list.data?.find((r) => r.key === "display.timezone")?.value;
   const timezone = typeof timezoneRaw === "string" ? timezoneRaw : "";
   const autoRefreshRaw = list.data?.find((r) => r.key === "ui.auto-refresh-seconds")?.value;
-  const autoRefresh = typeof autoRefreshRaw === "number" ? autoRefreshRaw : 0;
+  const autoRefreshSeconds = typeof autoRefreshRaw === "number" ? autoRefreshRaw : 0;
+  const autoRefreshMinutes = Math.round(autoRefreshSeconds / 60);
   const disabled = list.isPending || update.isPending;
 
   return (
@@ -60,25 +61,22 @@ export function ProfilePanel() {
       </Field>
 
       <Field className="flex flex-col gap-1 border-t border-border pt-6">
-        <Label className="text-sm font-medium text-fg">Auto-refresh interval (seconds)</Label>
+        <Label className="text-sm font-medium text-fg">Auto-refresh interval (minutes)</Label>
         <p className="text-xs text-fg-muted">
           How often dashboard list views (LLM providers, OAuth providers, and similar) silently
           re-fetch in the background. 0 disables auto-refresh; manual refetches still work. Maximum
-          3600 (one hour).
+          60 (one hour).
         </p>
-        <Input
-          type="number"
+        <NumberField
           min={0}
-          max={3600}
+          max={60}
           step={1}
-          value={autoRefresh}
-          disabled={disabled}
-          onChange={(e) => {
-            const next = Number.parseInt(e.target.value, 10);
-            if (!Number.isFinite(next) || next < 0) return;
-            update.mutate({ key: "ui.auto-refresh-seconds" as never, value: next });
-          }}
-          className={`${fieldClass} max-w-[8rem]`}
+          value={autoRefreshMinutes}
+          disabled={list.isPending}
+          onCommit={(next) =>
+            update.mutate({ key: "ui.auto-refresh-seconds" as never, value: next * 60 })
+          }
+          className="max-w-[8rem]"
         />
         {update.error ? <p className="text-xs text-danger-fg">{update.error.message}</p> : null}
       </Field>

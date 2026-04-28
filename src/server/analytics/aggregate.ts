@@ -26,6 +26,10 @@ export type DailyBucket = {
   tokensIn: number;
   tokensOut: number;
   costCents: number;
+  /** Guardrail-side spend, broken out so the chart can stack it. */
+  guardrailTokensIn: number;
+  guardrailTokensOut: number;
+  guardrailCostCents: number;
   conversations: number;
 };
 
@@ -33,7 +37,15 @@ export type AggregateResult = {
   /** Oldest → newest, gaps zero-filled across the requested window. */
   buckets: DailyBucket[];
   /** Sum across the window (matches the bars). */
-  totals: { tokensIn: number; tokensOut: number; costCents: number; conversations: number };
+  totals: {
+    tokensIn: number;
+    tokensOut: number;
+    costCents: number;
+    guardrailTokensIn: number;
+    guardrailTokensOut: number;
+    guardrailCostCents: number;
+    conversations: number;
+  };
   /** Inclusive UTC start (YYYY-MM-DD) of the window. */
   from: string;
   /** Inclusive UTC end (YYYY-MM-DD) of the window. */
@@ -82,6 +94,9 @@ async function aggregate(
       tokensIn: true,
       tokensOut: true,
       costCents: true,
+      guardrailTokensIn: true,
+      guardrailTokensOut: true,
+      guardrailCostCents: true,
     },
   });
 
@@ -94,6 +109,9 @@ async function aggregate(
       tokensIn: 0,
       tokensOut: 0,
       costCents: 0,
+      guardrailTokensIn: 0,
+      guardrailTokensOut: 0,
+      guardrailCostCents: 0,
       conversations: 0,
     });
   }
@@ -101,6 +119,9 @@ async function aggregate(
   let totalIn = 0;
   let totalOut = 0;
   let totalCost = 0;
+  let totalGuardIn = 0;
+  let totalGuardOut = 0;
+  let totalGuardCost = 0;
   let totalConv = 0;
   for (const row of rows) {
     const key = isoDay(startOfUtcDay(row.startedAt));
@@ -109,10 +130,16 @@ async function aggregate(
     bucket.tokensIn += row.tokensIn;
     bucket.tokensOut += row.tokensOut;
     bucket.costCents += row.costCents;
+    bucket.guardrailTokensIn += row.guardrailTokensIn;
+    bucket.guardrailTokensOut += row.guardrailTokensOut;
+    bucket.guardrailCostCents += row.guardrailCostCents;
     bucket.conversations += 1;
     totalIn += row.tokensIn;
     totalOut += row.tokensOut;
     totalCost += row.costCents;
+    totalGuardIn += row.guardrailTokensIn;
+    totalGuardOut += row.guardrailTokensOut;
+    totalGuardCost += row.guardrailCostCents;
     totalConv += 1;
   }
 
@@ -122,6 +149,9 @@ async function aggregate(
       tokensIn: totalIn,
       tokensOut: totalOut,
       costCents: totalCost,
+      guardrailTokensIn: totalGuardIn,
+      guardrailTokensOut: totalGuardOut,
+      guardrailCostCents: totalGuardCost,
       conversations: totalConv,
     },
     from: isoDay(fromStart),

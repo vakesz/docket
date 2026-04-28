@@ -95,13 +95,18 @@ export async function injectExternalChange(
   if (conversations.length === 0) return { injectedInto: 0 };
 
   const body = formatInboundChange(args.providerItemId, args.changes);
-  for (const conv of conversations) {
-    await appendMessage(db, {
-      conversationId: conv.id,
-      role: "system",
-      content: body,
-    });
-  }
+  // Each appendMessage is an independent insert against a different
+  // Conversation row — fan out so a project with many active conversations
+  // doesn't pay N round-trips serially during sync.
+  await Promise.all(
+    conversations.map((conv) =>
+      appendMessage(db, {
+        conversationId: conv.id,
+        role: "system",
+        content: body,
+      }),
+    ),
+  );
   logger.debug(
     {
       projectId: args.projectId,

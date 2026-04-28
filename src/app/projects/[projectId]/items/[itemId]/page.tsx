@@ -91,6 +91,7 @@ export default async function ItemDetailPage({
       projectId={projectId}
       providerKind={project.providerKind}
       capabilities={project.capabilities}
+      providerHasAvatars={project.hasAvatarFetcher}
       item={item}
       staleThresholdDays={staleThresholdDays}
       showHeaderReactions={showHeaderReactions}

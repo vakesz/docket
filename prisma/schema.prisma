@@ -130,12 +130,19 @@ model LlmProvider {
   /// 'ollama', ...). The agent's `selectAdapterFor` dispatches on this;
   /// the OpenAI adapter ships today, future adapters are one file each.
   kind      String
+  /// 'chat' | 'guardrail'. Chat rows feed the agent loop; guardrail rows
+  /// feed the prompt-injection / moderation layer. Resolution paths are
+  /// disjoint — a chat resolver never picks a guardrail row and vice
+  /// versa. Role is stamped at create time and is not editable; to switch,
+  /// delete and recreate the row.
+  role      String   @default("chat")
   label     String
   /// AES-256-GCM ciphertext (`enc:v1:<iv>:<ct+tag>`) when SECRETS_KEY is set;
   /// legacy plaintext rows are still readable and re-encrypt on next write.
   apiKey    String
-  /// Default model for this provider row (e.g. 'gpt-5'). Empty falls back
-  /// to the adapter's hardcoded default.
+  /// Default model for this provider row (e.g. 'gpt-5' for chat,
+  /// 'gpt-5-nano' for guardrail). Empty falls back to the adapter's
+  /// hardcoded default for that role.
   model     String   @default("")
   /// Optional base URL (Azure AI Foundry v1 endpoint, OpenAI-compatible
   /// Ollama endpoint, proxies). Empty = vendor default.
@@ -144,21 +151,30 @@ model LlmProvider {
   /// in which case `estimateCostCents` returns undefined for any turn the
   /// API doesn't surface a precomputed cost for, and budget tracking
   /// silently undercounts. Set both fields when adding a new model.
-  inputPriceCentsPerMtok  Float?
-  outputPriceCentsPerMtok Float?
-  /// Whether this row is the global fallback when a project has no
-  /// defaultLlmProviderId. At most one row should have this true, but the
-  /// constraint is application-level (no DB unique partial index for now).
+  ///
+  /// Stored as Decimal(12, 4) — exact decimal arithmetic in the DB, with
+  /// 4 fractional digits of cents (= sub-cent precision down to 0.0001¢).
+  /// JS reads convert to `number` at the registry / router boundary; no
+  /// JS-side `Decimal` math is performed.
+  inputPriceCentsPerMtok  Decimal? @db.Decimal(12, 4)
+  outputPriceCentsPerMtok Decimal? @db.Decimal(12, 4)
+  /// Whether this row is the deployment-wide default for its `role`. Looked
+  /// up by the chat-LLM and guardrail-LLM resolvers when a project doesn't
+  /// pin a row explicitly. At most one row per role should have this set;
+  /// the application enforces it (`setDefault` clears the flag on the other
+  /// rows of the same role first).
   isDefault Boolean  @default(false)
   enabled   Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  defaultedByProjects   Project[]      @relation("ProjectDefaultLlm")
-  conversationOverrides Conversation[] @relation("ConversationLlmOverride")
+  defaultedByChatProjects      Project[]      @relation("ProjectDefaultLlm")
+  defaultedByGuardrailProjects Project[]      @relation("ProjectDefaultGuardrail")
+  conversationOverrides        Conversation[] @relation("ConversationLlmOverride")
 
   @@index([kind])
-  @@index([isDefault])
+  @@index([role])
+  @@index([role, isDefault])
 }
 
 // ----------------------------------------------------------------------------
@@ -178,9 +194,14 @@ model Project {
   /// Schemas live in each provider module's spec; this column doesn't
   /// validate.
   providerScope        Json
-  /// Project-level LLM choice; falls back to the global default LlmProvider
-  /// if null. Per-conversation override on Conversation.llmProviderIdOverride.
+  /// Project-level chat LLM choice; falls back to the most-recently-updated
+  /// enabled `LlmProvider` row with role='chat' when null. Per-conversation
+  /// override on Conversation.llmProviderIdOverride.
   defaultLlmProviderId String?
+  /// Project-level guardrail LLM choice; null disables LLM-judge guardrail
+  /// for the project (pattern guardrail still runs if enabled). FK targets
+  /// an LlmProvider row with role='guardrail'.
+  defaultGuardrailProviderId String?
   /// Project-level sampling temperature for the agent loop. Null → adapter
   /// default. Conversation/per-turn overrides still win.
   defaultTemperature   Float?
@@ -193,6 +214,7 @@ model Project {
 
   owner         User                @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
   defaultLlm    LlmProvider?        @relation("ProjectDefaultLlm", fields: [defaultLlmProviderId], references: [id], onDelete: SetNull)
+  defaultGuardrail LlmProvider?     @relation("ProjectDefaultGuardrail", fields: [defaultGuardrailProviderId], references: [id], onDelete: SetNull)
   defaultForUsers User[]            @relation("UserDefaultProject")
   memberships   ProjectMembership[]
   items         Item[]
@@ -462,6 +484,15 @@ model Conversation {
   tokensIn              Int       @default(0)
   tokensOut             Int       @default(0)
   costCents             Int       @default(0)
+  /// Guardrail spend, tracked separately from chat spend so the analytics
+  /// chart can split them. Driven by the `LlmJudgeGuardrail` adapter, which
+  /// surfaces a `usage` block on each decision; the loop folds those into
+  /// per-turn increments alongside the chat-side `tokensIn` / `tokensOut` /
+  /// `costCents` columns. Pattern / no-op guardrails leave these at zero
+  /// (no LLM spend to attribute).
+  guardrailTokensIn     Int       @default(0)
+  guardrailTokensOut    Int       @default(0)
+  guardrailCostCents    Int       @default(0)
 
   project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -471,6 +502,10 @@ model Conversation {
   @@index([projectId, archivedAt])
   @@index([userId, archivedAt])
   @@index([itemId])
+  // Budget rollup + analytics aggregate filter by `startedAt` across every
+  // project (`where: { startedAt: { gte: since } }`); without this index the
+  // monthly spend query falls back to a full scan once the table grows.
+  @@index([startedAt])
 }
 
 model Message {
@@ -487,6 +522,13 @@ model Message {
   /// synthetic system summary. Live transcript filters compacted == false.
   compacted      Boolean  @default(false)
   pending        Boolean  @default(false)
+  /// True when the guardrail layer flagged or blocked this message.
+  /// Surfaces in the chat UI as a banner above the message bubble.
+  flagged        Boolean  @default(false)
+  /// One-line guardrail reason ("regex: ignore previous instructions",
+  /// "moderation: harassment", "llm-judge: injection"). Null when not
+  /// flagged.
+  guardrailReason String?
   tokensIn       Int      @default(0)
   tokensOut      Int      @default(0)
   createdAt      DateTime @default(now())
@@ -599,7 +641,11 @@ model Setting {
   user    User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  @@unique([key, userId, projectId])
+  // Per-scope uniqueness is enforced by three partial unique indexes
+  // applied in `bin/apply-raw-sql.ts` (Prisma can't model partial uniques
+  // declaratively, and a plain `@@unique([key, userId, projectId])` is a
+  // no-op for the global/partial-NULL scopes since Postgres treats NULL
+  // as distinct).
   @@index([scope, key])
 }
 
@@ -681,6 +727,11 @@ model Audit {
 
   @@index([projectId, createdAt(sort: Desc)])
   @@index([projectId, action])
+  // Retention sweep + global eligible-count both filter by `createdAt`
+  // alone (no projectId): `audit.deleteMany({ where: { createdAt: { lt } } })`
+  // and the corresponding count() in the settings preview. Without this
+  // index they full-scan once the audit table grows.
+  @@index([createdAt])
 }
 
 // ----------------------------------------------------------------------------

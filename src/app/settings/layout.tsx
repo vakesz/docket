@@ -49,7 +49,11 @@ export default async function SettingsLayout({
     loadGlobalSetting(db, "app.read-only"),
   ]);
 
-  const projectOptions = projects.map((p) => ({ id: p.id, name: p.name }));
+  const projectOptions = projects.map((p) => ({
+    id: p.id,
+    name: p.name,
+    providerKind: p.providerKind,
+  }));
 
   // Topbar's project switcher: prefer the user's pinned default, fall back
   // to the most-recent membership. Switching projects from the topbar
@@ -58,10 +62,6 @@ export default async function SettingsLayout({
     (me?.defaultProjectId && projectOptions.find((p) => p.id === me.defaultProjectId)?.id) ??
     projectOptions[0]?.id ??
     null;
-
-  const currentProject = currentProjectId
-    ? (projects.find((p) => p.id === currentProjectId) ?? null)
-    : null;
 
   // Mirror the project layout's footer state so the user keeps the same
   // sync/pending signal while navigating into /settings. Without this the
@@ -92,12 +92,11 @@ export default async function SettingsLayout({
           currentProjectId={currentProjectId}
           userLabel={userLabel}
           userImage={userImage}
+          readOnly={readOnly}
         />
         <main className="flex flex-1 flex-col overflow-hidden">{children}</main>
         <StatusFooter
           projectId={currentProjectId}
-          projectName={currentProject?.name ?? null}
-          providerKind={currentProject?.providerKind ?? null}
           lastSyncAt={lastSyncAt}
           pendingProposals={pendingProposalsCount}
           readOnly={readOnly}

@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { publicBaseUrl } from "@/lib/public-base-url";
 import { auth } from "@/server/auth";
 import { db } from "@/server/db";
 import { requireSetupComplete } from "@/server/setup/guard";
@@ -88,7 +89,7 @@ export default async function SettingsPage({
       })
     : null;
 
-  const publicBase = (process.env.PUBLIC_BASE_URL ?? "http://localhost:3000").trim();
+  const publicBase = publicBaseUrl();
 
   return (
     <SettingsShell

@@ -65,7 +65,11 @@ export default async function ProjectLayout({
     ? mostRecent([syncCursor.watermark, syncCursor.lastFullSyncAt, syncCursor.updatedAt])
     : null;
 
-  const projectOptions = projects.map((p) => ({ id: p.id, name: p.name }));
+  const projectOptions = projects.map((p) => ({
+    id: p.id,
+    name: p.name,
+    providerKind: p.providerKind,
+  }));
 
   return (
     <div className="flex min-h-screen flex-col bg-bg text-fg">
@@ -75,12 +79,11 @@ export default async function ProjectLayout({
           currentProjectId={project.id}
           userLabel={userLabel}
           userImage={userImage}
+          readOnly={readOnly}
         />
         <main className="flex flex-1 flex-col overflow-hidden">{children}</main>
         <StatusFooter
           projectId={project.id}
-          projectName={project.name}
-          providerKind={project.providerKind}
           lastSyncAt={lastSyncAt}
           pendingProposals={pendingProposalsCount}
           readOnly={readOnly}

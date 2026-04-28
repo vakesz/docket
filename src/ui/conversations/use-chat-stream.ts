@@ -98,6 +98,7 @@ export function useChatStream(): UseChatStream {
         text: "",
         toolCalls: [],
         question: null,
+        guardrailNotices: [],
         error: null,
         done: false,
       });
@@ -119,6 +120,7 @@ export function useChatStream(): UseChatStream {
           text: "",
           toolCalls: [],
           question: null,
+          guardrailNotices: [],
           error: err instanceof Error ? err.message : String(err),
           done: true,
         });
@@ -132,6 +134,7 @@ export function useChatStream(): UseChatStream {
           text: "",
           toolCalls: [],
           question: null,
+          guardrailNotices: [],
           error: message,
           done: true,
         });
@@ -159,7 +162,11 @@ export function useChatStream(): UseChatStream {
           }
         }
       } catch (err) {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted) {
+          // A deliberate abort (resetStream, stopStream, unmount) owns
+          // its own state cleanup — bail without overwriting it.
+          return;
+        }
         setStreaming((prev) => ({
           ...prev,
           error: err instanceof Error ? err.message : String(err),
@@ -175,6 +182,12 @@ export function useChatStream(): UseChatStream {
         utils.conversations.list.invalidate({ projectId, itemId }),
         utils.conversations.get.invalidate({ projectId, conversationId }),
       ]);
+      // If the controller was aborted while we awaited above, a newer
+      // call (resetStream, stopStream, or another drainStream) already
+      // owns `streaming` — never clobber that with this run's tail
+      // state. Without the guard, the pendingUserMessage of the next
+      // turn or the EMPTY_STREAM written by resetStream gets blown away
+      // with `done: true` and the UI looks stuck on the prior turn.
       if (controller.signal.aborted) return;
       setStreaming((prev) => ({
         ...prev,
@@ -228,6 +241,19 @@ export function useChatStream(): UseChatStream {
           setStreaming((prev) => ({
             ...prev,
             question: { question: p.question, options: p.options, multiSelect: p.multiSelect },
+          }));
+        } else if (p.kind === "guardrail_blocked" || p.kind === "guardrail_flagged") {
+          setStreaming((prev) => ({
+            ...prev,
+            guardrailNotices: [
+              ...prev.guardrailNotices,
+              {
+                stage: p.stage,
+                reason: p.reason,
+                blocked: p.kind === "guardrail_blocked",
+                ...(p.categories ? { categories: p.categories } : {}),
+              },
+            ],
           }));
         } else if (p.kind === "error") {
           setStreaming((prev) => ({ ...prev, error: p.message }));

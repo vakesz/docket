@@ -16,6 +16,7 @@
 
 import "server-only";
 import { z } from "zod";
+import { GUARDRAIL_KINDS } from "@/agent/guardrail/types";
 
 export const SETTING_SCOPES = ["user", "project", "global"] as const;
 export type SettingScope = (typeof SETTING_SCOPES)[number];
@@ -69,7 +70,9 @@ const AuditRetentionSchema = z.number().int().min(0).max(3650);
 const MonthlyCostCapSchema = z.number().int().min(0).max(10_000_000);
 const CostCapActionSchema = z.enum(["block", "warn"]);
 // 0 = disabled; otherwise a polling interval in seconds. Capped at 1 hour
-// so a stray "999999" can't pin a tab on `setInterval`.
+// so a stray "999999" can't pin a tab on `setInterval`. The settings UI
+// presents this as minutes; the stored unit stays in seconds so
+// `useAutoRefreshIntervalMs` only has one ×1000 conversion.
 const AutoRefreshSecondsSchema = z.number().int().min(0).max(3600);
 // Allowlist of fully-qualified hostnames the web_fetch tool may target.
 // Empty list = no allowlist (any non-SSRF host is reachable). Hosts are
@@ -80,6 +83,7 @@ const WebFetchAllowedHostsSchema = z.array(z.string().min(1).max(253)).max(200);
 // truncates and reports `denied_size`. Keeps a runaway redirect from
 // pulling a multi-GB payload into the agent context.
 const WebFetchMaxBytesSchema = z.number().int().min(64_000).max(8_000_000);
+const GuardrailKindSchema = z.enum(GUARDRAIL_KINDS);
 
 // Hardcoded eligibility list for auto-accept. The kinds here are restricted
 // to those the user can low-risk emit through the UI as direct interactions:
@@ -311,7 +315,7 @@ export const SETTINGS_CATALOG = {
     default: 0,
     label: "Auto-refresh interval (seconds)",
     description:
-      "How often the UI re-fetches list views (LLM providers, OAuth providers, and similar dashboards) in the background. 0 disables auto-refresh; manual refetches still work. Maximum 3600 (one hour).",
+      "How often the UI re-fetches list views (LLM providers, OAuth providers, and similar dashboards) in the background. 0 disables auto-refresh; manual refetches still work. Maximum 3600 (one hour). Surfaced to users as minutes in the settings UI.",
   },
   "llm.cost-cap-action": {
     key: "llm.cost-cap-action",
@@ -348,6 +352,60 @@ export const SETTINGS_CATALOG = {
     label: "Web-fetch response size cap (bytes)",
     description:
       "Upper bound on the wire response body web_fetch will read. Larger payloads are truncated and reported as denied_size. Range: 64 KB to 8 MB. Keep small — a single turn can fan out to several fetches, and each one's body lands in the model's context window (after HTML cleaning, when applicable).",
+  },
+  "guardrail.enabled": {
+    key: "guardrail.enabled",
+    scope: "project",
+    schema: BoolSchema,
+    default: true,
+    label: "Enable chat guardrails",
+    description:
+      "When on, the chatbot's input, tool results, and output flow through a guardrail layer that screens for prompt injection, off-topic requests, and harmful content. Calls go to the project's configured guardrail LLM provider — never an external free endpoint.",
+  },
+  "guardrail.kind": {
+    key: "guardrail.kind",
+    scope: "project",
+    schema: GuardrailKindSchema,
+    default: "composite",
+    label: "Guardrail strategy",
+    description:
+      "'pattern' is local regex only (free, fast, low precision). 'llm-judge' uses the configured guardrail model exclusively (precise, ~$0.0002/call). 'composite' runs pattern first and only escalates to the model on harder cases (recommended). 'noop' disables guardrails without flipping the enabled toggle.",
+  },
+  "guardrail.block-on-injection": {
+    key: "guardrail.block-on-injection",
+    scope: "project",
+    schema: BoolSchema,
+    default: true,
+    label: "Block prompt-injection attempts",
+    description:
+      "When on, tool results that the guardrail flags as prompt injection are replaced with a refusal stub before re-entering the prompt. Off, they pass through with a flag annotation only.",
+  },
+  "guardrail.block-off-topic": {
+    key: "guardrail.block-off-topic",
+    scope: "project",
+    schema: BoolSchema,
+    default: true,
+    label: "Block off-topic chat",
+    description:
+      "When on, user messages classified as outside the software / work-item scope (e.g. 'how to make pancakes', medical / legal advice) are refused before reaching the agent. Off, they only get a banner and the agent still answers.",
+  },
+  "guardrail.scope-check-enabled": {
+    key: "guardrail.scope-check-enabled",
+    scope: "project",
+    schema: BoolSchema,
+    default: true,
+    label: "Scope-check user input",
+    description:
+      "When on, every user message is run through a one-token scope classifier on the configured guardrail model. Turn off if your projects extend beyond software work-items.",
+  },
+  "guardrail.output-check-enabled": {
+    key: "guardrail.output-check-enabled",
+    scope: "project",
+    schema: BoolSchema,
+    default: false,
+    label: "Output safety check",
+    description:
+      "When on, the assistant's final reply is classified for harmful content (hate, harassment, threats, sexual). Adds one extra round-trip per turn on the guardrail model. Output is never blocked mid-stream — flagged messages get a banner.",
   },
   "proposals.auto-accept-kinds": {
     key: "proposals.auto-accept-kinds",

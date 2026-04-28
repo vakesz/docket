@@ -1,7 +1,7 @@
 "use client";
 
 import { Field, Label, Switch } from "@headlessui/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   primaryButtonClass,
   secondaryButtonClass,
@@ -45,13 +45,18 @@ export function AutoAcceptPanel({ projectId }: { projectId: string }) {
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
+  // Seed once per project. A refetch from a sibling save would otherwise
+  // replace the user's in-progress toggle changes with the unchanged
+  // stored set; switching projects in-place must re-seed from the new
+  // project's settings instead of keeping the previous project's state.
+  const seededForRef = useRef<string | null>(null);
   useEffect(() => {
+    if (seededForRef.current === projectId) return;
     if (!projectSettings.data) return;
     const row = projectSettings.data.find((r) => r.key === "proposals.auto-accept-kinds");
-    if (Array.isArray(row?.value)) {
-      setSelected(new Set(row.value as string[]));
-    }
-  }, [projectSettings.data]);
+    setSelected(Array.isArray(row?.value) ? new Set(row.value as string[]) : new Set<string>());
+    seededForRef.current = projectId;
+  }, [projectSettings.data, projectId]);
 
   const save = trpc.settings.projectUpdate.useMutation({
     onSuccess: async () => {

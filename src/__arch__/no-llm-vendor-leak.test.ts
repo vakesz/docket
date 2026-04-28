@@ -24,14 +24,23 @@ const SKIP_DIRS = new Set(["node_modules", "generated"]);
 
 type Quarantine = {
   sdk: string;
-  allowedFile: string;
+  /**
+   * Files allowed to import the quarantined SDK. The chat adapter
+   * (`agent/llm/openai.ts`) and the guardrail LLM-judge
+   * (`agent/guardrail/llm-judge.ts`) both legitimately need the openai
+   * SDK; everything else must go through the vendor-neutral interface.
+   */
+  allowedFiles: readonly string[];
   matcher: RegExp;
 };
 
 const QUARANTINES: Quarantine[] = [
   {
     sdk: "openai",
-    allowedFile: join("src", "agent", "llm", "openai.ts"),
+    allowedFiles: [
+      join("src", "agent", "llm", "openai.ts"),
+      join("src", "agent", "guardrail", "llm-judge.ts"),
+    ],
     // Match the bare "openai" package (and submodules) but not "openai-foo".
     matcher:
       /from\s+["']openai(?:\/[^"']+)?["']|require\(\s*["']openai(?:\/[^"']+)?["']\s*\)|import\(\s*["']openai(?:\/[^"']+)?["']\s*\)/,
@@ -60,7 +69,7 @@ describe("arch: LLM vendor SDK boundary", () => {
       const rel = relative(PROJECT_ROOT, file);
       const text = await readFile(file, "utf8");
       for (const q of QUARANTINES) {
-        if (rel === q.allowedFile) continue;
+        if (q.allowedFiles.includes(rel)) continue;
         if (q.matcher.test(text)) {
           offenders.push({ file: rel, sdk: q.sdk });
         }

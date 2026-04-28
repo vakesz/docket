@@ -1,7 +1,7 @@
 "use client";
 
 import { Field, Input, Label, Switch } from "@headlessui/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   fieldClass,
   primaryButtonClass,
@@ -34,7 +34,15 @@ export function ProjectLlmPanel({ projectId }: { projectId: string }) {
   const [compactKeep, setCompactKeep] = useState<string>("8");
   const [compactStrategy, setCompactStrategy] = useState<CompactionStrategy>("summary");
 
+  // Seed the form once per project. Re-seeding on every refetch would
+  // clobber in-flight user edits — including the partial-state window
+  // during the parallel-mutation submit below, where one mutation's
+  // invalidate fires a refetch before the others have written their rows.
+  // Switching projects in-place must re-seed from the new project's
+  // settings instead of keeping the previous project's state.
+  const seededProjectFor = useRef<string | null>(null);
   useEffect(() => {
+    if (seededProjectFor.current === projectId) return;
     if (!project) return;
     setProviderId(project.defaultLlmProviderId ?? "");
     setTemperature(
@@ -42,20 +50,24 @@ export function ProjectLlmPanel({ projectId }: { projectId: string }) {
         ? String(project.defaultTemperature)
         : "",
     );
-  }, [project]);
+    seededProjectFor.current = projectId;
+  }, [project, projectId]);
 
+  const seededSettingsFor = useRef<string | null>(null);
   useEffect(() => {
+    if (seededSettingsFor.current === projectId) return;
     if (!projectSettings.data) return;
     const lookup = new Map(projectSettings.data.map((row) => [row.key, row.value]));
     const enabled = lookup.get("llm.compaction.enabled");
     const threshold = lookup.get("llm.compaction.token-threshold");
     const keep = lookup.get("llm.compaction.keep-recent-turns");
     const strategy = lookup.get("llm.compaction.strategy");
-    if (typeof enabled === "boolean") setCompactEnabled(enabled);
-    if (typeof threshold === "number") setCompactThreshold(String(threshold));
-    if (typeof keep === "number") setCompactKeep(String(keep));
-    if (strategy === "summary" || strategy === "drop-tools") setCompactStrategy(strategy);
-  }, [projectSettings.data]);
+    setCompactEnabled(typeof enabled === "boolean" ? enabled : false);
+    setCompactThreshold(typeof threshold === "number" ? String(threshold) : "60000");
+    setCompactKeep(typeof keep === "number" ? String(keep) : "8");
+    setCompactStrategy(strategy === "drop-tools" ? "drop-tools" : "summary");
+    seededSettingsFor.current = projectId;
+  }, [projectSettings.data, projectId]);
 
   const saveLlm = trpc.projects.setLlmDefaults.useMutation({
     onSuccess: async () => {
@@ -119,8 +131,8 @@ export function ProjectLlmPanel({ projectId }: { projectId: string }) {
     return <p className="text-sm text-fg-faint">Project not found.</p>;
   }
 
-  const enabled = providers.data?.filter((p) => p.enabled) ?? [];
-  const globalDefault = providers.data?.find((p) => p.isDefault) ?? null;
+  const enabled = providers.data?.filter((p) => p.enabled && p.role === "chat") ?? [];
+  const globalDefault = providers.data?.find((p) => p.role === "chat" && p.isDefault) ?? null;
 
   return (
     <div className="flex flex-col gap-8">

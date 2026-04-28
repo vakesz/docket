@@ -1,10 +1,10 @@
 import { Clock, ExternalLink, GitBranch, Tag, User, UserX } from "lucide-react";
 import Link from "next/link";
-import type { ItemKind, ItemState } from "@/core/types";
-import { ITEM_KINDS, ITEM_STATES } from "@/core/types";
+import { type ItemState, isItemKind, isItemState } from "@/core/types";
 import { metaLabelClass } from "@/lib/form-classes";
 import { displayTag, formatKind, formatRelative, providerProfileUrl } from "@/lib/format";
 import { ChatToggleButton } from "@/ui/items/chat-toggle-button";
+import { CommentAvatar } from "@/ui/items/comment-avatar";
 import { CommentComposer } from "@/ui/items/comment-composer";
 import { CopyIdButton } from "@/ui/items/copy-id-button";
 import { FreshnessStamp } from "@/ui/items/freshness";
@@ -57,6 +57,7 @@ export function DetailPane({
   projectId,
   providerKind,
   capabilities,
+  providerHasAvatars,
   item,
   staleThresholdDays,
   showHeaderReactions,
@@ -65,6 +66,7 @@ export function DetailPane({
   projectId: string;
   providerKind: string | null;
   capabilities: { supportedReactions: readonly string[] };
+  providerHasAvatars: boolean;
   item: DetailItem;
   staleThresholdDays: number | null;
   showHeaderReactions: boolean;
@@ -91,16 +93,8 @@ export function DetailPane({
           </div>
           <div className="flex items-center gap-2">
             <SuggestActionButton
-              kind={
-                (ITEM_KINDS as readonly string[]).includes(item.kind)
-                  ? (item.kind as ItemKind)
-                  : null
-              }
-              state={
-                (ITEM_STATES as readonly string[]).includes(item.state)
-                  ? (item.state as ItemState)
-                  : null
-              }
+              kind={isItemKind(item.kind) ? item.kind : null}
+              state={isItemState(item.state) ? item.state : null}
               title={item.title}
               bodyMd={item.descriptionMd}
               commentCount={item.comments.length}
@@ -268,33 +262,63 @@ export function DetailPane({
           <p className="text-sm italic text-fg-faint">No comments cached.</p>
         ) : (
           <ul className="flex flex-col gap-3">
-            {item.comments.map((c) => (
-              <li key={c.id} className="rounded border border-border p-3">
-                <div className="mb-1 flex items-baseline justify-between gap-2 text-xs text-fg-muted">
-                  <span className="font-medium text-fg">{c.author ?? "(unknown)"}</span>
-                  <time
-                    dateTime={c.createdAt.toISOString()}
-                    title={c.createdAt.toLocaleString()}
-                    className="font-mono text-[10px]"
-                  >
-                    {formatRelative(c.createdAt)}
-                  </time>
-                </div>
-                <Markdown source={c.bodyMd} />
-                {capabilities.supportedReactions.length > 0 && showCommentReactions ? (
-                  <div className="mt-2">
-                    <ReactionRow
-                      projectId={projectId}
-                      providerItemId={item.providerItemId}
-                      targetKind="comment"
-                      targetId={c.providerCommentId}
-                      reactions={c.reactions}
-                      supportedReactions={capabilities.supportedReactions}
-                    />
+            {item.comments.map((c) => {
+              const commentAuthorProfileUrl = providerProfileUrl(providerKind, c.author);
+              return (
+                <li key={c.id} className="rounded border border-border p-3">
+                  <div className="mb-3 flex items-center justify-between gap-2 text-xs text-fg-muted">
+                    <span className="inline-flex items-center gap-2">
+                      {c.author ? (
+                        <CommentAvatar
+                          name={c.author}
+                          providerKind={providerKind}
+                          providerHasAvatars={providerHasAvatars}
+                        />
+                      ) : null}
+                      {c.author ? (
+                        commentAuthorProfileUrl ? (
+                          <a
+                            href={commentAuthorProfileUrl}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className="font-medium text-fg hover:text-accent hover:underline"
+                          >
+                            {c.author}
+                          </a>
+                        ) : (
+                          <span className="font-medium text-fg">{c.author}</span>
+                        )
+                      ) : (
+                        <span className="font-medium text-fg">(unknown)</span>
+                      )}
+                    </span>
+                    <time
+                      dateTime={c.createdAt.toISOString()}
+                      title={c.createdAt.toLocaleString()}
+                      className="font-mono text-[10px]"
+                    >
+                      {formatRelative(c.createdAt)}
+                    </time>
                   </div>
-                ) : null}
-              </li>
-            ))}
+                  <Markdown source={c.bodyMd} />
+                  {capabilities.supportedReactions.length > 0 && showCommentReactions ? (
+                    <div className="mt-2 flex flex-col gap-1.5">
+                      <h3 className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                        Reactions
+                      </h3>
+                      <ReactionRow
+                        projectId={projectId}
+                        providerItemId={item.providerItemId}
+                        targetKind="comment"
+                        targetId={c.providerCommentId}
+                        reactions={c.reactions}
+                        supportedReactions={capabilities.supportedReactions}
+                      />
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

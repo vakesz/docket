@@ -1,7 +1,7 @@
 "use client";
 
 import { Field, Input, Label, Switch, Textarea } from "@headlessui/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   fieldClass,
   fieldMonoClass,
@@ -30,16 +30,24 @@ export function WebFetchPanel({ projectId }: { projectId: string }) {
   const [hostsText, setHostsText] = useState("");
   const [maxBytes, setMaxBytes] = useState<string>("1000000");
 
+  // Seed once per project. Parallel mutateAsync calls below would
+  // otherwise let an intermediate refetch (after one mutation lands but
+  // before the others) clobber whatever the user is still editing.
+  // Switching projects in-place must re-seed from the new project's
+  // settings instead of keeping the previous project's state.
+  const seededForRef = useRef<string | null>(null);
   useEffect(() => {
+    if (seededForRef.current === projectId) return;
     if (!projectSettings.data) return;
     const lookup = new Map(projectSettings.data.map((row) => [row.key, row.value]));
     const e = lookup.get("web-fetch.enabled");
     const hosts = lookup.get("web-fetch.allowed-hosts");
     const m = lookup.get("web-fetch.max-bytes");
-    if (typeof e === "boolean") setEnabled(e);
-    if (Array.isArray(hosts)) setHostsText(hosts.join("\n"));
-    if (typeof m === "number") setMaxBytes(String(m));
-  }, [projectSettings.data]);
+    setEnabled(typeof e === "boolean" ? e : true);
+    setHostsText(Array.isArray(hosts) ? hosts.join("\n") : "");
+    setMaxBytes(typeof m === "number" ? String(m) : "1000000");
+    seededForRef.current = projectId;
+  }, [projectSettings.data, projectId]);
 
   const save = trpc.settings.projectUpdate.useMutation({
     onSuccess: async () => {

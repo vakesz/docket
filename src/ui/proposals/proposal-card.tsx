@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useRef, useState } from "react";
 import { metaLabelClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
 import { cn } from "@/lib/utils";
@@ -52,13 +52,13 @@ export function ProposalCard({
   // Distinguish "auto-applied" from "user-confirmed" by snapshotting the
   // status seen on first successful fetch — if the row is already terminal
   // before the user could click anything, the executor handled it.
-  const [autoApplied, setAutoApplied] = useState<boolean | null>(null);
-  useEffect(() => {
-    if (autoApplied !== null) return;
-    if (!query.data) return;
+  const autoAppliedRef = useRef<boolean | null>(null);
+  if (autoAppliedRef.current === null && query.data) {
     const r = query.data.row;
-    setAutoApplied(r.status === "confirmed" && r.executedAt !== null && r.errorMessage === null);
-  }, [query.data, autoApplied]);
+    autoAppliedRef.current =
+      r.status === "confirmed" && r.executedAt !== null && r.errorMessage === null;
+  }
+  const autoApplied = autoAppliedRef.current ?? false;
 
   const confirm = trpc.proposals.confirm.useMutation({
     onSuccess: async () => {

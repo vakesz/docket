@@ -42,16 +42,17 @@ COPY bin ./bin
 # artifact that may have slipped into the build context before we generate
 # our own. If these existed in the context, they shouldn't influence the
 # image we ship.
-RUN rm -rf .next out .turbo .vercel build dist src/db/generated bin/seed-dev.js \
+RUN rm -rf .next out .turbo .vercel build dist src/db/generated bin/seed-dev.js bin/apply-raw-sql.js \
     && find . -name '*.tsbuildinfo' -delete
 
 RUN bunx prisma generate
 RUN bun run build
-# Bundle the bootstrap seed into a single self-contained JS file so the
-# runtime image doesn't need the TS source tree. `--conditions react-server`
-# resolves the `server-only` marker package to its no-op shim instead of the
-# throw-on-import default.
+# Bundle the bootstrap seed and the post-`prisma db push` raw-SQL script
+# into single self-contained JS files so the runtime image doesn't need the
+# TS source tree. `--conditions react-server` resolves the `server-only`
+# marker package to its no-op shim instead of the throw-on-import default.
 RUN bun build bin/seed-dev.ts --target=bun --conditions react-server --outfile bin/seed-dev.js
+RUN bun build bin/apply-raw-sql.ts --target=bun --conditions react-server --outfile bin/apply-raw-sql.js
 
 # ---------------------------------------------------------------------------
 # runner — minimal runtime image

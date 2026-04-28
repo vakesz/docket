@@ -1,11 +1,12 @@
 "use client";
 
-import { Field, Input, Label, Switch } from "@headlessui/react";
+import { Field, Label, Switch } from "@headlessui/react";
 import { AlertTriangle } from "lucide-react";
-import { fieldClass, switchThumbClass, switchTrackClass } from "@/lib/form-classes";
+import { switchThumbClass, switchTrackClass } from "@/lib/form-classes";
 import { DEFAULT_STALE_THRESHOLD_DAYS } from "@/lib/staleness";
 import { trpc } from "@/lib/trpc-client";
 import { RECENT_LIMIT_MAX, useRecentEnabled, useRecentLimit } from "@/lib/ui-prefs";
+import { NumberField } from "@/ui/forms/number-field";
 import { SelectField } from "@/ui/forms/select-field";
 
 const USER_STALE_OVERRIDE_KEY = "items.stale-after-days.user";
@@ -124,19 +125,14 @@ export function ItemsListPanel({ projectId }: { projectId: string | null }) {
             How many rows the Recent strip shows above the backlog. Maximum {RECENT_LIMIT_MAX}; set
             to 0 to hide the strip entirely.
           </p>
-          <Input
-            type="number"
+          <NumberField
             min={0}
             max={RECENT_LIMIT_MAX}
             step={1}
             value={recentLimit}
             disabled={!recentEnabled}
-            onChange={(e) => {
-              const next = Number.parseInt(e.target.value, 10);
-              if (!Number.isFinite(next) || next < 0) return;
-              setRecentLimit(Math.min(next, RECENT_LIMIT_MAX));
-            }}
-            className={`${fieldClass} max-w-[6rem]`}
+            onCommit={setRecentLimit}
+            className="max-w-[6rem]"
           />
         </Field>
       </section>
@@ -265,19 +261,16 @@ export function ItemsListPanel({ projectId }: { projectId: string | null }) {
             top of the backlog) before the rest collapse into a +N badge. Set to 0 to always
             collapse.
           </p>
-          <Input
-            type="number"
+          <NumberField
             min={0}
             max={20}
             step={1}
             value={maxVisibleTags}
             disabled={disabled}
-            onChange={(e) => {
-              const next = Number.parseInt(e.target.value, 10);
-              if (!Number.isFinite(next) || next < 0) return;
-              update.mutate({ key: "items.max-visible-tags" as never, value: next });
-            }}
-            className={`${fieldClass} max-w-[6rem]`}
+            onCommit={(next) =>
+              update.mutate({ key: "items.max-visible-tags" as never, value: next })
+            }
+            className="max-w-[6rem]"
           />
         </Field>
 
@@ -288,19 +281,16 @@ export function ItemsListPanel({ projectId }: { projectId: string | null }) {
             badge. Only applies when the assignee selector style is set to chips. Set to 0 to always
             collapse.
           </p>
-          <Input
-            type="number"
+          <NumberField
             min={0}
             max={20}
             step={1}
             value={maxVisibleAssignees}
             disabled={disabled || assigneeSelectorStyle !== "chips"}
-            onChange={(e) => {
-              const next = Number.parseInt(e.target.value, 10);
-              if (!Number.isFinite(next) || next < 0) return;
-              update.mutate({ key: "items.max-visible-assignees" as never, value: next });
-            }}
-            className={`${fieldClass} max-w-[6rem]`}
+            onCommit={(next) =>
+              update.mutate({ key: "items.max-visible-assignees" as never, value: next })
+            }
+            className="max-w-[6rem]"
           />
         </Field>
       </section>
@@ -396,15 +386,14 @@ export function ItemsListPanel({ projectId }: { projectId: string | null }) {
             <p className="text-xs text-fg-muted">
               Days an item can sit untouched before it tints amber. Range: 1 to 3650.
             </p>
-            <Input
-              type="number"
+            <NumberField
               min={1}
               max={3650}
               step={1}
               value={userStale > 0 ? userStale : DEFAULT_STALE_THRESHOLD_DAYS}
               disabled={disabled}
-              onChange={(e) => onChangeStaleThreshold(Number.parseInt(e.target.value, 10))}
-              className={`${fieldClass} max-w-[8rem]`}
+              onCommit={onChangeStaleThreshold}
+              className="max-w-[8rem]"
             />
           </Field>
         ) : null}

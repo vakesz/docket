@@ -24,6 +24,7 @@ import { TRPCError } from "@trpc/server";
 import type { Item as CanonicalItem } from "@/core/types";
 import { Prisma, type Proposal as ProposalRow } from "@/db/generated/client";
 import type { db as Db } from "@/server/db";
+import { errFields } from "@/server/log-fields";
 import { logger } from "@/server/logger";
 import { hydrateProposal } from "@/server/proposals/builders";
 import { buildProviderForUser } from "@/server/providers/build";
@@ -32,11 +33,6 @@ import { loadGlobalSetting, loadProjectSetting } from "@/server/settings/effecti
 import { reconcileComments, toItemRow } from "@/server/sync";
 
 type ConfirmPhase = "load" | "provider_build" | "provider_call" | "cache_refresh" | "audit";
-
-function errFields(err: unknown): { err: string; stack?: string } {
-  if (err instanceof Error) return { err: err.message, stack: err.stack };
-  return { err: String(err) };
-}
 
 type ExecutorContext = {
   db: typeof Db;

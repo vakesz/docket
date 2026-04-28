@@ -1,10 +1,11 @@
 "use client";
 
-import { Field, Input, Label, Switch } from "@headlessui/react";
+import { Field, Label, Switch } from "@headlessui/react";
 import { useState } from "react";
-import { fieldClass, switchThumbClass, switchTrackClass } from "@/lib/form-classes";
+import { switchThumbClass, switchTrackClass } from "@/lib/form-classes";
 import { DEFAULT_STALE_THRESHOLD_DAYS } from "@/lib/staleness";
 import { trpc } from "@/lib/trpc-client";
+import { NumberField } from "@/ui/forms/number-field";
 
 const STALE_KEY = "items.stale-after-days";
 
@@ -82,15 +83,14 @@ export function ProjectItemsPanel({ projectId }: { projectId: string }) {
             <p className="text-xs text-fg-muted">
               Days an item can sit untouched before it tints amber. Range: 1 to 3650.
             </p>
-            <Input
-              type="number"
+            <NumberField
               min={1}
               max={3650}
               step={1}
               value={value > 0 ? value : lastPositive}
               disabled={disabled}
-              onChange={(e) => onChangeThreshold(Number.parseInt(e.target.value, 10))}
-              className={`${fieldClass} max-w-[8rem]`}
+              onCommit={onChangeThreshold}
+              className="max-w-[8rem]"
             />
           </Field>
         ) : null}

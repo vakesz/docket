@@ -27,7 +27,7 @@ const labelTemplate: LabelTemplate = (config) => {
   return `${owner}/${repo}`;
 };
 
-export const githubSpec: ProviderSpec = {
+export const githubSpec = {
   typeId: "github",
   displayName: "GitHub",
   factory: (config) => new GitHubProvider(config),
@@ -51,7 +51,6 @@ export const githubSpec: ProviderSpec = {
   ],
   requiresCli: [],
   grouping: "by_state_bucket",
-  supportedKinds: ["task", "bug"],
   normalizeConfig: (raw) => {
     const owner = typeof raw.owner === "string" ? raw.owner.trim() : "";
     const repo = typeof raw.repo === "string" ? raw.repo.trim() : "";
@@ -81,4 +80,4 @@ export const githubSpec: ProviderSpec = {
   },
   profileUrl: githubProfileUrl,
   avatarFetcher: githubAvatarFetcher,
-};
+} satisfies ProviderSpec;

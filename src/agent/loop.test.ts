@@ -52,7 +52,11 @@ function makeStubDb(): {
     userId: "user_1",
     itemId: null,
     llmProviderIdOverride: null,
-    project: { id: "proj_1", defaultLlmProviderId: null },
+    project: {
+      id: "proj_1",
+      defaultLlmProviderId: null,
+      defaultGuardrailProviderId: null,
+    },
   };
   const fake = {
     conversation: {
@@ -133,8 +137,14 @@ function makeStubDb(): {
       findMany: async () => [] as unknown[],
     },
     setting: {
-      // Compaction settings load from the Setting table; tests don't seed
-      // any rows so every key falls back to its catalog default.
+      // Compaction + guardrail settings load from the Setting table; tests
+      // don't seed any rows so every key falls back to its catalog default.
+      findFirst: async () => null,
+    },
+    llmProvider: {
+      // Guardrail provider lookup. No row → registry falls back to the
+      // PatternGuardrail (no model needed). The pattern adapter never
+      // hits the DB after that.
       findFirst: async () => null,
     },
   };

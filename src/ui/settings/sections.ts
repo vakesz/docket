@@ -16,6 +16,7 @@ import {
   ScrollText,
   ServerCog,
   Shield,
+  ShieldCheck,
   UserRound,
   Users,
 } from "lucide-react";
@@ -26,6 +27,7 @@ export type SectionKey =
   | "mcp"
   | "project-llm"
   | "project-web-fetch"
+  | "project-guardrail"
   | "project-auto-accept"
   | "project-sync"
   | "project-analytics"
@@ -95,6 +97,15 @@ export const SECTIONS: SectionMeta[] = [
     description:
       "Toggle the agent's web_fetch tool, optionally restrict it to an allowlist, and cap response size.",
     icon: Globe,
+    group: "project",
+    needsProject: true,
+  },
+  {
+    key: "project-guardrail",
+    label: "Guardrails",
+    description:
+      "Screen chat for prompt injection, off-topic requests, and unsafe output. Needs a guardrail-role LLM provider.",
+    icon: ShieldCheck,
     group: "project",
     needsProject: true,
   },

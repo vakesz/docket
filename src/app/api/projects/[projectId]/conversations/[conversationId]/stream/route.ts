@@ -156,8 +156,17 @@ export async function POST(req: Request, context: RouteContext): Promise<Respons
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
+      // Tracks whether the underlying stream has been torn down (client
+      // disconnect → `cancel`, or normal completion → `close`). Any further
+      // `enqueue` / `close` would throw, so we gate both on this flag.
+      let closed = false;
       const send = (event: LoopEvent) => {
-        controller.enqueue(encoder.encode(formatSseEvent(event)));
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(formatSseEvent(event)));
+        } catch {
+          closed = true;
+        }
       };
       let terminal: "done" | "error" | "aborted" = "aborted";
       let lastErrorMessage: string | undefined;
@@ -183,22 +192,35 @@ export async function POST(req: Request, context: RouteContext): Promise<Respons
           }
         }
       } catch (err) {
-        terminal = "error";
-        lastErrorMessage = err instanceof Error ? err.message : String(err);
-        logger.error(
-          {
-            projectId,
-            conversationId,
-            userId,
-            durationMs: Date.now() - streamStartedAt,
-            err: lastErrorMessage,
-            stack: err instanceof Error ? err.stack : undefined,
-          },
-          "stream: runTurn threw",
-        );
-        send({ kind: "error", message: lastErrorMessage });
+        // AbortError from `req.signal` means the client closed the connection.
+        // That's expected, not an error — skip the error event/log.
+        if (req.signal.aborted || (err instanceof Error && err.name === "AbortError")) {
+          terminal = "aborted";
+        } else {
+          terminal = "error";
+          lastErrorMessage = err instanceof Error ? err.message : String(err);
+          logger.error(
+            {
+              projectId,
+              conversationId,
+              userId,
+              durationMs: Date.now() - streamStartedAt,
+              err: lastErrorMessage,
+              stack: err instanceof Error ? err.stack : undefined,
+            },
+            "stream: runTurn threw",
+          );
+          send({ kind: "error", message: lastErrorMessage });
+        }
       } finally {
-        controller.close();
+        if (!closed) {
+          try {
+            controller.close();
+          } catch {
+            // Already closed by the consumer side; nothing to do.
+          }
+          closed = true;
+        }
         logger.info(
           {
             projectId,

@@ -32,17 +32,11 @@ import {
   type MaterialChange,
   materialDiff,
 } from "@/server/inbound-changes/inject";
+import { errFields } from "@/server/log-fields";
 import { logger } from "@/server/logger";
 import { buildProviderForUser } from "@/server/providers/build";
 
 type SyncPhase = "stream" | "persist" | "archive" | "cursor";
-
-function errFields(err: unknown): { err: string; stack?: string } {
-  if (err instanceof Error) {
-    return { err: err.message, stack: err.stack };
-  }
-  return { err: String(err) };
-}
 
 type ProjectArg = Parameters<typeof buildProviderForUser>[1];
 
@@ -205,13 +199,21 @@ async function processChunk(
   let commentsReconciled = 0;
   const bundlesWithComments = bundles.filter((b) => b.comments !== null);
   if (bundlesWithComments.length > 0) {
-    // Re-fetch the surrogate ids: createMany doesn't return them, and the
-    // first findMany only saw the rows that already existed.
-    const surrogateRows = await db.item.findMany({
-      where: { projectId, providerItemId: { in: ids } },
-      select: { id: true, providerItemId: true },
-    });
-    const surrogateMap = new Map(surrogateRows.map((r) => [r.providerItemId, r.id]));
+    // Surrogates: existing rows already came back in `cachedMap` with their
+    // ids — we only need a refetch for the freshly-created ones, since
+    // `createMany` doesn't return them. Saves one full-chunk findMany on
+    // every chunk where we've seen the items before (the common case after
+    // the first sync).
+    const surrogateMap = new Map<string, string>();
+    for (const r of cachedRows) surrogateMap.set(r.providerItemId, r.id);
+    const newIds = toCreate.map((r) => r.providerItemId).filter((id) => !surrogateMap.has(id));
+    if (newIds.length > 0) {
+      const newRows = await db.item.findMany({
+        where: { projectId, providerItemId: { in: newIds } },
+        select: { id: true, providerItemId: true },
+      });
+      for (const r of newRows) surrogateMap.set(r.providerItemId, r.id);
+    }
     const results = await Promise.all(
       bundlesWithComments.map(async (b) => {
         const surrogate = surrogateMap.get(b.item.id);

@@ -1,15 +1,19 @@
 /**
  * LLM registry — selectAdapterFor.
  *
- * Picks the right `LlmProvider` row for a project + optional override and
- * dispatches on `kind` to instantiate the matching adapter. At launch the
- * dispatch table has one entry (`openai`) plus a `default: throw` so a
- * misconfigured row fails loudly instead of silently.
+ * Picks the right chat-role `LlmProvider` row for a project + optional
+ * override and dispatches on `kind` to instantiate the matching adapter.
+ * At launch the dispatch table has one entry (`openai`) plus a
+ * `default: throw` so a misconfigured row fails loudly instead of silently.
  *
  * Resolution order (most specific first):
- *   1. `Conversation.llmProviderIdOverride` if provided (per-conversation pick)
- *   2. `Project.defaultLlmProviderId` (per-project pick)
- *   3. The `LlmProvider` row marked `isDefault = true` (global fallback)
+ *   1. `Conversation.llmProviderIdOverride` (per-conversation pick)
+ *   2. `Project.defaultLlmProviderId`        (per-project pick)
+ *   3. `role='chat'` + `isDefault=true`      (deployment-wide chat default)
+ *
+ * Every lookup filters `role: 'chat'` so a guardrail row can never resolve
+ * here. The disjoint guardrail resolver lives in
+ * `src/agent/guardrail/registry.ts`.
  */
 
 import "server-only";
@@ -71,8 +75,8 @@ export function buildAdapter(
         model: row.model || undefined,
         baseUrl: row.baseUrl || undefined,
         defaultTemperature: opts.defaultTemperature ?? undefined,
-        inputPriceCentsPerMtok: row.inputPriceCentsPerMtok,
-        outputPriceCentsPerMtok: row.outputPriceCentsPerMtok,
+        inputPriceCentsPerMtok: row.inputPriceCentsPerMtok?.toNumber() ?? null,
+        outputPriceCentsPerMtok: row.outputPriceCentsPerMtok?.toNumber() ?? null,
       });
     default:
       throw new LlmConfigError(
@@ -82,18 +86,30 @@ export function buildAdapter(
 }
 
 async function resolveProvider(db: Database, ctx: AdapterContext): Promise<LlmProvider | null> {
+  // Every level filters `enabled: true` so a disabled override / pin
+  // gracefully falls through to the next level instead of erroring out
+  // mid-turn. Same policy as `src/server/llm/lookup.ts`. The `enabled`
+  // check on `selectAdapterFor` is now defense-in-depth — by the time a
+  // row reaches it, this function has already filtered.
   if (ctx.overrideId) {
-    const row = await db.llmProvider.findUnique({ where: { id: ctx.overrideId } });
-    if (row) return row;
-  }
-  if (ctx.project.defaultLlmProviderId) {
-    const row = await db.llmProvider.findUnique({
-      where: { id: ctx.project.defaultLlmProviderId },
+    const row = await db.llmProvider.findFirst({
+      where: { id: ctx.overrideId, role: "chat", enabled: true },
     });
     if (row) return row;
   }
+  if (ctx.project.defaultLlmProviderId) {
+    const row = await db.llmProvider.findFirst({
+      where: { id: ctx.project.defaultLlmProviderId, role: "chat", enabled: true },
+    });
+    if (row) return row;
+  }
+  const flagged = await db.llmProvider.findFirst({
+    where: { role: "chat", isDefault: true, enabled: true },
+    orderBy: [{ updatedAt: "desc" }],
+  });
+  if (flagged) return flagged;
   return db.llmProvider.findFirst({
-    where: { isDefault: true, enabled: true },
+    where: { role: "chat", enabled: true },
     orderBy: [{ updatedAt: "desc" }],
   });
 }

@@ -85,7 +85,7 @@ const axisExtract: AxisExtractor = (item, axisKey) => {
   return null;
 };
 
-export const azureDevOpsSpec: ProviderSpec = {
+export const azureDevOpsSpec = {
   typeId: "azure_devops",
   displayName: "Azure DevOps",
   factory: (config) => new AzureDevOpsProvider(config),
@@ -109,7 +109,6 @@ export const azureDevOpsSpec: ProviderSpec = {
   ],
   requiresCli: [],
   grouping: "by_kind",
-  supportedKinds: ["epic", "feature", "story", "task", "bug"],
   // Accept either the bare org name (the friendly form input) or a full
   // `https://dev.azure.com/<org>` URL — for backwards compatibility with
   // any project rows already storing the full URL form.
@@ -150,4 +149,4 @@ export const azureDevOpsSpec: ProviderSpec = {
   },
   profileUrl: null,
   avatarFetcher: azureDevOpsAvatarFetcher,
-};
+} satisfies ProviderSpec;

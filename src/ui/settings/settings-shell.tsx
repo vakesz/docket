@@ -10,6 +10,7 @@ import { AutoAcceptPanel } from "@/ui/settings/auto-accept-panel";
 import { BudgetAuditPanel } from "@/ui/settings/budget-audit-panel";
 import { ChatDisplayPanel } from "@/ui/settings/chat-display-panel";
 import { ExportPanel } from "@/ui/settings/export-panel";
+import { GuardrailPanel } from "@/ui/settings/guardrail-panel";
 import { ItemDetailPanel } from "@/ui/settings/item-detail-panel";
 import { ItemsListPanel } from "@/ui/settings/items-list-panel";
 import { LlmProvidersPanel } from "@/ui/settings/llm-providers-panel";
@@ -186,6 +187,8 @@ function SectionContent({
       return projectId ? <ProjectLlmPanel projectId={projectId} /> : null;
     case "project-web-fetch":
       return projectId ? <WebFetchPanel projectId={projectId} /> : null;
+    case "project-guardrail":
+      return projectId ? <GuardrailPanel projectId={projectId} /> : null;
     case "project-auto-accept":
       return projectId ? <AutoAcceptPanel projectId={projectId} /> : null;
     case "project-sync":

@@ -26,6 +26,8 @@
 
 import "server-only";
 import { randomUUID } from "node:crypto";
+import { selectGuardrailFor } from "@/agent/guardrail/registry";
+import type { GuardrailUsage } from "@/agent/guardrail/types";
 import type { LlmAdapter, LlmEvent, LlmMessage, LlmToolCall } from "@/agent/llm/types";
 import { buildSystemPrefix } from "@/agent/prompt";
 import { buildToolRegistry } from "@/agent/tools/registry";
@@ -36,6 +38,7 @@ import { getBudgetStatus } from "@/server/billing/budget";
 import { compactConversation, loadCompactionSettings } from "@/server/conversations/compaction";
 import { appendMessage, getConversation } from "@/server/conversations/storage";
 import type { db as Db } from "@/server/db";
+import { loadGuardrailSettings } from "@/server/guardrail/settings";
 import { logger } from "@/server/logger";
 
 type Database = typeof Db;
@@ -67,6 +70,24 @@ export type LoopEvent =
       question: string;
       options: readonly string[] | null;
       multiSelect: boolean;
+    }
+  | {
+      kind: "guardrail_blocked";
+      stage: "input" | "tool_result" | "output";
+      reason: string;
+      categories?: readonly string[];
+    }
+  | {
+      kind: "guardrail_flagged";
+      stage: "input" | "tool_result" | "output";
+      reason: string;
+      categories?: readonly string[];
+    }
+  | {
+      kind: "guardrail_usage";
+      tokensIn: number;
+      tokensOut: number;
+      costCents: number | undefined;
     }
   | { kind: "usage"; tokensIn: number; tokensOut: number; costCents: number | undefined }
   | { kind: "done" }
@@ -149,11 +170,56 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
   // 3. Persist the user message before we start streaming. If the LLM
   //    crashes mid-turn the row stays — the user can see what they sent
   //    and retry, no double-post.
-  await appendMessage(db, {
+  const userMessageRow = await appendMessage(db, {
     conversationId,
     role: "user",
     content: userMessage,
   });
+
+  // 3a. Build the guardrail. Loaded per-turn (cheap — couple of setting
+  //     reads + one optional LlmProvider lookup) so config edits during a
+  //     long session take effect without reconnecting. A guardrail call
+  //     that throws or times out is allowed-by-default inside the adapter
+  //     itself — failures are silent, not turn-aborting.
+  const guardrailSettings = await loadGuardrailSettings(db, conv.projectId);
+  const guardrail = await selectGuardrailFor(db, {
+    project: conv.project,
+    settings: guardrailSettings,
+  });
+  const guardrailUsage: GuardrailUsage = { tokensIn: 0, tokensOut: 0, costCents: 0 };
+
+  // 3b. Input scope / safety check. A `block` aborts before we ever call
+  //     the chat model — no tokens billed, no streaming. A `flag` is a
+  //     soft warning surfaced to the UI; the turn proceeds.
+  const inputDecision = await guardrail.checkInput(userMessage, signal);
+  accumulateGuardrailUsage(guardrailUsage, inputDecision.usage);
+  if (inputDecision.action !== "allow") {
+    await markMessageFlagged(db, userMessageRow.id, inputDecision.reason);
+    yield {
+      kind: inputDecision.action === "block" ? "guardrail_blocked" : "guardrail_flagged",
+      stage: "input",
+      reason: inputDecision.reason,
+      ...(inputDecision.categories ? { categories: inputDecision.categories } : {}),
+    };
+    if (inputDecision.action === "block") {
+      logger.info(
+        { ...baseCtx, reason: inputDecision.reason },
+        "agent: input blocked by guardrail",
+      );
+      await persistAssistantTurn(db, conversationId, refusalText(inputDecision.reason), [], false);
+      await flushGuardrailUsage(db, conversationId, guardrailUsage);
+      if (guardrailUsage.tokensIn > 0 || guardrailUsage.tokensOut > 0) {
+        yield {
+          kind: "guardrail_usage",
+          tokensIn: guardrailUsage.tokensIn,
+          tokensOut: guardrailUsage.tokensOut,
+          costCents: guardrailUsage.costCents,
+        };
+      }
+      yield { kind: "done" };
+      return;
+    }
+  }
 
   // 2a. Auto-compaction. Runs before transcript assembly so the prompt
   //     this turn already reflects the trimmed history. The compaction
@@ -196,6 +262,8 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
   let totalTokensOut = 0;
   let totalCostCents: number | undefined;
   let askedQuestion = false;
+  let guardrailTerminated = false;
+  let finalAssistantRow: Message | null = null;
   let rounds = 0;
 
   while (true) {
@@ -295,7 +363,13 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
 
     // No tool calls → assistant is finished. Persist + emit final events.
     if (assistantToolCalls.length === 0) {
-      await persistAssistantTurn(db, conversationId, assistantBuffer, assistantToolCalls, false);
+      finalAssistantRow = await persistAssistantTurn(
+        db,
+        conversationId,
+        assistantBuffer,
+        assistantToolCalls,
+        false,
+      );
       break;
     }
 
@@ -368,18 +442,67 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
         "agent: tool call",
       );
 
+      // Guardrail tool-result scan. Runs on the structured payload before
+      // it's re-fed to the model — a `block` substitutes a refusal stub
+      // (the model never sees the original text) and aborts the round so
+      // the chat model doesn't keep generating off injected instructions.
+      let toolBlockReason: string | null = null;
+      const toolDecision = await guardrail.checkToolResult({ toolName: call.name, result }, signal);
+      accumulateGuardrailUsage(guardrailUsage, toolDecision.usage);
+      if (toolDecision.action === "block") {
+        toolBlockReason = toolDecision.reason;
+        result = {
+          ok: false,
+          error: `tool result blocked by guardrail: ${toolDecision.reason}`,
+        };
+        yield {
+          kind: "guardrail_blocked",
+          stage: "tool_result",
+          reason: toolDecision.reason,
+          ...(toolDecision.categories ? { categories: toolDecision.categories } : {}),
+        };
+        logger.info(
+          { ...baseCtx, round: rounds, callId: call.id, reason: toolDecision.reason },
+          "agent: tool result blocked by guardrail",
+        );
+      } else if (toolDecision.action === "flag") {
+        yield {
+          kind: "guardrail_flagged",
+          stage: "tool_result",
+          reason: toolDecision.reason,
+          ...(toolDecision.categories ? { categories: toolDecision.categories } : {}),
+        };
+      }
+
       const formatted = adapter.formatToolResult(call, result);
       messages.push(formatted);
 
-      await appendMessage(db, {
+      const toolRow = await appendMessage(db, {
         conversationId,
         role: "tool",
         content: formatted.content,
         toolCallId: formatted.toolCallId,
         toolName: formatted.toolName,
       });
+      if (toolBlockReason !== null) {
+        await markMessageFlagged(db, toolRow.id, toolBlockReason);
+        // Surface the block to the user as a final assistant turn so the
+        // chat thread shows *why* the agent stopped instead of trailing
+        // off mid-thought. Pinned at the end of this round; the outer
+        // while-loop bails before the next stream starts.
+        await persistAssistantTurn(db, conversationId, refusalText(toolBlockReason), [], false);
+      }
 
       yield { kind: "tool_call_completed", callId: call.id, ok: dispatchOk };
+
+      if (toolBlockReason !== null) {
+        // Stop the model from being re-invoked: drain remaining tool
+        // calls into the transcript above, then break out so the outer
+        // loop never calls `streamMessages` again. Preserves the "model
+        // doesn't keep generating after guardrail kicks in" invariant.
+        guardrailTerminated = true;
+        continue;
+      }
 
       // Special-case the two structured tool payloads the UI cares about.
       const data = (result as { ok?: boolean; data?: unknown }).data;
@@ -411,9 +534,11 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
       }
     }
 
-    if (askedQuestion) {
-      // Hand back to the user. The question is already persisted as the
-      // last assistant turn; the UI marks it pending until they reply.
+    if (askedQuestion || guardrailTerminated) {
+      // Either: (a) tool dispatched ask_user_question and we're handing
+      // back, or (b) guardrail blocked a tool result and we refuse to
+      // re-invoke the chat model on it. The corresponding final assistant
+      // turn is already persisted; the UI shows it as the end of the turn.
       break;
     }
 
@@ -421,6 +546,30 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
     // round it's been showing live (text bubble + ToolCallProgress) into
     // its settled-rounds list and reset for the next round's deltas.
     yield { kind: "round_boundary" };
+  }
+
+  // Output-safety check on the final assistant text. Always non-blocking
+  // (the user has already seen the streamed reply) — a `flag` marks the
+  // row so the chat pane renders a banner. Skipped when the guardrail
+  // already terminated the turn (the assistant text is a refusal stub
+  // we wrote ourselves) or when the assistant ended with a question.
+  if (
+    !guardrailTerminated &&
+    !askedQuestion &&
+    finalAssistantRow &&
+    assistantBuffer.trim().length > 0
+  ) {
+    const outputDecision = await guardrail.checkOutput(assistantBuffer, signal);
+    accumulateGuardrailUsage(guardrailUsage, outputDecision.usage);
+    if (outputDecision.action !== "allow") {
+      await markMessageFlagged(db, finalAssistantRow.id, outputDecision.reason);
+      yield {
+        kind: "guardrail_flagged",
+        stage: "output",
+        reason: outputDecision.reason,
+        ...(outputDecision.categories ? { categories: outputDecision.categories } : {}),
+      };
+    }
   }
 
   if (totalTokensIn > 0 || totalTokensOut > 0) {
@@ -440,6 +589,16 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
     });
   }
 
+  await flushGuardrailUsage(db, conversationId, guardrailUsage);
+  if (guardrailUsage.tokensIn > 0 || guardrailUsage.tokensOut > 0) {
+    yield {
+      kind: "guardrail_usage",
+      tokensIn: guardrailUsage.tokensIn,
+      tokensOut: guardrailUsage.tokensOut,
+      costCents: guardrailUsage.costCents,
+    };
+  }
+
   logger.info(
     {
       ...baseCtx,
@@ -447,7 +606,11 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
       tokensIn: totalTokensIn,
       tokensOut: totalTokensOut,
       costCents: totalCostCents,
+      guardrailTokensIn: guardrailUsage.tokensIn,
+      guardrailTokensOut: guardrailUsage.tokensOut,
+      guardrailCostCents: guardrailUsage.costCents,
       askedQuestion,
+      guardrailTerminated,
       durationMs: Date.now() - turnStartedAt,
     },
     "agent: turn done",
@@ -458,6 +621,58 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
 // ---------------------------------------------------------------------------
 // helpers — small, kept private to the loop module
 // ---------------------------------------------------------------------------
+
+function accumulateGuardrailUsage(total: GuardrailUsage, add: GuardrailUsage | undefined): void {
+  if (!add) return;
+  total.tokensIn += add.tokensIn;
+  total.tokensOut += add.tokensOut;
+  if (add.costCents !== undefined) {
+    total.costCents = (total.costCents ?? 0) + add.costCents;
+  }
+}
+
+async function flushGuardrailUsage(
+  db: Database,
+  conversationId: string,
+  usage: GuardrailUsage,
+): Promise<void> {
+  if (usage.tokensIn === 0 && usage.tokensOut === 0) return;
+  await db.conversation.update({
+    where: { id: conversationId },
+    data: {
+      guardrailTokensIn: { increment: usage.tokensIn },
+      guardrailTokensOut: { increment: usage.tokensOut },
+      ...(usage.costCents !== undefined && usage.costCents > 0
+        ? { guardrailCostCents: { increment: Math.round(usage.costCents) } }
+        : {}),
+    },
+  });
+}
+
+async function markMessageFlagged(db: Database, messageId: string, reason: string): Promise<void> {
+  await db.message.update({
+    where: { id: messageId },
+    data: { flagged: true, guardrailReason: reason },
+  });
+}
+
+/**
+ * User-facing refusal copy. Internal guardrail labels (e.g.
+ * "llm-judge: off-topic for ticketing-system assistant") are concise and
+ * good for logs/metrics but read like an error code in chat. Map them to
+ * a friendlier shell here. The full label is still recorded on
+ * `Message.guardrailReason` for the banner above the bubble — the chat
+ * UI surfaces both.
+ */
+function refusalText(reason: string): string {
+  if (reason.startsWith("llm-judge: off-topic") || reason.startsWith("pattern: off-topic")) {
+    return "Sorry — I can only help with software work-item topics. Try asking about a ticket, PR, or code question.";
+  }
+  if (reason.includes("prompt injection") || reason.includes("injection")) {
+    return "I had to stop here — that tool result looked like it was trying to override my instructions. Ask me to retry, or check the source content.";
+  }
+  return "Sorry, I can't continue with that request.";
+}
 
 async function persistAssistantTurn(
   db: Database,

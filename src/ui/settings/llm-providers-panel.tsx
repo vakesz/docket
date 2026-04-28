@@ -6,10 +6,30 @@ import { useAutoRefreshIntervalMs } from "@/lib/use-auto-refresh";
 import { LlmProviderActions } from "@/ui/settings/llm-provider-actions";
 import { LlmProviderForm } from "@/ui/settings/llm-provider-form";
 
+type Role = "chat" | "guardrail";
+
+type Row = {
+  id: string;
+  kind: string;
+  role: string;
+  label: string;
+  model: string;
+  baseUrl: string;
+  inputPriceCentsPerMtok: number | null;
+  outputPriceCentsPerMtok: number | null;
+  isDefault: boolean;
+  enabled: boolean;
+};
+
 /**
  * LLM-providers section, mounted inside the unified settings page. Reads
  * the row list client-side so the parent stays a single "use client"
  * island instead of having to thread server-fetched data through props.
+ *
+ * Rows are grouped by role: Chat rows feed the agent loop; Guardrail rows
+ * feed the prompt-injection / topic-scope / output-safety classifier.
+ * Each role has an independent "default" — the form's role toggle decides
+ * which one is being created.
  */
 export function LlmProvidersPanel() {
   const refetchInterval = useAutoRefreshIntervalMs();
@@ -23,10 +43,17 @@ export function LlmProvidersPanel() {
     return <p className="text-sm text-danger-fg">{list.error.message}</p>;
   }
 
-  const noDefaultYet = !list.data.some((r) => r.isDefault);
+  const rows = list.data as Row[];
+  const chatRows = rows.filter((r) => r.role === "chat");
+  const guardrailRows = rows.filter((r) => r.role === "guardrail");
+
+  const defaultRoleAvailability: Record<Role, boolean> = {
+    chat: !chatRows.some((r) => r.isDefault),
+    guardrail: !guardrailRows.some((r) => r.isDefault),
+  };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
       <aside
         role="note"
         className="rounded-2xl border border-warning/40 bg-warning-bg/40 p-4 text-xs text-warning-fg"
@@ -46,76 +73,109 @@ export function LlmProvidersPanel() {
         </p>
       </aside>
 
-      <section className="flex flex-col gap-3">
-        <h2 className="text-base font-medium text-fg">Configured providers</h2>
-        {list.data.length === 0 ? (
-          <p className={emptyStateClass}>
-            No LLM providers yet. Add one below to give the agent a backend.
-          </p>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {list.data.map((row) => (
-              <li
-                key={row.id}
-                className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4 shadow-sm"
-              >
-                {editingId === row.id ? (
-                  <LlmProviderForm
-                    mode="edit"
-                    initial={{
-                      id: row.id,
-                      kind: row.kind,
-                      label: row.label,
-                      model: row.model ?? "",
-                      baseUrl: row.baseUrl ?? "",
-                      inputPriceCentsPerMtok: row.inputPriceCentsPerMtok ?? null,
-                      outputPriceCentsPerMtok: row.outputPriceCentsPerMtok ?? null,
-                    }}
-                    onClose={() => setEditingId(null)}
-                  />
-                ) : (
-                  <div className="flex items-baseline justify-between gap-3">
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-baseline gap-2">
-                        <span className="font-medium text-fg">{row.label}</span>
-                        <span className="text-xs uppercase tracking-wide text-fg-muted">
-                          {row.kind}
-                        </span>
-                        {!row.enabled ? <span className={badgeClass}>disabled</span> : null}
-                        {row.inputPriceCentsPerMtok === null ||
-                        row.outputPriceCentsPerMtok === null ? (
-                          <span className={badgeClass}>no price</span>
-                        ) : null}
-                      </div>
-                      <p className="text-xs text-fg-muted">
-                        {row.model || "(default model)"}
-                        {row.baseUrl ? ` · ${row.baseUrl}` : ""}
-                      </p>
-                      {row.inputPriceCentsPerMtok !== null &&
-                      row.outputPriceCentsPerMtok !== null ? (
-                        <p className="text-xs text-fg-muted">
-                          ${(row.inputPriceCentsPerMtok / 100).toFixed(2)} in · $
-                          {(row.outputPriceCentsPerMtok / 100).toFixed(2)} out per Mtok
-                        </p>
+      <Section
+        title="Chat models"
+        description="Power the agent loop. Per-conversation overrides still win at runtime."
+        rows={chatRows}
+        editingId={editingId}
+        setEditingId={setEditingId}
+      />
+
+      <Section
+        title="Guardrail models"
+        description="Run alongside chat to classify prompt injection, off-topic input, and (optionally) output safety. A small / cheap model is recommended (e.g. gpt-5-nano)."
+        rows={guardrailRows}
+        editingId={editingId}
+        setEditingId={setEditingId}
+      />
+
+      <div aria-hidden="true" className="my-2 h-px bg-border" />
+
+      <LlmProviderForm mode="create" defaultRoleAvailability={defaultRoleAvailability} />
+    </div>
+  );
+}
+
+function Section({
+  title,
+  description,
+  rows,
+  editingId,
+  setEditingId,
+}: {
+  title: string;
+  description: string;
+  rows: readonly Row[];
+  editingId: string | null;
+  setEditingId: (next: string | null) => void;
+}) {
+  return (
+    <section className="flex flex-col gap-3">
+      <header className="flex flex-col gap-1">
+        <h2 className="text-base font-medium text-fg">{title}</h2>
+        <p className="text-xs text-fg-muted">{description}</p>
+      </header>
+      {rows.length === 0 ? (
+        <p className={emptyStateClass}>None configured yet.</p>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {rows.map((row) => (
+            <li
+              key={row.id}
+              className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4 shadow-sm"
+            >
+              {editingId === row.id ? (
+                <LlmProviderForm
+                  mode="edit"
+                  initial={{
+                    id: row.id,
+                    kind: row.kind,
+                    role: row.role === "guardrail" ? "guardrail" : "chat",
+                    label: row.label,
+                    model: row.model ?? "",
+                    baseUrl: row.baseUrl ?? "",
+                    inputPriceCentsPerMtok: row.inputPriceCentsPerMtok ?? null,
+                    outputPriceCentsPerMtok: row.outputPriceCentsPerMtok ?? null,
+                  }}
+                  onClose={() => setEditingId(null)}
+                />
+              ) : (
+                <div className="flex items-baseline justify-between gap-3">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-baseline gap-2">
+                      <span className="font-medium text-fg">{row.label}</span>
+                      <span className="text-xs uppercase tracking-wide text-fg-muted">
+                        {row.kind}
+                      </span>
+                      {!row.enabled ? <span className={badgeClass}>disabled</span> : null}
+                      {row.inputPriceCentsPerMtok === null ||
+                      row.outputPriceCentsPerMtok === null ? (
+                        <span className={badgeClass}>no price</span>
                       ) : null}
                     </div>
-                    <LlmProviderActions
-                      id={row.id}
-                      isDefault={row.isDefault}
-                      enabled={row.enabled}
-                      onEdit={() => setEditingId(row.id)}
-                    />
+                    <p className="text-xs text-fg-muted">
+                      {row.model || "(default model)"}
+                      {row.baseUrl ? ` · ${row.baseUrl}` : ""}
+                    </p>
+                    {row.inputPriceCentsPerMtok !== null && row.outputPriceCentsPerMtok !== null ? (
+                      <p className="text-xs text-fg-muted">
+                        ${(row.inputPriceCentsPerMtok / 100).toFixed(2)} in · $
+                        {(row.outputPriceCentsPerMtok / 100).toFixed(2)} out per Mtok
+                      </p>
+                    ) : null}
                   </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <div aria-hidden="true" className="my-4 h-px bg-border" />
-
-      <LlmProviderForm mode="create" canBeDefault={noDefaultYet} />
-    </div>
+                  <LlmProviderActions
+                    id={row.id}
+                    isDefault={row.isDefault}
+                    enabled={row.enabled}
+                    onEdit={() => setEditingId(row.id)}
+                  />
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

@@ -1,16 +1,18 @@
 "use client";
 
-import { Input } from "@headlessui/react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { fieldClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
 import { cn } from "@/lib/utils";
+import { NumberField } from "@/ui/forms/number-field";
 
 type Bucket = {
   date: string;
   tokensIn: number;
   tokensOut: number;
   costCents: number;
+  guardrailTokensIn: number;
+  guardrailTokensOut: number;
+  guardrailCostCents: number;
   conversations: number;
 };
 
@@ -55,7 +57,10 @@ export function AnalyticsPanel(
   const peakCost = useMemo(() => {
     if (!data) return 0;
     let p = 0;
-    for (const b of data.buckets) if (b.costCents > p) p = b.costCents;
+    for (const b of data.buckets) {
+      const total = b.costCents + b.guardrailCostCents;
+      if (total > p) p = total;
+    }
     return p;
   }, [data]);
 
@@ -82,19 +87,14 @@ export function AnalyticsPanel(
           <label htmlFor="analytics-custom-days" className="text-xs text-fg-muted">
             Custom (days):
           </label>
-          <Input
+          <NumberField
             id="analytics-custom-days"
-            type="number"
             min={1}
             max={365}
             step={1}
             value={days}
-            onChange={(e) => {
-              const n = Number.parseInt(e.target.value, 10);
-              if (!Number.isFinite(n) || n < 1 || n > 365) return;
-              setDays(n);
-            }}
-            className={`${fieldClass} w-20`}
+            onCommit={setDays}
+            className="w-20"
           />
         </div>
       </div>
@@ -118,16 +118,37 @@ function TotalsStrip({
   data,
 }: {
   data: {
-    totals: { tokensIn: number; tokensOut: number; costCents: number; conversations: number };
+    totals: {
+      tokensIn: number;
+      tokensOut: number;
+      costCents: number;
+      guardrailTokensIn: number;
+      guardrailTokensOut: number;
+      guardrailCostCents: number;
+      conversations: number;
+    };
     from: string;
     to: string;
   };
 }) {
+  const totalSpend = data.totals.costCents + data.totals.guardrailCostCents;
   const stats = [
     { label: "Conversations", value: data.totals.conversations.toLocaleString() },
-    { label: "Tokens in", value: data.totals.tokensIn.toLocaleString() },
-    { label: "Tokens out", value: data.totals.tokensOut.toLocaleString() },
-    { label: "Spend", value: `$${(data.totals.costCents / 100).toFixed(2)}` },
+    {
+      label: "Tokens in",
+      value: (data.totals.tokensIn + data.totals.guardrailTokensIn).toLocaleString(),
+      sub: `${data.totals.guardrailTokensIn.toLocaleString()} guardrail`,
+    },
+    {
+      label: "Tokens out",
+      value: (data.totals.tokensOut + data.totals.guardrailTokensOut).toLocaleString(),
+      sub: `${data.totals.guardrailTokensOut.toLocaleString()} guardrail`,
+    },
+    {
+      label: "Spend",
+      value: `$${(totalSpend / 100).toFixed(2)}`,
+      sub: `chat $${(data.totals.costCents / 100).toFixed(2)} · guardrail $${(data.totals.guardrailCostCents / 100).toFixed(2)}`,
+    },
   ];
   return (
     <div className="flex flex-col gap-2">
@@ -139,6 +160,7 @@ function TotalsStrip({
           <div key={s.label} className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
             <div className="text-[10px] uppercase tracking-wide text-fg-muted">{s.label}</div>
             <div className="mt-1 font-mono text-lg text-fg">{s.value}</div>
+            {s.sub ? <div className="mt-0.5 text-[10px] text-fg-faint">{s.sub}</div> : null}
           </div>
         ))}
       </div>
@@ -196,6 +218,9 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
     padTop + innerH - (trend.peakTokens > 0 ? (v / trend.peakTokens) * innerH : 0);
 
   const costLine = buckets.map((b, i) => `${xAt(i)},${yCost(b.costCents)}`).join(" ");
+  const guardrailCostLine = buckets
+    .map((b, i) => `${xAt(i)},${yCost(b.guardrailCostCents)}`)
+    .join(" ");
   const tokensInLine = buckets.map((b, i) => `${xAt(i)},${yTokens(b.tokensIn)}`).join(" ");
   const tokensOutLine = buckets.map((b, i) => `${xAt(i)},${yTokens(b.tokensOut)}`).join(" ");
   const avgLine = trend.movingAverage.map((v, i) => `${xAt(i)},${yCost(v)}`).join(" ");
@@ -238,7 +263,8 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
         <h4 className="text-sm font-medium text-fg">Trends</h4>
         <div className="flex flex-wrap items-center gap-3 font-mono text-[10px] uppercase tracking-wide text-fg-muted">
-          <LegendDot color="bg-accent" label="Spend" />
+          <LegendDot color="bg-accent" label="Chat spend" />
+          <LegendDot color="bg-warning" label="Guardrail spend" />
           <LegendDot color="bg-accent/50" label="7-day avg" dashed />
           <LegendDot color="bg-fg-muted" label="Tokens in" />
           <LegendDot color="bg-fg-faint" label="Tokens out" />
@@ -297,6 +323,14 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
           strokeLinejoin="round"
           strokeLinecap="round"
         />
+        {/* guardrail spend (separate line, same y-axis) */}
+        <polyline
+          points={guardrailCostLine}
+          className="fill-none stroke-warning"
+          strokeWidth={1.5}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
         {/* moving average */}
         <polyline
           points={avgLine}
@@ -349,6 +383,12 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
             <circle cx={xAt(hover)} cy={yCost(hovered.costCents)} r={3.5} className="fill-accent" />
             <circle
               cx={xAt(hover)}
+              cy={yCost(hovered.guardrailCostCents)}
+              r={3}
+              className="fill-warning"
+            />
+            <circle
+              cx={xAt(hover)}
               cy={yTokens(hovered.tokensIn)}
               r={2.5}
               className="fill-fg-muted"
@@ -366,7 +406,8 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
         {hovered ? (
           <>
             <span className="text-fg">{hovered.date}</span>
-            <span>spend ${(hovered.costCents / 100).toFixed(3)}</span>
+            <span>chat ${(hovered.costCents / 100).toFixed(3)}</span>
+            <span>guardrail ${(hovered.guardrailCostCents / 100).toFixed(3)}</span>
             <span>
               tokens {hovered.tokensIn.toLocaleString()} in / {hovered.tokensOut.toLocaleString()}{" "}
               out
@@ -410,7 +451,8 @@ function buildTrend(buckets: Bucket[]) {
   let peakCost = 0;
   let peakTokens = 0;
   for (const b of buckets) {
-    if (b.costCents > peakCost) peakCost = b.costCents;
+    const c = Math.max(b.costCents, b.guardrailCostCents);
+    if (c > peakCost) peakCost = c;
     const t = Math.max(b.tokensIn, b.tokensOut);
     if (t > peakTokens) peakTokens = t;
   }
@@ -475,22 +517,31 @@ function BarChart({ buckets, peakCost }: { buckets: Bucket[]; peakCost: number }
     <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
       <div className="mb-2 flex items-baseline justify-between">
         <h4 className="text-sm font-medium text-fg">Daily spend</h4>
-        <span className="text-[10px] uppercase tracking-wide text-fg-muted">
-          peak ${(peak / 100).toFixed(2)}
-        </span>
+        <div className="flex items-center gap-3 text-[10px] uppercase tracking-wide text-fg-muted">
+          <LegendDot color="bg-accent/70" label="Chat" />
+          <LegendDot color="bg-warning/80" label="Guardrail" />
+          <span>peak ${(peak / 100).toFixed(2)}</span>
+        </div>
       </div>
       <div className="flex h-40 items-end gap-1">
         {buckets.map((b) => {
-          const pct = peak > 0 ? (b.costCents / peak) * 100 : 0;
+          const total = b.costCents + b.guardrailCostCents;
+          const pct = peak > 0 ? (total / peak) * 100 : 0;
+          const chatShare = total > 0 ? (b.costCents / total) * pct : 0;
+          const guardShare = total > 0 ? (b.guardrailCostCents / total) * pct : 0;
           return (
             <div
               key={b.date}
-              className="group relative flex flex-1 flex-col items-center justify-end"
-              title={`${b.date}: $${(b.costCents / 100).toFixed(3)} · ${b.conversations} conv · ${b.tokensIn + b.tokensOut} tokens`}
+              className="group relative flex flex-1 flex-col items-end justify-end"
+              title={`${b.date}: chat $${(b.costCents / 100).toFixed(3)} · guardrail $${(b.guardrailCostCents / 100).toFixed(3)} · ${b.conversations} conv`}
             >
               <div
+                className="w-full bg-warning/80 transition-colors group-hover:bg-warning"
+                style={{ height: `${guardShare}%` }}
+              />
+              <div
                 className="w-full rounded-t bg-accent/70 transition-colors group-hover:bg-accent"
-                style={{ height: `${Math.max(pct, b.costCents > 0 ? 2 : 0)}%` }}
+                style={{ height: `${Math.max(chatShare, total > 0 && b.costCents > 0 ? 2 : 0)}%` }}
               />
             </div>
           );
@@ -516,19 +567,32 @@ function DataTable({ buckets }: { buckets: Bucket[] }) {
               <th className="pb-2 text-right">Conv</th>
               <th className="pb-2 text-right">Tokens in</th>
               <th className="pb-2 text-right">Tokens out</th>
-              <th className="pb-2 text-right">Spend</th>
+              <th className="pb-2 text-right">Chat $</th>
+              <th className="pb-2 text-right">Guardrail $</th>
+              <th className="pb-2 text-right">Total $</th>
             </tr>
           </thead>
           <tbody>
-            {[...buckets].reverse().map((b) => (
-              <tr key={b.date} className="border-t border-border">
-                <td className="py-1 font-mono text-fg">{b.date}</td>
-                <td className="py-1 text-right text-fg-muted">{b.conversations}</td>
-                <td className="py-1 text-right text-fg-muted">{b.tokensIn.toLocaleString()}</td>
-                <td className="py-1 text-right text-fg-muted">{b.tokensOut.toLocaleString()}</td>
-                <td className="py-1 text-right text-fg">${(b.costCents / 100).toFixed(3)}</td>
-              </tr>
-            ))}
+            {[...buckets].reverse().map((b) => {
+              const totalIn = b.tokensIn + b.guardrailTokensIn;
+              const totalOut = b.tokensOut + b.guardrailTokensOut;
+              const totalCost = b.costCents + b.guardrailCostCents;
+              return (
+                <tr key={b.date} className="border-t border-border">
+                  <td className="py-1 font-mono text-fg">{b.date}</td>
+                  <td className="py-1 text-right text-fg-muted">{b.conversations}</td>
+                  <td className="py-1 text-right text-fg-muted">{totalIn.toLocaleString()}</td>
+                  <td className="py-1 text-right text-fg-muted">{totalOut.toLocaleString()}</td>
+                  <td className="py-1 text-right text-fg">${(b.costCents / 100).toFixed(3)}</td>
+                  <td className="py-1 text-right text-warning-fg">
+                    ${(b.guardrailCostCents / 100).toFixed(3)}
+                  </td>
+                  <td className="py-1 text-right font-medium text-fg">
+                    ${(totalCost / 100).toFixed(3)}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

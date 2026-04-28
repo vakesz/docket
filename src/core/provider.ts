@@ -338,10 +338,6 @@ export type ScopeAxis = {
  * `GroupingStrategy`). Defaulting to `"by_kind"` keeps the existing AzDO
  * behavior for any spec that doesn't explicitly opt in.
  *
- * `supportedKinds` is the ordered set of kinds this provider can create;
- * surfaces render it as the choices in the new-item picker. It does not
- * gate reads (cached items already carry a translated `ItemKind`).
- *
  * `scopeAxes` declares the provider-defined narrowing axes alongside the
  * reserved `assignee`, `state`, and `tags` chips. Empty `[]` means only the
  * reserved chips render.
@@ -383,7 +379,6 @@ export type ProviderSpec = {
   setupFields: readonly SetupField[];
   requiresCli: readonly string[];
   grouping: GroupingStrategy;
-  supportedKinds: readonly ItemKind[];
   normalizeConfig: ProviderConfigNormalizer | null;
   labelTemplate: LabelTemplate | null;
   scopeAxes: readonly ScopeAxis[];

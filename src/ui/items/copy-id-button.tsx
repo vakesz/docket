@@ -1,23 +1,28 @@
 "use client";
 
 import { Check, Copy } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 export function CopyIdButton({ value, className }: { value: string; className?: string }) {
   const [copied, setCopied] = useState(false);
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Cancel a pending reset on unmount so an unmount-after-click doesn't
+  // queue a setState into a torn-down component.
   useEffect(() => {
-    if (!copied) return;
-    const t = window.setTimeout(() => setCopied(false), 1200);
-    return () => window.clearTimeout(t);
-  }, [copied]);
+    return () => {
+      if (resetTimer.current) clearTimeout(resetTimer.current);
+    };
+  }, []);
 
   const onCopy = async () => {
     if (typeof navigator === "undefined" || !navigator.clipboard) return;
     try {
       await navigator.clipboard.writeText(value);
       setCopied(true);
+      if (resetTimer.current) clearTimeout(resetTimer.current);
+      resetTimer.current = setTimeout(() => setCopied(false), 1200);
     } catch {
       // Clipboard API can be denied (insecure context, permission); silently degrade.
     }

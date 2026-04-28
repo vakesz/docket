@@ -88,7 +88,6 @@ export function ReactionRow({
   const router = useRouter();
   const utils = trpc.useUtils();
   const [pendingProposalId, setPendingProposalId] = useState<string | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
   const counts = asReactions(reactions, supportedReactions);
 
   const propose = trpc.proposals.proposeReactionToggle.useMutation({
@@ -99,11 +98,13 @@ export function ReactionRow({
       } else {
         setPendingProposalId(res.id);
       }
-      setBusy(null);
     },
-    onError: () => setBusy(null),
   });
 
+  // The in-flight reaction kind is whatever's on the mutation's `variables`
+  // while `isPending` — TanStack Query already tracks both, so a parallel
+  // `busy` state would just be a stale shadow.
+  const busy = propose.isPending ? (propose.variables?.reaction ?? null) : null;
   const error = propose.error?.message;
 
   if (supportedReactions.length === 0) return null;
@@ -120,7 +121,6 @@ export function ReactionRow({
             aria-label={`React with ${labelFor(kind)}`}
             title={`React with ${labelFor(kind)}`}
             onClick={() => {
-              setBusy(kind);
               propose.mutate({
                 projectId,
                 providerItemId,

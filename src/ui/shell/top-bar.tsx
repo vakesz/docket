@@ -1,11 +1,11 @@
-import Link from "next/link";
 import { signOut } from "@/server/auth";
-import { DocketLogo } from "@/ui/setup/docket-logo";
 import { AccountMenu } from "@/ui/shell/account-menu";
 import { BacklogDrawerTrigger } from "@/ui/shell/backlog-drawer-trigger";
+import { LogoLink } from "@/ui/shell/logo-link";
 import { ProjectSwitcher } from "@/ui/shell/project-switcher";
+import { SyncButton } from "@/ui/shell/sync-button";
 
-type ProjectOption = { id: string; name: string };
+type ProjectOption = { id: string; name: string; providerKind: string };
 
 /**
  * Header used inside the workspace shell. Top-left is just the Docket
@@ -18,11 +18,13 @@ export function TopBar({
   currentProjectId,
   userLabel,
   userImage,
+  readOnly = false,
 }: {
   projects: ProjectOption[];
   currentProjectId: string | null;
   userLabel: string;
   userImage: string | null;
+  readOnly?: boolean;
 }) {
   async function handleSignOut() {
     "use server";
@@ -32,20 +34,13 @@ export function TopBar({
   return (
     <header className="flex items-center border-b border-border bg-surface px-2 py-2 sm:px-4">
       <BacklogDrawerTrigger />
-      <Link
-        href="/"
-        className="flex shrink-0 items-center gap-2 text-fg hover:text-accent"
-        aria-label="Docket"
-      >
-        <DocketLogo size={20} className="shrink-0" />
-        <span className="text-[13px] font-semibold uppercase tracking-[0.18em]">DOCKET</span>
-        <span className="ml-1 hidden text-[12px] font-light italic tracking-wide text-fg-muted sm:inline">
-          build something cool together
-        </span>
-      </Link>
-      <div className="ml-auto flex shrink-0 items-center gap-3 text-xs text-fg-muted">
+      <LogoLink currentProjectId={currentProjectId} />
+      <div className="ml-auto flex shrink-0 items-center gap-2 text-xs text-fg-muted">
         {currentProjectId && projects.length > 0 ? (
-          <ProjectSwitcher projects={projects} currentProjectId={currentProjectId} />
+          <>
+            <SyncButton projectId={currentProjectId} readOnly={readOnly} variant="topbar" />
+            <ProjectSwitcher projects={projects} currentProjectId={currentProjectId} />
+          </>
         ) : null}
         <AccountMenu
           userLabel={userLabel}

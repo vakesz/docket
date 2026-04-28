@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { publicBaseUrl } from "@/lib/public-base-url";
 import { db } from "@/server/db";
 import { getSetupStatus } from "@/server/setup/status";
 import { SetupWizardForm } from "@/ui/setup/wizard-form";
@@ -21,20 +22,26 @@ export default async function SetupRequiredPage() {
     redirect("/");
   }
 
-  const publicBaseUrl = (process.env.PUBLIC_BASE_URL ?? "http://localhost:3000").trim();
+  const baseUrl = publicBaseUrl();
   const githubExisting = await db.oauthProviderConfig.findFirst({ where: { kind: "github" } });
   const azureDevopsExisting = await db.oauthProviderConfig.findFirst({
     where: { kind: "azure_devops" },
   });
-  const openaiExisting = await db.llmProvider.findFirst({ where: { kind: "openai" } });
+  const openaiChatExisting = await db.llmProvider.findFirst({
+    where: { kind: "openai", role: "chat" },
+  });
+  const openaiGuardrailExisting = await db.llmProvider.findFirst({
+    where: { kind: "openai", role: "guardrail" },
+  });
 
   return (
     <main className="min-h-screen bg-bg text-fg">
       <SetupWizardForm
-        publicBaseUrl={publicBaseUrl}
+        publicBaseUrl={baseUrl}
         hasGithub={Boolean(githubExisting)}
         hasAzureDevops={Boolean(azureDevopsExisting)}
-        hasOpenai={Boolean(openaiExisting)}
+        hasOpenaiChat={Boolean(openaiChatExisting)}
+        hasOpenaiGuardrail={Boolean(openaiGuardrailExisting)}
       />
     </main>
   );

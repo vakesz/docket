@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { formatRelative } from "@/lib/format";
 import { type FreshnessTone, freshnessTone } from "@/lib/staleness";
+import { useMinuteTick } from "@/lib/use-minute-tick";
 import { cn } from "@/lib/utils";
 
 /**
@@ -19,12 +19,9 @@ export function FreshnessStamp({
   thresholdDays: number | null;
   className?: string;
 }) {
-  // Single tick so the relative label and the tone tick together.
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setTick((n) => n + 1), 60_000);
-    return () => clearInterval(id);
-  }, []);
+  // Shared minute ticker — 1 setInterval document-wide regardless of how
+  // many stamps mount. Read for the side-effect (re-render on change).
+  useMinuteTick();
 
   if (!updatedAt) {
     return <span className={cn("text-fg-faint", className)}>—</span>;

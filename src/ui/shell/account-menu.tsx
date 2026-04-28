@@ -52,7 +52,7 @@ export function AccountMenu({
         {showImage ? (
           // biome-ignore lint/performance/noImgElement: provider-agnostic remote avatar
           <img
-            src={userImage as string}
+            src={userImage}
             alt=""
             className="h-full w-full object-cover"
             referrerPolicy="no-referrer"

@@ -15,9 +15,14 @@ export type StreamEventName =
   | "round_boundary"
   | "proposal_staged"
   | "ask_user_question"
+  | "guardrail_blocked"
+  | "guardrail_flagged"
+  | "guardrail_usage"
   | "usage"
   | "done"
   | "error";
+
+export type GuardrailStage = "input" | "tool_result" | "output";
 
 export type StreamPayload =
   | { kind: "text_delta"; delta: string }
@@ -31,6 +36,19 @@ export type StreamPayload =
       options: readonly string[] | null;
       multiSelect: boolean;
     }
+  | {
+      kind: "guardrail_blocked";
+      stage: GuardrailStage;
+      reason: string;
+      categories?: readonly string[];
+    }
+  | {
+      kind: "guardrail_flagged";
+      stage: GuardrailStage;
+      reason: string;
+      categories?: readonly string[];
+    }
+  | { kind: "guardrail_usage"; tokensIn: number; tokensOut: number; costCents?: number }
   | { kind: "usage"; tokensIn: number; tokensOut: number; costCents?: number }
   | { kind: "done" }
   | { kind: "error"; message: string };
@@ -55,6 +73,13 @@ export type SettledRound = {
   toolCalls: readonly StreamingToolCall[];
 };
 
+export type GuardrailNotice = {
+  stage: GuardrailStage;
+  reason: string;
+  blocked: boolean;
+  categories?: readonly string[];
+};
+
 export type StreamingState = {
   /**
    * The user's just-sent message, held locally until the post-stream
@@ -68,6 +93,12 @@ export type StreamingState = {
   text: string;
   toolCalls: StreamingToolCall[];
   question: { question: string; options: readonly string[] | null; multiSelect: boolean } | null;
+  /**
+   * Guardrail notices accumulated during this stream. The chat pane
+   * renders them inline so the user sees *why* the assistant stopped or
+   * was flagged. Cleared on the next send.
+   */
+  guardrailNotices: readonly GuardrailNotice[];
   error: string | null;
   done: boolean;
 };
@@ -78,6 +109,7 @@ export const EMPTY_STREAM: StreamingState = {
   text: "",
   toolCalls: [],
   question: null,
+  guardrailNotices: [],
   error: null,
   done: true,
 };

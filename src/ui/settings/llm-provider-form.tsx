@@ -17,10 +17,13 @@ import { trpc } from "@/lib/trpc-client";
 import { SelectField } from "@/ui/forms/select-field";
 
 type Kind = LlmKind;
+type Role = "chat" | "guardrail";
 
 type EditInitial = {
   id: string;
   kind: string;
+  /** Role is stamped at create time and not editable; carried so the form can show it. */
+  role: Role;
   label: string;
   model: string;
   baseUrl: string;
@@ -29,7 +32,15 @@ type EditInitial = {
 };
 
 type Props =
-  | { mode: "create"; canBeDefault: boolean }
+  /**
+   * `defaultRoleAvailability` lets the parent panel disable "Make this the default"
+   * when a default already exists for that role. Indexed per role so toggling
+   * the role flips the affordance without a re-render dance.
+   */
+  | {
+      mode: "create";
+      defaultRoleAvailability: Record<Role, boolean>;
+    }
   | { mode: "edit"; initial: EditInitial; onClose: () => void };
 
 /**
@@ -50,6 +61,7 @@ export function LlmProviderForm(props: Props) {
       ? (props.initial.kind as Kind)
       : "openai"
     : "openai";
+  const initialRole: Role = isEdit ? props.initial.role : "chat";
 
   const create = trpc.llmProviders.create.useMutation({
     onSuccess: async () => {
@@ -66,7 +78,9 @@ export function LlmProviderForm(props: Props) {
   const mutation = isEdit ? update : create;
 
   const kindId = useId();
+  const roleId = useId();
   const [kind, setKind] = useState<Kind>(initialKind);
+  const [role, setRole] = useState<Role>(initialRole);
   const [label, setLabel] = useState(isEdit ? props.initial.label : "");
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState(isEdit ? props.initial.model : "");
@@ -77,19 +91,20 @@ export function LlmProviderForm(props: Props) {
   const [outputPrice, setOutputPrice] = useState(
     isEdit ? formatPriceCentsAsDollars(props.initial.outputPriceCentsPerMtok) : "",
   );
-  const [isDefault, setIsDefault] = useState(
-    !isEdit && props.mode === "create" && props.canBeDefault,
-  );
+  const canBeDefaultForCurrentRole =
+    !isEdit && props.mode === "create" ? props.defaultRoleAvailability[role] : false;
+  const [isDefault, setIsDefault] = useState(canBeDefaultForCurrentRole);
 
   function resetCreateFields() {
     setKind("openai");
+    setRole("chat");
     setLabel("");
     setApiKey("");
     setModel("");
     setBaseUrl("");
     setInputPrice("");
     setOutputPrice("");
-    setIsDefault(props.mode === "create" && props.canBeDefault);
+    setIsDefault(props.mode === "create" ? props.defaultRoleAvailability.chat : false);
   }
 
   function onSubmit(e: FormEvent<HTMLFormElement>) {
@@ -106,7 +121,7 @@ export function LlmProviderForm(props: Props) {
     if (props.mode === "edit") {
       update.mutate({ id: props.initial.id, ...common });
     } else {
-      create.mutate({ ...common, isDefault });
+      create.mutate({ ...common, role, isDefault });
     }
   }
 
@@ -131,17 +146,44 @@ export function LlmProviderForm(props: Props) {
             ))}
           </SelectField>
         </div>
+        <div className="flex w-40 flex-col gap-1">
+          <label htmlFor={roleId} className="text-xs text-fg-muted">
+            Role
+          </label>
+          <SelectField
+            id={roleId}
+            value={role}
+            disabled={isEdit}
+            onChange={(e) => {
+              const next = e.target.value as Role;
+              setRole(next);
+              if (props.mode === "create") {
+                setIsDefault(props.defaultRoleAvailability[next]);
+              }
+            }}
+          >
+            <option value="chat">Chat</option>
+            <option value="guardrail">Guardrail</option>
+          </SelectField>
+        </div>
         <Field className="flex flex-1 flex-col gap-1">
           <Label className="text-xs text-fg-muted">Label</Label>
           <Input
             required
             value={label}
             onChange={(e) => setLabel(e.target.value)}
-            placeholder="OpenAI prod"
+            placeholder={role === "guardrail" ? "OpenAI guardrail" : "OpenAI prod"}
             className={fieldClass}
           />
         </Field>
       </div>
+      {!isEdit ? (
+        <p className="-mt-2 text-xs text-fg-muted">
+          {role === "chat"
+            ? "Chat rows feed the agent loop. The conversation LLM picker only sees chat rows."
+            : "Guardrail rows feed the prompt-injection / topic-scope / output-safety classifier. They run alongside chat — never as the chat model. A small / cheap model is recommended (e.g. gpt-5-nano)."}
+        </p>
+      ) : null}
 
       <Field className="flex flex-col gap-1">
         <Label className="text-xs text-fg-muted">
@@ -254,11 +296,12 @@ export function LlmProviderForm(props: Props) {
             <Switch checked={isDefault} onChange={setIsDefault} className={switchTrackClass}>
               <span aria-hidden className={switchThumbClass} />
             </Switch>
-            <Label>Make this the global default</Label>
+            <Label>Make this the {role === "guardrail" ? "guardrail" : "chat"} default</Label>
           </Field>
           <p className="text-xs text-fg-muted">
-            Becomes the fallback used by any project that hasn't picked its own LLM.
-            Per-conversation overrides still win.
+            {role === "guardrail"
+              ? "Becomes the fallback used by any project that hasn't pinned its own guardrail row. The pattern guardrail still runs first regardless."
+              : "Becomes the fallback used by any project that hasn't picked its own chat LLM. Per-conversation overrides still win."}
           </p>
         </div>
       ) : null}

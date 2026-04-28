@@ -1,8 +1,10 @@
 /**
  * Monthly LLM budget guard.
  *
- * Backed by `Conversation.costCents` rows the agent loop already increments
- * after each streaming turn. Cap + action come from global Settings:
+ * Backed by `Conversation.costCents` + `Conversation.guardrailCostCents`
+ * rows the agent loop already increments after each streaming turn. Both
+ * columns bill against the operator's API key, so both count toward the
+ * cap. Cap + action come from global Settings:
  * `llm.monthly-cost-cap-cents` and `llm.cost-cap-action`.
  *
  * The cap is calendar-month based in UTC so a deployment-wide cap rolls
@@ -40,9 +42,9 @@ export async function getBudgetStatus(db: Database): Promise<BudgetStatus> {
   const since = startOfMonthUtc();
   const agg = await db.conversation.aggregate({
     where: { startedAt: { gte: since } },
-    _sum: { costCents: true },
+    _sum: { costCents: true, guardrailCostCents: true },
   });
-  const monthCents = agg._sum.costCents ?? 0;
+  const monthCents = (agg._sum.costCents ?? 0) + (agg._sum.guardrailCostCents ?? 0);
   const capReached = capCents > 0 && monthCents >= capCents;
   const remainingCents = capCents > 0 ? Math.max(0, capCents - monthCents) : 0;
   return { monthCents, capCents, remainingCents, capReached, action };

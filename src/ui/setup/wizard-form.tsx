@@ -1,12 +1,17 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
-import { errorMessageClass, primaryButtonClass, secondaryButtonClass } from "@/lib/form-classes";
+import {
+  errorMessageClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+  xsBorderButtonClass,
+} from "@/lib/form-classes";
 import { parsePriceDollarsToCents } from "@/lib/pricing";
 import { trpc } from "@/lib/trpc-client";
 import { StepAzdo } from "@/ui/setup/step-azdo";
 import { StepGithub } from "@/ui/setup/step-github";
-import { StepOpenai } from "@/ui/setup/step-openai";
+import { type OpenaiRole, type OpenaiStepState, StepOpenai } from "@/ui/setup/step-openai";
 import { type StepperStep, WizardStepper } from "@/ui/setup/wizard-stepper";
 import { WizardWelcome } from "@/ui/setup/wizard-welcome";
 
@@ -15,7 +20,10 @@ type Props = {
   /** Pre-existing rows so we can hide subsections that are already configured. */
   hasGithub: boolean;
   hasAzureDevops: boolean;
-  hasOpenai: boolean;
+  /** Deployment already has a `kind=openai, role=chat` row — wizard skips chat slots that match. */
+  hasOpenaiChat: boolean;
+  /** Deployment already has a `kind=openai, role=guardrail` row. */
+  hasOpenaiGuardrail: boolean;
   /**
    * Visual-only mode: validation gates are bypassed (Next + Finish always
    * enabled) and Finish is a no-op so the wizard can be clicked end-to-end
@@ -24,11 +32,37 @@ type Props = {
   previewMode?: boolean;
 };
 
+type LlmDraft = OpenaiStepState & {
+  /** Stable key for React reconciliation — array index would shift on remove. */
+  uid: string;
+};
+
+let llmDraftCounter = 0;
+function nextDraftUid(): string {
+  llmDraftCounter += 1;
+  return `llm-${llmDraftCounter}`;
+}
+
+function newDraft(role: OpenaiRole): LlmDraft {
+  return {
+    uid: nextDraftUid(),
+    enabled: true,
+    role,
+    label: role === "guardrail" ? "OpenAI guardrail" : "OpenAI",
+    apiKey: "",
+    model: role === "guardrail" ? "gpt-5-nano" : "gpt-5",
+    baseUrl: "",
+    inputPrice: "",
+    outputPrice: "",
+  };
+}
+
 export function SetupWizardForm({
   publicBaseUrl,
   hasGithub,
   hasAzureDevops,
-  hasOpenai,
+  hasOpenaiChat,
+  hasOpenaiGuardrail,
   previewMode = false,
 }: Props) {
   const router = useRouter();
@@ -59,13 +93,15 @@ export function SetupWizardForm({
   );
   const [azdoTenantId, setAzdoTenantId] = useState("");
 
-  const [openaiEnabled, setOpenaiEnabled] = useState(!hasOpenai);
-  const [openaiLabel, setOpenaiLabel] = useState("OpenAI");
-  const [openaiKey, setOpenaiKey] = useState("");
-  const [openaiModel, setOpenaiModel] = useState("gpt-5");
-  const [openaiBaseUrl, setOpenaiBaseUrl] = useState("");
-  const [openaiInputPrice, setOpenaiInputPrice] = useState("");
-  const [openaiOutputPrice, setOpenaiOutputPrice] = useState("");
+  // Initial LLM lineup: just the chat draft. The "+ Add another LLM" button
+  // appends extra drafts (e.g. guardrail) when the operator wants more —
+  // most deployments only need a chat row up front and add the guardrail
+  // later from /settings, so we don't pre-populate it here. The chat draft
+  // starts disabled when a chat row already exists so the form doesn't
+  // pretend to ask for something bootstrap will skip anyway.
+  const [llms, setLlms] = useState<LlmDraft[]>(() => [
+    { ...newDraft("chat"), enabled: !hasOpenaiChat },
+  ]);
 
   const submit = trpc.setup.bootstrap.useMutation({
     onSuccess: () => {
@@ -78,10 +114,35 @@ export function SetupWizardForm({
     azdoEnabled && azdoClientId.trim() && azdoClientSecret.trim() && azdoTenantId.trim(),
   );
   const oauthSatisfied = hasGithub || hasAzureDevops || githubFilled || azdoFilled;
-  const openaiFilled = Boolean(openaiEnabled && openaiKey.trim());
-  const openaiSatisfied = !openaiEnabled || openaiFilled;
 
-  const canSubmit = !submit.isPending && oauthSatisfied && openaiSatisfied;
+  function isAlreadyConfiguredFor(role: OpenaiRole): boolean {
+    return role === "guardrail" ? hasOpenaiGuardrail : hasOpenaiChat;
+  }
+  function llmDraftFilled(d: LlmDraft): boolean {
+    return Boolean(d.enabled && !isAlreadyConfiguredFor(d.role) && d.apiKey.trim());
+  }
+  // A draft is "valid for submit" if it's either skipped (disabled / pre-configured)
+  // or fully filled. Half-filled drafts (toggle on but no apiKey) gate the Next button.
+  const llmsAllValid = llms.every((d) => {
+    if (!d.enabled) return true;
+    if (isAlreadyConfiguredFor(d.role)) return true;
+    return d.apiKey.trim().length > 0;
+  });
+  // Block "two enabled chat drafts" / "two enabled guardrail drafts" — bootstrap
+  // would skip the second one anyway, but the operator deserves a clearer signal.
+  const seenRoles = new Set<OpenaiRole>();
+  let llmsHaveRoleConflict = false;
+  for (const d of llms) {
+    if (!d.enabled || isAlreadyConfiguredFor(d.role)) continue;
+    if (seenRoles.has(d.role)) {
+      llmsHaveRoleConflict = true;
+      break;
+    }
+    seenRoles.add(d.role);
+  }
+  const llmsSatisfied = llmsAllValid && !llmsHaveRoleConflict;
+
+  const canSubmit = !submit.isPending && oauthSatisfied && llmsSatisfied;
 
   const submitDone = submit.isSuccess;
   const reachedDone = page === "done" || submitDone;
@@ -95,7 +156,27 @@ export function SetupWizardForm({
   const activeIndex = !started ? 0 : page === "oauth" ? 1 : page === "llm" ? 2 : 3;
 
   const oauthGate = previewMode || oauthSatisfied;
+  const llmGate = previewMode || llmsSatisfied;
   const finishGate = previewMode || canSubmit;
+
+  function updateLlm(index: number, patch: Partial<LlmDraft>) {
+    setLlms((prev) => prev.map((d, i) => (i === index ? { ...d, ...patch } : d)));
+  }
+  function addLlm() {
+    setLlms((prev) => {
+      // Prefer guardrail when none exists yet — most operators reach for
+      // "add another" specifically because they want to fill the other role.
+      const hasGuardrailDraft = prev.some((d) => d.role === "guardrail");
+      const nextRole: OpenaiRole = hasGuardrailDraft ? "chat" : "guardrail";
+      return [...prev, newDraft(nextRole)];
+    });
+  }
+  function removeLlm(index: number) {
+    setLlms((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  const filledLlms = llms.filter(llmDraftFilled);
+  const enabledLlms = llms.filter((d) => d.enabled && !isAlreadyConfiguredFor(d.role));
 
   function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -121,17 +202,15 @@ export function SetupWizardForm({
               tenantId: azdoTenantId.trim(),
             }
           : null,
-      openai:
-        openaiEnabled && openaiFilled
-          ? {
-              label: openaiLabel.trim(),
-              apiKey: openaiKey.trim(),
-              model: openaiModel.trim(),
-              baseUrl: openaiBaseUrl.trim(),
-              inputPriceCentsPerMtok: parsePriceDollarsToCents(openaiInputPrice),
-              outputPriceCentsPerMtok: parsePriceDollarsToCents(openaiOutputPrice),
-            }
-          : null,
+      llms: filledLlms.map((d) => ({
+        role: d.role,
+        label: d.label.trim(),
+        apiKey: d.apiKey.trim(),
+        model: d.model.trim(),
+        baseUrl: d.baseUrl.trim(),
+        inputPriceCentsPerMtok: parsePriceDollarsToCents(d.inputPrice),
+        outputPriceCentsPerMtok: parsePriceDollarsToCents(d.outputPrice),
+      })),
     });
   }
 
@@ -227,35 +306,45 @@ export function SetupWizardForm({
           <section className="flex w-full flex-col gap-4">
             <header className="flex items-baseline justify-between gap-3">
               <div className="flex flex-col gap-1">
-                <h2 className="text-base font-medium text-fg">Default LLM (optional)</h2>
+                <h2 className="text-base font-medium text-fg">LLM providers (optional)</h2>
                 <p className="text-xs text-fg-muted">
-                  Powers the agent. Skip for now and add later in{" "}
+                  Powers the agent (chat) and the prompt-injection / topic-scope classifier
+                  (guardrail). Skip any role for now and add later in{" "}
                   <code className="font-mono">/settings → LLM providers</code>.
                 </p>
               </div>
             </header>
 
-            <StepOpenai
-              state={{
-                enabled: openaiEnabled,
-                label: openaiLabel,
-                apiKey: openaiKey,
-                model: openaiModel,
-                baseUrl: openaiBaseUrl,
-                inputPrice: openaiInputPrice,
-                outputPrice: openaiOutputPrice,
-              }}
-              handlers={{
-                setEnabled: setOpenaiEnabled,
-                setLabel: setOpenaiLabel,
-                setApiKey: setOpenaiKey,
-                setModel: setOpenaiModel,
-                setBaseUrl: setOpenaiBaseUrl,
-                setInputPrice: setOpenaiInputPrice,
-                setOutputPrice: setOpenaiOutputPrice,
-              }}
-              alreadyConfigured={hasOpenai}
-            />
+            {llms.map((draft, i) => (
+              <StepOpenai
+                key={draft.uid}
+                index={llms.length > 1 ? i + 1 : undefined}
+                state={draft}
+                handlers={{
+                  setEnabled: (next) => updateLlm(i, { enabled: next }),
+                  setRole: (next) => updateLlm(i, { role: next }),
+                  setLabel: (next) => updateLlm(i, { label: next }),
+                  setApiKey: (next) => updateLlm(i, { apiKey: next }),
+                  setModel: (next) => updateLlm(i, { model: next }),
+                  setBaseUrl: (next) => updateLlm(i, { baseUrl: next }),
+                  setInputPrice: (next) => updateLlm(i, { inputPrice: next }),
+                  setOutputPrice: (next) => updateLlm(i, { outputPrice: next }),
+                }}
+                alreadyConfigured={isAlreadyConfiguredFor(draft.role)}
+                onRemove={llms.length > 1 ? () => removeLlm(i) : undefined}
+              />
+            ))}
+
+            {llmsHaveRoleConflict ? (
+              <p className={errorMessageClass}>
+                Two enabled drafts share the same role. Disable one or change its role — the wizard
+                writes at most one row per role.
+              </p>
+            ) : null}
+
+            <button type="button" onClick={addLlm} className={`${xsBorderButtonClass} self-start`}>
+              + Add another LLM
+            </button>
 
             <div className="flex items-center justify-between">
               <button
@@ -267,7 +356,7 @@ export function SetupWizardForm({
               </button>
               <button
                 type="button"
-                disabled={!(previewMode || openaiSatisfied)}
+                disabled={!llmGate}
                 onClick={() => setPage("done")}
                 className={primaryButtonClass}
               >
@@ -312,14 +401,12 @@ export function SetupWizardForm({
                 }
               />
               <SummaryRow
-                title="LLM"
-                value={
-                  hasOpenai
-                    ? "Already configured"
-                    : openaiEnabled && openaiFilled
-                      ? `${openaiLabel.trim() || "OpenAI"} — ${openaiModel.trim() || "default model"}`
-                      : "Skipped (add later in /settings)"
-                }
+                title="Chat LLM"
+                value={summarizeLlmFor("chat", filledLlms, enabledLlms, hasOpenaiChat)}
+              />
+              <SummaryRow
+                title="Guardrail LLM"
+                value={summarizeLlmFor("guardrail", filledLlms, enabledLlms, hasOpenaiGuardrail)}
               />
             </dl>
 
@@ -362,4 +449,24 @@ function SummaryRow({ title, value }: { title: string; value: string }) {
       <dd className="text-sm text-fg">{value}</dd>
     </div>
   );
+}
+
+function summarizeLlmFor(
+  role: OpenaiRole,
+  filled: readonly LlmDraft[],
+  enabled: readonly LlmDraft[],
+  alreadyConfigured: boolean,
+): string {
+  if (alreadyConfigured) return "Already configured";
+  const filledMatch = filled.find((d) => d.role === role);
+  if (filledMatch) {
+    const label =
+      filledMatch.label.trim() || (role === "guardrail" ? "OpenAI guardrail" : "OpenAI");
+    const fallbackModel = role === "guardrail" ? "gpt-5-nano" : "gpt-5";
+    return `${label} — ${filledMatch.model.trim() || fallbackModel}`;
+  }
+  // Toggle on but apiKey blank — surfaces a "won't be created" hint instead of a silent skip.
+  const enabledMatch = enabled.find((d) => d.role === role);
+  if (enabledMatch && !enabledMatch.apiKey.trim()) return "Skipped (API key blank)";
+  return "Skipped (add later in /settings)";
 }

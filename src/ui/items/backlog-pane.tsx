@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import type { BacklogBucket, ItemKind } from "@/core/types";
 import { metaLabelFaintClass } from "@/lib/form-classes";
 import { useRecentItemIds } from "@/lib/recent-items";
@@ -14,7 +14,6 @@ const KINDS: Array<ItemKind | "all"> = ["all", "epic", "feature", "story", "task
 
 const ITEMS_QUERY_LIMIT = 200;
 const PINNED_QUERY_LIMIT = 50;
-const FILTER_DEBOUNCE_MS = 150;
 
 /**
  * Left pane of the workspace shell: search + filter chips on top of the
@@ -41,14 +40,13 @@ export function BacklogPane({
   const [activeTags, setActiveTags] = useState<ReadonlySet<string>>(new Set());
   const [activeAssignees, setActiveAssignees] = useState<ReadonlySet<string>>(new Set());
   const [query, setQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
+  // useDeferredValue lets the keystroke commit immediately while the
+  // (expensive) filtered/facets memos lag one render — same UX intent as the
+  // old fixed-150ms timer but driven by React's scheduler instead of wall
+  // time, so a fast typist never blocks on a stale debounce.
+  const deferredQuery = useDeferredValue(query);
   const [tagsExpanded, setTagsExpanded] = useState(false);
   const [assigneesExpanded, setAssigneesExpanded] = useState(false);
-
-  useEffect(() => {
-    const t = window.setTimeout(() => setDebouncedQuery(query), FILTER_DEBOUNCE_MS);
-    return () => window.clearTimeout(t);
-  }, [query]);
 
   const items = trpc.items.list.useQuery(
     { projectId, bucket, limit: ITEMS_QUERY_LIMIT },
@@ -61,26 +59,27 @@ export function BacklogPane({
   const settings = trpc.settings.list.useQuery(undefined, { staleTime: 60_000 });
   const me = trpc.projects.me.useQuery(undefined, { staleTime: 5 * 60_000 });
   const meIdentifier = me.data?.name ?? null;
-  const maxVisibleTags = (() => {
-    const raw = settings.data?.find((r) => r.key === "items.max-visible-tags")?.value;
-    return typeof raw === "number" ? raw : 2;
-  })();
-  const maxVisibleAssignees = (() => {
-    const raw = settings.data?.find((r) => r.key === "items.max-visible-assignees")?.value;
-    return typeof raw === "number" ? raw : 2;
-  })();
-  const assigneeSelectorStyle: "chips" | "dropdown" = (() => {
-    const raw = settings.data?.find((r) => r.key === "items.assignee-selector-style")?.value;
-    return raw === "dropdown" ? "dropdown" : "chips";
-  })();
-  const showAvatars = (() => {
-    const raw = settings.data?.find((r) => r.key === "items.show-assignee-avatars")?.value;
-    return typeof raw === "boolean" ? raw : true;
-  })();
-  const showArchivedBucket = (() => {
-    const raw = settings.data?.find((r) => r.key === "items.show-archived-bucket")?.value;
-    return typeof raw === "boolean" ? raw : true;
-  })();
+  // Settings come back as a flat array; keying once removes the per-key
+  // O(N) `find` walk we'd otherwise pay for each derived value.
+  const settingsByKey = useMemo(() => {
+    const map = new Map<string, unknown>();
+    for (const row of settings.data ?? []) map.set(row.key, row.value);
+    return map;
+  }, [settings.data]);
+  const numSetting = (key: string, fallback: number): number => {
+    const raw = settingsByKey.get(key);
+    return typeof raw === "number" ? raw : fallback;
+  };
+  const boolSetting = (key: string, fallback: boolean): boolean => {
+    const raw = settingsByKey.get(key);
+    return typeof raw === "boolean" ? raw : fallback;
+  };
+  const maxVisibleTags = numSetting("items.max-visible-tags", 2);
+  const maxVisibleAssignees = numSetting("items.max-visible-assignees", 2);
+  const assigneeSelectorStyle: "chips" | "dropdown" =
+    settingsByKey.get("items.assignee-selector-style") === "dropdown" ? "dropdown" : "chips";
+  const showAvatars = boolSetting("items.show-assignee-avatars", true);
+  const showArchivedBucket = boolSetting("items.show-archived-bucket", true);
   const project = trpc.projects.get.useQuery({ projectId }, { staleTime: 5 * 60_000 });
   const providerKind = project.data?.providerKind ?? "";
   const providerHasAvatars = project.data?.hasAvatarFetcher ?? false;
@@ -152,7 +151,7 @@ export function BacklogPane({
   const { visibleKinds, tagCounts, assigneeCounts } = facets;
 
   const filtered = useMemo(() => {
-    const q = debouncedQuery.trim().toLowerCase();
+    const q = deferredQuery.trim().toLowerCase();
     return data.filter((it) => {
       if (kind !== "all" && it.kind !== kind) return false;
       if (activeTags.size > 0) {
@@ -188,7 +187,7 @@ export function BacklogPane({
       }
       return true;
     });
-  }, [data, kind, activeTags, activeAssignees, debouncedQuery]);
+  }, [data, kind, activeTags, activeAssignees, deferredQuery]);
 
   return (
     <div className="flex h-full flex-col bg-bg">

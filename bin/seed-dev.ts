@@ -6,9 +6,10 @@
  * for production self-host.
  *
  * Branches (each is independent and idempotent):
- *   - `DEV_OPENAI_API_KEY` → `LlmProvider` row (kind=openai). First row wins
- *     `isDefault: true`; subsequent runs leave the flag where it is so an
- *     admin tweak in the UI is not stomped.
+ *   - `DEV_OPENAI_API_KEY` → `LlmProvider` row (kind=openai, role=chat).
+ *     First chat row wins `isDefault: true` for the chat role; subsequent
+ *     runs leave the flag where it is so an admin tweak in the UI is not
+ *     stomped. Guardrail rows are admin-managed only.
  *   - `DEV_GITHUB_CLIENT_ID` + `DEV_GITHUB_CLIENT_SECRET` → an
  *     `OauthProviderConfig` row (kind=github).
  *   - `DEV_AZURE_DEVOPS_CLIENT_ID` + `DEV_AZURE_DEVOPS_CLIENT_SECRET`
@@ -66,27 +67,32 @@ async function seedOpenAi(db: PrismaClient): Promise<void> {
     return;
   }
 
-  // Match by kind, not label, so a user who renamed the row in the admin UI
-  // still gets their apiKey bumped on a re-seed without having the label
-  // clobbered back. Ciphertexts can't be byte-compared (fresh IV).
-  const existing = await db.llmProvider.findFirst({ where: { kind: "openai" } });
+  // Match by (kind, role='chat') so a user who renamed the row in the admin
+  // UI still gets their apiKey bumped on a re-seed without having the label
+  // clobbered back. Ciphertexts can't be byte-compared (fresh IV). The seed
+  // only manages chat rows; guardrail rows are added from the settings UI.
+  const existing = await db.llmProvider.findFirst({
+    where: { kind: "openai", role: "chat" },
+  });
   const writeKey = encryptSecret(apiKey);
 
   if (!existing) {
-    // First LLM row in the deployment? Seed it as the global default so the
-    // agent has an adapter to dispatch to without any further admin work.
-    const anyOther = await db.llmProvider.count();
+    // First chat row in the deployment? Seed it as the global chat default
+    // so the agent has an adapter to dispatch to without any further admin
+    // work. Guardrail-role rows have an independent default.
+    const anyChat = await db.llmProvider.count({ where: { role: "chat" } });
     const label = "OpenAI";
     await db.llmProvider.create({
       data: {
         kind: "openai",
+        role: "chat",
         label,
         apiKey: writeKey,
         model: process.env.DEV_OPENAI_MODEL?.trim() || "gpt-5",
         baseUrl: process.env.DEV_OPENAI_BASE_URL?.trim() || "",
         inputPriceCentsPerMtok: parsePrice(process.env.DEV_OPENAI_INPUT_PRICE_CENTS_PER_MTOK),
         outputPriceCentsPerMtok: parsePrice(process.env.DEV_OPENAI_OUTPUT_PRICE_CENTS_PER_MTOK),
-        isDefault: anyOther === 0,
+        isDefault: anyChat === 0,
         enabled: true,
       },
     });

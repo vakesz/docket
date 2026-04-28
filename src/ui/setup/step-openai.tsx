@@ -1,20 +1,25 @@
 "use client";
 
 import { Field, Input, Label } from "@headlessui/react";
-import { fieldClass, fieldMonoClass } from "@/lib/form-classes";
+import { fieldClass, fieldMonoClass, xsBorderButtonClass } from "@/lib/form-classes";
+import { SelectField } from "@/ui/forms/select-field";
 import { ProviderToggle } from "@/ui/setup/provider-toggle";
 
 const OPENAI_MODEL_SUGGESTIONS = [
   "gpt-5",
   "gpt-5-mini",
+  "gpt-5-nano",
   "gpt-4o",
   "gpt-4o-mini",
   "gpt-4.1",
   "gpt-4.1-mini",
 ] as const;
 
+export type OpenaiRole = "chat" | "guardrail";
+
 export type OpenaiStepState = {
   enabled: boolean;
+  role: OpenaiRole;
   label: string;
   apiKey: string;
   model: string;
@@ -25,6 +30,7 @@ export type OpenaiStepState = {
 
 export type OpenaiStepHandlers = {
   setEnabled: (next: boolean) => void;
+  setRole: (next: OpenaiRole) => void;
   setLabel: (next: string) => void;
   setApiKey: (next: string) => void;
   setModel: (next: string) => void;
@@ -37,19 +43,36 @@ export function StepOpenai({
   state,
   handlers,
   alreadyConfigured,
+  index,
+  onRemove,
 }: {
   state: OpenaiStepState;
   handlers: OpenaiStepHandlers;
+  /**
+   * Whether the deployment already has a row for this draft's current role.
+   * The toggle goes disabled+`configured` when true so the operator can
+   * tell that submitting again won't create a duplicate.
+   */
   alreadyConfigured: boolean;
+  /** 1-based index used in the section title when more than one draft is present. */
+  index?: number;
+  /** Optional remove button shown next to the toggle. Hidden when there's only one draft. */
+  onRemove?: () => void;
 }) {
+  const heading =
+    typeof index === "number" ? `OpenAI provider #${index}` : "OpenAI (or OpenAI-compatible)";
   return (
     <ProviderToggle
-      label="OpenAI (or OpenAI-compatible)"
+      label={heading}
       checked={state.enabled}
       disabled={alreadyConfigured}
       alreadyConfigured={alreadyConfigured}
       onChange={handlers.setEnabled}
-      help={null}
+      help={
+        state.role === "guardrail"
+          ? "Guardrail row — feeds the prompt-injection / topic-scope classifier."
+          : "Chat row — feeds the agent loop."
+      }
     >
       <aside
         role="note"
@@ -68,20 +91,35 @@ export function StepOpenai({
         </code>
       </aside>
 
-      <Field className="flex flex-col gap-1">
-        <Label className="text-xs text-fg-muted">Display label</Label>
-        <Input
-          value={state.label}
-          onChange={(e) => handlers.setLabel(e.target.value)}
-          placeholder="OpenAI"
-          className={fieldClass}
-          autoComplete="off"
-          required={state.enabled}
-        />
-        <p className="text-xs text-fg-faint">
-          Shown in the model picker. Useful if you'll add multiple OpenAI-compatible endpoints.
-        </p>
-      </Field>
+      <div className="flex gap-3">
+        <Field className="flex w-40 flex-col gap-1">
+          <Label className="text-xs text-fg-muted">Role</Label>
+          <SelectField
+            value={state.role}
+            onChange={(e) => handlers.setRole(e.target.value as OpenaiRole)}
+          >
+            <option value="chat">Chat</option>
+            <option value="guardrail">Guardrail</option>
+          </SelectField>
+          <p className="text-xs text-fg-faint">
+            Stamped at create — switch in /settings means delete + recreate.
+          </p>
+        </Field>
+        <Field className="flex flex-1 flex-col gap-1">
+          <Label className="text-xs text-fg-muted">Display label</Label>
+          <Input
+            value={state.label}
+            onChange={(e) => handlers.setLabel(e.target.value)}
+            placeholder={state.role === "guardrail" ? "OpenAI guardrail" : "OpenAI"}
+            className={fieldClass}
+            autoComplete="off"
+            required={state.enabled}
+          />
+          <p className="text-xs text-fg-faint">
+            Shown in the model picker. Useful if you'll add multiple OpenAI-compatible endpoints.
+          </p>
+        </Field>
+      </div>
 
       <Field className="flex flex-col gap-1">
         <Label className="text-xs text-fg-muted">API key</Label>
@@ -106,7 +144,7 @@ export function StepOpenai({
           <Input
             value={state.model}
             onChange={(e) => handlers.setModel(e.target.value)}
-            placeholder="gpt-5"
+            placeholder={state.role === "guardrail" ? "gpt-5-nano" : "gpt-5"}
             list="setup-openai-models"
             className={fieldMonoClass}
             autoComplete="off"
@@ -118,8 +156,9 @@ export function StepOpenai({
             ))}
           </datalist>
           <p className="text-xs text-fg-faint">
-            Pick a suggestion or type any deployment name (Azure Foundry users — paste your
-            deployment id).
+            {state.role === "guardrail"
+              ? "Pick a small / cheap model — guardrail runs on every turn."
+              : "Pick a suggestion or type any deployment name (Azure Foundry users — paste your deployment id)."}
           </p>
         </Field>
         <Field className="flex flex-1 flex-col gap-1">
@@ -168,6 +207,12 @@ export function StepOpenai({
         budget tracking will undercount until you fill them in from{" "}
         <code className="font-mono">/settings</code>.
       </p>
+
+      {onRemove ? (
+        <button type="button" onClick={onRemove} className={`${xsBorderButtonClass} self-start`}>
+          Remove this provider
+        </button>
+      ) : null}
     </ProviderToggle>
   );
 }

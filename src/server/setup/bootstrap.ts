@@ -20,6 +20,11 @@ export const DEFAULT_AZURE_DEVOPS_SCOPES =
   "499b84ac-1321-427f-aa17-267ca6975798/.default offline_access";
 export const DEFAULT_OPENAI_LABEL = "OpenAI";
 export const DEFAULT_OPENAI_MODEL = "gpt-5";
+export const DEFAULT_OPENAI_GUARDRAIL_LABEL = "OpenAI guardrail";
+export const DEFAULT_OPENAI_GUARDRAIL_MODEL = "gpt-5-nano";
+
+const LLM_ROLES = ["chat", "guardrail"] as const;
+const LlmRole = z.enum(LLM_ROLES);
 
 const PriceCentsPerMtok = z.number().min(0).max(1_000_000).nullable();
 
@@ -45,29 +50,55 @@ const AzureDevopsInput = z
   })
   .nullable();
 
-const OpenAiInput = z
-  .object({
-    label: z.string().min(1).max(80).default(DEFAULT_OPENAI_LABEL),
-    apiKey: z.string().min(1).max(500),
-    /** Free-text model name — falls back to `gpt-5` if blank. */
-    model: z.string().max(120).default(""),
-    /** Optional override for Azure OpenAI / proxies / Foundry. Blank = api.openai.com. */
-    baseUrl: z.string().max(500).default(""),
-    /** USD per million tokens × 100, matches LlmProvider columns. Null = unknown / unlogged. */
-    inputPriceCentsPerMtok: PriceCentsPerMtok.default(null),
-    outputPriceCentsPerMtok: PriceCentsPerMtok.default(null),
-  })
-  .nullable();
+/**
+ * One LLM row staged by the wizard. The wizard only knows about OpenAI
+ * (the only wired adapter) so `kind` is implicit; `role` decides whether
+ * the row feeds the agent loop (`chat`) or the guardrail classifier
+ * (`guardrail`). Bootstrap may receive multiple entries — typically one
+ * per role — and creates them in order, skipping any (kind, role) pair
+ * that already has a row in the deployment.
+ */
+const OpenAiInput = z.object({
+  role: LlmRole.default("chat"),
+  label: z.string().min(1).max(80).default(DEFAULT_OPENAI_LABEL),
+  apiKey: z.string().min(1).max(500),
+  /** Free-text model name — falls back to a role-appropriate default if blank. */
+  model: z.string().max(120).default(""),
+  /** Optional override for Azure OpenAI / proxies / Foundry. Blank = api.openai.com. */
+  baseUrl: z.string().max(500).default(""),
+  /** USD per million tokens × 100, matches LlmProvider columns. Null = unknown / unlogged. */
+  inputPriceCentsPerMtok: PriceCentsPerMtok.default(null),
+  outputPriceCentsPerMtok: PriceCentsPerMtok.default(null),
+});
 
 export const BootstrapInput = z
   .object({
     github: GithubInput.default(null),
     azureDevops: AzureDevopsInput.default(null),
-    openai: OpenAiInput.default(null),
+    /**
+     * Zero or more LLM rows to seed. The wizard typically submits one
+     * `chat` row and optionally one `guardrail` row, but the shape allows
+     * for future expansion (multiple chat models in one go, etc.). Cap at
+     * 8 to keep bootstrap from accidentally batching huge writes — beyond
+     * that, the operator should use the regular settings panel.
+     */
+    llms: z.array(OpenAiInput).max(8).default([]),
   })
   .refine((value) => value.github !== null || value.azureDevops !== null, {
     message: "At least one OAuth provider is required to finish setup.",
-  });
+  })
+  .refine(
+    (value) => {
+      const seen = new Set<string>();
+      for (const llm of value.llms) {
+        const key = `openai:${llm.role}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+      }
+      return true;
+    },
+    { message: "Each (kind, role) pair can be configured at most once in the wizard." },
+  );
 
 export type BootstrapInputType = z.infer<typeof BootstrapInput>;
 
@@ -125,24 +156,36 @@ export async function applyBootstrap(
     }
   }
 
-  if (input.openai) {
-    const existing = await db.llmProvider.findFirst({ where: { kind: "openai" } });
-    if (!existing) {
-      const anyOther = await db.llmProvider.count();
-      await db.llmProvider.create({
-        data: {
-          kind: "openai",
-          label: input.openai.label.trim() || DEFAULT_OPENAI_LABEL,
-          apiKey: encryptSecret(input.openai.apiKey),
-          model: input.openai.model.trim() || DEFAULT_OPENAI_MODEL,
-          baseUrl: input.openai.baseUrl.trim(),
-          inputPriceCentsPerMtok: input.openai.inputPriceCentsPerMtok,
-          outputPriceCentsPerMtok: input.openai.outputPriceCentsPerMtok,
-          isDefault: anyOther === 0,
-          enabled: true,
-        },
-      });
-    }
+  for (const llm of input.llms) {
+    // Skip if a row already exists for this (kind, role) — the wizard is
+    // idempotent against returning operators who configured one role
+    // earlier and are now adding the other.
+    const existing = await db.llmProvider.findFirst({
+      where: { kind: "openai", role: llm.role },
+    });
+    if (existing) continue;
+    // First row of this role in the deployment becomes its `isDefault`,
+    // so the chat / guardrail resolvers have something to dispatch to
+    // without further admin work. Roles default independently.
+    const anyForRole = await db.llmProvider.count({ where: { role: llm.role } });
+    const fallbackLabel =
+      llm.role === "guardrail" ? DEFAULT_OPENAI_GUARDRAIL_LABEL : DEFAULT_OPENAI_LABEL;
+    const fallbackModel =
+      llm.role === "guardrail" ? DEFAULT_OPENAI_GUARDRAIL_MODEL : DEFAULT_OPENAI_MODEL;
+    await db.llmProvider.create({
+      data: {
+        kind: "openai",
+        role: llm.role,
+        label: llm.label.trim() || fallbackLabel,
+        apiKey: encryptSecret(llm.apiKey),
+        model: llm.model.trim() || fallbackModel,
+        baseUrl: llm.baseUrl.trim(),
+        inputPriceCentsPerMtok: llm.inputPriceCentsPerMtok,
+        outputPriceCentsPerMtok: llm.outputPriceCentsPerMtok,
+        isDefault: anyForRole === 0,
+        enabled: true,
+      },
+    });
   }
 
   // Re-read so the sticky bit flips in the same DB session and the

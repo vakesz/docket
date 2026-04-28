@@ -104,8 +104,11 @@ const COMMENT_ECHO_THRESHOLD = 0.6;
 const MEMORY_BODY_ADVISORY_BYTES = 4096;
 
 async function loadCachedItem(ctx: ProposalContext, providerItemId: string) {
-  const row = await ctx.db.item.findFirst({
-    where: { projectId: ctx.projectId, providerItemId },
+  // (projectId, providerItemId) is the canonical compound unique on `Item`
+  // — using findUnique lets Postgres hit the unique index directly instead
+  // of running a generic equality plan via findFirst.
+  const row = await ctx.db.item.findUnique({
+    where: { projectId_providerItemId: { projectId: ctx.projectId, providerItemId } },
   });
   if (!row) {
     throw new TRPCError({

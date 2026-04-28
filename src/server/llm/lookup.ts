@@ -8,11 +8,12 @@ import type { db } from "@/server/db";
  *
  *   conversation.llmProviderIdOverride
  *     → project.defaultLlmProviderId
- *     → the global isDefault LlmProvider row.
+ *     → the deployment-wide chat row (`role='chat'`, `isDefault=true`).
  *
- * Returns null when no row at all is configured (the wizard hasn't run /
- * setup is incomplete). `selectAdapterFor` instantiates the actual adapter
- * from this row.
+ * Every step filters `role: 'chat'` so a guardrail row can never resolve
+ * here even when some malformed pointer references one. Returns null when
+ * no row at all is configured (setup wizard hasn't run). `selectAdapterFor`
+ * instantiates the actual adapter from this row.
  */
 export async function resolveLlmProviderRow(
   prisma: typeof db,
@@ -21,17 +22,17 @@ export async function resolveLlmProviderRow(
 ): Promise<LlmProvider | null> {
   if (conversation?.llmProviderIdOverride) {
     const row = await prisma.llmProvider.findFirst({
-      where: { id: conversation.llmProviderIdOverride, enabled: true },
+      where: { id: conversation.llmProviderIdOverride, role: "chat", enabled: true },
     });
     if (row) return row;
   }
   if (project.defaultLlmProviderId) {
     const row = await prisma.llmProvider.findFirst({
-      where: { id: project.defaultLlmProviderId, enabled: true },
+      where: { id: project.defaultLlmProviderId, role: "chat", enabled: true },
     });
     if (row) return row;
   }
   return prisma.llmProvider.findFirst({
-    where: { isDefault: true, enabled: true },
+    where: { role: "chat", isDefault: true, enabled: true },
   });
 }
