@@ -1,6 +1,7 @@
 "use client";
 
 import { Textarea } from "@headlessui/react";
+import { Send, Square } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { metaLabelFaintClass, microCapsButtonClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
@@ -39,7 +40,8 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
   const autoscrollFrameRef = useRef<number | null>(null);
   const promptRef = useRef<HTMLTextAreaElement | null>(null);
 
-  const { streaming, proposalIds, dismissProposal, drainStream, resetStream } = useChatStream();
+  const { streaming, proposalIds, dismissProposal, drainStream, resetStream, stopStream } =
+    useChatStream();
   const [toolDisplayMode] = useToolDisplayMode();
   const { pendingSeed, claimSeed } = useChatPaneController();
 
@@ -264,9 +266,7 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
               // biome-ignore lint/suspicious/noArrayIndexKey: settledRounds is append-only during one stream; index is stable for the lifetime of the snapshot.
               <SettledRoundView key={`settled:${idx}`} round={round} mode={toolDisplayMode} />
             ))}
-            {inFlight && streaming.text && (
-              <Bubble messageRole="assistant" text={streaming.text} streaming />
-            )}
+            {inFlight && streaming.text && <Bubble messageRole="assistant" text={streaming.text} />}
             {streaming.toolCalls.length > 0 && (
               <ToolCallProgress
                 toolCalls={streaming.toolCalls}
@@ -274,21 +274,23 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
                 streaming={inFlight}
               />
             )}
+            {inFlight && !streaming.question && <ThinkingDots />}
             {streaming.error && (
               <div className="mt-2 rounded border border-danger/40 bg-danger-bg px-3 py-2 text-xs text-danger-fg">
                 {streaming.error}
               </div>
             )}
-            {(proposalIds.length > 0 || streaming.question) && (
+            {((!inFlight && proposalIds.length > 0) || streaming.question) && (
               <div className="sticky bottom-0 -mx-3 mt-3 flex flex-col gap-2 border-t border-border bg-bg/95 px-3 pb-1 pt-2 backdrop-blur-sm">
-                {proposalIds.map((id) => (
-                  <ProposalCard
-                    key={id}
-                    projectId={projectId}
-                    proposalId={id}
-                    onDismiss={() => dismissProposal(id)}
-                  />
-                ))}
+                {!inFlight &&
+                  proposalIds.map((id) => (
+                    <ProposalCard
+                      key={id}
+                      projectId={projectId}
+                      proposalId={id}
+                      onDismiss={() => dismissProposal(id)}
+                    />
+                  ))}
                 {streaming.question && (
                   <QuestionCard
                     question={streaming.question}
@@ -332,11 +334,9 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
           }}
           rows={3}
           placeholder={
-            inFlight
-              ? "Streaming…"
-              : sendOnEnter
-                ? "Ask the agent… (⏎ to send, ⇧⏎ for newline)"
-                : "Ask the agent… (⇧⏎ to send, ⏎ for newline)"
+            sendOnEnter
+              ? "Ask the agent… (⏎ to send, ⇧⏎ for newline)"
+              : "Ask the agent… (⇧⏎ to send, ⏎ for newline)"
           }
           className="w-full resize-none rounded border border-border bg-bg p-2 text-sm text-fg focus:border-accent focus:outline-none disabled:bg-surface-alt"
         />
@@ -348,7 +348,33 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
           />
           <div className="flex items-center gap-2">
             {create.error && <span className="text-danger-fg">{create.error.message}</span>}
-            <span>{inFlight ? "Streaming…" : "Ready"}</span>
+            {inFlight ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (!conversationId) return;
+                  void stopStream({ projectId, itemId, conversationId });
+                }}
+                className={cn(
+                  microCapsButtonClass,
+                  "border border-danger/40 text-danger-fg hover:bg-danger-bg/40 hover:text-danger-fg",
+                )}
+                title="Stop generation"
+              >
+                <Square className="h-3 w-3" aria-hidden />
+                Stop
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={!draft.trim()}
+                className={cn(microCapsButtonClass, "disabled:opacity-50")}
+                title="Send message"
+              >
+                <Send className="h-3 w-3" aria-hidden />
+                Send
+              </button>
+            )}
           </div>
         </div>
       </form>
@@ -364,6 +390,25 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
  * `buildRenderUnits` is the whole point — the live → persisted swap is
  * visually a no-op.
  */
+function ThinkingDots() {
+  return (
+    <output className="mb-3 flex items-center gap-1 px-3 py-2" aria-label="Thinking">
+      <span
+        className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-fg-faint"
+        style={{ animationDelay: "0ms" }}
+      />
+      <span
+        className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-fg-faint"
+        style={{ animationDelay: "150ms" }}
+      />
+      <span
+        className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-fg-faint"
+        style={{ animationDelay: "300ms" }}
+      />
+    </output>
+  );
+}
+
 function SettledRoundView({ round, mode }: { round: SettledRound; mode: ToolDisplayMode }) {
   return (
     <>

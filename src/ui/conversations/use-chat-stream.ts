@@ -16,6 +16,12 @@ type DrainArgs = {
   content: string;
 };
 
+type StopArgs = {
+  projectId: string;
+  itemId: string;
+  conversationId: string;
+};
+
 type UseChatStream = {
   streaming: StreamingState;
   /**
@@ -29,6 +35,13 @@ type UseChatStream = {
   drainStream: (args: DrainArgs) => Promise<void>;
   /** Abort any in-flight stream and clear local stream state. */
   resetStream: () => void;
+  /**
+   * User-triggered stop: aborts the in-flight stream and refetches the
+   * persisted transcript so any rows the loop already flushed (the user
+   * message, partial assistant text) appear immediately. Unlike
+   * `resetStream`, this is meant to be wired to a Stop button in the UI.
+   */
+  stopStream: (args: StopArgs) => Promise<void>;
 };
 
 /**
@@ -60,6 +73,19 @@ export function useChatStream(): UseChatStream {
   const dismissProposal = useCallback((id: string) => {
     setProposalIds((prev) => prev.filter((p) => p !== id));
   }, []);
+
+  const stopStream = useCallback(
+    async ({ projectId, itemId, conversationId }: StopArgs) => {
+      abortRef.current?.abort();
+      abortRef.current = null;
+      await Promise.all([
+        utils.conversations.list.invalidate({ projectId, itemId }),
+        utils.conversations.get.invalidate({ projectId, conversationId }),
+      ]);
+      setStreaming(EMPTY_STREAM);
+    },
+    [utils.conversations.get, utils.conversations.list],
+  );
 
   const drainStream = useCallback(
     async ({ projectId, itemId, conversationId, content }: DrainArgs) => {
@@ -214,5 +240,5 @@ export function useChatStream(): UseChatStream {
     [utils.conversations.get, utils.conversations.list],
   );
 
-  return { streaming, proposalIds, dismissProposal, drainStream, resetStream };
+  return { streaming, proposalIds, dismissProposal, drainStream, resetStream, stopStream };
 }
