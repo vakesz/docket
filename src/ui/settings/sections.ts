@@ -168,15 +168,15 @@ export const SECTIONS: SectionMeta[] = [
   {
     key: "items-list",
     label: "Items list",
-    description: "Backlog filter bar defaults, row appearance, and recently-viewed items.",
+    description:
+      "Backlog filter bar defaults, row appearance, recently-viewed items, and a personal staleness override that wins over each project's value.",
     icon: ListOrdered,
     group: "you",
   },
   {
     key: "item-detail",
     label: "Item detail",
-    description:
-      "How item-detail headers render for me — including a personal staleness override that wins over each project's value.",
+    description: "Personal toggles for what renders on the item detail page (reactions today).",
     icon: Clock,
     group: "you",
   },

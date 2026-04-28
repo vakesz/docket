@@ -105,7 +105,8 @@ export function TimezonePicker({
     );
   }, [candidates, query]);
 
-  const selectedLabel = value === "" ? browserLabel() : entryLabel({ id: value, offset: offsetFor(value) });
+  const selectedLabel =
+    value === "" ? browserLabel() : entryLabel({ id: value, offset: offsetFor(value) });
 
   return (
     <Combobox
@@ -155,9 +156,7 @@ export function TimezonePicker({
                   {zone.offset ? (
                     <span className="font-mono text-[10px] text-fg-muted">{zone.offset}</span>
                   ) : null}
-                  {value === zone.id ? (
-                    <Check aria-hidden className="h-4 w-4 text-accent" />
-                  ) : null}
+                  {value === zone.id ? <Check aria-hidden className="h-4 w-4 text-accent" /> : null}
                 </span>
               </ComboboxOption>
             ))

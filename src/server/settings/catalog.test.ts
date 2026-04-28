@@ -82,4 +82,31 @@ describe("settings catalog", () => {
     expect(decodeSettingValue("items.stale-after-days.user", JSON.stringify(-5))).toBe(-1);
     expect(decodeSettingValue("items.stale-after-days.user", JSON.stringify(2.5))).toBe(-1);
   });
+
+  it("display.timezone accepts empty + valid IANA names, rejects garbage", () => {
+    const def = getSettingDef("display.timezone");
+    expect(def.scope).toBe("user");
+    expect(def.default).toBe("");
+    expect(decodeSettingValue("display.timezone", null)).toBe("");
+    expect(decodeSettingValue("display.timezone", JSON.stringify(""))).toBe("");
+    expect(decodeSettingValue("display.timezone", JSON.stringify("Europe/Stockholm"))).toBe(
+      "Europe/Stockholm",
+    );
+    expect(decodeSettingValue("display.timezone", JSON.stringify("UTC"))).toBe("UTC");
+    // Garbage falls back to the default rather than blowing up the page.
+    expect(decodeSettingValue("display.timezone", JSON.stringify("Mars/Olympus"))).toBe("");
+    // Encode rejects invalid zones at the catalog boundary.
+    expect(() => encodeSettingValue("display.timezone", "Mars/Olympus")).toThrow();
+  });
+
+  it("items.show-reactions-header and -comments default true and round-trip", () => {
+    for (const key of ["items.show-reactions-header", "items.show-reactions-comments"] as const) {
+      const def = getSettingDef(key);
+      expect(def.scope).toBe("user");
+      expect(def.default).toBe(true);
+      expect(decodeSettingValue(key, null)).toBe(true);
+      expect(decodeSettingValue(key, JSON.stringify(false))).toBe(false);
+      expect(decodeSettingValue(key, JSON.stringify(true))).toBe(true);
+    }
+  });
 });

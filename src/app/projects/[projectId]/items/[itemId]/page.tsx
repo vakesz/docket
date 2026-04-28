@@ -76,11 +76,13 @@ export default async function ItemDetailPage({
 
   const session = await auth();
   const userId = session?.user?.id ?? null;
-  const [projectStale, userStale] = await Promise.all([
+  const [projectStale, userStale, showHeaderReactions, showCommentReactions] = await Promise.all([
     loadProjectSetting(db, projectId, "items.stale-after-days"),
     userId
       ? loadUserSetting(db, userId, "items.stale-after-days.user")
       : Promise.resolve(-1 as number),
+    userId ? loadUserSetting(db, userId, "items.show-reactions-header") : Promise.resolve(true),
+    userId ? loadUserSetting(db, userId, "items.show-reactions-comments") : Promise.resolve(true),
   ]);
   const staleThresholdDays = resolveEffectiveStaleThreshold(userStale, projectStale);
 
@@ -91,6 +93,8 @@ export default async function ItemDetailPage({
       capabilities={project.capabilities}
       item={item}
       staleThresholdDays={staleThresholdDays}
+      showHeaderReactions={showHeaderReactions}
+      showCommentReactions={showCommentReactions}
     />
   );
 }

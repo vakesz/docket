@@ -1,9 +1,9 @@
 "use client";
 import { Field, Input, Label } from "@headlessui/react";
-import { useEffect, useState } from "react";
 import { fieldClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
 import { DefaultProjectPicker } from "@/ui/settings/default-project-picker";
+import { TimezonePicker } from "@/ui/settings/timezone-picker";
 import { ThemePicker } from "@/ui/shell/theme-picker";
 
 /**
@@ -14,7 +14,7 @@ import { ThemePicker } from "@/ui/shell/theme-picker";
  * don't want a DB write to override that.
  *
  * Pane-specific preferences live alongside their pane: backlog/filter-bar
- * defaults under "Items list", staleness under "Item detail", chat keys
+ * defaults under "Items list", reactions under "Item detail", chat keys
  * under "Chat".
  */
 export function ProfilePanel() {
@@ -45,11 +45,19 @@ export function ProfilePanel() {
         <ThemePicker />
       </Field>
 
-      <TimezoneField
-        value={timezone}
-        disabled={disabled}
-        onCommit={(next) => update.mutate({ key: "display.timezone" as never, value: next })}
-      />
+      <Field className="flex flex-col gap-1 border-t border-border pt-6">
+        <Label className="text-sm font-medium text-fg">Display time zone</Label>
+        <p className="text-xs text-fg-muted">
+          Used for relative dates and the staleness tint window. Pick &ldquo;Browser local&rdquo; to
+          follow whatever zone the browser reports.
+        </p>
+        <TimezonePicker
+          value={timezone}
+          disabled={disabled}
+          onChange={(next) => update.mutate({ key: "display.timezone" as never, value: next })}
+        />
+        {update.error ? <p className="text-xs text-danger-fg">{update.error.message}</p> : null}
+      </Field>
 
       <Field className="flex flex-col gap-1 border-t border-border pt-6">
         <Label className="text-sm font-medium text-fg">Auto-refresh interval (seconds)</Label>
@@ -75,63 +83,5 @@ export function ProfilePanel() {
         {update.error ? <p className="text-xs text-danger-fg">{update.error.message}</p> : null}
       </Field>
     </div>
-  );
-}
-
-function TimezoneField({
-  value,
-  disabled,
-  onCommit,
-}: {
-  value: string;
-  disabled: boolean;
-  onCommit: (next: string) => void;
-}) {
-  const [draft, setDraft] = useState(value);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setDraft(value);
-    setError(null);
-  }, [value]);
-
-  return (
-    <Field className="flex flex-col gap-1 border-t border-border pt-6">
-      <Label className="text-sm font-medium text-fg">Display time zone</Label>
-      <p className="text-xs text-fg-muted">
-        IANA name used for relative dates and the staleness tint window (e.g.{" "}
-        <code className="rounded bg-surface-alt px-1 py-0.5 font-mono">Europe/Stockholm</code>,{" "}
-        <code className="rounded bg-surface-alt px-1 py-0.5 font-mono">UTC</code>). Empty falls back
-        to the browser's local zone.
-      </p>
-      <Input
-        type="text"
-        placeholder="(browser local)"
-        value={draft}
-        disabled={disabled}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={(e) => {
-          const next = e.target.value.trim();
-          if (next === value) {
-            setDraft(value);
-            setError(null);
-            return;
-          }
-          if (next !== "") {
-            try {
-              Intl.DateTimeFormat(undefined, { timeZone: next });
-            } catch {
-              setError(`'${next}' is not a recognized IANA time zone`);
-              return;
-            }
-          }
-          setError(null);
-          setDraft(next);
-          onCommit(next);
-        }}
-        className={`${fieldClass} max-w-md`}
-      />
-      {error ? <p className="text-xs text-danger-fg">{error}</p> : null}
-    </Field>
   );
 }

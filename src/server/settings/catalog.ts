@@ -42,8 +42,24 @@ const BacklogSortSchema = z.enum(["updated", "created", "priority", "title"]);
 const BacklogStateFilterSchema = z.enum(["all", "open", "in_progress", "done"]);
 const BacklogDensitySchema = z.enum(["compact", "cozy"]);
 // IANA tz names go from a couple chars ("UTC") to 30+ ("America/Argentina/ComodRivadavia").
-// 64 is generous and avoids DB-side surprises. Empty string = follow the browser.
-const TimezoneSchema = z.string().max(64);
+// 64 is generous and avoids DB-side surprises. Empty string = follow the browser;
+// any non-empty value must be one Intl.DateTimeFormat accepts so direct DB / raw
+// tRPC writes can't sneak in a bogus zone.
+const TimezoneSchema = z
+  .string()
+  .max(64)
+  .refine(
+    (v) => {
+      if (v === "") return true;
+      try {
+        new Intl.DateTimeFormat("en-US", { timeZone: v });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { message: "must be an IANA time-zone name (e.g. 'Europe/Stockholm') or empty" },
+  );
 const CompactionTokenThresholdSchema = z.number().int().min(1_000).max(500_000);
 const CompactionKeepRecentTurnsSchema = z.number().int().min(2).max(50);
 const CompactionStrategySchema = z.enum(["summary", "drop-tools"]);
@@ -144,6 +160,24 @@ export const SETTINGS_CATALOG = {
     label: "Backlog — show Archived bucket",
     description:
       "When on, the backlog filter bar offers an Archived bucket alongside Open / Closed / All. Archived rows are still reachable via the All-states bucket regardless of this setting.",
+  },
+  "items.show-reactions-header": {
+    key: "items.show-reactions-header",
+    scope: "user",
+    schema: BoolSchema,
+    default: true,
+    label: "Item detail — show reactions on header",
+    description:
+      "When off, the reaction picker and existing reaction chips are hidden on the item detail header. Reactions on comments are unaffected. Sync still pulls reactions; this is a personal view preference.",
+  },
+  "items.show-reactions-comments": {
+    key: "items.show-reactions-comments",
+    scope: "user",
+    schema: BoolSchema,
+    default: true,
+    label: "Item detail — show reactions in comments",
+    description:
+      "When off, the reaction picker and existing reaction chips are hidden inside each comment. Reactions on the item header itself are unaffected. Sync still pulls reactions; this is a personal view preference.",
   },
   "app.read-only": {
     key: "app.read-only",

@@ -1,20 +1,32 @@
 "use client";
 
 import { Field, Input, Label, Switch } from "@headlessui/react";
+import { AlertTriangle } from "lucide-react";
 import { fieldClass, switchThumbClass, switchTrackClass } from "@/lib/form-classes";
+import { DEFAULT_STALE_THRESHOLD_DAYS } from "@/lib/staleness";
 import { trpc } from "@/lib/trpc-client";
 import { RECENT_LIMIT_MAX, useRecentEnabled, useRecentLimit } from "@/lib/ui-prefs";
 import { SelectField } from "@/ui/forms/select-field";
+
+const USER_STALE_OVERRIDE_KEY = "items.stale-after-days.user";
 
 /**
  * Items list section — every backlog list / filter bar preference, both
  * catalog-backed and browser-local, in one place. Catalog-backed fields
  * persist server-side; browser-local fields (recents) live in localStorage
  * since the recent ids themselves are per-device.
+ *
+ * Hosts the personal staleness override (was under "Item detail" — moved
+ * here because the freshness tint shows up on the backlog list, not on the
+ * detail page header).
  */
-export function ItemsListPanel() {
+export function ItemsListPanel({ projectId }: { projectId: string | null }) {
   const utils = trpc.useUtils();
   const list = trpc.settings.list.useQuery();
+  const projectList = trpc.settings.projectList.useQuery(
+    { projectId: projectId ?? "" },
+    { enabled: projectId !== null },
+  );
   const update = trpc.settings.update.useMutation({
     onSuccess: async () => {
       await utils.settings.list.invalidate();
@@ -50,7 +62,43 @@ export function ItemsListPanel() {
   const backlogDensityRaw = list.data?.find((r) => r.key === "backlog.density")?.value;
   const backlogDensity = typeof backlogDensityRaw === "string" ? backlogDensityRaw : "cozy";
 
+  const userStaleRaw = list.data?.find((r) => r.key === USER_STALE_OVERRIDE_KEY)?.value;
+  const userStale = typeof userStaleRaw === "number" ? userStaleRaw : -1;
+  const overrideOn = userStale >= 0;
+  const indicatorOn = userStale > 0;
+
+  const projectStaleRaw = projectList.data?.find((r) => r.key === "items.stale-after-days")?.value;
+  const projectStale = typeof projectStaleRaw === "number" ? projectStaleRaw : null;
+  const projectThresholdLabel =
+    projectStale === null
+      ? "(no project selected)"
+      : projectStale === 0
+        ? "Disabled"
+        : `${projectStale} day${projectStale === 1 ? "" : "s"}`;
+
   const disabled = list.isPending || update.isPending;
+
+  const onToggleStaleOverride = (next: boolean) => {
+    update.mutate({
+      key: USER_STALE_OVERRIDE_KEY as never,
+      value: next ? DEFAULT_STALE_THRESHOLD_DAYS : -1,
+    });
+  };
+
+  const onToggleStaleIndicator = (next: boolean) => {
+    update.mutate({
+      key: USER_STALE_OVERRIDE_KEY as never,
+      value: next ? DEFAULT_STALE_THRESHOLD_DAYS : 0,
+    });
+  };
+
+  const onChangeStaleThreshold = (next: number) => {
+    if (!Number.isFinite(next) || next < 1) return;
+    update.mutate({
+      key: USER_STALE_OVERRIDE_KEY as never,
+      value: Math.min(Math.trunc(next), 3650),
+    });
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -281,6 +329,85 @@ export function ItemsListPanel() {
             <option value="compact">Compact</option>
           </SelectField>
         </Field>
+      </section>
+
+      <section className="flex flex-col gap-3 border-t border-border pt-6">
+        <header className="flex flex-col gap-1">
+          <h3 className="text-sm font-medium text-fg">Staleness indicator</h3>
+          <p className="text-xs text-fg-muted">
+            Backlog rows tint amber once an item has been untouched past the threshold, and red at
+            2x. The detail-page header shows the same age stamp. Project default:{" "}
+            <span className="font-medium text-fg">{projectThresholdLabel}</span>.
+          </p>
+        </header>
+
+        <Field className="flex flex-col gap-1">
+          <Field className="flex items-center gap-2 text-sm text-fg">
+            <Switch
+              checked={overrideOn}
+              disabled={disabled}
+              onChange={onToggleStaleOverride}
+              className={switchTrackClass}
+            >
+              <span aria-hidden className={switchThumbClass} />
+            </Switch>
+            <Label>{overrideOn ? "Using my own threshold" : "Inheriting project default"}</Label>
+          </Field>
+          {overrideOn ? (
+            <p className="inline-flex items-start gap-1.5 text-xs text-warning-fg">
+              <AlertTriangle aria-hidden className="mt-0.5 size-3 shrink-0" />
+              <span>
+                Not recommended — your override replaces the project default for every project you
+                view. Leave this off so each project's threshold applies.
+              </span>
+            </p>
+          ) : (
+            <p className="text-xs text-fg-muted">
+              Off by default. Turn on only if you want a different freshness window than your
+              projects use.
+            </p>
+          )}
+        </Field>
+
+        {overrideOn ? (
+          <Field className="flex flex-col gap-1">
+            <Label className="text-sm font-medium text-fg">Show staleness indicator (mine)</Label>
+            <p className="text-xs text-fg-muted">
+              When off, the freshness tint and detail-page age badge are hidden for me on every
+              project — even if a project's own default is positive.
+            </p>
+            <Field className="flex items-center gap-2 text-sm text-fg">
+              <Switch
+                checked={indicatorOn}
+                disabled={disabled}
+                onChange={onToggleStaleIndicator}
+                className={switchTrackClass}
+              >
+                <span aria-hidden className={switchThumbClass} />
+              </Switch>
+              <Label>{indicatorOn ? "Visible" : "Hidden"}</Label>
+            </Field>
+          </Field>
+        ) : null}
+
+        {overrideOn && indicatorOn ? (
+          <Field className="flex flex-col gap-1">
+            <Label className="text-sm font-medium text-fg">My threshold (days)</Label>
+            <p className="text-xs text-fg-muted">
+              Days an item can sit untouched before it tints amber. Range: 1 to 3650.
+            </p>
+            <Input
+              type="number"
+              min={1}
+              max={3650}
+              step={1}
+              value={userStale > 0 ? userStale : DEFAULT_STALE_THRESHOLD_DAYS}
+              disabled={disabled}
+              onChange={(e) => onChangeStaleThreshold(Number.parseInt(e.target.value, 10))}
+              className={`${fieldClass} max-w-[8rem]`}
+            />
+          </Field>
+        ) : null}
       </section>
 
       {update.error ? <p className="text-xs text-danger-fg">{update.error.message}</p> : null}

@@ -59,12 +59,16 @@ export function DetailPane({
   capabilities,
   item,
   staleThresholdDays,
+  showHeaderReactions,
+  showCommentReactions,
 }: {
   projectId: string;
   providerKind: string | null;
   capabilities: { supportedReactions: readonly string[] };
   item: DetailItem;
   staleThresholdDays: number | null;
+  showHeaderReactions: boolean;
+  showCommentReactions: boolean;
 }) {
   const authorProfileUrl = providerProfileUrl(providerKind, item.author);
   const assigneeProfileUrl = providerProfileUrl(providerKind, item.assignee);
@@ -227,7 +231,7 @@ export function DetailPane({
               state={item.state as ItemState}
             />
           </div>
-          {capabilities.supportedReactions.length > 0 ? (
+          {capabilities.supportedReactions.length > 0 && showHeaderReactions ? (
             <div className="flex flex-col gap-1.5">
               <h3 className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
                 Reactions
@@ -277,7 +281,7 @@ export function DetailPane({
                   </time>
                 </div>
                 <Markdown source={c.bodyMd} />
-                {capabilities.supportedReactions.length > 0 ? (
+                {capabilities.supportedReactions.length > 0 && showCommentReactions ? (
                   <div className="mt-2">
                     <ReactionRow
                       projectId={projectId}

@@ -205,9 +205,9 @@ function SectionContent({
     case "chat":
       return <ChatDisplayPanel />;
     case "items-list":
-      return <ItemsListPanel />;
+      return <ItemsListPanel projectId={projectId} />;
     case "item-detail":
-      return <ItemDetailPanel projectId={projectId} />;
+      return <ItemDetailPanel />;
     case "budget-audit":
       return <BudgetAuditPanel />;
     case "global-analytics":
