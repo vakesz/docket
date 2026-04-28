@@ -102,24 +102,26 @@ function ctxFor(ctx: {
  */
 export const proposalsRouter = router({
   list: projectScopedProcedure.input(ListInput).query(async ({ ctx, input }) => {
-    const rows = await ctx.db.proposal.findMany({
+    // Explicit select keeps the `payload` JSON blob (the full proposed
+    // change body) off the wire — list rows render summaries only.
+    return ctx.db.proposal.findMany({
       where: {
         projectId: ctx.projectId,
         ...(input.status === "all" ? {} : { status: input.status }),
       },
       orderBy: [{ createdAt: "desc" }],
       take: input.limit,
+      select: {
+        id: true,
+        kind: true,
+        status: true,
+        providerItemId: true,
+        createdAt: true,
+        confirmedAt: true,
+        executedAt: true,
+        errorMessage: true,
+      },
     });
-    return rows.map((row) => ({
-      id: row.id,
-      kind: row.kind,
-      status: row.status,
-      providerItemId: row.providerItemId,
-      createdAt: row.createdAt,
-      confirmedAt: row.confirmedAt,
-      executedAt: row.executedAt,
-      errorMessage: row.errorMessage,
-    }));
   }),
 
   count: projectScopedProcedure.input(CountInput).query(({ ctx, input }) => {

@@ -24,9 +24,11 @@ export function BudgetAuditPanel() {
 
   const update = trpc.settings.globalUpdate.useMutation({
     onSuccess: async () => {
-      await utils.settings.globalList.invalidate();
-      await utils.settings.auditStatus.invalidate();
-      await utils.settings.budgetStatus.invalidate();
+      await Promise.all([
+        utils.settings.globalList.invalidate(),
+        utils.settings.auditStatus.invalidate(),
+        utils.settings.budgetStatus.invalidate(),
+      ]);
     },
   });
 

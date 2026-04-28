@@ -40,8 +40,7 @@ export function ProjectsPanel() {
   });
   const archive = trpc.projects.archive.useMutation({
     onSuccess: async () => {
-      await utils.projects.list.invalidate();
-      await utils.projects.me.invalidate();
+      await Promise.all([utils.projects.list.invalidate(), utils.projects.me.invalidate()]);
       router.refresh();
     },
   });

@@ -110,9 +110,11 @@ $EDITOR .env.local       # at minimum: DATABASE_URL, plus optional DEV_* seeds
 bun run dev              # runs predev seed + next dev (Turbopack)
 ```
 
-`bun run dev` runs `bin/seed-dev.ts` first, which reads `.env.local` and writes any matching `LlmProvider` / `OauthProviderConfig` rows (idempotent). Leave the `DEV_*` block empty and you'll land on the in-browser wizard at `http://localhost:3000` exactly as a fresh self-host would.
+`bun run dev` first runs `bunx prisma db push --accept-data-loss` to apply the schema to whatever `DATABASE_URL` points at, then runs `bin/seed-dev.ts` which reads `.env.local` and writes any matching `LlmProvider` / `OauthProviderConfig` rows (idempotent). Leave the `DEV_*` block empty and you'll land on the in-browser wizard at `http://localhost:3000` exactly as a fresh self-host would.
 
 If you don't have a local Postgres, point `DATABASE_URL` at `docker compose up -d db` running just the bundled DB service, or any reachable Postgres (Neon dev branch, etc).
+
+> **Heads-up on `SECRETS_KEY`.** Encrypted rows (`LlmProvider.apiKey`, `OauthProviderConfig.clientSecret`) are bound to whichever `SECRETS_KEY` was active when they were written. If you've previously booted the full Docker stack — which auto-generates a `SECRETS_KEY` into the `docket-secrets` named volume — and then point a local `bun run dev` at the same `db-data` volume with a *different* `SECRETS_KEY` in `.env.local`, decrypts will fail with `Unsupported state or unable to authenticate data`. Pick one key and stick with it, or `docker compose down -v` to wipe both volumes and start clean.
 
 ### Common commands
 

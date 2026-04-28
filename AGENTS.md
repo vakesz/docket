@@ -16,7 +16,7 @@ This file is the load-bearing reference for anyone (or anything) editing the cod
 ```bash
 bun install
 cp .env.example .env.local              # at minimum: DATABASE_URL, AUTH_SECRET, plus DEV_* seeds
-bun run dev                             # predev seed (bin/seed-dev.ts) + next dev (Turbopack)
+bun run dev                             # predev: prisma db push + bin/seed-dev.ts, then next dev (Turbopack)
 
 bun run build                           # next build
 bun run start                           # next start (production)
@@ -164,7 +164,7 @@ Aspirational direction (consistent with current refactors, not a hard rule):
 
 ## Global Invariants
 
-- **Bootstrap is env-driven and idempotent.** `bin/seed-dev.ts` reads `DEV_OPENAI_API_KEY`, `DEV_GITHUB_CLIENT_ID`, `DEV_GITHUB_CLIENT_SECRET` and writes any missing `LlmProvider` / `OauthProviderConfig` rows. Once both an LLM provider and an OAuth provider exist, the `setup.complete` global Setting flips and the seed becomes a no-op forever after — admin UI edits are never stomped, even if env values change. The same script runs in dev (via `predev`) and in production (via `bin/docker-entrypoint.sh`).
+- **Bootstrap is env-driven and idempotent.** `bin/seed-dev.ts` reads `DEV_OPENAI_API_KEY`, `DEV_GITHUB_CLIENT_ID`, `DEV_GITHUB_CLIENT_SECRET` and writes any missing `LlmProvider` / `OauthProviderConfig` rows. Once both an LLM provider and an OAuth provider exist, the `setup.complete` global Setting flips and the seed becomes a no-op forever after — admin UI edits are never stomped, even if env values change. The same script runs in dev (via `predev`, after `prisma db push`) and in production (via `bin/docker-entrypoint.sh`, also after `prisma db push`).
 - **`setup.complete` gates middleware.** Pre-completion, every authenticated route redirects to `/setup-required`. Post-completion, normal auth + project membership applies. There is no separate `/admin` surface — operator-level config lives under `/settings` (LLM providers, OAuth providers, members, MCP fleet, budget, audit log).
 - **Read-only mode is system-wide.** `app.read-only` Setting → `enforceReadWrite` middleware refuses every mutation procedure → agent registry strips mutating tools. There is no per-user toggle and no per-route bypass.
 - **Audit is append-only.** Every confirmed or rejected proposal produces one `Audit` row. Foreign keys to `User` use `onDelete: SetNull` so user deletion never cascade-erases the audit trail.

@@ -285,10 +285,35 @@ export const itemsRouter = router({
   }),
 
   get: projectScopedProcedure.input(ItemRef).query(async ({ ctx, input }) => {
+    // Explicit select keeps the `providerRaw` JSON blob (often kilobytes of
+    // unfiltered provider response) off the wire — nothing in the UI reads it.
     const item = await ctx.db.item.findUnique({
       where: { id: input.itemId },
-      include: {
-        comments: { orderBy: [{ createdAt: "asc" }] },
+      select: {
+        id: true,
+        projectId: true,
+        providerItemId: true,
+        kind: true,
+        title: true,
+        descriptionMd: true,
+        state: true,
+        assignee: true,
+        author: true,
+        parentId: true,
+        tags: true,
+        url: true,
+        createdAt: true,
+        updatedAt: true,
+        syncedAt: true,
+        comments: {
+          orderBy: [{ createdAt: "asc" }],
+          select: {
+            id: true,
+            author: true,
+            bodyMd: true,
+            createdAt: true,
+          },
+        },
       },
     });
     if (!item || item.projectId !== ctx.projectId) {
