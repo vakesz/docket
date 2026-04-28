@@ -40,6 +40,10 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
   const stickToBottomRef = useRef(true);
   const autoscrollFrameRef = useRef<number | null>(null);
   const promptRef = useRef<HTMLTextAreaElement | null>(null);
+  // Reentrancy guard for "New thread" — keeps the button visually enabled
+  // (no disabled flicker on slow create) while still preventing a stray
+  // double-click from creating two threads.
+  const startingThreadRef = useRef(false);
 
   const { streaming, proposalIds, dismissProposal, drainStream, resetStream, stopStream } =
     useChatStream();
@@ -196,29 +200,39 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
   }, [pendingSeed, inFlight]);
 
   const startNewThread = async () => {
-    // Snapshot whether we were streaming BEFORE we touch any state. The
-    // call to resetStream() below aborts the in-flight fetch
-    // synchronously, which propagates through Next.js's req.signal into
-    // the OpenAI SDK and stops upstream token generation on the next
-    // event-loop tick. Doing this *before* any await guarantees the LLM
-    // is cut off immediately even if the create / invalidate calls below
-    // take a moment.
-    const wasInFlight = inFlight;
-    const priorConvId = conversationId;
-    resetStream();
-    // If a stream was running, the agent loop's persistAssistantTurn
-    // catch handler will have flushed any partial output. Refetch so the
-    // prior thread shows what it managed to produce.
-    if (wasInFlight && priorConvId) {
-      await Promise.all([
-        utils.conversations.list.invalidate({ projectId, itemId }),
-        utils.conversations.get.invalidate({ projectId, conversationId: priorConvId }),
-      ]);
+    if (startingThreadRef.current) return;
+    startingThreadRef.current = true;
+    try {
+      // Snapshot whether we were streaming BEFORE we touch any state. The
+      // call to resetStream() below aborts the in-flight fetch
+      // synchronously, which propagates through Next.js's req.signal into
+      // the OpenAI SDK and stops upstream token generation on the next
+      // event-loop tick. Doing this *before* any await guarantees the LLM
+      // is cut off immediately even if the create / invalidate calls below
+      // take a moment.
+      //
+      // resetStream also clears `proposalIds`, so any pending or rejected
+      // proposal cards still pinned at the bottom of the prior thread
+      // disappear — the new thread starts with a clean scroll region.
+      const wasInFlight = inFlight;
+      const priorConvId = conversationId;
+      resetStream();
+      // If a stream was running, the agent loop's persistAssistantTurn
+      // catch handler will have flushed any partial output. Refetch so the
+      // prior thread shows what it managed to produce.
+      if (wasInFlight && priorConvId) {
+        await Promise.all([
+          utils.conversations.list.invalidate({ projectId, itemId }),
+          utils.conversations.get.invalidate({ projectId, conversationId: priorConvId }),
+        ]);
+      }
+      const conv = await create.mutateAsync({ projectId, itemId });
+      setActiveId(conv.id);
+      await utils.conversations.list.invalidate({ projectId, itemId });
+      promptRef.current?.focus();
+    } finally {
+      startingThreadRef.current = false;
     }
-    const conv = await create.mutateAsync({ projectId, itemId });
-    setActiveId(conv.id);
-    await utils.conversations.list.invalidate({ projectId, itemId });
-    promptRef.current?.focus();
   };
 
   return (
@@ -235,9 +249,12 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
           <button
             type="button"
             onClick={() => void startNewThread()}
-            disabled={create.isPending}
-            className={cn(microCapsButtonClass, "disabled:opacity-50")}
-            title={inFlight ? "Stop this thread and start a new one" : "Start a new thread"}
+            className={microCapsButtonClass}
+            title={
+              inFlight
+                ? "Stop this thread, dismiss any open proposals, and start a new one"
+                : "Dismiss any open proposals and start a new thread"
+            }
           >
             New thread
           </button>
