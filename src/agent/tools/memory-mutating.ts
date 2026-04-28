@@ -30,7 +30,7 @@ export const proposeMemoryWriteTool: ToolFactory = (ctx) => ({
   def: {
     name: "propose_memory_write",
     description:
-      "Stage a project-memory entry (create or update). Pass `title` (short headline), `bodyMd` (markdown body — not `body`/`content`/`text`), and optional `tags`. If `memoryId` is null a new entry is staged; otherwise the named entry is overwritten. The human reviews the diff and confirms before anything lands.",
+      "Stage a project-memory entry (create or update). Pass `title` (short, narrowly-scoped headline — one topic per entry), `bodyMd` (markdown body — not `body`/`content`/`text`), and optional `tags`. If `memoryId` is null a new entry is staged; otherwise the named entry is overwritten. Stage at most ONE memory write per reply, and only when you've learned something non-obvious that the next conversation couldn't easily re-derive (a project-specific convention, a glossary term, a recurring decision, an ownership pointer, a label/state convention you just inferred). Keep entries narrowly-scoped: split unrelated findings into separate entries with their own titles rather than piling everything into one note. Before staging a NEW entry, call list_memory to see if an entry on the same topic already exists — if so, pass that entry's `memoryId` to update it in place instead of creating a duplicate. The human reviews the diff and confirms before anything lands.",
     parameters: zodToJsonSchema(
       z.object({
         memoryId: z.string().nullable().default(null),

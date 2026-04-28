@@ -119,6 +119,33 @@ export async function proposeTransition(
   return persist(ctx, draft, args.providerItemId);
 }
 
+/**
+ * Format the "Previous version" footer that's automatically appended to
+ * description patches. Linear stack — each patch's footer wraps whatever was
+ * already in the description, including any earlier footers, so the full
+ * authorship chain stays in the body. (The Audit table is the second source
+ * of truth for who-patched-when; the footer keeps history visible to humans
+ * reading the body in the provider UI.)
+ *
+ * The agent passes only the new top-level content; this helper appends
+ * everything else, so the model can't accidentally double-archive.
+ */
+export function appendPreviousVersionFooter(
+  newMd: string,
+  previousMd: string,
+  author: string | null,
+  timestamp: Date | null,
+): string {
+  if (!previousMd.trim()) return newMd;
+  const date = timestamp ? timestamp.toISOString().slice(0, 10) : null;
+  let label: string;
+  if (author && date) label = `*Previous version (by ${author}, ${date}):*`;
+  else if (author) label = `*Previous version (by ${author}):*`;
+  else if (date) label = `*Previous version (${date}):*`;
+  else label = `*Previous version:*`;
+  return `${newMd.trimEnd()}\n\n---\n\n${label}\n\n${previousMd}`;
+}
+
 export async function proposeDescriptionPatch(
   ctx: ProposalContext,
   args: { providerItemId: string; newMd: string },
@@ -131,10 +158,16 @@ export async function proposeDescriptionPatch(
       message: "description_patch is a no-op (description unchanged)",
     });
   }
+  const merged = appendPreviousVersionFooter(
+    args.newMd,
+    item.descriptionMd,
+    item.author,
+    item.updatedAt ?? item.createdAt,
+  );
   const draft: Omit<DescriptionPatchProposal, "id"> = {
     kind: "description_patch",
     item,
-    newMd: args.newMd,
+    newMd: merged,
   };
   return persist(ctx, draft, args.providerItemId);
 }
