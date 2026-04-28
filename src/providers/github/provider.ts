@@ -29,6 +29,7 @@ import {
   bodyHasClosingKeyword,
   branchMatchesIssue,
   CONFIDENCE_BRANCH_NAME,
+  CONFIDENCE_KEYWORD_SEARCH,
   CONFIDENCE_SEARCH_BODY,
   CONFIDENCE_SEARCH_TITLE,
   CONFIDENCE_TIMELINE_CLOSING,
@@ -787,6 +788,42 @@ export class GitHubProvider implements WorkItemProvider {
           patch: f.patch ?? null,
         })),
       };
+    } catch (err) {
+      wrapOctokitError(err);
+    }
+  }
+
+  async searchPullRequests(
+    query: string,
+    opts: { state: "open" | "closed" | "merged" | "all"; limit: number },
+  ): Promise<PRMatch[]> {
+    // Scope to the project's configured repo so the agent can't accidentally
+    // pull in PRs from forks or other repos sharing the owner. Confidence
+    // is fixed at the keyword-search floor — there's no explicit link
+    // signal, only a topic match, so the agent should always verify a hit
+    // by reading the PR before proposing anything.
+    const stateFilter = opts.state === "all" ? "" : ` is:${opts.state}`;
+    const q = `repo:${this.config.owner}/${this.config.repo} type:pr${stateFilter} ${query}`;
+    try {
+      const res = await this.octokit.search.issuesAndPullRequests({
+        q,
+        per_page: Math.min(Math.max(opts.limit, 1), 50),
+      });
+      const out: PRMatch[] = [];
+      for (const item of res.data.items) {
+        if (!item.pull_request) continue;
+        const url = item.pull_request.html_url ?? item.html_url;
+        if (!url) continue;
+        out.push({
+          url,
+          title: item.title ?? "",
+          branch: "",
+          state: derivePRState(item.state, item.pull_request.merged_at ?? null),
+          author: item.user?.login ?? "",
+          confidence: CONFIDENCE_KEYWORD_SEARCH,
+        });
+      }
+      return out;
     } catch (err) {
       wrapOctokitError(err);
     }

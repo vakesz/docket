@@ -20,7 +20,7 @@ export const findRelatedPullRequestsTool: ToolFactory = (ctx) => ({
   def: {
     name: "find_related_pull_requests",
     description:
-      "Find pull requests the provider heuristically links to a cached item (id mention, branch name, keyword overlap). Defaults to the conversation's anchored item; pass providerItemId only to look up a different one. Use this before drilling into a specific PR with get_pull_request.",
+      "Find pull requests the provider heuristically links to a cached item (id mention, branch name, keyword overlap). Defaults to the conversation's anchored item; pass providerItemId only to look up a different one. Use this before drilling into a specific PR with get_pull_request. If `matches` comes back empty, you MUST follow up with `search_pull_requests` using distinctive keywords from the issue title before concluding no PR exists — many PRs are merged without ever referencing the issue.",
     parameters: zodToJsonSchema(
       z.object({
         providerItemId: z

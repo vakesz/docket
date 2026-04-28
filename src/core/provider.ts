@@ -166,6 +166,19 @@ export interface WorkItemProvider {
   getCIStatus?(ref: string): Promise<CIStatus>;
 
   /**
+   * Project-wide PR keyword search. Used as a fallback when
+   * `findRelatedPRs` returns no link-driven matches — a PR may have been
+   * merged without ever referencing the issue. Implementations cap the
+   * result set at `limit` (or a sensible internal cap) and return matches
+   * at low confidence (no explicit link signal). Throw `ProviderError`
+   * when the provider doesn't expose PR keyword search.
+   */
+  searchPullRequests?(
+    query: string,
+    opts: { state: "open" | "closed" | "merged" | "all"; limit: number },
+  ): Promise<PRMatch[]>;
+
+  /**
    * Provider-native code search.
    *
    * Returns repository-scoped hits for `query`. Implementations should cap

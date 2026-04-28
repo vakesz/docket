@@ -134,6 +134,44 @@ export const getPullRequestDiffTool: ToolFactory = (ctx) => ({
   },
 });
 
+export const searchPullRequestsTool: ToolFactory = (ctx) => ({
+  def: {
+    name: "search_pull_requests",
+    description:
+      "Keyword search across the project's PR titles and bodies. Use this whenever `find_related_pull_requests` returned an empty `matches` array for an issue — it is the required fallback for finding PRs that were merged (or are open) without ever being linked to the issue. Pick distinctive nouns from the issue title; avoid boilerplate words like 'fix' or 'update'. Returns low-confidence matches (no explicit link signal) — verify any plausible hit by reading the PR with `get_pull_request` before acting.",
+    parameters: zodToJsonSchema(
+      z.object({
+        query: z.string().min(1).max(200),
+        state: z.enum(["open", "closed", "merged", "all"]).default("all"),
+        limit: z.number().int().min(1).max(50).default(20),
+      }),
+    ),
+  },
+  handler: async (raw) => {
+    const args = z
+      .object({
+        query: z.string().min(1).max(200),
+        state: z.enum(["open", "closed", "merged", "all"]).default("all"),
+        limit: z.number().int().min(1).max(50).default(20),
+      })
+      .parse(raw);
+    try {
+      return await withProvider(ctx, async (p) => {
+        if (!p.searchPullRequests) {
+          return ok({ matches: [] as const, note: "provider does not surface PR keyword search" });
+        }
+        const matches = await p.searchPullRequests(args.query, {
+          state: args.state,
+          limit: args.limit,
+        });
+        return ok({ matches });
+      });
+    } catch (err) {
+      return fail(err instanceof Error ? err.message : String(err));
+    }
+  },
+});
+
 export const searchCodeTool: ToolFactory = (ctx) => ({
   def: {
     name: "search_code",
@@ -170,5 +208,6 @@ export function discoveryTools(ctx: ToolContext): readonly AgentTool[] {
     listAuditTool(ctx),
     getPullRequestDiffTool(ctx),
     searchCodeTool(ctx),
+    searchPullRequestsTool(ctx),
   ];
 }

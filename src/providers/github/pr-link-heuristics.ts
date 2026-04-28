@@ -15,6 +15,7 @@ export const CONFIDENCE_TIMELINE_MENTION = 0.7;
 export const CONFIDENCE_SEARCH_TITLE = 0.6;
 export const CONFIDENCE_SEARCH_BODY = 0.4;
 export const CONFIDENCE_BRANCH_NAME = 0.3;
+export const CONFIDENCE_KEYWORD_SEARCH = 0.2;
 
 export const MAX_MATCHES = 10;
 

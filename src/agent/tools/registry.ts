@@ -90,6 +90,7 @@ export const TOOL_ORDER = [
   "list_audit",
   "get_pull_request_diff",
   "search_code",
+  "search_pull_requests",
 ] as const satisfies readonly string[];
 
 export type RegisteredToolName = (typeof TOOL_ORDER)[number];
