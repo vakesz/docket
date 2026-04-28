@@ -225,32 +225,52 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
 
     let sawDone = false;
     for await (const event of stream as AsyncIterable<LlmEvent>) {
-      if (event.kind === "text_delta") {
-        assistantBuffer += event.delta;
-        yield { kind: "text_delta", delta: event.delta };
-      } else if (event.kind === "tool_call") {
-        assistantToolCalls.push(event.call);
-      } else if (event.kind === "usage") {
-        totalTokensIn += event.tokensIn;
-        totalTokensOut += event.tokensOut;
-        totalCostCents = (totalCostCents ?? 0) + (event.costCents ?? 0);
-      } else if (event.kind === "error") {
-        logger.error(
-          {
-            ...baseCtx,
-            round: rounds,
-            roundMs: Date.now() - roundStartedAt,
-            llmError: event.message,
-          },
-          "agent: LLM stream error",
-        );
-        await persistAssistantTurn(db, conversationId, assistantBuffer, assistantToolCalls, false);
-        yield { kind: "error", message: event.message };
-        return;
-      } else if (event.kind === "done") {
-        sawDone = true;
-        break;
+      switch (event.kind) {
+        case "text_delta":
+          assistantBuffer += event.delta;
+          yield { kind: "text_delta", delta: event.delta };
+          break;
+        case "tool_call":
+          assistantToolCalls.push(event.call);
+          break;
+        case "usage":
+          totalTokensIn += event.tokensIn;
+          totalTokensOut += event.tokensOut;
+          totalCostCents = (totalCostCents ?? 0) + (event.costCents ?? 0);
+          break;
+        case "error":
+          logger.error(
+            {
+              ...baseCtx,
+              round: rounds,
+              roundMs: Date.now() - roundStartedAt,
+              llmError: event.message,
+            },
+            "agent: LLM stream error",
+          );
+          await persistAssistantTurn(
+            db,
+            conversationId,
+            assistantBuffer,
+            assistantToolCalls,
+            false,
+          );
+          yield { kind: "error", message: event.message };
+          return;
+        case "done":
+          sawDone = true;
+          break;
+        default: {
+          // Compile-time exhaustiveness check — adding a new LlmEvent kind
+          // forces a case here rather than silently dropping the event.
+          const exhaustive: never = event;
+          logger.error(
+            { ...baseCtx, round: rounds, event: exhaustive as unknown },
+            "agent: unhandled LLM event kind",
+          );
+        }
       }
+      if (sawDone) break;
     }
 
     if (!sawDone) {

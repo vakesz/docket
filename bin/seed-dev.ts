@@ -33,7 +33,9 @@ import { config as loadEnv } from "dotenv";
 import { PrismaClient } from "../src/db/generated/client";
 import { encryptSecret, isEncryptionConfigured } from "../src/server/secrets/encryption";
 
+// Match prisma.config.ts precedence: .env.local first, then .env fills any gaps.
 loadEnv({ path: ".env.local" });
+loadEnv({ path: ".env" });
 
 async function main() {
   const databaseUrl = process.env.DATABASE_URL;

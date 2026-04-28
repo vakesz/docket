@@ -102,6 +102,13 @@ export type ProposalDiff =
   | MemoryDeleteDiff;
 
 /**
+ * Narrow `ProposalDiff` to the variant matching a specific kind. Lets
+ * consumers (UI panels, executor handlers) declare the exact shape they
+ * expect without re-stating the conditional type at every call site.
+ */
+export type DiffForKind<K extends ProposalKind> = Extract<ProposalDiff, { kind: K }>;
+
+/**
  * A proposal is "empty" when confirming it would be a no-op against the
  * current snapshot — usually because somebody already applied the change
  * manually between staging and review. Returning this flag lets the UI

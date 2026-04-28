@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from "@headlessui/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { startTransition, useEffect, useRef } from "react";
 import { ghostButtonClass, primaryButtonClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
 import { ProposalDiffView } from "@/ui/proposals/proposal-diff-view";
@@ -47,7 +47,9 @@ export function ProposalDialog({
         utils.items.get.invalidate(),
         utils.proposals.list.invalidate(),
       ]);
-      router.refresh();
+      // router.refresh() schedules a server-component re-render; running it
+      // through a transition keeps the dialog dismissal feeling instant.
+      startTransition(() => router.refresh());
       onClose();
     },
   });
@@ -63,7 +65,13 @@ export function ProposalDialog({
   // snapshot (e.g. someone applied the change manually before review). The
   // ref guards against re-firing if reject.mutate triggers a re-render
   // before the proposalId clears.
+  //
+  // Why `reject.mutate` is NOT in the deps array: the function reference is
+  // re-created on every render of the mutation hook, so including it would
+  // re-run the effect every render and risk a duplicate auto-reject before
+  // the ref-based guard updates. The ref alone is sufficient for idempotency.
   const autoRejectedRef = useRef<string | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above.
   useEffect(() => {
     if (!proposalId) {
       autoRejectedRef.current = null;
@@ -73,7 +81,7 @@ export function ProposalDialog({
     if (autoRejectedRef.current === proposalId) return;
     autoRejectedRef.current = proposalId;
     reject.mutate({ projectId, proposalId });
-  }, [proposalId, projectId, query.data?.isEmpty, reject.mutate]);
+  }, [proposalId, projectId, query.data?.isEmpty]);
 
   const busy = confirm.isPending || reject.isPending;
   const errorMessage =

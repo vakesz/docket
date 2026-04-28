@@ -95,14 +95,11 @@ export const sourcesRouter = router({
   }),
 
   update: projectScopedMutationProcedure.input(UpdateInput).mutation(async ({ ctx, input }) => {
-    const existing = await ctx.db.sourceDoc.findFirst({
+    // updateMany scopes the update to (id, projectId) atomically — no need
+    // for a pre-flight findFirst. count === 0 means either the row doesn't
+    // exist or it belongs to a different project, which both surface as 404.
+    const result = await ctx.db.sourceDoc.updateMany({
       where: { id: input.sourceId, projectId: ctx.projectId },
-    });
-    if (!existing) {
-      throw new TRPCError({ code: "NOT_FOUND", message: "source not found" });
-    }
-    return ctx.db.sourceDoc.update({
-      where: { id: existing.id },
       data: {
         ...(input.title !== undefined ? { title: input.title.trim() } : {}),
         ...(input.kind !== undefined ? { kind: input.kind } : {}),
@@ -111,6 +108,10 @@ export const sourcesRouter = router({
         ...(input.tags !== undefined ? { tags: input.tags } : {}),
       },
     });
+    if (result.count === 0) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "source not found" });
+    }
+    return ctx.db.sourceDoc.findUniqueOrThrow({ where: { id: input.sourceId } });
   }),
 
   delete: projectScopedMutationProcedure.input(GetInput).mutation(async ({ ctx, input }) => {

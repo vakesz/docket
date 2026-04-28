@@ -48,6 +48,14 @@ export async function selectAdapterFor(db: Database, ctx: AdapterContext): Promi
   return buildAdapter(row, { defaultTemperature: ctx.project.defaultTemperature ?? null });
 }
 
+/**
+ * Kinds for which an adapter is wired today. Keep in sync with the `switch`
+ * below — `llm-kinds-have-adapters.test.ts` enforces this at the LLM_KINDS
+ * level; this constant just lets the error path report what the registry
+ * actually supports without grepping the file.
+ */
+const SUPPORTED_KINDS = ["openai"] as const;
+
 export function buildAdapter(
   row: LlmProvider,
   opts: { defaultTemperature?: number | null } = {},
@@ -68,7 +76,7 @@ export function buildAdapter(
       });
     default:
       throw new LlmConfigError(
-        `Unsupported LLM kind '${row.kind}'. Only 'openai' has an adapter today; add a sibling adapter under src/agent/llm/ for new vendors.`,
+        `Unsupported LLM kind '${row.kind}'. Wired kinds: ${SUPPORTED_KINDS.join(", ")}. Add a sibling adapter under src/agent/llm/ for new vendors.`,
       );
   }
 }
