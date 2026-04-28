@@ -12,20 +12,16 @@ import {
 import { trpc } from "@/lib/trpc-client";
 import { SelectField } from "@/ui/forms/select-field";
 
-const KINDS = ["github", "azure_devops"] as const;
-type Kind = (typeof KINDS)[number];
+type OauthDefaults = {
+  defaultLabel: string;
+  defaultScopes: string;
+  baseUrlPlaceholder: string;
+};
 
-const DEFAULTS: Record<Kind, { label: string; scopes: string; baseUrlHint: string }> = {
-  github: {
-    label: "GitHub",
-    scopes: "read:user user:email repo",
-    baseUrlHint: "GitHub Enterprise base URL (leave blank for github.com)",
-  },
-  azure_devops: {
-    label: "Azure DevOps",
-    scopes: "499b84ac-1321-427f-aa17-267ca6975798/.default offline_access",
-    baseUrlHint: "Entra tenant id (leave blank for `common` / multi-tenant)",
-  },
+const FALLBACK_DEFAULTS: OauthDefaults = {
+  defaultLabel: "",
+  defaultScopes: "",
+  baseUrlPlaceholder: "Optional override",
 };
 
 export type OauthProviderFormInitial = {
@@ -46,12 +42,27 @@ export function OauthProviderForm(props: Props) {
   const initial = props.initial;
   const utils = trpc.useUtils();
 
+  // Load OAuth-capable provider kinds from the registry. Until the query
+  // resolves we fall back to the spec the row was created with (edit mode)
+  // or render an empty picker (create mode); both states clear once the
+  // network round-trip lands and the kinds list arrives. The fetch is
+  // shared with everything else that reads `projects.kinds`, so it's
+  // typically already cached when this form mounts.
+  const kinds = trpc.projects.kinds.useQuery(undefined, { staleTime: 5 * 60_000 });
+  const oauthKinds = (kinds.data ?? []).filter((k) => k.oauth !== null);
+  const defaultsByKind = new Map<string, OauthDefaults>(
+    oauthKinds.flatMap((k) => (k.oauth ? [[k.typeId, k.oauth]] : [])),
+  );
+  const firstKind = oauthKinds[0]?.typeId ?? "";
+  const initialDefaults = defaultsByKind.get(initial?.kind ?? firstKind) ?? FALLBACK_DEFAULTS;
+
   const create = trpc.oauthProviders.create.useMutation({
     onSuccess: async () => {
-      setLabel(DEFAULTS[kind as Kind].label);
+      const d = defaultsByKind.get(kind) ?? FALLBACK_DEFAULTS;
+      setLabel(d.defaultLabel);
       setClientId("");
       setClientSecret("");
-      setScopes(DEFAULTS[kind as Kind].scopes);
+      setScopes(d.defaultScopes);
       setBaseUrl("");
       await utils.oauthProviders.list.invalidate();
       props.onDone?.();
@@ -65,17 +76,18 @@ export function OauthProviderForm(props: Props) {
   });
 
   const kindId = useId();
-  const [kind, setKind] = useState<string>(initial?.kind ?? "github");
-  const [label, setLabel] = useState(initial?.label ?? DEFAULTS.github.label);
+  const [kind, setKind] = useState<string>(initial?.kind ?? firstKind);
+  const [label, setLabel] = useState(initial?.label ?? initialDefaults.defaultLabel);
   const [clientId, setClientId] = useState(initial?.clientId ?? "");
   const [clientSecret, setClientSecret] = useState("");
-  const [scopes, setScopes] = useState(initial?.scopes ?? DEFAULTS.github.scopes);
+  const [scopes, setScopes] = useState(initial?.scopes ?? initialDefaults.defaultScopes);
   const [baseUrl, setBaseUrl] = useState(initial?.baseUrl ?? "");
 
-  function onKindChange(next: Kind) {
+  function onKindChange(next: string) {
     setKind(next);
-    setLabel(DEFAULTS[next].label);
-    setScopes(DEFAULTS[next].scopes);
+    const d = defaultsByKind.get(next) ?? FALLBACK_DEFAULTS;
+    setLabel(d.defaultLabel);
+    setScopes(d.defaultScopes);
   }
 
   function onSubmit(e: FormEvent<HTMLFormElement>) {
@@ -93,7 +105,7 @@ export function OauthProviderForm(props: Props) {
       return;
     }
     create.mutate({
-      kind: kind as Kind,
+      kind,
       label: label.trim(),
       clientId: clientId.trim(),
       clientSecret: clientSecret.trim(),
@@ -104,7 +116,7 @@ export function OauthProviderForm(props: Props) {
 
   const pending = mode === "edit" ? update.isPending : create.isPending;
   const error = (mode === "edit" ? update.error : create.error)?.message;
-  const baseUrlHint = (DEFAULTS[kind as Kind] ?? DEFAULTS.github).baseUrlHint;
+  const baseUrlHint = (defaultsByKind.get(kind) ?? FALLBACK_DEFAULTS).baseUrlPlaceholder;
 
   return (
     <form onSubmit={onSubmit} className={`${settingsPanelClass} flex flex-col gap-4 text-sm`}>
@@ -125,14 +137,10 @@ export function OauthProviderForm(props: Props) {
               className={`${fieldClass} cursor-not-allowed opacity-70`}
             />
           ) : (
-            <SelectField
-              id={kindId}
-              value={kind}
-              onChange={(e) => onKindChange(e.target.value as Kind)}
-            >
-              {KINDS.map((k) => (
-                <option key={k} value={k}>
-                  {k.replace("_", " ")}
+            <SelectField id={kindId} value={kind} onChange={(e) => onKindChange(e.target.value)}>
+              {oauthKinds.map((k) => (
+                <option key={k.typeId} value={k.typeId}>
+                  {k.displayName}
                 </option>
               ))}
             </SelectField>

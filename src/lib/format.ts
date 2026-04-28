@@ -8,6 +8,7 @@
  */
 
 import type { ItemKind, ItemState, TransitionIntent } from "@/core/types";
+import { githubProfileUrl } from "@/providers/github/profile";
 
 export function mostRecent(dates: Array<Date | null | undefined>): Date | null {
   let best: Date | null = null;
@@ -95,20 +96,21 @@ export function displayTag(raw: string): string {
 
 /**
  * Build a public profile URL for the user identifier the provider stamps
- * into `Item.author`. GitHub stores the login (e.g. `octocat`), so the
- * profile is `https://github.com/<login>`. Azure DevOps stamps null, and
- * other providers don't expose a stable profile URL pattern — return null
- * and the UI falls back to plain text.
+ * into `Item.author`. Each provider package owns its own client-safe URL
+ * builder (see `src/providers/<name>/profile.ts`); this is just the kind
+ * dispatcher — same shape as `src/lib/provider-logos.tsx`. Providers
+ * without a stable profile URL (Azure DevOps today) get no entry and the
+ * UI falls back to plain text.
  */
 export function providerProfileUrl(
   providerKind: string | null | undefined,
   identity: string | null | undefined,
 ): string | null {
   if (!providerKind || !identity) return null;
-  const trimmed = identity.trim();
-  if (!trimmed) return null;
-  if (providerKind === "github") {
-    return `https://github.com/${encodeURIComponent(trimmed)}`;
+  switch (providerKind) {
+    case "github":
+      return githubProfileUrl(identity);
+    default:
+      return null;
   }
-  return null;
 }

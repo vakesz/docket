@@ -1,19 +1,29 @@
 import "server-only";
 import { z } from "zod";
+import { listProviderSpecs } from "@/server/provider-registry";
 import { encryptSecret } from "@/server/secrets/encryption";
 import { mutationProcedure, protectedProcedure, router } from "@/server/trpc";
 
 /**
- * OAuth provider kinds the picker exposes. Mirrors `buildAuthProvider`'s
- * dispatch table — adding a new kind is a row + a sibling adapter under
- * `src/providers/<kind>/auth.ts` plus a `case` in
- * `src/server/providers/auth-build.ts`.
+ * OAuth provider kinds the picker accepts — derived from the registry.
+ * A spec with `oauth !== null` declares OAuth support; `auth-build.ts`
+ * dispatches to the matching NextAuth adapter. Adding a new OAuth-capable
+ * provider is one new entry in `provider-registry.ts` plus a case in
+ * `auth-build.ts`; this enum updates automatically.
  *
  * The DB column is plain `String` so a deployment can carry a forward-
  * compatible row from a future migration without a schema bump; this Zod
  * enum simply gates what the admin UI will offer today.
  */
-const OAUTH_KIND = z.enum(["github", "azure_devops"]);
+const OAUTH_KIND_VALUES = listProviderSpecs()
+  .filter((spec) => spec.oauth !== null)
+  .map((spec) => spec.typeId);
+if (OAUTH_KIND_VALUES.length === 0) {
+  throw new Error(
+    "oauth/router: no provider in PROVIDER_SPECS declares an `oauth` block; the OAuth picker would be empty.",
+  );
+}
+const OAUTH_KIND = z.enum(OAUTH_KIND_VALUES as [string, ...string[]]);
 
 const CreateOauthProviderInput = z.object({
   kind: OAUTH_KIND,

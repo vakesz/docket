@@ -19,10 +19,10 @@ import { NextResponse } from "next/server";
 import { auth } from "@/server/auth";
 import { serveAvatar } from "@/server/avatars/service";
 import { db } from "@/server/db";
+import { getProviderSpec } from "@/server/provider-registry";
 
 export const runtime = "nodejs";
 
-const SUPPORTED_KINDS = new Set(["github", "azure_devops"]);
 const HIT_CACHE_HEADER = "public, max-age=86400, stale-while-revalidate=2592000";
 const MISS_CACHE_HEADER = "public, max-age=300";
 
@@ -37,7 +37,7 @@ export async function GET(req: Request, context: RouteContext): Promise<Response
   }
 
   const { providerKind, identifier } = await context.params;
-  if (!SUPPORTED_KINDS.has(providerKind)) {
+  if (!getProviderSpec(providerKind)) {
     return new NextResponse("unknown provider kind", { status: 404 });
   }
   // The route is shaped `/{kind}/{identifier}` so Next has already URL-

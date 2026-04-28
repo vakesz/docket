@@ -8,8 +8,6 @@ import { displayTag, formatKind } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { CreateItemForm } from "@/ui/items/create-item-form";
 
-const SUPPORTED_AVATAR_PROVIDERS = new Set(["github", "azure_devops"]);
-
 export const ASSIGNEE_UNASSIGNED = "__unassigned";
 
 export type FilterState = {
@@ -114,6 +112,7 @@ export function FilterBar({
   meIdentifier,
   showArchivedBucket,
   providerKind,
+  providerHasAvatars,
   showAvatars,
 }: {
   projectId: string;
@@ -128,6 +127,11 @@ export function FilterBar({
   meIdentifier: string | null;
   showArchivedBucket: boolean;
   providerKind: string;
+  /** Does this project's provider expose an avatar fetcher? Threaded down
+   * so the avatar chip can short-circuit to the initials fallback for
+   * provider kinds without an avatar surface — no client-side branch on
+   * specific provider names. */
+  providerHasAvatars: boolean;
   showAvatars: boolean;
 }) {
   const { bucket, kind, activeTags, activeAssignees, query, tagsExpanded, assigneesExpanded } =
@@ -229,6 +233,7 @@ export function FilterBar({
               onToggle={onToggleAssignee}
               onClear={onClearAssignees}
               providerKind={providerKind}
+              providerHasAvatars={providerHasAvatars}
               showAvatars={showAvatars}
             />
             {activeAssignees.size > 0 && <ClearButton onClick={onClearAssignees} />}
@@ -244,6 +249,7 @@ export function FilterBar({
               onToggle={onToggleAssignee}
               onToggleExpanded={() => handlers.setAssigneesExpanded((v) => !v)}
               providerKind={providerKind}
+              providerHasAvatars={providerHasAvatars}
               showAvatars={showAvatars}
             />
             {activeAssignees.size > 0 && <ClearButton onClick={onClearAssignees} />}
@@ -295,6 +301,7 @@ function AssigneeChips({
   onToggle,
   onToggleExpanded,
   providerKind,
+  providerHasAvatars,
   showAvatars,
 }: {
   assigneeCounts: Array<[string, number]>;
@@ -305,6 +312,7 @@ function AssigneeChips({
   onToggle: (value: string) => void;
   onToggleExpanded: () => void;
   providerKind: string;
+  providerHasAvatars: boolean;
   showAvatars: boolean;
 }) {
   const visibleCounts = assigneesExpanded
@@ -336,7 +344,13 @@ function AssigneeChips({
             )}
             title={`${name}${isMe ? " (you)" : ""} — ${n} item${n === 1 ? "" : "s"}`}
           >
-            {showAvatars ? <AssigneeAvatar name={name} providerKind={providerKind} /> : null}
+            {showAvatars ? (
+              <AssigneeAvatar
+                name={name}
+                providerKind={providerKind}
+                providerHasAvatars={providerHasAvatars}
+              />
+            ) : null}
             <span>{name}</span>
             {isMe ? (
               <span
@@ -389,20 +403,25 @@ function ChipPill({
 }
 
 /**
- * Avatars now resolve through `/api/avatars/{providerKind}/{identifier}`,
- * which serves cached bytes out of the `Avatar` table. The route lazily
+ * Avatars resolve through `/api/avatars/{providerKind}/{identifier}`, which
+ * serves cached bytes out of the `Avatar` table. The route lazily
  * populates on first hit (GitHub uses the public CDN; AzDO assignees stay
- * 404 until the signed-in user's row supplies bytes), and returns a
+ * 404 until the signed-in user's row supplies bytes) and returns a
  * deterministic 404 when nothing is available so the `onError` fallback to
- * an initial chip kicks in.
+ * an initial chip kicks in. The `providerHasAvatars` gate short-circuits
+ * the request entirely for provider kinds without an avatar fetcher
+ * registered — same effective UX without the doomed round-trip.
  */
-function avatarUrlFor(providerKind: string, name: string): string | null {
-  if (!SUPPORTED_AVATAR_PROVIDERS.has(providerKind)) return null;
-  return avatarUrl(providerKind, name);
-}
-
-function AssigneeAvatar({ name, providerKind }: { name: string; providerKind: string }) {
-  const url = avatarUrlFor(providerKind, name);
+function AssigneeAvatar({
+  name,
+  providerKind,
+  providerHasAvatars,
+}: {
+  name: string;
+  providerKind: string;
+  providerHasAvatars: boolean;
+}) {
+  const url = providerHasAvatars ? avatarUrl(providerKind, name) : null;
   const initial = name.charAt(0).toUpperCase() || "?";
   return (
     <span
@@ -436,6 +455,7 @@ function AssigneeDropdown({
   onToggle,
   onClear,
   providerKind,
+  providerHasAvatars,
   showAvatars,
 }: {
   assigneeCounts: Array<[string, number]>;
@@ -444,6 +464,7 @@ function AssigneeDropdown({
   onToggle: (value: string) => void;
   onClear: () => void;
   providerKind: string;
+  providerHasAvatars: boolean;
   showAvatars: boolean;
 }) {
   const summary = summarizeSelection(activeAssignees, meIdentifier);
@@ -525,7 +546,11 @@ function AssigneeDropdown({
                   >
                     <span className="flex items-center gap-1.5 truncate">
                       {showAvatars ? (
-                        <AssigneeAvatar name={name} providerKind={providerKind} />
+                        <AssigneeAvatar
+                          name={name}
+                          providerKind={providerKind}
+                          providerHasAvatars={providerHasAvatars}
+                        />
                       ) : null}
                       <span className="truncate">{name}</span>
                       {isMe ? (

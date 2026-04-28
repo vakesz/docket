@@ -24,6 +24,7 @@
 import type { AxisExtractor, AxisMatcher, LabelTemplate, ProviderSpec } from "@/core/provider";
 import type { Item } from "@/core/types";
 import { asPlainObject } from "@/lib/json";
+import { azureDevOpsAvatarFetcher } from "@/providers/azure-devops/avatar";
 import { AzureDevOpsProvider } from "@/providers/azure-devops/provider";
 
 const labelTemplate: LabelTemplate = (config) => {
@@ -141,4 +142,12 @@ export const azureDevOpsSpec: ProviderSpec = {
     pullRequestDiffs: false,
     linkedItems: true,
   },
+  oauth: {
+    defaultLabel: "Azure DevOps",
+    defaultScopes: "499b84ac-1321-427f-aa17-267ca6975798/.default offline_access",
+    baseUrlPlaceholder: "Entra tenant id (leave blank for `common` / multi-tenant)",
+    baseUrlHelpKey: "azure_devops_tenant",
+  },
+  profileUrl: null,
+  avatarFetcher: azureDevOpsAvatarFetcher,
 };

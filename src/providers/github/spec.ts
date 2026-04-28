@@ -13,6 +13,8 @@
  */
 
 import type { LabelTemplate, ProviderSpec } from "@/core/provider";
+import { githubAvatarFetcher } from "@/providers/github/avatar";
+import { githubProfileUrl } from "@/providers/github/profile";
 import { GitHubProvider } from "@/providers/github/provider";
 import { GITHUB_REACTION_KINDS } from "@/providers/github/reactions";
 
@@ -71,4 +73,12 @@ export const githubSpec: ProviderSpec = {
     pullRequestDiffs: true,
     linkedItems: true,
   },
+  oauth: {
+    defaultLabel: "GitHub",
+    defaultScopes: "read:user user:email repo",
+    baseUrlPlaceholder: "GitHub Enterprise base URL (leave blank for github.com)",
+    baseUrlHelpKey: "github_enterprise",
+  },
+  profileUrl: githubProfileUrl,
+  avatarFetcher: githubAvatarFetcher,
 };

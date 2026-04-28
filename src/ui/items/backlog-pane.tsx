@@ -83,6 +83,7 @@ export function BacklogPane({
   })();
   const project = trpc.projects.get.useQuery({ projectId }, { staleTime: 5 * 60_000 });
   const providerKind = project.data?.providerKind ?? "";
+  const providerHasAvatars = project.data?.hasAvatarFetcher ?? false;
 
   // If the user disabled the archived bucket while it was selected, fall
   // back to open so the request and the (now-hidden) chip don't desync.
@@ -117,44 +118,38 @@ export function BacklogPane({
     return out;
   }, [recentIds, data, selectedId]);
 
-  const kindCounts = useMemo(() => {
-    const counts = new Map<ItemKind, number>();
-    for (const it of data)
-      counts.set(it.kind as ItemKind, (counts.get(it.kind as ItemKind) ?? 0) + 1);
-    return counts;
-  }, [data]);
-
-  const visibleKinds = useMemo(() => {
-    const available = KINDS.filter((k) => k === "all" || (kindCounts.get(k) ?? 0) > 0);
-    if (kind !== "all" && !available.includes(kind)) available.push(kind);
-    return available;
-  }, [kindCounts, kind]);
-
-  const tagCounts = useMemo(() => {
-    const counts = new Map<string, number>();
+  // One pass over `data` produces all three facet aggregates. Keeping the
+  // counts in a single memo (vs the previous four) avoids two redundant
+  // walks per render and one Map allocation. `kind` is only here to fold
+  // the active selection into `visibleKinds` when it's filtered out by zero
+  // count — the underlying tallies don't depend on it.
+  const facets = useMemo(() => {
+    const kindMap = new Map<ItemKind, number>();
+    const tagMap = new Map<string, number>();
+    const assigneeMap = new Map<string, number>();
     for (const it of data) {
-      for (const t of it.tags ?? []) counts.set(t, (counts.get(t) ?? 0) + 1);
-    }
-    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-  }, [data]);
-
-  const assigneeCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const it of data) {
+      const k = it.kind as ItemKind;
+      kindMap.set(k, (kindMap.get(k) ?? 0) + 1);
+      for (const t of it.tags ?? []) tagMap.set(t, (tagMap.get(t) ?? 0) + 1);
       const a = it.assignee;
-      if (!a) continue;
-      counts.set(a, (counts.get(a) ?? 0) + 1);
+      if (a) assigneeMap.set(a, (assigneeMap.get(a) ?? 0) + 1);
     }
-    const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    const visibleKinds = KINDS.filter((k) => k === "all" || (kindMap.get(k) ?? 0) > 0);
+    if (kind !== "all" && !visibleKinds.includes(kind)) visibleKinds.push(kind);
+    const byCountThenName = (a: readonly [string, number], b: readonly [string, number]): number =>
+      b[1] - a[1] || a[0].localeCompare(b[0]);
+    const tagCounts = [...tagMap.entries()].sort(byCountThenName);
+    const assigneeCounts = [...assigneeMap.entries()].sort(byCountThenName);
     if (meIdentifier !== null) {
-      const meIdx = sorted.findIndex(([name]) => name === meIdentifier);
+      const meIdx = assigneeCounts.findIndex(([name]) => name === meIdentifier);
       if (meIdx > 0) {
-        const [meEntry] = sorted.splice(meIdx, 1);
-        sorted.unshift(meEntry);
+        const [meEntry] = assigneeCounts.splice(meIdx, 1);
+        assigneeCounts.unshift(meEntry);
       }
     }
-    return sorted;
-  }, [data, meIdentifier]);
+    return { visibleKinds, tagCounts, assigneeCounts };
+  }, [data, kind, meIdentifier]);
+  const { visibleKinds, tagCounts, assigneeCounts } = facets;
 
   const filtered = useMemo(() => {
     const q = debouncedQuery.trim().toLowerCase();
@@ -226,6 +221,7 @@ export function BacklogPane({
         meIdentifier={meIdentifier}
         showArchivedBucket={showArchivedBucket}
         providerKind={providerKind}
+        providerHasAvatars={providerHasAvatars}
         showAvatars={showAvatars}
       />
 

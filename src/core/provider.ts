@@ -245,6 +245,57 @@ export const GROUPING_STRATEGIES = ["by_kind", "by_state_bucket"] as const;
 export type GroupingStrategy = (typeof GROUPING_STRATEGIES)[number];
 
 /**
+ * OAuth-side metadata for a provider type that supports sign-in.
+ *
+ * Populated on `ProviderSpec.oauth` when the provider has a NextAuth
+ * adapter wired (see `src/server/providers/auth-build.ts`). The fields are
+ * pure data — no NextAuth or JSX leaks into core. Surfaces consume them to
+ * pre-fill the OAuth-creds form, the bootstrap wizard, and the seed script.
+ *
+ * - `defaultLabel` / `defaultScopes` are the values that land in fresh rows.
+ * - `baseUrlPlaceholder` is the human-readable hint for the optional
+ *   per-row `baseUrl` column. Empty placeholder hides the field's hint.
+ * - `baseUrlHelpKey` lets surfaces render a long-form help string keyed
+ *   off the spec rather than re-encoding `if (kind === ...)` chains. Empty
+ *   string means "no special help — generic baseUrl explanation only."
+ */
+export type ProviderOauthMetadata = {
+  defaultLabel: string;
+  defaultScopes: string;
+  baseUrlPlaceholder: string;
+  baseUrlHelpKey: string;
+};
+
+/**
+ * Reaction kinds aside, `Item.author` and `Item.assignee` carry a
+ * provider-stamped identifier. Some providers expose a stable public
+ * profile URL (GitHub: `https://github.com/<login>`); others don't (AzDO
+ * stamps null today). Surfaces call this via the spec to render an `<a>`
+ * around the author chip — return null when the provider has no useful URL
+ * shape so the UI degrades to plain text.
+ */
+export type ProviderProfileUrlBuilder = (identity: string) => string | null;
+
+/**
+ * Per-provider avatar fetcher signature.
+ *
+ * Mirrors `FetchAvatarOptions` / `FetchedAvatar` in `src/server/avatars/`
+ * but typed via plain shapes so `core/` doesn't import server-only
+ * modules. The actual server registry imports the spec, narrows to specs
+ * with a non-null `avatarFetcher`, and dispatches to it.
+ */
+export type ProviderAvatarFetched = {
+  bytes: Uint8Array;
+  contentType: string;
+  etag?: string | null;
+};
+
+export type ProviderAvatarFetcher = (
+  identifier: string,
+  opts: { accessToken?: string | null; isSelf?: boolean },
+) => Promise<ProviderAvatarFetched | null>;
+
+/**
  * One provider-defined axis for the visual scope filter.
  *
  * `key` is the wire/storage identifier persisted in the saved view's `axes`
@@ -326,4 +377,20 @@ export type ProviderSpec = {
   axisMatcher: AxisMatcher | null;
   axisExtract: AxisExtractor | null;
   capabilities: ProviderCapabilities;
+  /**
+   * OAuth sign-in metadata. `null` for providers that don't support OAuth
+   * (CLI-only, API-token-only). The actual NextAuth adapter dispatch lives
+   * in `src/server/providers/auth-build.ts` so JSX/NextAuth deps stay out
+   * of `core/`.
+   */
+  oauth: ProviderOauthMetadata | null;
+  /** Profile URL for an `Item.author` identity, or null if not available. */
+  profileUrl: ProviderProfileUrlBuilder | null;
+  /**
+   * Optional public avatar fetcher. Providers that don't expose a useful
+   * fetch (cross-user not cheaply available, etc.) leave this null and the
+   * UI keeps showing initials. The signed-in user's own avatar is captured
+   * during the OAuth callback regardless of this field.
+   */
+  avatarFetcher: ProviderAvatarFetcher | null;
 };

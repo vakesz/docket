@@ -29,17 +29,25 @@ const CreateProjectInput = z.object({
 
 export const projectsRouter = router({
   /**
-   * Public-shaped catalog of registered provider kinds. The create-project
-   * form renders the kind picker and per-kind scope inputs from this so
-   * surfaces don't have to branch on `providerKind`. Returns only the
-   * JSON-safe metadata (no factories, no matchers) — the UI form needs
-   * `typeId`, `displayName`, and `setupFields` to render itself.
+   * Public-shaped catalog of registered provider kinds. Surfaces consume
+   * this so they don't have to branch on `providerKind` — the project
+   * picker, the OAuth provider form, the setup wizard, and the filter
+   * bar all read from here. Returns only JSON-safe metadata (no
+   * factories, no matchers); per-spec functions stay server-side.
+   *
+   * `oauth` is null when the provider doesn't support OAuth sign-in (the
+   * field is omitted from the form picker in that case). `hasAvatarFetcher`
+   * lets the filter bar render avatar chips conditionally without
+   * importing the registry into client code.
    */
   kinds: protectedProcedure.query(() =>
     listProviderSpecs().map((spec) => ({
       typeId: spec.typeId,
       displayName: spec.displayName,
       setupFields: spec.setupFields,
+      oauth: spec.oauth,
+      capabilities: spec.capabilities,
+      hasAvatarFetcher: spec.avatarFetcher !== null,
     })),
   ),
 
@@ -82,7 +90,8 @@ export const projectsRouter = router({
    * Get a single project the user has access to. Includes the provider's
    * capability map so client surfaces can branch on
    * `capabilities.supportedReactions.length` (etc.) without re-importing the
-   * registry.
+   * registry. `hasAvatarFetcher` lets the filter bar decide whether to
+   * even attempt the avatar route for assignee chips.
    */
   get: projectScopedProcedure.input(projectIdSchema).query(({ ctx }) => {
     const spec = getProviderSpec(ctx.project.providerKind);
@@ -94,6 +103,7 @@ export const projectsRouter = router({
         pullRequestDiffs: false,
         linkedItems: false,
       },
+      hasAvatarFetcher: spec?.avatarFetcher != null,
     };
   }),
 
