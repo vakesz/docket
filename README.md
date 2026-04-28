@@ -56,7 +56,7 @@ open http://localhost:3000   # opens the in-browser setup wizard
 That's it. The entrypoint generates `AUTH_SECRET` and `SECRETS_KEY` into a named volume on first boot, applies the schema, and the wizard at `/setup-required` collects:
 
 - **At least one OAuth provider** — GitHub, Azure DevOps, or both. The wizard shows the exact callback URL to paste into the upstream app.
-- **An optional default LLM** — OpenAI, OpenAI-compatible, or Azure AI Foundry. Skip it and add later from `/settings`.
+- **An optional default LLM** — any OpenAI-compatible endpoint (OpenAI itself, Azure AI Foundry, or any other v1-API server reachable via a custom `baseUrl`). Skip it and add later from `/settings`.
 
 Submitting the wizard flips the global `setup.complete` flag and drops you on the home page. From `/settings`, an operator can add more LLM/OAuth providers, rotate keys, and tune projects at any time — no redeploy.
 
@@ -169,7 +169,7 @@ The global `setup.complete` flag in the `Setting` table is the sticky bit that d
 - **Project memory** — durable facts (label conventions, runbooks, design notes) the agent reads and proposes writes to. Mutations go through the proposal pipeline.
 - **Project sources** — read-only-for-the-agent reference docs (requirements, design docs, screenshots). Source writes are human-driven only; the architecture test `src/__arch__/no-source-mutation-tools.test.ts` enforces this.
 - **MCP fleet** — per-project HTTP-only MCP servers. Tools land in the agent registry namespaced as `${serverName}__${toolName}` between the source-readonly and provider-mutating groups.
-- **Web fetch** — agent tool gated by a per-project setting. Validates against an SSRF allowlist + content-type + max-size guards. Every call is logged to `WebFetchEvent` with status (`ok`, `denied_ssrf`, `denied_host`, `denied_size`, `denied_type`, `denied_disabled`, `error`).
+- **Web fetch** — agent tool gated by a per-project setting. Validates against an SSRF allowlist + content-type + max-size guards. Every call is logged to `WebFetchEvent` with status (`ok`, `error`, `denied_disabled`, `denied_url`, `denied_host_allowlist`, `denied_host_metadata`, `denied_host_unresolved`, `denied_redirect`, `denied_type`, `denied_size`).
 - **Inbound-change injection** — when a sync detects a material external edit (state, title, description, assignee), active conversations on that item get a synthetic system message so the assistant doesn't keep reasoning over a stale snapshot.
 - **Roles** — `viewer` / `member` / `approver` per `ProjectMembership`, plus the project owner. Approvers can confirm/reject proposals; viewers cannot mutate; owners always have full control.
 - **Read-only mode** — flip the global `app.read-only` Setting to refuse every mutation procedure and strip mutating tools from the agent.

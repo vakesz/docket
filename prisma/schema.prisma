@@ -645,9 +645,11 @@ model WebFetchEvent {
   /// so user deletion never cascade-erases this trail.
   userId      String?
   url         String
-  /// 'ok' | 'denied_ssrf' | 'denied_host' | 'denied_size' | 'denied_type' |
-  /// 'denied_disabled' | 'error'. Free-text so the tool can grow new failure
-  /// modes without a migration.
+  /// 'ok' | 'error' | 'denied_disabled' | 'denied_url' |
+  /// 'denied_host_allowlist' | 'denied_host_metadata' |
+  /// 'denied_host_unresolved' | 'denied_redirect' | 'denied_type' |
+  /// 'denied_size'. Free-text so the tool can grow new failure modes
+  /// without a migration.
   status      String
   /// Response Content-Type header on success; null on denial / error.
   contentType String?
