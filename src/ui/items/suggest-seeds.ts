@@ -13,6 +13,8 @@
 
 import type { ItemKind, ItemState } from "@/core/types";
 
+export const SUGGEST_NEXT_ACTION_SENTINEL = "<!-- docket:seed:suggest-next-action -->";
+
 const KIND_HINTS: Record<ItemKind, string> = {
   epic: "epic — track child rollup; suggest splitting if scope keeps growing",
   feature: "feature — coherent unit; child stories carry the work",
@@ -53,6 +55,8 @@ export function buildSuggestSeed(args: {
   const body = excerpt(bodyMd);
 
   const lines = [
+    SUGGEST_NEXT_ACTION_SENTINEL,
+    "",
     `What's the next concrete action on "${title}"?${kindHint ? ` (${kindHint})` : ""}${stateHint ? ` — ${stateHint}.` : ""}`,
     "",
     "Call get_item first; the excerpt below is just a hint, not the full body. Then pick one and stage it (or explain why none apply):",
@@ -88,3 +92,14 @@ export function buildSuggestSeed(args: {
 
   return lines.join("\n");
 }
+
+export type SeedKind = "suggest-next-action";
+
+export function extractSeedKind(content: string): SeedKind | null {
+  if (content.startsWith(SUGGEST_NEXT_ACTION_SENTINEL)) return "suggest-next-action";
+  return null;
+}
+
+export const SEED_LABELS: Record<SeedKind, string> = {
+  "suggest-next-action": "Suggest next action",
+};

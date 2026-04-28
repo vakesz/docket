@@ -15,6 +15,7 @@ import { QuestionCard } from "@/ui/conversations/question-card";
 import { ToolCallProgress, ToolCallRow } from "@/ui/conversations/tool-call-row";
 import { buildRenderUnits, type PersistedMessage } from "@/ui/conversations/transcript";
 import { useChatStream } from "@/ui/conversations/use-chat-stream";
+import { extractSeedKind } from "@/ui/items/suggest-seeds";
 import { ProposalCard } from "@/ui/proposals/proposal-card";
 
 /**
@@ -246,7 +247,14 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
           <>
             {renderUnits.map((unit) => {
               if (unit.kind === "text") {
-                return <Bubble key={unit.key} messageRole={unit.role} text={unit.content} />;
+                return (
+                  <Bubble
+                    key={unit.key}
+                    messageRole={unit.role}
+                    text={unit.content}
+                    seedKind={unit.seedKind}
+                  />
+                );
               }
               return (
                 <ToolCallRow
@@ -260,7 +268,11 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
               );
             })}
             {showPendingUserMessage && streaming.pendingUserMessage && (
-              <Bubble messageRole="user" text={streaming.pendingUserMessage} />
+              <Bubble
+                messageRole="user"
+                text={streaming.pendingUserMessage}
+                seedKind={extractSeedKind(streaming.pendingUserMessage)}
+              />
             )}
             {streaming.settledRounds.map((round, idx) => (
               // biome-ignore lint/suspicious/noArrayIndexKey: settledRounds is append-only during one stream; index is stable for the lifetime of the snapshot.

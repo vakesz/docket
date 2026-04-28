@@ -4,6 +4,8 @@
  * surrounding "use client" islands don't grow when these are imported.
  */
 
+import { extractSeedKind, type SeedKind } from "@/ui/items/suggest-seeds";
+
 export type PersistedMessage = {
   id: string;
   role: string;
@@ -20,7 +22,7 @@ export type AssistantToolCall = {
 };
 
 export type RenderUnit =
-  | { kind: "text"; key: string; role: string; content: string }
+  | { kind: "text"; key: string; role: string; content: string; seedKind: SeedKind | null }
   | {
       kind: "tool_call";
       key: string;
@@ -92,7 +94,13 @@ export function buildRenderUnits(messages: readonly PersistedMessage[]): RenderU
       const calls = parseAssistantToolCalls(m.toolCallsJson);
       const hasText = m.content.trim().length > 0;
       if (hasText) {
-        units.push({ kind: "text", key: `${m.id}:text`, role: m.role, content: m.content });
+        units.push({
+          kind: "text",
+          key: `${m.id}:text`,
+          role: m.role,
+          content: m.content,
+          seedKind: null,
+        });
       }
       for (const call of calls) {
         const result = toolByCallId.get(call.id) ?? null;
@@ -109,7 +117,13 @@ export function buildRenderUnits(messages: readonly PersistedMessage[]): RenderU
       }
       continue;
     }
-    units.push({ kind: "text", key: `${m.id}:text`, role: m.role, content: m.content });
+    units.push({
+      kind: "text",
+      key: `${m.id}:text`,
+      role: m.role,
+      content: m.content,
+      seedKind: m.role === "user" ? extractSeedKind(m.content) : null,
+    });
   }
 
   // Orphan tool results — should not happen, but rather than swallow them
