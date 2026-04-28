@@ -1,5 +1,6 @@
 "use client";
 
+import { Input } from "@headlessui/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fieldClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
@@ -81,7 +82,7 @@ export function AnalyticsPanel(
           <label htmlFor="analytics-custom-days" className="text-xs text-fg-muted">
             Custom (days):
           </label>
-          <input
+          <Input
             id="analytics-custom-days"
             type="number"
             min={1}

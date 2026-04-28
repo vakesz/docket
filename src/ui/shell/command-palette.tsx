@@ -1,6 +1,14 @@
 "use client";
 
-import { Command } from "cmdk";
+import {
+  Combobox,
+  ComboboxInput,
+  ComboboxOption,
+  ComboboxOptions,
+  Dialog,
+  DialogBackdrop,
+  DialogPanel,
+} from "@headlessui/react";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { metaLabelClass, metaLabelFaintClass } from "@/lib/form-classes";
@@ -31,6 +39,10 @@ interface PaletteCommand {
   keywords?: string;
   run: () => void;
 }
+
+type Entry =
+  | { kind: "command"; group: Group; command: PaletteCommand; searchText: string }
+  | { kind: "item"; group: "Pinned" | "Items"; item: ItemSummary; searchText: string };
 
 const RECENTS_KEY = "docket.cmdPaletteRecents";
 const RECENTS_LIMIT = 5;
@@ -69,15 +81,10 @@ function extractItemId(pathname: string | null, projectId: string): string | und
 }
 
 /**
- * Global cmdk palette mounted by the project shell. Cmd/Ctrl+K toggles it,
- * Esc closes it, and the dismissive backdrop click also closes it. Recents
- * are kept in localStorage so commands the user actually uses float to the
- * top across reloads.
- *
- * T3 is per-project, not global-active-provider like main was, so commands
- * scope to the current `projectId` and navigation goes through the Next
- * App Router. Item / pin commands are surfaced when the current URL has
- * an itemId — no need for the user to click first.
+ * Global Headless UI Combobox palette mounted by the project shell.
+ * Cmd/Ctrl+K toggles it; Headless UI handles Esc and the dismissive
+ * backdrop click. Recents are kept in localStorage so commands the user
+ * actually uses float to the top across reloads.
  */
 export function CommandPalette({
   projectId,
@@ -88,6 +95,7 @@ export function CommandPalette({
 }) {
   const [open, setOpen] = useState(false);
   const [recents, setRecents] = useState<string[]>(() => loadRecents());
+  const [query, setQuery] = useState("");
 
   const router = useRouter();
   const pathname = usePathname();
@@ -137,15 +145,16 @@ export function CommandPalette({
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setOpen((v) => !v);
-      } else if (e.key === "Escape") {
-        setOpen(false);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const close = useCallback(() => setOpen(false), []);
+  const close = useCallback(() => {
+    setOpen(false);
+    setQuery("");
+  }, []);
 
   const go = useCallback(
     (to: string) => {
@@ -162,14 +171,6 @@ export function CommandPalette({
       return next;
     });
   }, []);
-
-  const runWith = useCallback(
-    (cmd: PaletteCommand) => () => {
-      record(cmd.id);
-      cmd.run();
-    },
-    [record],
-  );
 
   const commands = useMemo<PaletteCommand[]>(() => {
     const list: PaletteCommand[] = [
@@ -308,8 +309,41 @@ export function CommandPalette({
 
   const recentIds = useMemo(() => new Set(recentCommands.map((c) => c.id)), [recentCommands]);
 
-  const grouped = useMemo(() => {
-    const groups: Record<Exclude<Group, "Recent">, PaletteCommand[]> = {
+  const pinnedItems: ItemSummary[] = useMemo(
+    () =>
+      (pinned.data ?? []).map((row) => ({
+        id: row.item.id,
+        providerItemId: row.item.providerItemId,
+        kind: row.item.kind,
+        title: row.item.title,
+        state: row.item.state,
+        url: row.item.url,
+      })),
+    [pinned.data],
+  );
+
+  const itemList: ItemSummary[] = useMemo(
+    () =>
+      (items.data ?? []).map((row) => ({
+        id: row.id,
+        providerItemId: row.providerItemId,
+        kind: row.kind,
+        title: row.title,
+        state: row.state,
+        url: row.url,
+      })),
+    [items.data],
+  );
+
+  const sections = useMemo(() => {
+    const recentEntries: Entry[] = recentCommands.map((c) => ({
+      kind: "command",
+      group: c.group,
+      command: c,
+      searchText: [c.label, c.description ?? "", c.keywords ?? ""].filter(Boolean).join(" "),
+    }));
+
+    const grouped: Record<Exclude<Group, "Recent">, Entry[]> = {
       Item: [],
       Navigate: [],
       Actions: [],
@@ -319,140 +353,177 @@ export function CommandPalette({
     for (const c of commands) {
       if (recentIds.has(c.id)) continue;
       if (c.group === "Recent") continue;
-      groups[c.group].push(c);
+      grouped[c.group].push({
+        kind: "command",
+        group: c.group,
+        command: c,
+        searchText: [c.label, c.description ?? "", c.keywords ?? ""].filter(Boolean).join(" "),
+      });
     }
-    return groups;
-  }, [commands, recentIds]);
+    for (const it of pinnedItems) {
+      grouped.Pinned.push({
+        kind: "item",
+        group: "Pinned",
+        item: it,
+        searchText: `${it.providerItemId} ${it.title}`,
+      });
+    }
+    for (const it of itemList.slice(0, 80)) {
+      grouped.Items.push({
+        kind: "item",
+        group: "Items",
+        item: it,
+        searchText: `${it.providerItemId} ${it.title}`,
+      });
+    }
 
-  if (!open) return null;
+    const q = query.trim().toLowerCase();
+    const filterEntries = (entries: Entry[]) =>
+      q === "" ? entries : entries.filter((e) => e.searchText.toLowerCase().includes(q));
 
-  const pinnedItems: ItemSummary[] = (pinned.data ?? []).map((row) => ({
-    id: row.item.id,
-    providerItemId: row.item.providerItemId,
-    kind: row.item.kind,
-    title: row.item.title,
-    state: row.item.state,
-    url: row.item.url,
-  }));
+    return {
+      recent: filterEntries(recentEntries),
+      item: filterEntries(grouped.Item),
+      navigate: filterEntries(grouped.Navigate),
+      actions: filterEntries(grouped.Actions),
+      pinned: filterEntries(grouped.Pinned),
+      items: filterEntries(grouped.Items),
+    };
+  }, [commands, recentCommands, recentIds, pinnedItems, itemList, query]);
 
-  const itemList: ItemSummary[] = (items.data ?? []).map((row) => ({
-    id: row.id,
-    providerItemId: row.providerItemId,
-    kind: row.kind,
-    title: row.title,
-    state: row.state,
-    url: row.url,
-  }));
+  const totalMatches =
+    sections.recent.length +
+    sections.item.length +
+    sections.navigate.length +
+    sections.actions.length +
+    sections.pinned.length +
+    sections.items.length;
+
+  const onSelect = (entry: Entry | null) => {
+    if (!entry) return;
+    if (entry.kind === "command") {
+      record(entry.command.id);
+      entry.command.run();
+    } else {
+      go(`/projects/${projectId}/items/${entry.item.id}`);
+    }
+  };
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: dismissive-overlay pattern — interactive content is the child <Command> dialog; this div is only a backdrop that closes on click. Escape is handled globally above.
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-fg/40 pt-[12vh]"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) setOpen(false);
-      }}
+    <Dialog
+      open={open}
+      onClose={close}
+      className="relative z-50"
+      // Disable Headless UI's autofocus so we can hand focus to the input
+      // explicitly via ComboboxInput's autoFocus prop.
     >
-      <Command
-        label="Command palette"
-        className="w-[560px] max-w-[92vw] overflow-hidden rounded-lg border border-border bg-surface text-fg shadow-2xl"
-      >
-        <Command.Input
-          placeholder="Jump to item, run command…"
-          className="w-full border-b border-border bg-transparent px-4 py-3 text-sm text-fg outline-none"
-          autoFocus
-          // Keep password managers (Bitwarden, 1Password, etc.) from
-          // mistaking the palette's search input for a credential field.
-          // The non-standard data-* hints cover the password managers that
-          // ignore autoComplete="off".
-          autoComplete="off"
-          autoCorrect="off"
-          autoCapitalize="off"
-          spellCheck={false}
-          name="docket-command-palette-search"
-          enterKeyHint="search"
-          data-form-type="other"
-          data-lpignore="true"
-          data-1p-ignore="true"
-          data-bwignore="true"
-        />
-        <Command.List className="max-h-[56vh] overflow-auto p-1">
-          <Command.Empty className="px-4 py-6 text-center text-sm text-fg-faint">
-            No matches.
-          </Command.Empty>
+      <DialogBackdrop className="fixed inset-0 bg-fg/40" />
+      <div className="fixed inset-0 flex items-start justify-center pt-[12vh]">
+        <DialogPanel className="w-[560px] max-w-[92vw] overflow-hidden rounded-lg border border-border bg-surface text-fg shadow-2xl">
+          <Combobox<Entry | null> immediate value={null} onChange={onSelect}>
+            <ComboboxInput
+              placeholder="Jump to item, run command…"
+              className="w-full border-b border-border bg-transparent px-4 py-3 text-sm text-fg outline-none"
+              autoFocus
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              name="docket-command-palette-search"
+              enterKeyHint="search"
+              data-form-type="other"
+              data-lpignore="true"
+              data-1p-ignore="true"
+              data-bwignore="true"
+              displayValue={() => query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            <ComboboxOptions static className="max-h-[56vh] overflow-auto p-1">
+              {totalMatches === 0 ? (
+                <div className="px-4 py-6 text-center text-sm text-fg-faint">No matches.</div>
+              ) : null}
 
-          {recentCommands.length > 0 ? (
-            <Command.Group heading="Recent" className={cn("px-2 py-1", metaLabelFaintClass)}>
-              {recentCommands.map((c) => (
-                <PaletteEntry key={c.id} command={c} onSelect={runWith(c)} />
-              ))}
-            </Command.Group>
-          ) : null}
+              {sections.recent.length > 0 ? (
+                <PaletteSection heading="Recent">
+                  {sections.recent.map((entry) =>
+                    entry.kind === "command" ? (
+                      <CommandRow key={entry.command.id} entry={entry} />
+                    ) : null,
+                  )}
+                </PaletteSection>
+              ) : null}
 
-          {grouped.Item.length > 0 ? (
-            <Command.Group heading="Item" className={cn("px-2 py-1", metaLabelFaintClass)}>
-              {grouped.Item.map((c) => (
-                <PaletteEntry key={c.id} command={c} onSelect={runWith(c)} />
-              ))}
-            </Command.Group>
-          ) : null}
+              {sections.item.length > 0 ? (
+                <PaletteSection heading="Item">
+                  {sections.item.map((entry) =>
+                    entry.kind === "command" ? (
+                      <CommandRow key={entry.command.id} entry={entry} />
+                    ) : null,
+                  )}
+                </PaletteSection>
+              ) : null}
 
-          {grouped.Navigate.length > 0 ? (
-            <Command.Group heading="Navigate" className={cn("px-2 py-1", metaLabelFaintClass)}>
-              {grouped.Navigate.map((c) => (
-                <PaletteEntry key={c.id} command={c} onSelect={runWith(c)} />
-              ))}
-            </Command.Group>
-          ) : null}
+              {sections.navigate.length > 0 ? (
+                <PaletteSection heading="Navigate">
+                  {sections.navigate.map((entry) =>
+                    entry.kind === "command" ? (
+                      <CommandRow key={entry.command.id} entry={entry} />
+                    ) : null,
+                  )}
+                </PaletteSection>
+              ) : null}
 
-          {grouped.Actions.length > 0 ? (
-            <Command.Group heading="Actions" className={cn("px-2 py-1", metaLabelFaintClass)}>
-              {grouped.Actions.map((c) => (
-                <PaletteEntry key={c.id} command={c} onSelect={runWith(c)} />
-              ))}
-            </Command.Group>
-          ) : null}
+              {sections.actions.length > 0 ? (
+                <PaletteSection heading="Actions">
+                  {sections.actions.map((entry) =>
+                    entry.kind === "command" ? (
+                      <CommandRow key={entry.command.id} entry={entry} />
+                    ) : null,
+                  )}
+                </PaletteSection>
+              ) : null}
 
-          {pinnedItems.length > 0 ? (
-            <Command.Group heading="Pinned" className={cn("px-2 py-1", metaLabelFaintClass)}>
-              {pinnedItems.map((it) => (
-                <ItemEntry
-                  key={it.id}
-                  item={it}
-                  onSelect={() => go(`/projects/${projectId}/items/${it.id}`)}
-                />
-              ))}
-            </Command.Group>
-          ) : null}
+              {sections.pinned.length > 0 ? (
+                <PaletteSection heading="Pinned">
+                  {sections.pinned.map((entry) =>
+                    entry.kind === "item" ? <ItemRow key={entry.item.id} entry={entry} /> : null,
+                  )}
+                </PaletteSection>
+              ) : null}
 
-          {itemList.length > 0 ? (
-            <Command.Group heading="Items" className={cn("px-2 py-1", metaLabelFaintClass)}>
-              {itemList.slice(0, 80).map((it) => (
-                <ItemEntry
-                  key={it.id}
-                  item={it}
-                  onSelect={() => go(`/projects/${projectId}/items/${it.id}`)}
-                />
-              ))}
-            </Command.Group>
-          ) : null}
-        </Command.List>
-        <div className={cn("border-t border-border px-3 py-2", metaLabelFaintClass)}>
-          {shortcut("K")} · Esc to close
-        </div>
-      </Command>
+              {sections.items.length > 0 ? (
+                <PaletteSection heading="Items">
+                  {sections.items.map((entry) =>
+                    entry.kind === "item" ? <ItemRow key={entry.item.id} entry={entry} /> : null,
+                  )}
+                </PaletteSection>
+              ) : null}
+            </ComboboxOptions>
+          </Combobox>
+          <div className={cn("border-t border-border px-3 py-2", metaLabelFaintClass)}>
+            {shortcut("K")} · Esc to close
+          </div>
+        </DialogPanel>
+      </div>
+    </Dialog>
+  );
+}
+
+function PaletteSection({ heading, children }: { heading: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className={cn("px-2 py-1", metaLabelFaintClass)}>{heading}</div>
+      {children}
     </div>
   );
 }
 
-function PaletteEntry({ command, onSelect }: { command: PaletteCommand; onSelect: () => void }) {
-  const value = [command.label, command.description ?? "", command.keywords ?? ""]
-    .filter(Boolean)
-    .join(" ");
+function CommandRow({ entry }: { entry: Extract<Entry, { kind: "command" }> }) {
+  const { command } = entry;
   return (
-    <Command.Item
-      onSelect={onSelect}
-      value={value}
-      className="flex cursor-pointer items-center gap-3 rounded px-3 py-2 text-sm data-[selected=true]:bg-surface-alt"
+    <ComboboxOption
+      value={entry}
+      className="flex cursor-pointer items-center gap-3 rounded px-3 py-2 text-sm data-focus:bg-surface-alt"
     >
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="truncate text-fg">{command.label}</span>
@@ -465,20 +536,20 @@ function PaletteEntry({ command, onSelect }: { command: PaletteCommand; onSelect
           {command.hint}
         </span>
       ) : null}
-    </Command.Item>
+    </ComboboxOption>
   );
 }
 
-function ItemEntry({ item, onSelect }: { item: ItemSummary; onSelect: () => void }) {
+function ItemRow({ entry }: { entry: Extract<Entry, { kind: "item" }> }) {
+  const { item } = entry;
   return (
-    <Command.Item
-      onSelect={onSelect}
-      value={`${item.providerItemId} ${item.title}`}
-      className="flex cursor-pointer items-center gap-2 rounded px-3 py-2 text-sm data-[selected=true]:bg-surface-alt"
+    <ComboboxOption
+      value={entry}
+      className="flex cursor-pointer items-center gap-2 rounded px-3 py-2 text-sm data-focus:bg-surface-alt"
     >
       <span className={metaLabelClass}>{formatKind(item.kind)}</span>
       <span className="ml-2 truncate">{item.title}</span>
       <span className="ml-auto font-mono text-[10px] text-fg-faint">#{item.providerItemId}</span>
-    </Command.Item>
+    </ComboboxOption>
   );
 }

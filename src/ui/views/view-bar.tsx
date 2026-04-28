@@ -1,4 +1,5 @@
 "use client";
+import { Input } from "@headlessui/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useMemo, useState } from "react";
 import type { StateBucket } from "@/core/types";
@@ -184,7 +185,7 @@ export function ViewBar({ projectId }: Props) {
 
       {showForm ? (
         <form onSubmit={onCreate} className="flex items-center gap-2">
-          <input
+          <Input
             type="text"
             placeholder="View name (e.g. ‘My open work’)"
             value={newName}

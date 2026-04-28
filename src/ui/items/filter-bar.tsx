@@ -1,5 +1,6 @@
 "use client";
 
+import { Input } from "@headlessui/react";
 import type { BacklogBucket, ItemKind } from "@/core/types";
 import { displayTag, formatKind } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -59,7 +60,7 @@ export function FilterBar({
   return (
     <div className="flex flex-col gap-2 border-b border-border p-3">
       <div className="flex items-center gap-2">
-        <input
+        <Input
           type="search"
           placeholder="Filter by title, id, tag…"
           value={query}

@@ -1,8 +1,9 @@
 "use client";
 
+import { Button, Textarea } from "@headlessui/react";
 import { useState } from "react";
+import { xsAccentButtonClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
-import { Button } from "@/ui/primitives/button";
 import { ProposalDialog } from "@/ui/proposals/proposal-dialog";
 
 /**
@@ -45,7 +46,7 @@ export function CommentComposer({
       >
         Add comment
       </label>
-      <textarea
+      <Textarea
         id="comment-body"
         value={body}
         onChange={(e) => setBody(e.target.value)}
@@ -55,7 +56,11 @@ export function CommentComposer({
         disabled={propose.isPending}
       />
       <div className="flex items-center gap-2">
-        <Button type="submit" size="sm" disabled={propose.isPending || !body.trim()}>
+        <Button
+          type="submit"
+          disabled={propose.isPending || !body.trim()}
+          className={xsAccentButtonClass}
+        >
           {propose.isPending ? "Staging…" : "Stage comment"}
         </Button>
         {error ? <span className="text-xs text-danger-fg">{error}</span> : null}

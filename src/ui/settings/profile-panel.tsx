@@ -1,9 +1,9 @@
 "use client";
+import { Field, Input, Label, Switch } from "@headlessui/react";
 import { useEffect, useState } from "react";
-import { fieldClass } from "@/lib/form-classes";
+import { fieldClass, switchThumbClass, switchTrackClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
 import { SelectField } from "@/ui/forms/select-field";
-import { Toggle } from "@/ui/primitives/toggle";
 import { DefaultProjectPicker } from "@/ui/settings/default-project-picker";
 import { ThemePicker } from "@/ui/shell/theme-picker";
 
@@ -60,17 +60,22 @@ export function ProfilePanel() {
           When on, the backlog filter bar offers an Archived bucket alongside Open / Closed / All.
           Archived rows remain reachable via the All-states bucket either way.
         </p>
-        <Toggle
-          checked={showArchivedBucket}
-          disabled={update.isPending || list.isPending}
-          onChange={(next) =>
-            update.mutate({
-              key: "items.show-archived-bucket" as never,
-              value: next,
-            })
-          }
-          label={showArchivedBucket ? "Visible" : "Hidden"}
-        />
+        <Field className="flex items-center gap-2 text-sm text-fg">
+          <Switch
+            checked={showArchivedBucket}
+            disabled={update.isPending || list.isPending}
+            onChange={(next) =>
+              update.mutate({
+                key: "items.show-archived-bucket" as never,
+                value: next,
+              })
+            }
+            className={switchTrackClass}
+          >
+            <span aria-hidden className={switchThumbClass} />
+          </Switch>
+          <Label>{showArchivedBucket ? "Visible" : "Hidden"}</Label>
+        </Field>
       </div>
 
       <div className="flex flex-col gap-2 border-t border-border pt-6">
@@ -79,7 +84,7 @@ export function ProfilePanel() {
           How many tag chips render inline on each backlog row before the rest collapse into a +N
           badge. Set to 0 to always collapse.
         </p>
-        <input
+        <Input
           type="number"
           min={0}
           max={20}
@@ -183,7 +188,7 @@ export function ProfilePanel() {
           re-fetch in the background. 0 disables auto-refresh; manual refetches still work. Maximum
           3600 (one hour).
         </p>
-        <input
+        <Input
           type="number"
           min={0}
           max={3600}
@@ -208,18 +213,22 @@ export function ProfilePanel() {
           When on, Enter sends a message and Shift+Enter inserts a newline. When off, Enter inserts
           a newline and Cmd/Ctrl+Enter sends.
         </p>
-        <Toggle
-          inline
-          checked={sendOnEnter === true}
-          disabled={update.isPending || list.isPending}
-          onChange={(next) =>
-            update.mutate({
-              key: "chat.send-on-enter" as never,
-              value: next,
-            })
-          }
-          label="Enabled"
-        />
+        <Field className="inline-flex items-center gap-2 text-sm text-fg">
+          <Switch
+            checked={sendOnEnter === true}
+            disabled={update.isPending || list.isPending}
+            onChange={(next) =>
+              update.mutate({
+                key: "chat.send-on-enter" as never,
+                value: next,
+              })
+            }
+            className={switchTrackClass}
+          >
+            <span aria-hidden className={switchThumbClass} />
+          </Switch>
+          <Label>Enabled</Label>
+        </Field>
         {update.error ? <p className="text-xs text-danger-fg">{update.error.message}</p> : null}
       </div>
     </div>
@@ -253,7 +262,7 @@ function TimezoneField({
         <code className="rounded bg-surface-alt px-1 py-0.5 font-mono">UTC</code>). Empty falls back
         to the browser's local zone.
       </p>
-      <input
+      <Input
         type="text"
         placeholder="(browser local)"
         value={draft}

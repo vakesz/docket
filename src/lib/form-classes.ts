@@ -88,3 +88,18 @@ export const settingsRowClass =
 
 export const SEPARATOR =
   "bg-border transition-colors data-[resize-handle-state=hover]:bg-fg-faint data-[resize-handle-state=drag]:bg-accent";
+
+/**
+ * Headless UI `<Switch>` track. Use as the Switch's own `className`. The
+ * thumb lives as a child `<span>` styled by {@link switchThumbClass}.
+ */
+export const switchTrackClass =
+  "group relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border border-border bg-surface-alt transition-colors focus:outline-none data-checked:border-primary data-checked:bg-primary data-disabled:cursor-not-allowed data-disabled:opacity-60 data-focus:ring-3 data-focus:ring-ring/50";
+
+/** Sliding thumb child of a Headless UI `<Switch>`. */
+export const switchThumbClass =
+  "ml-0.5 inline-block h-4 w-4 rounded-full bg-fg shadow-sm transition-transform group-data-checked:translate-x-4 group-data-checked:bg-primary-foreground";
+
+/** Transparent button (no border, no background until hover). */
+export const ghostButtonClass =
+  "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium text-fg hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-60";

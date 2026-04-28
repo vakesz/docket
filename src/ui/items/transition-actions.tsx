@@ -1,9 +1,10 @@
 "use client";
 
+import { Button } from "@headlessui/react";
 import { useState } from "react";
 import type { ItemState, TransitionIntent } from "@/core/types";
+import { xsBorderButtonClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
-import { Button } from "@/ui/primitives/button";
 import { ProposalDialog } from "@/ui/proposals/proposal-dialog";
 
 /**
@@ -69,10 +70,9 @@ export function TransitionActions({
       {intents.map((intent) => (
         <Button
           key={intent}
-          variant="outline"
-          size="xs"
           disabled={proposeTransition.isPending}
           onClick={() => proposeTransition.mutate({ projectId, providerItemId, intent })}
+          className={xsBorderButtonClass}
         >
           {INTENT_LABEL[intent]}
         </Button>

@@ -1,4 +1,5 @@
 "use client";
+import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from "@headlessui/react";
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
@@ -105,19 +106,18 @@ export function SettingsShell({ publicBase, project, initialSection }: Props) {
         <SettingsSidebar active={active} onSelect={handleSelect} projectId={projectId} />
       </aside>
 
-      {mobileNavOpen ? (
-        <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true">
-          <button
-            type="button"
-            aria-label="Close menu"
-            className="absolute inset-0 bg-fg/30 backdrop-blur-sm"
-            onClick={() => setMobileNavOpen(false)}
-          />
-          <aside className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col overflow-auto border-r border-border bg-surface px-3 py-4 shadow-xl">
+      <Dialog
+        open={mobileNavOpen}
+        onClose={() => setMobileNavOpen(false)}
+        className="relative z-40 lg:hidden"
+      >
+        <DialogBackdrop className="fixed inset-0 bg-fg/30 backdrop-blur-sm" />
+        <div className="fixed inset-0 flex">
+          <DialogPanel className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col overflow-auto border-r border-border bg-surface px-3 py-4 shadow-xl">
             <div className="mb-3 flex items-center justify-between px-3">
-              <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-fg-muted">
+              <DialogTitle className="font-mono text-[11px] uppercase tracking-[0.18em] text-fg-muted">
                 Settings
-              </span>
+              </DialogTitle>
               <button
                 type="button"
                 onClick={() => setMobileNavOpen(false)}
@@ -128,9 +128,9 @@ export function SettingsShell({ publicBase, project, initialSection }: Props) {
               </button>
             </div>
             <SettingsSidebar active={active} onSelect={handleSelect} projectId={projectId} />
-          </aside>
+          </DialogPanel>
         </div>
-      ) : null}
+      </Dialog>
 
       <section className="min-h-0 overflow-auto">
         <header className="border-b border-border bg-surface/70 px-4 py-4 backdrop-blur sm:px-6">

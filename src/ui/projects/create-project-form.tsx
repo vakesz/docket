@@ -1,4 +1,5 @@
 "use client";
+import { Field, Input, Label, Switch } from "@headlessui/react";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 import {
@@ -6,10 +7,11 @@ import {
   fieldClass,
   primaryButtonClass,
   settingsPanelClass,
+  switchThumbClass,
+  switchTrackClass,
 } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
 import { SelectField } from "@/ui/forms/select-field";
-import { Toggle } from "@/ui/primitives/toggle";
 
 type ProviderKind = "github" | "azure_devops";
 
@@ -101,25 +103,25 @@ export function CreateProjectForm({ defaultMakeDefault = true, onCreated }: Prop
     <form onSubmit={onSubmit} className={`${settingsPanelClass} flex flex-col gap-4 text-sm`}>
       <h2 className="text-base font-medium text-fg">Add project</h2>
 
-      <label className="flex flex-col gap-1">
-        <span className="text-xs text-fg-muted">Display name</span>
-        <input
+      <Field className="flex flex-col gap-1">
+        <Label className="text-xs text-fg-muted">Display name</Label>
+        <Input
           required
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="acme / web"
           className={fieldClass}
         />
-      </label>
+      </Field>
 
-      <label className="flex flex-col gap-1">
-        <span className="text-xs text-fg-muted">Description (optional)</span>
-        <input
+      <Field className="flex flex-col gap-1">
+        <Label className="text-xs text-fg-muted">Description (optional)</Label>
+        <Input
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           className={fieldClass}
         />
-      </label>
+      </Field>
 
       <div className="flex flex-col gap-1">
         <span className="text-xs text-fg-muted">Provider</span>
@@ -136,26 +138,26 @@ export function CreateProjectForm({ defaultMakeDefault = true, onCreated }: Prop
       {providerKind === "github" ? (
         <div className="flex flex-col gap-1">
           <div className="flex gap-3">
-            <label className="flex flex-1 flex-col gap-1">
-              <span className="text-xs text-fg-muted">Owner</span>
-              <input
+            <Field className="flex flex-1 flex-col gap-1">
+              <Label className="text-xs text-fg-muted">Owner</Label>
+              <Input
                 required
                 value={githubOwner}
                 onChange={(e) => setGithubOwner(e.target.value)}
                 placeholder="acme"
                 className={fieldClass}
               />
-            </label>
-            <label className="flex flex-1 flex-col gap-1">
-              <span className="text-xs text-fg-muted">Repo</span>
-              <input
+            </Field>
+            <Field className="flex flex-1 flex-col gap-1">
+              <Label className="text-xs text-fg-muted">Repo</Label>
+              <Input
                 required
                 value={githubRepo}
                 onChange={(e) => setGithubRepo(e.target.value)}
                 placeholder="web"
                 className={fieldClass}
               />
-            </label>
+            </Field>
           </div>
           <p className="text-xs text-fg-muted">
             From the repo URL{" "}
@@ -168,26 +170,26 @@ export function CreateProjectForm({ defaultMakeDefault = true, onCreated }: Prop
       ) : (
         <div className="flex flex-col gap-1">
           <div className="flex gap-3">
-            <label className="flex flex-1 flex-col gap-1">
-              <span className="text-xs text-fg-muted">Organization</span>
-              <input
+            <Field className="flex flex-1 flex-col gap-1">
+              <Label className="text-xs text-fg-muted">Organization</Label>
+              <Input
                 required
                 value={azdoOrg}
                 onChange={(e) => setAzdoOrg(e.target.value)}
                 placeholder="contoso"
                 className={fieldClass}
               />
-            </label>
-            <label className="flex flex-1 flex-col gap-1">
-              <span className="text-xs text-fg-muted">Project</span>
-              <input
+            </Field>
+            <Field className="flex flex-1 flex-col gap-1">
+              <Label className="text-xs text-fg-muted">Project</Label>
+              <Input
                 required
                 value={azdoProject}
                 onChange={(e) => setAzdoProject(e.target.value)}
                 placeholder="Platform"
                 className={fieldClass}
               />
-            </label>
+            </Field>
           </div>
           <p className="text-xs text-fg-muted">
             From{" "}
@@ -199,12 +201,12 @@ export function CreateProjectForm({ defaultMakeDefault = true, onCreated }: Prop
         </div>
       )}
 
-      <Toggle
-        inline
-        checked={makeDefault}
-        onChange={setMakeDefault}
-        label="Set as my default project"
-      />
+      <Field className="inline-flex items-center gap-2 text-sm text-fg">
+        <Switch checked={makeDefault} onChange={setMakeDefault} className={switchTrackClass}>
+          <span aria-hidden className={switchThumbClass} />
+        </Switch>
+        <Label>Set as my default project</Label>
+      </Field>
 
       {create.error ? <p className={errorMessageClass}>{create.error.message}</p> : null}
 

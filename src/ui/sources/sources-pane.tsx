@@ -1,9 +1,15 @@
 "use client";
 
+import { Button, Input, Textarea } from "@headlessui/react";
 import { useRef, useState } from "react";
-import { emptyStateClass, errorMessageClass, fieldClass } from "@/lib/form-classes";
+import {
+  emptyStateClass,
+  errorMessageClass,
+  fieldClass,
+  xsAccentButtonClass,
+  xsDangerButtonClass,
+} from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
-import { Button } from "@/ui/primitives/button";
 
 /**
  * Sources pane on the project detail page.
@@ -65,7 +71,7 @@ export function SourcesPane({ projectId }: { projectId: string }) {
       >
         <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
-            <input
+            <Input
               type="text"
               value={draftTitle}
               onChange={(e) => setDraftTitle(e.target.value)}
@@ -75,7 +81,7 @@ export function SourcesPane({ projectId }: { projectId: string }) {
             />
           </div>
           <div className="w-40 shrink-0">
-            <input
+            <Input
               type="text"
               value={draftKind}
               onChange={(e) => setDraftKind(e.target.value)}
@@ -85,7 +91,7 @@ export function SourcesPane({ projectId }: { projectId: string }) {
             />
           </div>
         </div>
-        <textarea
+        <Textarea
           value={draftBody}
           onChange={(e) => setDraftBody(e.target.value)}
           placeholder="Paste markdown, or upload a .md / .txt file below."
@@ -93,7 +99,7 @@ export function SourcesPane({ projectId }: { projectId: string }) {
           className={fieldClass}
         />
         <div className="flex items-center justify-between gap-2">
-          <input
+          <Input
             ref={fileRef}
             type="file"
             accept=".md,.markdown,.txt,.json,text/plain,text/markdown,application/json"
@@ -103,7 +109,11 @@ export function SourcesPane({ projectId }: { projectId: string }) {
               if (file) void handleFile(file);
             }}
           />
-          <Button type="submit" size="sm" disabled={create.isPending || !draftTitle.trim()}>
+          <Button
+            type="submit"
+            disabled={create.isPending || !draftTitle.trim()}
+            className={xsAccentButtonClass}
+          >
             {create.isPending ? "Saving…" : "Save source"}
           </Button>
         </div>
@@ -140,10 +150,9 @@ export function SourcesPane({ projectId }: { projectId: string }) {
               </div>
               <Button
                 type="button"
-                variant="destructive"
-                size="sm"
                 disabled={remove.isPending}
                 onClick={() => void remove.mutateAsync({ projectId, sourceId: s.id })}
+                className={xsDangerButtonClass}
               >
                 Delete
               </Button>

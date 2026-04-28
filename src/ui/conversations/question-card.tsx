@@ -1,5 +1,6 @@
 "use client";
 
+import { Input } from "@headlessui/react";
 import { useState } from "react";
 import { metaLabelClass } from "@/lib/form-classes";
 import { cn } from "@/lib/utils";
@@ -91,7 +92,7 @@ export function QuestionCard({
           })}
         </div>
       )}
-      <input
+      <Input
         type="text"
         disabled={disabled}
         value={other}

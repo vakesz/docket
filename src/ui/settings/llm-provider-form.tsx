@@ -1,4 +1,5 @@
 "use client";
+import { Field, Input, Label, Switch } from "@headlessui/react";
 import { type FormEvent, useId, useState } from "react";
 import {
   errorMessageClass,
@@ -6,12 +7,13 @@ import {
   fieldMonoClass,
   primaryButtonClass,
   settingsPanelClass,
+  switchThumbClass,
+  switchTrackClass,
   xsBorderButtonClass,
 } from "@/lib/form-classes";
 import { formatPriceCentsAsDollars, parsePriceDollarsToCents } from "@/lib/pricing";
 import { trpc } from "@/lib/trpc-client";
 import { SelectField } from "@/ui/forms/select-field";
-import { Toggle } from "@/ui/primitives/toggle";
 
 const KINDS = ["openai", "anthropic", "gemini", "bedrock", "mistral", "ollama"] as const;
 type Kind = (typeof KINDS)[number];
@@ -129,23 +131,23 @@ export function LlmProviderForm(props: Props) {
             ))}
           </SelectField>
         </div>
-        <label className="flex flex-1 flex-col gap-1">
-          <span className="text-xs text-fg-muted">Label</span>
-          <input
+        <Field className="flex flex-1 flex-col gap-1">
+          <Label className="text-xs text-fg-muted">Label</Label>
+          <Input
             required
             value={label}
             onChange={(e) => setLabel(e.target.value)}
             placeholder="OpenAI prod"
             className={fieldClass}
           />
-        </label>
+        </Field>
       </div>
 
-      <label className="flex flex-col gap-1">
-        <span className="text-xs text-fg-muted">
+      <Field className="flex flex-col gap-1">
+        <Label className="text-xs text-fg-muted">
           {isEdit ? "API key (leave blank to keep current)" : "API key"}
-        </span>
-        <input
+        </Label>
+        <Input
           required={!isEdit}
           type="password"
           autoComplete="off"
@@ -165,12 +167,12 @@ export function LlmProviderForm(props: Props) {
             </>
           )}
         </p>
-      </label>
+      </Field>
 
       <div className="flex gap-3">
-        <label className="flex flex-1 flex-col gap-1">
-          <span className="text-xs text-fg-muted">{isEdit ? "Model" : "Model (optional)"}</span>
-          <input
+        <Field className="flex flex-1 flex-col gap-1">
+          <Label className="text-xs text-fg-muted">{isEdit ? "Model" : "Model (optional)"}</Label>
+          <Input
             value={model}
             onChange={(e) => setModel(e.target.value)}
             placeholder="gpt-5"
@@ -190,12 +192,12 @@ export function LlmProviderForm(props: Props) {
               </>
             )}
           </p>
-        </label>
-        <label className="flex flex-1 flex-col gap-1">
-          <span className="text-xs text-fg-muted">
+        </Field>
+        <Field className="flex flex-1 flex-col gap-1">
+          <Label className="text-xs text-fg-muted">
             {isEdit ? "Base URL" : "Base URL (optional)"}
-          </span>
-          <input
+          </Label>
+          <Input
             value={baseUrl}
             onChange={(e) => setBaseUrl(e.target.value)}
             placeholder="https://api.openai.com/v1"
@@ -205,13 +207,13 @@ export function LlmProviderForm(props: Props) {
             Only set for non-vanilla endpoints — Azure OpenAI, an internal proxy, or a self-hosted
             Ollama. Blank uses the vendor's public endpoint.
           </p>
-        </label>
+        </Field>
       </div>
 
       <div className="flex gap-3">
-        <label className="flex flex-1 flex-col gap-1">
-          <span className="text-xs text-fg-muted">Input price ($ / Mtok)</span>
-          <input
+        <Field className="flex flex-1 flex-col gap-1">
+          <Label className="text-xs text-fg-muted">Input price ($ / Mtok)</Label>
+          <Input
             type="text"
             inputMode="decimal"
             value={inputPrice}
@@ -219,10 +221,10 @@ export function LlmProviderForm(props: Props) {
             placeholder="2.00"
             className={fieldClass}
           />
-        </label>
-        <label className="flex flex-1 flex-col gap-1">
-          <span className="text-xs text-fg-muted">Output price ($ / Mtok)</span>
-          <input
+        </Field>
+        <Field className="flex flex-1 flex-col gap-1">
+          <Label className="text-xs text-fg-muted">Output price ($ / Mtok)</Label>
+          <Input
             type="text"
             inputMode="decimal"
             value={outputPrice}
@@ -230,7 +232,7 @@ export function LlmProviderForm(props: Props) {
             placeholder="8.00"
             className={fieldClass}
           />
-        </label>
+        </Field>
       </div>
       <p className="-mt-2 text-xs text-fg-muted">
         USD per million tokens — paste the vendor's published rate as-is
@@ -248,13 +250,12 @@ export function LlmProviderForm(props: Props) {
 
       {!isEdit ? (
         <div className="flex flex-col gap-1">
-          <Toggle
-            inline
-            size="muted"
-            checked={isDefault}
-            onChange={setIsDefault}
-            label="Make this the global default"
-          />
+          <Field className="inline-flex items-center gap-2 text-xs text-fg-muted">
+            <Switch checked={isDefault} onChange={setIsDefault} className={switchTrackClass}>
+              <span aria-hidden className={switchThumbClass} />
+            </Switch>
+            <Label>Make this the global default</Label>
+          </Field>
           <p className="text-xs text-fg-muted">
             Becomes the fallback used by any project that hasn't picked its own LLM.
             Per-conversation overrides still win.

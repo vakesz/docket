@@ -1,14 +1,16 @@
 "use client";
 
+import { Field, Input, Label, Switch, Textarea } from "@headlessui/react";
 import { useEffect, useState } from "react";
 import {
   fieldClass,
   fieldMonoClass,
   primaryButtonClass,
   secondaryButtonClass,
+  switchThumbClass,
+  switchTrackClass,
 } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
-import { Toggle } from "@/ui/primitives/toggle";
 
 /**
  * Per-project knobs for the agent's web_fetch tool.
@@ -67,12 +69,17 @@ export function WebFetchPanel({ projectId }: { projectId: string }) {
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <Toggle
-          checked={enabled}
-          disabled={save.isPending}
-          onChange={setEnabled}
-          label="Allow agent to fetch web pages"
-        />
+        <Field className="flex items-center gap-2 text-sm text-fg">
+          <Switch
+            checked={enabled}
+            disabled={save.isPending}
+            onChange={setEnabled}
+            className={switchTrackClass}
+          >
+            <span aria-hidden className={switchThumbClass} />
+          </Switch>
+          <Label>Allow agent to fetch web pages</Label>
+        </Field>
         <p className="text-xs text-fg-muted">
           When on, the agent can call web_fetch to read public URLs (RFCs, docs, changelogs).
           Private IPs and cloud metadata endpoints are blocked regardless of this flag.
@@ -88,7 +95,7 @@ export function WebFetchPanel({ projectId }: { projectId: string }) {
           <code className="rounded bg-surface-alt px-1 py-0.5 font-mono">docs.python.org</code>).
           Leave empty to let the agent reach any public host.
         </p>
-        <textarea
+        <Textarea
           id="web-fetch-hosts"
           value={hostsText}
           disabled={save.isPending}
@@ -107,7 +114,7 @@ export function WebFetchPanel({ projectId }: { projectId: string }) {
           Larger payloads are truncated and reported as denied_size. Range: 64 000 to 8 000 000.
           Default 1 000 000 (~1 MB).
         </p>
-        <input
+        <Input
           id="web-fetch-max-bytes"
           type="number"
           inputMode="numeric"

@@ -1,5 +1,6 @@
 "use client";
 
+import { Textarea } from "@headlessui/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { metaLabelFaintClass, microCapsButtonClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
@@ -308,7 +309,7 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
             ? "Pick from the card above — or type free text and it'll be sent as your answer."
             : "Ask the agent to comment, transition, or rewrite — changes appear as cards to confirm."}
         </p>
-        <textarea
+        <Textarea
           ref={promptRef}
           value={draft}
           disabled={inFlight}

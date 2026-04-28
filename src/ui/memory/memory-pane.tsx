@@ -1,9 +1,15 @@
 "use client";
 
+import { Button, Input, Textarea } from "@headlessui/react";
 import { useState } from "react";
-import { emptyStateClass, errorMessageClass, fieldClass } from "@/lib/form-classes";
+import {
+  emptyStateClass,
+  errorMessageClass,
+  fieldClass,
+  xsAccentButtonClass,
+  xsDangerButtonClass,
+} from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
-import { Button } from "@/ui/primitives/button";
 import { ProposalDialog } from "@/ui/proposals/proposal-dialog";
 
 /**
@@ -55,7 +61,7 @@ export function MemoryPane({ projectId }: { projectId: string }) {
           void submitNew();
         }}
       >
-        <input
+        <Input
           type="text"
           value={draftTitle}
           onChange={(e) => setDraftTitle(e.target.value)}
@@ -63,7 +69,7 @@ export function MemoryPane({ projectId }: { projectId: string }) {
           className={fieldClass}
           maxLength={200}
         />
-        <textarea
+        <Textarea
           value={draftBody}
           onChange={(e) => setDraftBody(e.target.value)}
           placeholder="Body (markdown)"
@@ -73,7 +79,11 @@ export function MemoryPane({ projectId }: { projectId: string }) {
         />
         <div className="flex items-center justify-between">
           <span className="text-xs text-fg-muted">{list.data?.length ?? 0} entries</span>
-          <Button type="submit" size="sm" disabled={proposeWrite.isPending || !draftTitle.trim()}>
+          <Button
+            type="submit"
+            disabled={proposeWrite.isPending || !draftTitle.trim()}
+            className={xsAccentButtonClass}
+          >
             {proposeWrite.isPending ? "Staging…" : "Propose write"}
           </Button>
         </div>
@@ -106,10 +116,9 @@ export function MemoryPane({ projectId }: { projectId: string }) {
               </div>
               <Button
                 type="button"
-                variant="destructive"
-                size="sm"
                 disabled={proposeDelete.isPending}
                 onClick={() => void submitDelete(m.id)}
+                className={xsDangerButtonClass}
               >
                 Delete
               </Button>

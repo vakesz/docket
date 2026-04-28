@@ -1,9 +1,14 @@
 "use client";
 
+import { Field, Label, Switch } from "@headlessui/react";
 import { useEffect, useMemo, useState } from "react";
-import { primaryButtonClass, secondaryButtonClass } from "@/lib/form-classes";
+import {
+  primaryButtonClass,
+  secondaryButtonClass,
+  switchThumbClass,
+  switchTrackClass,
+} from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
-import { Toggle } from "@/ui/primitives/toggle";
 
 /**
  * Per-project auto-accept policy.
@@ -97,12 +102,17 @@ export function AutoAcceptPanel({ projectId }: { projectId: string }) {
           const checked = selected.has(k.key);
           return (
             <li key={k.key} className="flex flex-col gap-1">
-              <Toggle
-                checked={checked}
-                disabled={save.isPending}
-                onChange={() => toggle(k.key)}
-                label={k.label}
-              />
+              <Field className="flex items-center gap-2 text-sm text-fg">
+                <Switch
+                  checked={checked}
+                  disabled={save.isPending}
+                  onChange={() => toggle(k.key)}
+                  className={switchTrackClass}
+                >
+                  <span aria-hidden className={switchThumbClass} />
+                </Switch>
+                <Label>{k.label}</Label>
+              </Field>
               <p className="ml-6 text-xs text-fg-muted">{k.hint}</p>
             </li>
           );

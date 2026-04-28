@@ -1,16 +1,16 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { trpc } from "@/lib/trpc-client";
-import { Button } from "@/ui/primitives/button";
 import {
+  Button,
+  Description,
   Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
+  DialogBackdrop,
+  DialogPanel,
   DialogTitle,
-} from "@/ui/primitives/dialog";
+} from "@headlessui/react";
+import { useRouter } from "next/navigation";
+import { ghostButtonClass, primaryButtonClass } from "@/lib/form-classes";
+import { trpc } from "@/lib/trpc-client";
 import { ProposalDiffView } from "@/ui/proposals/proposal-diff-view";
 
 /**
@@ -65,64 +65,69 @@ export function ProposalDialog({
   return (
     <Dialog
       open={open}
-      onOpenChange={(next) => {
-        if (!next && !busy) {
-          onClose();
-        }
+      onClose={() => {
+        if (!busy) onClose();
       }}
+      className="relative z-50"
     >
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Confirm proposal</DialogTitle>
-          <DialogDescription>
-            Review the change before it&rsquo;s sent to the provider. Nothing has been written yet.
-          </DialogDescription>
-        </DialogHeader>
+      <DialogBackdrop className="fixed inset-0 bg-black/50" />
+      <div className="fixed inset-0 flex w-screen items-center justify-center p-4">
+        <DialogPanel className="grid w-full max-w-2xl gap-4 rounded-lg border border-border bg-surface p-6 text-fg shadow-lg">
+          <div className="flex flex-col gap-1.5">
+            <DialogTitle className="text-lg font-semibold leading-none tracking-tight">
+              Confirm proposal
+            </DialogTitle>
+            <Description className="text-sm text-fg-muted">
+              Review the change before it&rsquo;s sent to the provider. Nothing has been written
+              yet.
+            </Description>
+          </div>
 
-        <div className="min-h-[6rem]">
-          {query.isPending ? (
-            <p className="text-sm text-fg-muted">Loading proposal…</p>
-          ) : query.data ? (
-            <>
-              {query.data.row.advisory ? (
-                <p className="mb-3 rounded-md border border-warning/40 bg-warning-bg/40 p-2 text-xs text-warning-fg">
-                  Heads up: {query.data.row.advisory}
-                </p>
-              ) : null}
-              <ProposalDiffView diff={query.data.diff} />
-            </>
+          <div className="min-h-[6rem]">
+            {query.isPending ? (
+              <p className="text-sm text-fg-muted">Loading proposal…</p>
+            ) : query.data ? (
+              <>
+                {query.data.row.advisory ? (
+                  <p className="mb-3 rounded-md border border-warning/40 bg-warning-bg/40 p-2 text-xs text-warning-fg">
+                    Heads up: {query.data.row.advisory}
+                  </p>
+                ) : null}
+                <ProposalDiffView diff={query.data.diff} />
+              </>
+            ) : null}
+          </div>
+
+          {errorMessage ? (
+            <p className="rounded-md border border-danger/40 bg-danger-bg/40 p-2 text-xs text-danger-fg">
+              {errorMessage}
+            </p>
           ) : null}
-        </div>
 
-        {errorMessage ? (
-          <p className="rounded-md border border-danger/40 bg-danger-bg/40 p-2 text-xs text-danger-fg">
-            {errorMessage}
-          </p>
-        ) : null}
-
-        <DialogFooter>
-          <Button
-            variant="ghost"
-            disabled={busy || !proposalId}
-            onClick={() => {
-              if (!proposalId) return;
-              reject.mutate({ projectId, proposalId });
-            }}
-          >
-            {reject.isPending ? "Rejecting…" : "Reject"}
-          </Button>
-          <Button
-            variant="default"
-            disabled={busy || !proposalId || !query.data}
-            onClick={() => {
-              if (!proposalId) return;
-              confirm.mutate({ projectId, proposalId });
-            }}
-          >
-            {confirm.isPending ? "Confirming…" : "Confirm"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
+          <div className="flex flex-row justify-end gap-2">
+            <Button
+              disabled={busy || !proposalId}
+              onClick={() => {
+                if (!proposalId) return;
+                reject.mutate({ projectId, proposalId });
+              }}
+              className={ghostButtonClass}
+            >
+              {reject.isPending ? "Rejecting…" : "Reject"}
+            </Button>
+            <Button
+              disabled={busy || !proposalId || !query.data}
+              onClick={() => {
+                if (!proposalId) return;
+                confirm.mutate({ projectId, proposalId });
+              }}
+              className={primaryButtonClass}
+            >
+              {confirm.isPending ? "Confirming…" : "Confirm"}
+            </Button>
+          </div>
+        </DialogPanel>
+      </div>
     </Dialog>
   );
 }

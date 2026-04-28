@@ -1,5 +1,6 @@
 "use client";
 
+import { Input } from "@headlessui/react";
 import { useEffect, useState } from "react";
 import {
   dangerButtonClass,
@@ -84,7 +85,7 @@ export function BudgetAuditPanel() {
         ) : null}
         <div className="flex items-center gap-2">
           <span className="text-xs text-fg-muted">$</span>
-          <input
+          <Input
             type="number"
             inputMode="decimal"
             min={0}
@@ -134,7 +135,7 @@ export function BudgetAuditPanel() {
             "Audit rows older than this are eligible for pruning. 0 disables pruning entirely."}
         </p>
         <div className="flex items-center gap-2">
-          <input
+          <Input
             type="number"
             min={0}
             max={3650}

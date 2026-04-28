@@ -1,7 +1,7 @@
 "use client";
-import { fieldClass } from "@/lib/form-classes";
+import { Field, Input, Label, Switch } from "@headlessui/react";
+import { fieldClass, switchThumbClass, switchTrackClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
-import { Toggle } from "@/ui/primitives/toggle";
 
 /**
  * Deployment-wide knobs that aren't tied to a specific provider row.
@@ -36,7 +36,7 @@ export function WorkspacePanel() {
           {stale?.description ??
             "Backlog rows tint amber once an item has been untouched this long, and red at 2x. Set to 0 to disable the freshness tint entirely."}
         </p>
-        <input
+        <Input
           type="number"
           min={0}
           max={3650}
@@ -63,18 +63,22 @@ export function WorkspacePanel() {
           {readOnly?.description ??
             "When on, every mutation route — including proposal confirms — is blocked. Reads stay open. Flip on for maintenance windows."}
         </p>
-        <Toggle
-          inline
-          checked={readOnly?.value === true}
-          disabled={list.isPending || update.isPending}
-          onChange={(next) =>
-            update.mutate({
-              key: "app.read-only" as never,
-              value: next,
-            })
-          }
-          label={readOnly?.value === true ? "Enabled — all writes blocked" : "Disabled"}
-        />
+        <Field className="inline-flex items-center gap-2 text-sm text-fg">
+          <Switch
+            checked={readOnly?.value === true}
+            disabled={list.isPending || update.isPending}
+            onChange={(next) =>
+              update.mutate({
+                key: "app.read-only" as never,
+                value: next,
+              })
+            }
+            className={switchTrackClass}
+          >
+            <span aria-hidden className={switchThumbClass} />
+          </Switch>
+          <Label>{readOnly?.value === true ? "Enabled — all writes blocked" : "Disabled"}</Label>
+        </Field>
       </div>
 
       {update.error ? <p className="text-xs text-danger-fg">{update.error.message}</p> : null}

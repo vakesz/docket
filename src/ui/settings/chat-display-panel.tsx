@@ -2,6 +2,7 @@
 
 // UI-only preference — see src/lib/ui-prefs.ts. Deliberately not in SETTINGS_CATALOG.
 
+import { Description, Field, Label, Radio, RadioGroup } from "@headlessui/react";
 import { type ToolDisplayMode, useToolDisplayMode } from "@/lib/ui-prefs";
 
 const OPTIONS: { value: ToolDisplayMode; label: string; helper: string }[] = [
@@ -34,33 +35,36 @@ export function ChatDisplayPanel() {
         </p>
       </header>
 
-      <fieldset className="flex flex-col gap-3">
-        <legend className="text-sm font-medium text-fg">Tool calls in chat</legend>
+      <RadioGroup
+        value={mode}
+        onChange={setMode}
+        aria-label="Tool calls in chat"
+        className="flex flex-col gap-3"
+      >
+        <Label className="text-sm font-medium text-fg">Tool calls in chat</Label>
         <p className="text-xs text-fg-muted">
           Controls how tool invocations the agent makes appear inside the chat transcript.
         </p>
         <div className="flex flex-col gap-2">
           {OPTIONS.map((opt) => (
-            <label
+            <Field
               key={opt.value}
               className="flex items-start gap-3 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg hover:bg-surface-alt"
             >
-              <input
-                type="radio"
-                name="tool-display-mode"
+              <Radio
                 value={opt.value}
-                checked={mode === opt.value}
-                onChange={() => setMode(opt.value)}
-                className="mt-1"
-              />
+                className="group mt-1 grid size-4 shrink-0 place-items-center rounded-full border border-border bg-surface data-[checked]:border-accent data-[checked]:bg-accent"
+              >
+                <span className="size-1.5 rounded-full bg-surface opacity-0 group-data-[checked]:opacity-100" />
+              </Radio>
               <span className="flex flex-col">
-                <span className="font-medium text-fg">{opt.label}</span>
-                <span className="text-xs text-fg-muted">{opt.helper}</span>
+                <Label className="font-medium text-fg">{opt.label}</Label>
+                <Description className="text-xs text-fg-muted">{opt.helper}</Description>
               </span>
-            </label>
+            </Field>
           ))}
         </div>
-      </fieldset>
+      </RadioGroup>
     </div>
   );
 }

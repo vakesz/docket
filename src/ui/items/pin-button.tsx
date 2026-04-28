@@ -1,8 +1,14 @@
 "use client";
 
+import { Button } from "@headlessui/react";
 import { Pin, PinOff } from "lucide-react";
 import { trpc } from "@/lib/trpc-client";
-import { Button } from "@/ui/primitives/button";
+import { cn } from "@/lib/utils";
+
+const baseClass =
+  "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-60";
+const inactiveClass = "border-border bg-surface text-fg hover:bg-surface-alt";
+const activeClass = "border-border bg-surface-alt text-fg hover:bg-surface";
 
 export function PinButton({
   projectId,
@@ -31,11 +37,10 @@ export function PinButton({
   return (
     <Button
       type="button"
-      variant={pinned ? "secondary" : "outline"}
-      size="xs"
       aria-pressed={pinned}
       disabled={busy}
       title={busy ? "…" : label}
+      className={cn(baseClass, pinned ? activeClass : inactiveClass)}
       onClick={() => {
         if (pinned) {
           unpin.mutate({ projectId, providerItemId });
@@ -44,7 +49,7 @@ export function PinButton({
         }
       }}
     >
-      <Icon aria-hidden="true" />
+      <Icon aria-hidden="true" className="size-3" />
       {busy ? "…" : label}
     </Button>
   );

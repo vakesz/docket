@@ -1,9 +1,10 @@
 "use client";
 
+import { Button } from "@headlessui/react";
 import { RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { xsBorderButtonClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
-import { Button } from "@/ui/primitives/button";
 
 /**
  * Header button that re-syncs the open item from its provider — fresh body,
@@ -26,14 +27,16 @@ export function RefreshItemButton({ projectId, itemId }: { projectId: string; it
   return (
     <Button
       type="button"
-      variant="outline"
-      size="xs"
       disabled={refresh.isPending}
       onClick={() => refresh.mutate({ projectId, itemId })}
       title={refresh.isPending ? "Refreshing…" : "Refresh from provider"}
       aria-label="Refresh item"
+      className={xsBorderButtonClass}
     >
-      <RefreshCw aria-hidden="true" className={refresh.isPending ? "animate-spin" : undefined} />
+      <RefreshCw
+        aria-hidden="true"
+        className={`size-3 ${refresh.isPending ? "animate-spin" : ""}`}
+      />
       Refresh
     </Button>
   );

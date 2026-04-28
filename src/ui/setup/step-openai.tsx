@@ -1,5 +1,6 @@
 "use client";
 
+import { Field, Input, Label } from "@headlessui/react";
 import { fieldClass, fieldMonoClass } from "@/lib/form-classes";
 import { ProviderToggle } from "@/ui/setup/provider-toggle";
 
@@ -67,9 +68,9 @@ export function StepOpenai({
         </code>
       </aside>
 
-      <label className="flex flex-col gap-1">
-        <span className="text-xs text-fg-muted">Display label</span>
-        <input
+      <Field className="flex flex-col gap-1">
+        <Label className="text-xs text-fg-muted">Display label</Label>
+        <Input
           value={state.label}
           onChange={(e) => handlers.setLabel(e.target.value)}
           placeholder="OpenAI"
@@ -80,11 +81,11 @@ export function StepOpenai({
         <p className="text-xs text-fg-faint">
           Shown in the model picker. Useful if you'll add multiple OpenAI-compatible endpoints.
         </p>
-      </label>
+      </Field>
 
-      <label className="flex flex-col gap-1">
-        <span className="text-xs text-fg-muted">API key</span>
-        <input
+      <Field className="flex flex-col gap-1">
+        <Label className="text-xs text-fg-muted">API key</Label>
+        <Input
           type="password"
           value={state.apiKey}
           onChange={(e) => handlers.setApiKey(e.target.value)}
@@ -97,12 +98,12 @@ export function StepOpenai({
           OpenAI keys start with <code className="font-mono">sk-</code> /{" "}
           <code className="font-mono">sk-proj-</code>. Stored AES-GCM encrypted.
         </p>
-      </label>
+      </Field>
 
       <div className="flex gap-3">
-        <label className="flex flex-1 flex-col gap-1">
-          <span className="text-xs text-fg-muted">Model</span>
-          <input
+        <Field className="flex flex-1 flex-col gap-1">
+          <Label className="text-xs text-fg-muted">Model</Label>
+          <Input
             value={state.model}
             onChange={(e) => handlers.setModel(e.target.value)}
             placeholder="gpt-5"
@@ -120,10 +121,10 @@ export function StepOpenai({
             Pick a suggestion or type any deployment name (Azure Foundry users — paste your
             deployment id).
           </p>
-        </label>
-        <label className="flex flex-1 flex-col gap-1">
-          <span className="text-xs text-fg-muted">Base URL (optional)</span>
-          <input
+        </Field>
+        <Field className="flex flex-1 flex-col gap-1">
+          <Label className="text-xs text-fg-muted">Base URL (optional)</Label>
+          <Input
             value={state.baseUrl}
             onChange={(e) => handlers.setBaseUrl(e.target.value)}
             placeholder="https://api.openai.com/v1"
@@ -133,13 +134,13 @@ export function StepOpenai({
           <p className="text-xs text-fg-faint">
             Blank uses OpenAI's public endpoint. Set for Azure OpenAI / Foundry / Ollama / a proxy.
           </p>
-        </label>
+        </Field>
       </div>
 
       <div className="flex gap-3">
-        <label className="flex flex-1 flex-col gap-1">
-          <span className="text-xs text-fg-muted">Input price ($ / Mtok)</span>
-          <input
+        <Field className="flex flex-1 flex-col gap-1">
+          <Label className="text-xs text-fg-muted">Input price ($ / Mtok)</Label>
+          <Input
             type="text"
             inputMode="decimal"
             value={state.inputPrice}
@@ -148,10 +149,10 @@ export function StepOpenai({
             className={fieldClass}
             autoComplete="off"
           />
-        </label>
-        <label className="flex flex-1 flex-col gap-1">
-          <span className="text-xs text-fg-muted">Output price ($ / Mtok)</span>
-          <input
+        </Field>
+        <Field className="flex flex-1 flex-col gap-1">
+          <Label className="text-xs text-fg-muted">Output price ($ / Mtok)</Label>
+          <Input
             type="text"
             inputMode="decimal"
             value={state.outputPrice}
@@ -160,7 +161,7 @@ export function StepOpenai({
             className={fieldClass}
             autoComplete="off"
           />
-        </label>
+        </Field>
       </div>
       <p className="-mt-2 text-xs text-fg-faint">
         USD per million tokens — paste the vendor's published rate as-is. Leave blank if unknown;

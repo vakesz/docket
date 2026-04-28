@@ -1,5 +1,6 @@
 "use client";
 
+import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from "@headlessui/react";
 import { X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
@@ -92,68 +93,70 @@ export function ItemsShellLayout({
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:hidden">
         <div className="min-h-0 flex-1 overflow-hidden">{middle}</div>
-
-        {backlog.open ? (
-          <MobileDrawer side="left" onClose={() => backlog.setOpen(false)} label="Backlog">
-            {left}
-          </MobileDrawer>
-        ) : null}
-
-        {showRight && chat.open ? (
-          <MobileDrawer side="right" onClose={() => chat.setOpen(false)} label="Chat">
-            {right}
-          </MobileDrawer>
-        ) : null}
       </div>
+
+      <MobileDrawer
+        open={backlog.open}
+        side="left"
+        onClose={() => backlog.setOpen(false)}
+        label="Backlog"
+      >
+        {left}
+      </MobileDrawer>
+
+      {showRight ? (
+        <MobileDrawer
+          open={chat.open}
+          side="right"
+          onClose={() => chat.setOpen(false)}
+          label="Chat"
+        >
+          {right}
+        </MobileDrawer>
+      ) : null}
     </>
   );
 }
 
 function MobileDrawer({
+  open,
   side,
   onClose,
   label,
   children,
 }: {
+  open: boolean;
   side: "left" | "right";
   onClose: () => void;
   label: string;
   children: React.ReactNode;
 }) {
   return (
-    <div
-      className="fixed inset-0 z-40 lg:hidden"
-      role="dialog"
-      aria-modal="true"
-      aria-label={label}
-    >
-      <button
-        type="button"
-        aria-label={`Close ${label.toLowerCase()}`}
-        className="absolute inset-0 bg-fg/30 backdrop-blur-sm"
-        onClick={onClose}
-      />
-      <aside
-        className={cn(
-          "absolute inset-y-0 flex w-[88vw] max-w-[420px] flex-col overflow-hidden border-border bg-bg shadow-xl",
-          side === "left" ? "left-0 border-r" : "right-0 border-l",
-        )}
-      >
-        <div className="flex items-center justify-between border-b border-border bg-surface px-3 py-2">
-          <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-fg-muted">
-            {label}
-          </span>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={`Close ${label.toLowerCase()}`}
-            className="rounded-md p-1 text-fg-muted hover:bg-surface-alt hover:text-fg"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
-      </aside>
-    </div>
+    <Dialog open={open} onClose={onClose} className="relative z-40 lg:hidden">
+      <DialogBackdrop className="fixed inset-0 bg-fg/30 backdrop-blur-sm" />
+      <div className="fixed inset-0 flex">
+        <DialogPanel
+          className={cn(
+            "absolute inset-y-0 flex w-[88vw] max-w-[420px] flex-col overflow-hidden border-border bg-bg shadow-xl",
+            side === "left" ? "left-0 border-r" : "right-0 border-l",
+          )}
+        >
+          <div className="flex items-center justify-between border-b border-border bg-surface px-3 py-2">
+            <DialogTitle className="font-mono text-[11px] uppercase tracking-[0.18em] text-fg-muted">
+              {label}
+            </DialogTitle>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={`Close ${label.toLowerCase()}`}
+              className="rounded-md p-1 text-fg-muted hover:bg-surface-alt hover:text-fg"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+        </DialogPanel>
+      </div>
+    </Dialog>
   );
 }

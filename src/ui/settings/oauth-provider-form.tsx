@@ -1,4 +1,5 @@
 "use client";
+import { Field, Input, Label } from "@headlessui/react";
 import { type FormEvent, useId, useState } from "react";
 import {
   errorMessageClass,
@@ -88,30 +89,30 @@ export function OauthProviderForm() {
             ))}
           </SelectField>
         </div>
-        <label className="flex flex-1 flex-col gap-1">
-          <span className="text-xs text-fg-muted">Label</span>
-          <input
+        <Field className="flex flex-1 flex-col gap-1">
+          <Label className="text-xs text-fg-muted">Label</Label>
+          <Input
             required
             value={label}
             onChange={(e) => setLabel(e.target.value)}
             className={fieldClass}
           />
-        </label>
+        </Field>
       </div>
 
       <div className="flex gap-3">
-        <label className="flex flex-1 flex-col gap-1">
-          <span className="text-xs text-fg-muted">Client ID</span>
-          <input
+        <Field className="flex flex-1 flex-col gap-1">
+          <Label className="text-xs text-fg-muted">Client ID</Label>
+          <Input
             required
             value={clientId}
             onChange={(e) => setClientId(e.target.value)}
             className={fieldMonoClass}
           />
-        </label>
-        <label className="flex flex-1 flex-col gap-1">
-          <span className="text-xs text-fg-muted">Client secret</span>
-          <input
+        </Field>
+        <Field className="flex flex-1 flex-col gap-1">
+          <Label className="text-xs text-fg-muted">Client secret</Label>
+          <Input
             required
             type="password"
             autoComplete="off"
@@ -119,12 +120,12 @@ export function OauthProviderForm() {
             onChange={(e) => setClientSecret(e.target.value)}
             className={fieldMonoClass}
           />
-        </label>
+        </Field>
       </div>
 
-      <label className="flex flex-col gap-1">
-        <span className="text-xs text-fg-muted">Scopes (space-separated)</span>
-        <input
+      <Field className="flex flex-col gap-1">
+        <Label className="text-xs text-fg-muted">Scopes (space-separated)</Label>
+        <Input
           value={scopes}
           onChange={(e) => setScopes(e.target.value)}
           className={fieldMonoClass}
@@ -132,11 +133,11 @@ export function OauthProviderForm() {
         <p className="text-xs text-fg-muted">
           Pre-filled per kind. Only edit if you need extra capability beyond the defaults.
         </p>
-      </label>
+      </Field>
 
-      <label className="flex flex-col gap-1">
-        <span className="text-xs text-fg-muted">Base URL / tenant (optional)</span>
-        <input
+      <Field className="flex flex-col gap-1">
+        <Label className="text-xs text-fg-muted">Base URL / tenant (optional)</Label>
+        <Input
           value={baseUrl}
           onChange={(e) => setBaseUrl(e.target.value)}
           placeholder={DEFAULTS[kind].baseUrlHint}
@@ -151,7 +152,7 @@ export function OauthProviderForm() {
           <code className="rounded bg-surface-alt px-1 py-0.5 font-mono">github.com</code> /
           multi-tenant <code className="rounded bg-surface-alt px-1 py-0.5 font-mono">common</code>.
         </p>
-      </label>
+      </Field>
 
       {create.error ? <p className={errorMessageClass}>{create.error.message}</p> : null}
 

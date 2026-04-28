@@ -1,10 +1,16 @@
 "use client";
 
+import { Field, Input, Label, Switch } from "@headlessui/react";
 import { useEffect, useState } from "react";
-import { fieldClass, primaryButtonClass, secondaryButtonClass } from "@/lib/form-classes";
+import {
+  fieldClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+  switchThumbClass,
+  switchTrackClass,
+} from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
 import { SelectField } from "@/ui/forms/select-field";
-import { Toggle } from "@/ui/primitives/toggle";
 
 type CompactionStrategy = "summary" | "drop-tools";
 
@@ -154,7 +160,7 @@ export function ProjectLlmPanel({ projectId }: { projectId: string }) {
             0–2. Lower is more deterministic, higher is more creative. Empty falls back to the
             adapter default. Per-request overrides (e.g. tool-mode turns) still win.
           </p>
-          <input
+          <Input
             id="project-llm-temperature"
             type="number"
             inputMode="decimal"
@@ -193,12 +199,17 @@ export function ProjectLlmPanel({ projectId }: { projectId: string }) {
           </p>
         </div>
 
-        <Toggle
-          checked={compactEnabled}
-          disabled={saveSetting.isPending}
-          onChange={setCompactEnabled}
-          label="Auto-compact long conversations"
-        />
+        <Field className="flex items-center gap-2 text-sm text-fg">
+          <Switch
+            checked={compactEnabled}
+            disabled={saveSetting.isPending}
+            onChange={setCompactEnabled}
+            className={switchTrackClass}
+          >
+            <span aria-hidden className={switchThumbClass} />
+          </Switch>
+          <Label>Auto-compact long conversations</Label>
+        </Field>
 
         <div className="flex flex-col gap-2">
           <label htmlFor="compact-threshold" className="text-sm font-medium text-fg">
@@ -208,7 +219,7 @@ export function ProjectLlmPanel({ projectId }: { projectId: string }) {
             Trigger compaction once the live transcript reaches this many estimated tokens (4 chars
             ≈ 1 token). Default 60 000.
           </p>
-          <input
+          <Input
             id="compact-threshold"
             type="number"
             inputMode="numeric"
@@ -229,7 +240,7 @@ export function ProjectLlmPanel({ projectId }: { projectId: string }) {
           <p className="text-xs text-fg-muted">
             How many of the most-recent message turns survive compaction unchanged. 2–50.
           </p>
-          <input
+          <Input
             id="compact-keep"
             type="number"
             inputMode="numeric"

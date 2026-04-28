@@ -1,5 +1,6 @@
 "use client";
 
+import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from "@headlessui/react";
 import { useEffect, useState } from "react";
 import { metaLabelFaintClass } from "@/lib/form-classes";
 import { isMacLike } from "@/lib/platform";
@@ -31,10 +32,6 @@ export function ShortcutHelp() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setOpen(false);
-        return;
-      }
       if (e.key !== "?") return;
       const target = e.target as HTMLElement | null;
       if (target && isEditableTarget(target)) return;
@@ -46,60 +43,53 @@ export function ShortcutHelp() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  if (!open) return null;
-
   const modKey = mac ? "⌘" : "Ctrl";
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: dismissive backdrop; the inner dialog hosts focusable controls.
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-fg/40 p-4"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) setOpen(false);
-      }}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Keyboard shortcuts"
-        className="w-[420px] max-w-full overflow-hidden rounded-lg border border-border bg-surface text-fg shadow-2xl"
-      >
-        <div
-          className={cn(
-            "flex items-center justify-between border-b border-border px-4 py-2",
-            metaLabelFaintClass,
-          )}
-        >
-          <span>Keyboard shortcuts</span>
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            className="rounded px-1 text-fg-muted hover:bg-surface-alt hover:text-fg"
-            aria-label="Close shortcuts"
+    <Dialog open={open} onClose={() => setOpen(false)} className="relative z-50">
+      <DialogBackdrop className="fixed inset-0 bg-fg/40" />
+      <div className="fixed inset-0 flex items-center justify-center p-4">
+        <DialogPanel className="w-[420px] max-w-full overflow-hidden rounded-lg border border-border bg-surface text-fg shadow-2xl">
+          <div
+            className={cn(
+              "flex items-center justify-between border-b border-border px-4 py-2",
+              metaLabelFaintClass,
+            )}
           >
-            Esc
-          </button>
-        </div>
-        <ul className="flex flex-col divide-y divide-border">
-          {SHORTCUTS.map((s) => (
-            <li key={s.label} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
-              <span className="text-fg">{s.label}</span>
-              <span className="flex items-center gap-1">
-                {s.keys.map((k, i) => (
-                  <span
-                    // biome-ignore lint/suspicious/noArrayIndexKey: stable list rendered once.
-                    key={`${s.label}-${i}`}
-                    className="rounded border border-border bg-bg px-1.5 py-0.5 font-mono text-[10px] text-fg-muted"
-                  >
-                    {k === "mod" ? modKey : k}
-                  </span>
-                ))}
-              </span>
-            </li>
-          ))}
-        </ul>
+            <DialogTitle>Keyboard shortcuts</DialogTitle>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="rounded px-1 text-fg-muted hover:bg-surface-alt hover:text-fg"
+              aria-label="Close shortcuts"
+            >
+              Esc
+            </button>
+          </div>
+          <ul className="flex flex-col divide-y divide-border">
+            {SHORTCUTS.map((s) => (
+              <li
+                key={s.label}
+                className="flex items-center justify-between gap-3 px-4 py-2 text-sm"
+              >
+                <span className="text-fg">{s.label}</span>
+                <span className="flex items-center gap-1">
+                  {s.keys.map((k, i) => (
+                    <span
+                      // biome-ignore lint/suspicious/noArrayIndexKey: stable list rendered once.
+                      key={`${s.label}-${i}`}
+                      className="rounded border border-border bg-bg px-1.5 py-0.5 font-mono text-[10px] text-fg-muted"
+                    >
+                      {k === "mod" ? modKey : k}
+                    </span>
+                  ))}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </DialogPanel>
       </div>
-    </div>
+    </Dialog>
   );
 }
 

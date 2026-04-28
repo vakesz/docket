@@ -1,5 +1,6 @@
 "use client";
 
+import { Button, Input, Textarea } from "@headlessui/react";
 import { useState } from "react";
 import {
   badgeClass,
@@ -7,9 +8,11 @@ import {
   errorMessageClass,
   fieldClass,
   fieldMonoClass,
+  xsAccentButtonClass,
+  xsBorderButtonClass,
+  xsDangerButtonClass,
 } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
-import { Button } from "@/ui/primitives/button";
 
 /**
  * MCP servers pane on the project detail page.
@@ -85,7 +88,7 @@ export function McpPane({ projectId }: { projectId: string }) {
       >
         <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
-            <input
+            <Input
               type="text"
               value={draftName}
               onChange={(e) => setDraftName(e.target.value)}
@@ -96,7 +99,7 @@ export function McpPane({ projectId }: { projectId: string }) {
             />
           </div>
           <div className="min-w-0 flex-[2]">
-            <input
+            <Input
               type="url"
               value={draftUrl}
               onChange={(e) => setDraftUrl(e.target.value)}
@@ -106,7 +109,7 @@ export function McpPane({ projectId }: { projectId: string }) {
             />
           </div>
         </div>
-        <textarea
+        <Textarea
           value={draftHeaders}
           onChange={(e) => setDraftHeaders(e.target.value)}
           placeholder='Optional headers JSON, e.g. {"Authorization": "Bearer ..."}'
@@ -122,8 +125,8 @@ export function McpPane({ projectId }: { projectId: string }) {
           <span className="text-xs text-fg-muted">{list.data?.length ?? 0} configured</span>
           <Button
             type="submit"
-            size="sm"
             disabled={create.isPending || !draftName.trim() || !draftUrl.trim()}
+            className={xsAccentButtonClass}
           >
             {create.isPending ? "Adding…" : "Add server"}
           </Button>
@@ -166,8 +169,6 @@ export function McpPane({ projectId }: { projectId: string }) {
                 <div className="flex flex-col items-end gap-1">
                   <Button
                     type="button"
-                    variant="outline"
-                    size="sm"
                     disabled={update.isPending}
                     onClick={() =>
                       void update.mutateAsync({
@@ -176,15 +177,15 @@ export function McpPane({ projectId }: { projectId: string }) {
                         enabled: !s.enabled,
                       })
                     }
+                    className={xsBorderButtonClass}
                   >
                     {s.enabled ? "Disable" : "Enable"}
                   </Button>
                   <Button
                     type="button"
-                    variant="destructive"
-                    size="sm"
                     disabled={remove.isPending}
                     onClick={() => void remove.mutateAsync({ projectId, serverId: s.id })}
+                    className={xsDangerButtonClass}
                   >
                     Delete
                   </Button>

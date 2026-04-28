@@ -1,5 +1,6 @@
 "use client";
 
+import { Field, Input, Label } from "@headlessui/react";
 import { fieldClass, fieldMonoClass } from "@/lib/form-classes";
 import { ProviderToggle } from "@/ui/setup/provider-toggle";
 
@@ -55,9 +56,9 @@ export function StepGithub({
         </>
       }
     >
-      <label className="flex flex-col gap-1">
-        <span className="text-xs text-fg-muted">Display label</span>
-        <input
+      <Field className="flex flex-col gap-1">
+        <Label className="text-xs text-fg-muted">Display label</Label>
+        <Input
           value={state.label}
           onChange={(e) => handlers.setLabel(e.target.value)}
           placeholder="GitHub"
@@ -68,12 +69,12 @@ export function StepGithub({
         <p className="text-xs text-fg-faint">
           Shown on the sign-in button. Useful when running multiple GitHub Enterprise instances.
         </p>
-      </label>
+      </Field>
 
       <div className="flex gap-3">
-        <label className="flex flex-1 flex-col gap-1">
-          <span className="text-xs text-fg-muted">Client ID</span>
-          <input
+        <Field className="flex flex-1 flex-col gap-1">
+          <Label className="text-xs text-fg-muted">Client ID</Label>
+          <Input
             value={state.clientId}
             onChange={(e) => handlers.setClientId(e.target.value)}
             placeholder="Iv23liab1cd2EFG3hijK"
@@ -85,10 +86,10 @@ export function StepGithub({
             20 chars, starts with <code className="font-mono">Iv1.</code> (legacy) or{" "}
             <code className="font-mono">Iv23li</code> (new apps).
           </p>
-        </label>
-        <label className="flex flex-1 flex-col gap-1">
-          <span className="text-xs text-fg-muted">Client secret</span>
-          <input
+        </Field>
+        <Field className="flex flex-1 flex-col gap-1">
+          <Label className="text-xs text-fg-muted">Client secret</Label>
+          <Input
             type="password"
             value={state.clientSecret}
             onChange={(e) => handlers.setClientSecret(e.target.value)}
@@ -100,7 +101,7 @@ export function StepGithub({
           <p className="text-xs text-fg-faint">
             40-char hex string from the OAuth App page. Stored AES-GCM encrypted.
           </p>
-        </label>
+        </Field>
       </div>
 
       <details className="rounded-xl border border-border bg-surface p-3">
@@ -108,9 +109,9 @@ export function StepGithub({
           Advanced
         </summary>
         <div className="mt-3 flex flex-col gap-3">
-          <label className="flex flex-col gap-1">
-            <span className="text-xs text-fg-muted">Scopes (space-separated)</span>
-            <input
+          <Field className="flex flex-col gap-1">
+            <Label className="text-xs text-fg-muted">Scopes (space-separated)</Label>
+            <Input
               value={state.scopes}
               onChange={(e) => handlers.setScopes(e.target.value)}
               className={fieldMonoClass}
@@ -119,10 +120,10 @@ export function StepGithub({
             <p className="text-xs text-fg-faint">
               Default covers sign-in + repo access. Trim if you only need read access.
             </p>
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-xs text-fg-muted">Enterprise base URL</span>
-            <input
+          </Field>
+          <Field className="flex flex-col gap-1">
+            <Label className="text-xs text-fg-muted">Enterprise base URL</Label>
+            <Input
               value={state.baseUrl}
               onChange={(e) => handlers.setBaseUrl(e.target.value)}
               placeholder="https://github.example.com"
@@ -132,7 +133,7 @@ export function StepGithub({
             <p className="text-xs text-fg-faint">
               Leave blank for github.com. Only fill in for GitHub Enterprise Server.
             </p>
-          </label>
+          </Field>
         </div>
       </details>
     </ProviderToggle>

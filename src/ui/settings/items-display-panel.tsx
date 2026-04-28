@@ -2,9 +2,9 @@
 
 // UI-only preference — see src/lib/ui-prefs.ts. Deliberately not in SETTINGS_CATALOG.
 
-import { fieldClass } from "@/lib/form-classes";
+import { Field, Input, Label, Switch } from "@headlessui/react";
+import { fieldClass, switchThumbClass, switchTrackClass } from "@/lib/form-classes";
 import { RECENT_LIMIT_MAX, useRecentEnabled, useRecentLimit } from "@/lib/ui-prefs";
-import { Toggle } from "@/ui/primitives/toggle";
 
 export function ItemsDisplayPanel() {
   const [limit, setLimit] = useRecentLimit();
@@ -21,17 +21,18 @@ export function ItemsDisplayPanel() {
 
       <fieldset className="flex flex-col gap-3">
         <legend className="text-sm font-medium text-fg">Recently viewed</legend>
-        <Toggle
-          checked={enabled}
-          onChange={setEnabled}
-          label="Show recently-viewed items above the backlog"
-        />
+        <Field className="flex items-center gap-2 text-sm text-fg">
+          <Switch checked={enabled} onChange={setEnabled} className={switchTrackClass}>
+            <span aria-hidden className={switchThumbClass} />
+          </Switch>
+          <Label>Show recently-viewed items above the backlog</Label>
+        </Field>
         <p className="text-xs text-fg-muted">
           Pin recently-opened items to the top of the backlog so you can hop back without scrolling.
           Maximum {RECENT_LIMIT_MAX}.
         </p>
         <div className="flex items-center gap-3">
-          <input
+          <Input
             type="number"
             min={0}
             max={RECENT_LIMIT_MAX}

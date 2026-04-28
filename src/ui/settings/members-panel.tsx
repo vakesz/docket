@@ -1,5 +1,6 @@
 "use client";
 
+import { Input } from "@headlessui/react";
 import { useState } from "react";
 import {
   fieldClass,
@@ -63,7 +64,7 @@ export function MembersPanel({ projectId }: Props) {
           <span className="font-mono">approver</span> can confirm them and manage members.
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          <input
+          <Input
             type="email"
             placeholder="someone@example.com"
             value={email}
