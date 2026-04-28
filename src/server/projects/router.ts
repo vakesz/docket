@@ -4,14 +4,16 @@ import { z } from "zod";
 import type { Prisma } from "@/db/generated/client";
 import { asPlainObject } from "@/lib/json";
 import { buildProjectExport } from "@/server/projects/export";
-import { getProviderSpec, PROVIDER_TYPE_IDS } from "@/server/provider-registry";
+import { getProviderSpec, listProviderSpecs, PROVIDER_TYPE_IDS } from "@/server/provider-registry";
 import {
   mutationProcedure,
+  projectIdSchema,
   projectScopedApproverProcedure,
   projectScopedMutationProcedure,
   projectScopedProcedure,
   protectedProcedure,
   router,
+  userIdOrThrow,
 } from "@/server/trpc";
 
 const MEMBER_ROLE = z.enum(["viewer", "member", "approver"]);
@@ -26,6 +28,21 @@ const CreateProjectInput = z.object({
 });
 
 export const projectsRouter = router({
+  /**
+   * Public-shaped catalog of registered provider kinds. The create-project
+   * form renders the kind picker and per-kind scope inputs from this so
+   * surfaces don't have to branch on `providerKind`. Returns only the
+   * JSON-safe metadata (no factories, no matchers) — the UI form needs
+   * `typeId`, `displayName`, and `setupFields` to render itself.
+   */
+  kinds: protectedProcedure.query(() =>
+    listProviderSpecs().map((spec) => ({
+      typeId: spec.typeId,
+      displayName: spec.displayName,
+      setupFields: spec.setupFields,
+    })),
+  ),
+
   /** List projects the current user owns or is a member of (non-archived). */
   list: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.session.user.id;
@@ -62,9 +79,7 @@ export const projectsRouter = router({
   }),
 
   /** Get a single project the user has access to. */
-  get: projectScopedProcedure
-    .input(z.object({ projectId: z.string().min(1) }))
-    .query(({ ctx }) => ctx.project),
+  get: projectScopedProcedure.input(projectIdSchema).query(({ ctx }) => ctx.project),
 
   /**
    * Create a project. The session user becomes the owner and gets an
@@ -72,10 +87,7 @@ export const projectsRouter = router({
    * `projectScopedProcedure` works uniformly.
    */
   create: mutationProcedure.input(CreateProjectInput).mutation(async ({ ctx, input }) => {
-    const userId = ctx.session.user.id;
-    if (!userId) {
-      throw new Error("session has no user id");
-    }
+    const userId = userIdOrThrow(ctx);
     const spec = getProviderSpec(input.providerKind);
     if (!spec) {
       throw new TRPCError({
@@ -115,22 +127,26 @@ export const projectsRouter = router({
    * place but the project disappears from list queries. A future restore
    * procedure can flip archivedAt back to null.
    */
-  archive: mutationProcedure
-    .input(z.object({ projectId: z.string().min(1) }))
-    .mutation(async ({ ctx, input }) => {
-      const userId = ctx.session.user.id;
-      const project = await ctx.db.project.findUnique({
-        where: { id: input.projectId },
-        select: { ownerUserId: true },
+  archive: mutationProcedure.input(projectIdSchema).mutation(async ({ ctx, input }) => {
+    const userId = userIdOrThrow(ctx);
+    const project = await ctx.db.project.findUnique({
+      where: { id: input.projectId },
+      select: { ownerUserId: true },
+    });
+    if (!project) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "project not found" });
+    }
+    if (project.ownerUserId !== userId) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "only the project owner can archive",
       });
-      if (!project || project.ownerUserId !== userId) {
-        throw new Error("only the project owner can archive");
-      }
-      return ctx.db.project.update({
-        where: { id: input.projectId },
-        data: { archivedAt: new Date() },
-      });
-    }),
+    }
+    return ctx.db.project.update({
+      where: { id: input.projectId },
+      data: { archivedAt: new Date() },
+    });
+  }),
 
   /**
    * Per-user landing project. `null` clears it and falls landing back to
@@ -140,7 +156,7 @@ export const projectsRouter = router({
   setDefault: mutationProcedure
     .input(z.object({ projectId: z.string().min(1).nullable() }))
     .mutation(async ({ ctx, input }) => {
-      const userId = ctx.session.user.id;
+      const userId = userIdOrThrow(ctx);
       if (input.projectId) {
         const project = await ctx.db.project.findFirst({
           where: {
@@ -151,7 +167,10 @@ export const projectsRouter = router({
           select: { id: true },
         });
         if (!project) {
-          throw new Error("project not found or you no longer have access");
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "project not found or you no longer have access",
+          });
         }
       }
       await ctx.db.user.update({
@@ -169,8 +188,7 @@ export const projectsRouter = router({
    */
   setLlmDefaults: projectScopedMutationProcedure
     .input(
-      z.object({
-        projectId: z.string().min(1),
+      projectIdSchema.extend({
         llmProviderId: z.string().min(1).nullable(),
         defaultTemperature: z.number().min(0).max(2).nullable(),
       }),
@@ -210,15 +228,10 @@ export const projectsRouter = router({
    * JSON blob. Read-only; runs through `projectScopedProcedure` so any
    * member can pull their own archive.
    */
-  export: projectScopedProcedure
-    .input(z.object({ projectId: z.string().min(1) }))
-    .query(async ({ ctx }) => {
-      const userId = ctx.session.user.id;
-      if (!userId) {
-        throw new TRPCError({ code: "UNAUTHORIZED" });
-      }
-      return buildProjectExport(ctx.db, ctx.projectId, userId);
-    }),
+  export: projectScopedProcedure.input(projectIdSchema).query(async ({ ctx }) => {
+    const userId = userIdOrThrow(ctx);
+    return buildProjectExport(ctx.db, ctx.projectId, userId);
+  }),
 
   /**
    * List members of a project. Any member can read the roster — knowing
@@ -226,41 +239,39 @@ export const projectsRouter = router({
    * tag in proposals. Owner is rendered separately so the UI can show
    * "owner" as a non-editable, non-removable row.
    */
-  members: projectScopedProcedure
-    .input(z.object({ projectId: z.string().min(1) }))
-    .query(async ({ ctx, input }) => {
-      const project = await ctx.db.project.findUniqueOrThrow({
-        where: { id: input.projectId },
-        select: {
-          ownerUserId: true,
-          owner: { select: { id: true, name: true, email: true, image: true } },
-          memberships: {
-            select: {
-              id: true,
-              userId: true,
-              role: true,
-              createdAt: true,
-              user: { select: { id: true, name: true, email: true, image: true } },
-            },
-            orderBy: [{ createdAt: "asc" }],
+  members: projectScopedProcedure.input(projectIdSchema).query(async ({ ctx, input }) => {
+    const project = await ctx.db.project.findUniqueOrThrow({
+      where: { id: input.projectId },
+      select: {
+        ownerUserId: true,
+        owner: { select: { id: true, name: true, email: true, image: true } },
+        memberships: {
+          select: {
+            id: true,
+            userId: true,
+            role: true,
+            createdAt: true,
+            user: { select: { id: true, name: true, email: true, image: true } },
           },
+          orderBy: [{ createdAt: "asc" }],
         },
-      });
-      const callerId = ctx.session.user.id;
-      return {
-        callerIsOwner: project.ownerUserId === callerId,
-        owner: project.owner,
-        members: project.memberships.map((m) => ({
-          membershipId: m.id,
-          userId: m.userId,
-          role: m.role,
-          createdAt: m.createdAt,
-          name: m.user.name,
-          email: m.user.email,
-          image: m.user.image,
-        })),
-      };
-    }),
+      },
+    });
+    const callerId = ctx.session.user.id;
+    return {
+      callerIsOwner: project.ownerUserId === callerId,
+      owner: project.owner,
+      members: project.memberships.map((m) => ({
+        membershipId: m.id,
+        userId: m.userId,
+        role: m.role,
+        createdAt: m.createdAt,
+        name: m.user.name,
+        email: m.user.email,
+        image: m.user.image,
+      })),
+    };
+  }),
 
   /**
    * Add a member to a project by email. Approver-only — keeps roster
@@ -270,8 +281,7 @@ export const projectsRouter = router({
    */
   addMember: projectScopedApproverProcedure
     .input(
-      z.object({
-        projectId: z.string().min(1),
+      projectIdSchema.extend({
         email: z.string().email(),
         role: MEMBER_ROLE.default("member"),
       }),
@@ -325,8 +335,7 @@ export const projectsRouter = router({
   /** Change a member's role. Approver-only; viewer/member/approver. */
   updateMemberRole: projectScopedApproverProcedure
     .input(
-      z.object({
-        projectId: z.string().min(1),
+      projectIdSchema.extend({
         membershipId: z.string().min(1),
         role: MEMBER_ROLE,
       }),
@@ -353,8 +362,7 @@ export const projectsRouter = router({
    */
   removeMember: projectScopedApproverProcedure
     .input(
-      z.object({
-        projectId: z.string().min(1),
+      projectIdSchema.extend({
         membershipId: z.string().min(1),
       }),
     )

@@ -1,6 +1,7 @@
 "use client";
 import { Field, Input, Label, Switch } from "@headlessui/react";
 import { type FormEvent, useId, useState } from "react";
+import { LLM_KIND_LABELS, LLM_KINDS, type LlmKind } from "@/agent/llm/types";
 import {
   errorMessageClass,
   fieldClass,
@@ -15,8 +16,7 @@ import { formatPriceCentsAsDollars, parsePriceDollarsToCents } from "@/lib/prici
 import { trpc } from "@/lib/trpc-client";
 import { SelectField } from "@/ui/forms/select-field";
 
-const KINDS = ["openai", "anthropic", "gemini", "bedrock", "mistral", "ollama"] as const;
-type Kind = (typeof KINDS)[number];
+type Kind = LlmKind;
 
 type EditInitial = {
   id: string;
@@ -46,7 +46,7 @@ export function LlmProviderForm(props: Props) {
   const isEdit = props.mode === "edit";
 
   const initialKind: Kind = isEdit
-    ? KINDS.includes(props.initial.kind as Kind)
+    ? (LLM_KINDS as readonly string[]).includes(props.initial.kind)
       ? (props.initial.kind as Kind)
       : "openai"
     : "openai";
@@ -124,9 +124,9 @@ export function LlmProviderForm(props: Props) {
             Kind
           </label>
           <SelectField id={kindId} value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
-            {KINDS.map((k) => (
+            {LLM_KINDS.map((k) => (
               <option key={k} value={k}>
-                {k}
+                {LLM_KIND_LABELS[k]}
               </option>
             ))}
           </SelectField>

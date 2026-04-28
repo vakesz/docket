@@ -3,7 +3,7 @@
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from "@headlessui/react";
 import { X } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { SEPARATOR } from "@/lib/form-classes";
 import { cn } from "@/lib/utils";
@@ -46,6 +46,7 @@ export function ItemsShellLayout({
   const { open: backlogOpen, setOpen: setBacklogOpen } = backlog;
   const { open: chatOpen, setOpen: setChatOpen } = chat;
   const pathname = usePathname();
+  const isBelowLg = useIsBelowLg();
 
   useEffect(() => {
     if (pathname) setBacklogOpen(false);
@@ -54,6 +55,18 @@ export function ItemsShellLayout({
   useEffect(() => {
     if (backlogOpen && chatOpen) setChatOpen(false);
   }, [backlogOpen, chatOpen, setChatOpen]);
+
+  // Headless UI's Dialog mounts its portal + children whenever `open=true`,
+  // even when the dialog itself is display:none via `lg:hidden`. On lg+ that
+  // double-mounts ChatPane (once in the desktop Group, once inside the
+  // hidden Dialog) AND lets the Dialog's outside-click logic fire onClose
+  // moments after opening — the visible "pops up then closes instantly"
+  // bug. Gate the Dialog `open` on viewport so it stays unmounted on lg+.
+  // `null` (pre-hydration) is treated as "not below lg" so SSR markup
+  // matches the desktop default and the Dialog doesn't briefly mount on
+  // first paint.
+  const showMobileBacklog = isBelowLg === true && backlogOpen;
+  const showMobileChat = isBelowLg === true && chatOpen;
 
   return (
     <>
@@ -96,7 +109,7 @@ export function ItemsShellLayout({
       </div>
 
       <MobileDrawer
-        open={backlog.open}
+        open={showMobileBacklog}
         side="left"
         onClose={() => backlog.setOpen(false)}
         label="Backlog"
@@ -106,7 +119,7 @@ export function ItemsShellLayout({
 
       {showRight ? (
         <MobileDrawer
-          open={chat.open}
+          open={showMobileChat}
           side="right"
           onClose={() => chat.setOpen(false)}
           label="Chat"
@@ -116,6 +129,26 @@ export function ItemsShellLayout({
       ) : null}
     </>
   );
+}
+
+/**
+ * Tracks whether the viewport is below the Tailwind `lg` breakpoint
+ * (1024px). Returns `null` until the first client effect runs so callers
+ * can distinguish "we don't know yet" (pre-hydration) from "yes mobile"
+ * vs "no desktop". SSR + first-paint should always match the `null` →
+ * desktop default, otherwise we hydrate-mismatch.
+ */
+function useIsBelowLg(): boolean | null {
+  const [below, setBelow] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(max-width: 1023.98px)");
+    const update = () => setBelow(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  return below;
 }
 
 function MobileDrawer({

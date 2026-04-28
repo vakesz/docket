@@ -1,11 +1,13 @@
 "use client";
 
 import type { ComponentProps } from "react";
+import { memo } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
+import type { PluggableList } from "unified";
 import { cn } from "@/lib/utils";
 import rehypeHljs from "@/ui/markdown/rehype-hljs";
 
@@ -58,26 +60,38 @@ const sanitizeSchema = {
   },
 };
 
-export function Markdown({ source, className }: { source: string; className?: string }) {
+// Hoisted to module scope so each Markdown render reuses the same array
+// references — keeps react-markdown's plugin pipeline cache stable.
+const REMARK_PLUGINS: PluggableList = [remarkGfm, remarkBreaks];
+const REHYPE_PLUGINS: PluggableList = [rehypeRaw, rehypeHljs, [rehypeSanitize, sanitizeSchema]];
+const COMPONENTS = {
+  a: AnchorRenderer,
+  code: CodeRenderer,
+  pre: PreRenderer,
+};
+
+export const Markdown = memo(function Markdown({
+  source,
+  className,
+}: {
+  source: string;
+  className?: string;
+}) {
   if (!source?.trim()) {
     return <p className="text-sm italic text-fg-faint">(no content)</p>;
   }
   return (
     <div className={cn("docket-md break-words text-sm text-fg", className)}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkBreaks]}
-        rehypePlugins={[rehypeRaw, rehypeHljs, [rehypeSanitize, sanitizeSchema]]}
-        components={{
-          a: AnchorRenderer,
-          code: CodeRenderer,
-          pre: PreRenderer,
-        }}
+        remarkPlugins={REMARK_PLUGINS}
+        rehypePlugins={REHYPE_PLUGINS}
+        components={COMPONENTS}
       >
         {source}
       </ReactMarkdown>
     </div>
   );
-}
+});
 
 function AnchorRenderer({ href, children, ...rest }: ComponentProps<"a">) {
   const isExternal = !!href && /^https?:\/\//i.test(href);

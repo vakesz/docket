@@ -13,17 +13,20 @@
 import "server-only";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { projectScopedMutationProcedure, projectScopedProcedure, router } from "@/server/trpc";
+import {
+  projectIdSchema,
+  projectScopedMutationProcedure,
+  projectScopedProcedure,
+  router,
+} from "@/server/trpc";
 
-const ProjectId = z.object({ projectId: z.string().min(1) });
-
-const ServerRef = ProjectId.extend({
+const ServerRef = projectIdSchema.extend({
   serverId: z.string().min(1),
 });
 
 const HeadersJson = z.record(z.string(), z.string()).default({});
 
-const CreateInput = ProjectId.extend({
+const CreateInput = projectIdSchema.extend({
   name: z
     .string()
     .min(1)
@@ -41,7 +44,7 @@ const UpdateInput = ServerRef.extend({
 });
 
 export const mcpRouter = router({
-  list: projectScopedProcedure.input(ProjectId).query(async ({ ctx }) => {
+  list: projectScopedProcedure.input(projectIdSchema).query(async ({ ctx }) => {
     return ctx.db.mcpServerConfig.findMany({
       where: { projectId: ctx.projectId },
       orderBy: [{ name: "asc" }],

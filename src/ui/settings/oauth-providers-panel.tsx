@@ -1,18 +1,13 @@
 "use client";
 import { badgeClass, emptyStateClass } from "@/lib/form-classes";
+import { nextAuthCallbackPath } from "@/lib/next-auth-provider-id";
 import { trpc } from "@/lib/trpc-client";
 import { useAutoRefreshIntervalMs } from "@/lib/use-auto-refresh";
 import { OauthProviderActions } from "@/ui/settings/oauth-provider-actions";
 import { OauthProviderForm } from "@/ui/settings/oauth-provider-form";
 
-const CALLBACK_PATHS: Record<string, string> = {
-  github: "/api/auth/callback/github",
-  azure_devops: "/api/auth/callback/azure-devops",
-};
-
 function callbackUrl(kind: string, base: string): string {
-  const path = CALLBACK_PATHS[kind] ?? "/api/auth/callback/<kind>";
-  return `${base.replace(/\/$/, "")}${path}`;
+  return `${base.replace(/\/$/, "")}${nextAuthCallbackPath(kind)}`;
 }
 
 /** OAuth-providers section, mounted inside the unified settings page. */

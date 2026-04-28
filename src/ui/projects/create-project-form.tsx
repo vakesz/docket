@@ -1,7 +1,7 @@
 "use client";
 import { Field, Input, Label, Switch } from "@headlessui/react";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useMemo, useState } from "react";
 import {
   errorMessageClass,
   fieldClass,
@@ -11,9 +11,8 @@ import {
   switchTrackClass,
 } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
+import type { ProviderTypeId } from "@/server/provider-registry";
 import { SelectField } from "@/ui/forms/select-field";
-
-type ProviderKind = "github" | "azure_devops";
 
 type Props = {
   /**
@@ -33,13 +32,14 @@ type Props = {
 
 /**
  * Create form: name + provider kind + per-kind scope inputs that assemble
- * into the JSON the server expects. The "Set as default" checkbox calls
- * `projects.setDefault` immediately after creation so the next visit to
- * `/` lands here automatically.
+ * into the JSON the server expects. Scope inputs are driven by
+ * `ProviderSpec.setupFields` (loaded via `projects.kinds`), so a new
+ * provider only needs to register its spec — no surface-side branching.
  */
 export function CreateProjectForm({ defaultMakeDefault = true, onCreated }: Props = {}) {
   const router = useRouter();
   const utils = trpc.useUtils();
+  const kinds = trpc.projects.kinds.useQuery();
   const setDefault = trpc.projects.setDefault.useMutation({
     onSuccess: async () => {
       await utils.projects.me.invalidate();
@@ -59,10 +59,7 @@ export function CreateProjectForm({ defaultMakeDefault = true, onCreated }: Prop
       if (onCreated) {
         setName("");
         setDescription("");
-        setGithubOwner("");
-        setGithubRepo("");
-        setAzdoOrg("");
-        setAzdoProject("");
+        setScope({});
         onCreated({ id: project.id, name: project.name });
         return;
       }
@@ -71,32 +68,58 @@ export function CreateProjectForm({ defaultMakeDefault = true, onCreated }: Prop
     },
   });
 
+  const specs = kinds.data ?? [];
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [providerKind, setProviderKind] = useState<ProviderKind>("github");
-  // GitHub scope fields
-  const [githubOwner, setGithubOwner] = useState("");
-  const [githubRepo, setGithubRepo] = useState("");
-  // Azure DevOps scope fields
-  const [azdoOrg, setAzdoOrg] = useState("");
-  const [azdoProject, setAzdoProject] = useState("");
+  const [providerKind, setProviderKind] = useState<string>("");
+  const [scope, setScope] = useState<Record<string, string>>({});
   const [makeDefault, setMakeDefault] = useState(defaultMakeDefault);
 
+  const activeSpec = useMemo(
+    () => specs.find((s) => s.typeId === providerKind) ?? specs[0] ?? null,
+    [specs, providerKind],
+  );
+  const activeKind = activeSpec?.typeId ?? "";
+
+  function setScopeField(key: string, value: string) {
+    setScope((prev) => ({ ...prev, [key]: value }));
+  }
+
   function buildScope(): Record<string, string> {
-    if (providerKind === "github") {
-      return { owner: githubOwner.trim(), repo: githubRepo.trim() };
+    if (!activeSpec) return {};
+    const out: Record<string, string> = {};
+    for (const f of activeSpec.setupFields) {
+      out[f.key] = (scope[f.key] ?? "").trim();
     }
-    return { organization: azdoOrg.trim(), project: azdoProject.trim() };
+    return out;
   }
 
   function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!activeSpec) return;
+    // typeId comes from the registry, which the server's zod enum is built
+    // from — the value is always a registered kind, but the literal-union
+    // narrowing doesn't survive the JSON round-trip back to the client.
     create.mutate({
       name: name.trim(),
       description: description.trim(),
-      providerKind,
+      providerKind: activeSpec.typeId as ProviderTypeId,
       providerScope: buildScope(),
     });
+  }
+
+  if (kinds.isPending) {
+    return <p className="text-sm text-fg-faint">Loading providers…</p>;
+  }
+  if (kinds.error) {
+    return <p className={errorMessageClass}>{kinds.error.message}</p>;
+  }
+  if (specs.length === 0) {
+    return (
+      <p className="text-sm text-fg-muted">
+        No providers registered. Configure one under Settings → OAuth providers first.
+      </p>
+    );
   }
 
   return (
@@ -127,79 +150,37 @@ export function CreateProjectForm({ defaultMakeDefault = true, onCreated }: Prop
         <span className="text-xs text-fg-muted">Provider</span>
         <SelectField
           aria-label="Provider"
-          value={providerKind}
-          onChange={(e) => setProviderKind(e.target.value as ProviderKind)}
+          value={activeKind}
+          onChange={(e) => setProviderKind(e.target.value)}
         >
-          <option value="github">GitHub</option>
-          <option value="azure_devops">Azure DevOps</option>
+          {specs.map((s) => (
+            <option key={s.typeId} value={s.typeId}>
+              {s.displayName}
+            </option>
+          ))}
         </SelectField>
       </div>
 
-      {providerKind === "github" ? (
+      {activeSpec ? (
         <div className="flex flex-col gap-1">
-          <div className="flex gap-3">
-            <Field className="flex flex-1 flex-col gap-1">
-              <Label className="text-xs text-fg-muted">Owner</Label>
-              <Input
-                required
-                value={githubOwner}
-                onChange={(e) => setGithubOwner(e.target.value)}
-                placeholder="acme"
-                className={fieldClass}
-              />
-            </Field>
-            <Field className="flex flex-1 flex-col gap-1">
-              <Label className="text-xs text-fg-muted">Repo</Label>
-              <Input
-                required
-                value={githubRepo}
-                onChange={(e) => setGithubRepo(e.target.value)}
-                placeholder="web"
-                className={fieldClass}
-              />
-            </Field>
+          <div className="flex flex-wrap gap-3">
+            {activeSpec.setupFields.map((f) => (
+              <Field key={f.key} className="flex flex-1 flex-col gap-1 min-w-[12rem]">
+                <Label className="text-xs text-fg-muted">{f.label}</Label>
+                <Input
+                  required={f.required}
+                  type={f.kind === "secret" ? "password" : f.kind === "url" ? "url" : "text"}
+                  value={scope[f.key] ?? ""}
+                  onChange={(e) => setScopeField(f.key, e.target.value)}
+                  placeholder={f.placeholder}
+                  className={fieldClass}
+                />
+                {f.help ? <p className="text-xs text-fg-muted">{f.help}</p> : null}
+              </Field>
+            ))}
           </div>
-          <p className="text-xs text-fg-muted">
-            From the repo URL{" "}
-            <code className="rounded bg-surface-alt px-1 py-0.5 font-mono">
-              github.com/{`{owner}/{repo}`}
-            </code>
-            . One project tracks one repo.
-          </p>
         </div>
-      ) : (
-        <div className="flex flex-col gap-1">
-          <div className="flex gap-3">
-            <Field className="flex flex-1 flex-col gap-1">
-              <Label className="text-xs text-fg-muted">Organization</Label>
-              <Input
-                required
-                value={azdoOrg}
-                onChange={(e) => setAzdoOrg(e.target.value)}
-                placeholder="contoso"
-                className={fieldClass}
-              />
-            </Field>
-            <Field className="flex flex-1 flex-col gap-1">
-              <Label className="text-xs text-fg-muted">Project</Label>
-              <Input
-                required
-                value={azdoProject}
-                onChange={(e) => setAzdoProject(e.target.value)}
-                placeholder="Platform"
-                className={fieldClass}
-              />
-            </Field>
-          </div>
-          <p className="text-xs text-fg-muted">
-            From{" "}
-            <code className="rounded bg-surface-alt px-1 py-0.5 font-mono">
-              dev.azure.com/{`{organization}/{project}`}
-            </code>
-            .
-          </p>
-        </div>
-      )}
+      ) : null}
 
       <Field className="inline-flex items-center gap-2 text-sm text-fg">
         <Switch checked={makeDefault} onChange={setMakeDefault} className={switchTrackClass}>
@@ -212,7 +193,7 @@ export function CreateProjectForm({ defaultMakeDefault = true, onCreated }: Prop
 
       <button
         type="submit"
-        disabled={create.isPending || setDefault.isPending}
+        disabled={create.isPending || setDefault.isPending || !activeSpec}
         className={`${primaryButtonClass} self-start`}
       >
         {create.isPending ? "Creating…" : "Create project"}

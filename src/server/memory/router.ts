@@ -17,38 +17,34 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { proposeMemoryDelete, proposeMemoryWrite } from "@/server/proposals/builders";
 import { maybeAutoAccept } from "@/server/proposals/executor";
-import { projectScopedMutationProcedure, projectScopedProcedure, router } from "@/server/trpc";
+import {
+  projectIdSchema,
+  projectScopedMutationProcedure,
+  projectScopedProcedure,
+  router,
+  userIdOrThrow,
+} from "@/server/trpc";
 
-const ProjectId = z.object({ projectId: z.string().min(1) });
-
-const ListInput = ProjectId.extend({
+const ListInput = projectIdSchema.extend({
   search: z.string().max(200).optional(),
   tag: z.string().max(64).optional(),
   limit: z.number().int().min(1).max(200).default(100),
 });
 
-const GetInput = ProjectId.extend({
+const GetInput = projectIdSchema.extend({
   memoryId: z.string().min(1),
 });
 
-const ProposeWriteInput = ProjectId.extend({
+const ProposeWriteInput = projectIdSchema.extend({
   memoryId: z.string().min(1).nullable().default(null),
   title: z.string().min(1).max(200),
   bodyMd: z.string().max(50_000).default(""),
   tags: z.array(z.string().min(1).max(64)).max(32).default([]),
 });
 
-const ProposeDeleteInput = ProjectId.extend({
+const ProposeDeleteInput = projectIdSchema.extend({
   memoryId: z.string().min(1),
 });
-
-function userIdOrThrow(ctx: { session: { user: { id?: string } } }): string {
-  const userId = ctx.session.user.id;
-  if (!userId) {
-    throw new TRPCError({ code: "UNAUTHORIZED" });
-  }
-  return userId;
-}
 
 export const memoryRouter = router({
   list: projectScopedProcedure.input(ListInput).query(async ({ ctx, input }) => {

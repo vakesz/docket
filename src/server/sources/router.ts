@@ -16,22 +16,25 @@
 import "server-only";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { projectScopedMutationProcedure, projectScopedProcedure, router } from "@/server/trpc";
+import {
+  projectIdSchema,
+  projectScopedMutationProcedure,
+  projectScopedProcedure,
+  router,
+} from "@/server/trpc";
 
-const ProjectId = z.object({ projectId: z.string().min(1) });
-
-const ListInput = ProjectId.extend({
+const ListInput = projectIdSchema.extend({
   kind: z.string().max(64).optional(),
   tag: z.string().max(64).optional(),
   search: z.string().max(200).optional(),
   limit: z.number().int().min(1).max(200).default(100),
 });
 
-const GetInput = ProjectId.extend({
+const GetInput = projectIdSchema.extend({
   sourceId: z.string().min(1),
 });
 
-const CreateInput = ProjectId.extend({
+const CreateInput = projectIdSchema.extend({
   title: z.string().min(1).max(200),
   kind: z.string().max(64).default(""),
   uri: z.string().max(500).default(""),

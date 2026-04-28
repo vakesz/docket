@@ -13,29 +13,28 @@ import {
 import { diffOf } from "@/server/proposals/diff";
 import { confirmProposal, maybeAutoAccept, rejectProposal } from "@/server/proposals/executor";
 import {
+  projectIdSchema,
   projectScopedApproverProcedure,
   projectScopedMutationProcedure,
   projectScopedProcedure,
   router,
 } from "@/server/trpc";
 
-const ProjectId = z.object({ projectId: z.string().min(1) });
-
 const ItemKindEnum = z.enum(ITEM_KINDS);
 const TransitionIntentEnum = z.enum(TRANSITION_INTENTS);
 
-const ListInput = ProjectId.extend({
+const ListInput = projectIdSchema.extend({
   status: z.enum(["pending", "confirmed", "rejected", "all"]).default("pending"),
   limit: z.number().int().min(1).max(100).default(50),
 });
 
-const CountInput = ProjectId.extend({
+const CountInput = projectIdSchema.extend({
   status: z.enum(["pending", "confirmed", "rejected", "all"]).default("pending"),
 });
 
-const ProposalIdInput = ProjectId.extend({ proposalId: z.string().min(1) });
+const ProposalIdInput = projectIdSchema.extend({ proposalId: z.string().min(1) });
 
-const AuditListInput = ProjectId.extend({
+const AuditListInput = projectIdSchema.extend({
   /// When set, returns only audit rows for one proposal.
   proposalId: z.string().min(1).optional(),
   /// When set, filters to one action kind (e.g. `proposal.confirm.failed`).
@@ -43,27 +42,27 @@ const AuditListInput = ProjectId.extend({
   limit: z.number().int().min(1).max(200).default(50),
 });
 
-const ProposeTransitionInput = ProjectId.extend({
+const ProposeTransitionInput = projectIdSchema.extend({
   providerItemId: z.string().min(1),
   intent: TransitionIntentEnum,
 });
 
-const ProposeDescriptionPatchInput = ProjectId.extend({
+const ProposeDescriptionPatchInput = projectIdSchema.extend({
   providerItemId: z.string().min(1),
   newMd: z.string().max(50_000),
 });
 
-const ProposeCommentInput = ProjectId.extend({
+const ProposeCommentInput = projectIdSchema.extend({
   providerItemId: z.string().min(1),
   bodyMd: z.string().min(1).max(50_000),
 });
 
-const ProposeTagsChangeInput = ProjectId.extend({
+const ProposeTagsChangeInput = projectIdSchema.extend({
   providerItemId: z.string().min(1),
   nextTags: z.array(z.string().min(1).max(80)).max(50),
 });
 
-const ProposeNewItemInput = ProjectId.extend({
+const ProposeNewItemInput = projectIdSchema.extend({
   itemKind: ItemKindEnum,
   fields: z.object({
     title: z.string().min(1).max(500),

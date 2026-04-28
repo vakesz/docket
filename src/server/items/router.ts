@@ -10,13 +10,11 @@ import { injectExternalChange, materialDiff } from "@/server/inbound-changes/inj
 import { getProviderSpec } from "@/server/provider-registry";
 import { buildProviderForUser } from "@/server/providers/build";
 import { runFullSync, runIncrementalSync, toItemRow } from "@/server/sync";
-import { projectScopedProcedure, router } from "@/server/trpc";
-
-const ProjectId = z.object({ projectId: z.string().min(1) });
+import { projectIdSchema, projectScopedProcedure, router, userIdOrThrow } from "@/server/trpc";
 
 const BacklogBucketEnum = z.enum(BACKLOG_BUCKETS);
 
-const ListInput = ProjectId.extend({
+const ListInput = projectIdSchema.extend({
   kind: z.string().optional(),
   state: z.string().optional(),
   bucket: BacklogBucketEnum.default("open"),
@@ -35,19 +33,11 @@ const ListInput = ProjectId.extend({
   limit: z.number().int().min(1).max(200).default(100),
 });
 
-const ItemRef = ProjectId.extend({ itemId: z.string().min(1) });
+const ItemRef = projectIdSchema.extend({ itemId: z.string().min(1) });
 
-const SyncInput = ProjectId.extend({
+const SyncInput = projectIdSchema.extend({
   mode: z.enum(["incremental", "full"]).default("incremental"),
 });
-
-function userIdOrThrow(ctx: { session: { user: { id?: string } } }): string {
-  const userId = ctx.session.user.id;
-  if (!userId) {
-    throw new TRPCError({ code: "UNAUTHORIZED" });
-  }
-  return userId;
-}
 
 type ListInputResolved = z.infer<typeof ListInput>;
 
@@ -309,7 +299,7 @@ export const itemsRouter = router({
 
   search: projectScopedProcedure
     .input(
-      ProjectId.extend({
+      projectIdSchema.extend({
         q: z.string().min(1).max(200),
         limit: z.number().int().min(1).max(50).default(20),
       }),
@@ -354,7 +344,7 @@ export const itemsRouter = router({
    * user can see when the last full walk happened and the watermark the
    * incremental sync will pick up from.
    */
-  syncStatus: projectScopedProcedure.input(ProjectId).query(async ({ ctx }) => {
+  syncStatus: projectScopedProcedure.input(projectIdSchema).query(async ({ ctx }) => {
     const cursor = await ctx.db.syncCursor.findUnique({
       where: { projectId: ctx.projectId },
       select: { watermark: true, lastFullSyncAt: true },

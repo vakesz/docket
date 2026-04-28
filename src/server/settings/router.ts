@@ -28,10 +28,12 @@ import {
 import { loadGlobalSetting } from "@/server/settings/effective";
 import {
   mutationProcedure,
+  projectIdSchema,
   projectScopedMutationProcedure,
   projectScopedProcedure,
   protectedProcedure,
   router,
+  userIdOrThrow,
 } from "@/server/trpc";
 
 const SettingKeyEnum = z.enum(SETTING_KEYS as [SettingKey, ...SettingKey[]]);
@@ -45,24 +47,14 @@ const UpdateInput = z.object({
 
 const ResetInput = z.object({ key: SettingKeyEnum });
 
-const ProjectUpdateInput = z.object({
-  projectId: z.string().min(1),
+const ProjectUpdateInput = projectIdSchema.extend({
   key: SettingKeyEnum,
   value: z.unknown(),
 });
 
-const ProjectResetInput = z.object({
-  projectId: z.string().min(1),
+const ProjectResetInput = projectIdSchema.extend({
   key: SettingKeyEnum,
 });
-
-function userIdOrThrow(ctx: { session: { user: { id?: string } } }): string {
-  const userId = ctx.session.user.id;
-  if (!userId) {
-    throw new TRPCError({ code: "UNAUTHORIZED" });
-  }
-  return userId;
-}
 
 export const settingsRouter = router({
   /**
@@ -238,24 +230,22 @@ export const settingsRouter = router({
    * every project-scoped catalog key (catalog default substituted when the
    * row is missing or invalid).
    */
-  projectList: projectScopedProcedure
-    .input(z.object({ projectId: z.string().min(1) }))
-    .query(async ({ ctx, input }) => {
-      const projectKeys = SETTING_KEYS.filter((k) => SETTINGS_CATALOG[k].scope === "project");
-      const rows = await ctx.db.setting.findMany({
-        where: {
-          projectId: input.projectId,
-          scope: "project",
-          key: { in: projectKeys },
-        },
-        select: { key: true, value: true },
-      });
-      const byKey = new Map(rows.map((r) => [r.key, r.value]));
-      return projectKeys.map((key) => ({
-        key,
-        value: decodeSettingValue(key, byKey.get(key) ?? null),
-      }));
-    }),
+  projectList: projectScopedProcedure.input(projectIdSchema).query(async ({ ctx, input }) => {
+    const projectKeys = SETTING_KEYS.filter((k) => SETTINGS_CATALOG[k].scope === "project");
+    const rows = await ctx.db.setting.findMany({
+      where: {
+        projectId: input.projectId,
+        scope: "project",
+        key: { in: projectKeys },
+      },
+      select: { key: true, value: true },
+    });
+    const byKey = new Map(rows.map((r) => [r.key, r.value]));
+    return projectKeys.map((key) => ({
+      key,
+      value: decodeSettingValue(key, byKey.get(key) ?? null),
+    }));
+  }),
 
   projectUpdate: projectScopedMutationProcedure
     .input(ProjectUpdateInput)

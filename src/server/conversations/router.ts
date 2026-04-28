@@ -25,32 +25,30 @@ import {
   listConversations,
   ownsConversation,
 } from "@/server/conversations/storage";
-import { projectScopedMutationProcedure, projectScopedProcedure, router } from "@/server/trpc";
+import { logger } from "@/server/logger";
+import {
+  projectIdSchema,
+  projectScopedMutationProcedure,
+  projectScopedProcedure,
+  router,
+  userIdOrThrow,
+} from "@/server/trpc";
 
-const ProjectId = z.object({ projectId: z.string().min(1) });
-const ConversationRef = ProjectId.extend({ conversationId: z.string().min(1) });
+const ConversationRef = projectIdSchema.extend({ conversationId: z.string().min(1) });
 
-const ListInput = ProjectId.extend({
+const ListInput = projectIdSchema.extend({
   itemId: z.string().nullable().default(null),
   limit: z.number().int().min(1).max(100).default(50),
   archived: z.boolean().default(false),
 });
 
-const CreateInput = ProjectId.extend({
+const CreateInput = projectIdSchema.extend({
   itemId: z.string().nullable().default(null),
 });
 
 const SetLlmOverrideInput = ConversationRef.extend({
   llmProviderId: z.string().min(1).nullable(),
 });
-
-function userIdOrThrow(ctx: { session: { user: { id?: string } } }): string {
-  const userId = ctx.session.user.id;
-  if (!userId) {
-    throw new TRPCError({ code: "UNAUTHORIZED" });
-  }
-  return userId;
-}
 
 async function ensureOwn(
   ctx: {
@@ -89,11 +87,16 @@ export const conversationsRouter = router({
 
   create: projectScopedMutationProcedure.input(CreateInput).mutation(async ({ ctx, input }) => {
     const userId = userIdOrThrow(ctx);
-    return createConversation(ctx.db, {
+    const conv = await createConversation(ctx.db, {
       projectId: ctx.projectId,
       userId,
       itemId: input.itemId,
     });
+    logger.info(
+      { projectId: ctx.projectId, userId, itemId: input.itemId, conversationId: conv.id },
+      "conversation: created",
+    );
+    return conv;
   }),
 
   archive: projectScopedMutationProcedure

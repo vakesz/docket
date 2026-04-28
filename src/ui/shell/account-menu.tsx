@@ -65,7 +65,10 @@ export function AccountMenu({
       <MenuItems
         anchor="bottom end"
         transition
-        className="z-30 mt-1.5 w-56 overflow-hidden rounded-xl border border-border bg-surface shadow-lg [--anchor-gap:0.375rem] focus:outline-none data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in"
+        className={cn(
+          "z-30 w-56 origin-top-right overflow-hidden rounded-xl border border-border bg-surface shadow-lg [--anchor-gap:0.5rem] focus:outline-none",
+          "transition data-closed:scale-95 data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in",
+        )}
       >
         <div className="border-b border-border px-3 py-2 text-xs text-fg-muted">
           <div className={metaLabelFaintClass}>Signed in as</div>

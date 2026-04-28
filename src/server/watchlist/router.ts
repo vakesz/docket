@@ -12,27 +12,22 @@
  */
 
 import "server-only";
-import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { projectScopedMutationProcedure, projectScopedProcedure, router } from "@/server/trpc";
+import {
+  projectIdSchema,
+  projectScopedMutationProcedure,
+  projectScopedProcedure,
+  router,
+  userIdOrThrow,
+} from "@/server/trpc";
 
-const ProjectId = z.object({ projectId: z.string().min(1) });
-
-const ListInput = ProjectId.extend({
+const ListInput = projectIdSchema.extend({
   limit: z.number().int().min(1).max(200).default(100),
 });
 
-const PinInput = ProjectId.extend({
+const PinInput = projectIdSchema.extend({
   providerItemId: z.string().min(1),
 });
-
-function userIdOrThrow(ctx: { session: { user: { id?: string } } }): string {
-  const userId = ctx.session.user.id;
-  if (!userId) {
-    throw new TRPCError({ code: "UNAUTHORIZED" });
-  }
-  return userId;
-}
 
 export const watchlistRouter = router({
   /**

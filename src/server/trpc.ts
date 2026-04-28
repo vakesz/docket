@@ -65,6 +65,27 @@ export const router = t.router;
 export const middleware = t.middleware;
 export const publicProcedure = t.procedure;
 
+/**
+ * Shared zod fragment for project-scoped procedure inputs. Compose via
+ * `.extend({ ... })` so every router uses the same id rule and rename
+ * stays single-source.
+ */
+export const projectIdSchema = z.object({ projectId: z.string().min(1) });
+
+/**
+ * Pull a non-empty `userId` off a session that's already passed
+ * `protectedProcedure`. The shape check survives if the session type
+ * widens; throw `UNAUTHORIZED` rather than letting `undefined` leak into
+ * a Prisma `where` clause.
+ */
+export function userIdOrThrow(ctx: { session: { user: { id?: string } } }): string {
+  const userId = ctx.session.user.id;
+  if (!userId) {
+    throw new TRPCError({ code: "UNAUTHORIZED" });
+  }
+  return userId;
+}
+
 const requireSession = t.middleware(({ ctx, next }) => {
   if (!ctx.session?.user) {
     throw new TRPCError({ code: "UNAUTHORIZED" });

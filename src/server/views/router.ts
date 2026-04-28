@@ -21,18 +21,22 @@ import "server-only";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { STATE_BUCKETS } from "@/core/types";
-import { projectScopedMutationProcedure, projectScopedProcedure, router } from "@/server/trpc";
-
-const ProjectId = z.object({ projectId: z.string().min(1) });
+import {
+  projectIdSchema,
+  projectScopedMutationProcedure,
+  projectScopedProcedure,
+  router,
+  userIdOrThrow,
+} from "@/server/trpc";
 
 const StateBucketEnum = z.enum(STATE_BUCKETS);
 
 const AssigneeList = z.array(z.string().min(0).max(200)).max(50).default([]);
 const AxesMap = z.record(z.string().min(1).max(64), z.string().max(500)).default({});
 
-const ViewIdInput = ProjectId.extend({ viewId: z.string().min(1) });
+const ViewIdInput = projectIdSchema.extend({ viewId: z.string().min(1) });
 
-const CreateInput = ProjectId.extend({
+const CreateInput = projectIdSchema.extend({
   name: z.string().min(1).max(80),
   stateBucket: StateBucketEnum.default("open"),
   assignees: AssigneeList,
@@ -40,7 +44,7 @@ const CreateInput = ProjectId.extend({
   isDefault: z.boolean().default(false),
 });
 
-const UpdateInput = ProjectId.extend({
+const UpdateInput = projectIdSchema.extend({
   viewId: z.string().min(1),
   name: z.string().min(1).max(80).optional(),
   stateBucket: StateBucketEnum.optional(),
@@ -48,16 +52,8 @@ const UpdateInput = ProjectId.extend({
   axes: AxesMap.optional(),
 });
 
-function userIdOrThrow(ctx: { session: { user: { id?: string } } }): string {
-  const userId = ctx.session.user.id;
-  if (!userId) {
-    throw new TRPCError({ code: "UNAUTHORIZED" });
-  }
-  return userId;
-}
-
 export const viewsRouter = router({
-  list: projectScopedProcedure.input(ProjectId).query(async ({ ctx }) => {
+  list: projectScopedProcedure.input(projectIdSchema).query(async ({ ctx }) => {
     const userId = userIdOrThrow(ctx);
     return ctx.db.savedView.findMany({
       where: { userId, projectId: ctx.projectId },

@@ -19,13 +19,17 @@
  */
 
 import "server-only";
-import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { projectScopedProcedure, protectedProcedure, router } from "@/server/trpc";
+import {
+  projectIdSchema,
+  projectScopedMutationProcedure,
+  projectScopedProcedure,
+  protectedProcedure,
+  router,
+  userIdOrThrow,
+} from "@/server/trpc";
 
-const ProjectId = z.object({ projectId: z.string().min(1) });
-
-const ListInput = ProjectId.extend({
+const ListInput = projectIdSchema.extend({
   /// Filter by suggestion kind. Empty omits the filter.
   kind: z.string().min(1).max(64).optional(),
   /// When true, also returns dismissed rows. Default hides them.
@@ -33,7 +37,7 @@ const ListInput = ProjectId.extend({
   limit: z.number().int().min(1).max(100).default(20),
 });
 
-const DismissInput = ProjectId.extend({ suggestionId: z.string().min(1) });
+const DismissInput = projectIdSchema.extend({ suggestionId: z.string().min(1) });
 
 const RecentsInput = z.object({
   /// Optional project filter — when set, only commands used in that
@@ -46,14 +50,6 @@ const BumpInput = z.object({
   commandId: z.string().min(1).max(120),
   projectId: z.string().min(1).optional(),
 });
-
-function userIdOrThrow(ctx: { session: { user: { id?: string } } }): string {
-  const userId = ctx.session.user.id;
-  if (!userId) {
-    throw new TRPCError({ code: "UNAUTHORIZED" });
-  }
-  return userId;
-}
 
 export const suggestionsRouter = router({
   list: projectScopedProcedure.input(ListInput).query(async ({ ctx, input }) => {
@@ -68,7 +64,7 @@ export const suggestionsRouter = router({
     });
   }),
 
-  dismiss: projectScopedProcedure.input(DismissInput).mutation(async ({ ctx, input }) => {
+  dismiss: projectScopedMutationProcedure.input(DismissInput).mutation(async ({ ctx, input }) => {
     const result = await ctx.db.suggestion.updateMany({
       where: { id: input.suggestionId, projectId: ctx.projectId, dismissedAt: null },
       data: { dismissedAt: new Date() },

@@ -41,18 +41,18 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
 
   const { streaming, proposalIds, dismissProposal, drainStream, resetStream } = useChatStream();
   const [toolDisplayMode] = useToolDisplayMode();
-  const { pendingSeed, consumeSeed } = useChatPaneController();
+  const { pendingSeed, claimSeed } = useChatPaneController();
 
   const list = trpc.conversations.list.useQuery(
     { projectId, itemId, limit: 20, archived: false },
-    { staleTime: 0 },
+    { staleTime: 5_000 },
   );
   const fallbackId = useMemo(() => list.data?.[0]?.id ?? null, [list.data]);
   const conversationId = activeId ?? fallbackId;
 
   const detail = trpc.conversations.get.useQuery(
     { projectId, conversationId: conversationId ?? "" },
-    { enabled: conversationId !== null, staleTime: 0 },
+    { enabled: conversationId !== null, staleTime: 5_000 },
   );
 
   const create = trpc.conversations.create.useMutation();
@@ -168,12 +168,17 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
   // submit it as a normal user message. We start a *new* thread so the
   // suggestion isn't appended to whatever the user was last asking about
   // for this item — distinct entry point, distinct conversation.
+  //
+  // `claimSeed()` is ref-backed and atomic: when the layout has two
+  // ChatPane instances mounted simultaneously (desktop Group + mobile
+  // Dialog can race on viewport transitions), only the first effect to
+  // call it gets the string back. The loser bails without firing.
   // biome-ignore lint/correctness/useExhaustiveDependencies: pendingSeed is the trigger; the rest is captured.
   useEffect(() => {
     if (!pendingSeed) return;
     if (inFlight) return;
-    const seed = pendingSeed;
-    consumeSeed();
+    const seed = claimSeed();
+    if (seed === null) return;
     void (async () => {
       const conv = await create.mutateAsync({ projectId, itemId });
       setActiveId(conv.id);

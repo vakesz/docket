@@ -9,10 +9,20 @@
  * Architecture test `src/__arch__/no-llm-vendor-leak.test.ts` enforces
  * that the only file importing `openai` is `src/agent/llm/openai.ts`. The
  * same rule will quarantine future SDKs as they land.
+ *
+ * `LLM_KINDS` lists the kinds whose adapter is *actually wired*.
+ * `src/__arch__/llm-kinds-have-adapters.test.ts` keeps the runtime switch
+ * in `registry.ts` and the UI selector in lockstep — adding a kind here
+ * without a matching `case` is a CI failure.
  */
 
-export const LLM_KINDS = ["openai", "anthropic", "gemini", "ollama"] as const;
+export const LLM_KINDS = ["openai"] as const;
 export type LlmKind = (typeof LLM_KINDS)[number];
+
+/** Human-readable name shown in the LLM provider form picker. */
+export const LLM_KIND_LABELS: Record<LlmKind, string> = {
+  openai: "OpenAI / OpenAI-compatible",
+};
 
 /**
  * One round-trip request to a chat-style LLM. The adapter consumes this and
