@@ -28,6 +28,30 @@ export function resolveStaleThreshold(rawSetting: unknown): number | null {
   return v > 0 ? v : null;
 }
 
+/**
+ * Resolve the effective stale threshold from the per-user override and the
+ * per-project default. The user value uses a sentinel encoding:
+ *  - `-1`  → inherit the project value
+ *  - `0`   → force-disabled for me on every project
+ *  - `>0`  → my personal threshold wins over the project value
+ *
+ * Project value is a normal `>= 0` integer (`0` disables the tint for the
+ * whole project). Returns `null` when the tint should be hidden, otherwise a
+ * positive day count.
+ */
+export function resolveEffectiveStaleThreshold(
+  userValue: number | null | undefined,
+  projectValue: number | null | undefined,
+): number | null {
+  if (typeof userValue === "number" && Number.isFinite(userValue) && userValue >= 0) {
+    return userValue > 0 ? Math.trunc(userValue) : null;
+  }
+  if (typeof projectValue === "number" && Number.isFinite(projectValue) && projectValue >= 0) {
+    return projectValue > 0 ? Math.trunc(projectValue) : null;
+  }
+  return DEFAULT_STALE_THRESHOLD_DAYS;
+}
+
 export function ageDays(
   updatedAt: Date | string | null | undefined,
   nowMs = Date.now(),

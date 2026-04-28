@@ -1,0 +1,102 @@
+"use client";
+
+import { Field, Input, Label, Switch } from "@headlessui/react";
+import { useState } from "react";
+import { fieldClass, switchThumbClass, switchTrackClass } from "@/lib/form-classes";
+import { DEFAULT_STALE_THRESHOLD_DAYS } from "@/lib/staleness";
+import { trpc } from "@/lib/trpc-client";
+
+const STALE_KEY = "items.stale-after-days";
+
+/**
+ * Project-level defaults for the items list — currently the staleness
+ * threshold. Each member sees this value unless they set their own
+ * override under Profile → Item detail.
+ */
+export function ProjectItemsPanel({ projectId }: { projectId: string }) {
+  const utils = trpc.useUtils();
+  const list = trpc.settings.projectList.useQuery({ projectId });
+  const update = trpc.settings.projectUpdate.useMutation({
+    onSuccess: async () => {
+      await utils.settings.projectList.invalidate({ projectId });
+    },
+  });
+
+  const valueRaw = list.data?.find((r) => r.key === STALE_KEY)?.value;
+  const value = typeof valueRaw === "number" ? valueRaw : DEFAULT_STALE_THRESHOLD_DAYS;
+  const indicatorOn = value > 0;
+  const [lastPositive, setLastPositive] = useState<number>(
+    value > 0 ? value : DEFAULT_STALE_THRESHOLD_DAYS,
+  );
+  const disabled = list.isPending || update.isPending;
+
+  const onToggleIndicator = (next: boolean) => {
+    update.mutate({
+      projectId,
+      key: STALE_KEY as never,
+      value: next ? lastPositive : 0,
+    });
+  };
+
+  const onChangeThreshold = (next: number) => {
+    if (!Number.isFinite(next) || next < 1) return;
+    const clamped = Math.min(Math.trunc(next), 3650);
+    setLastPositive(clamped);
+    update.mutate({ projectId, key: STALE_KEY as never, value: clamped });
+  };
+
+  return (
+    <div className="flex flex-col gap-6">
+      <section className="flex flex-col gap-3">
+        <header className="flex flex-col gap-1">
+          <h3 className="text-sm font-medium text-fg">Staleness threshold (project default)</h3>
+          <p className="text-xs text-fg-muted">
+            Backlog rows tint amber once an item has been untouched for this many days, and red at
+            2x. Each project member sees this value by default; they can override it under Profile →
+            Item detail.
+          </p>
+        </header>
+
+        <Field className="flex flex-col gap-1">
+          <Label className="text-sm font-medium text-fg">Show staleness indicator</Label>
+          <p className="text-xs text-fg-muted">
+            When off, the freshness tint and detail-page age badge are hidden for everyone viewing
+            this project (members with their own override still see their value).
+          </p>
+          <Field className="flex items-center gap-2 text-sm text-fg">
+            <Switch
+              checked={indicatorOn}
+              disabled={disabled}
+              onChange={onToggleIndicator}
+              className={switchTrackClass}
+            >
+              <span aria-hidden className={switchThumbClass} />
+            </Switch>
+            <Label>{indicatorOn ? "Visible" : "Hidden"}</Label>
+          </Field>
+        </Field>
+
+        {indicatorOn ? (
+          <Field className="flex flex-col gap-1">
+            <Label className="text-sm font-medium text-fg">Threshold (days)</Label>
+            <p className="text-xs text-fg-muted">
+              Days an item can sit untouched before it tints amber. Range: 1 to 3650.
+            </p>
+            <Input
+              type="number"
+              min={1}
+              max={3650}
+              step={1}
+              value={value > 0 ? value : lastPositive}
+              disabled={disabled}
+              onChange={(e) => onChangeThreshold(Number.parseInt(e.target.value, 10))}
+              className={`${fieldClass} max-w-[8rem]`}
+            />
+          </Field>
+        ) : null}
+      </section>
+
+      {update.error ? <p className="text-xs text-danger-fg">{update.error.message}</p> : null}
+    </div>
+  );
+}

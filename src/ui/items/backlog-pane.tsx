@@ -7,7 +7,7 @@ import { metaLabelFaintClass } from "@/lib/form-classes";
 import { useRecentItemIds } from "@/lib/recent-items";
 import { trpc } from "@/lib/trpc-client";
 import { cn } from "@/lib/utils";
-import { FilterBar } from "@/ui/items/filter-bar";
+import { ASSIGNEE_UNASSIGNED, FilterBar } from "@/ui/items/filter-bar";
 import { EmptyMessage, ItemRow, type ListItem, PinnedRow } from "@/ui/items/item-row";
 
 const KINDS: Array<ItemKind | "all"> = ["all", "epic", "feature", "story", "task", "bug"];
@@ -38,10 +38,12 @@ export function BacklogPane({
 }) {
   const [bucket, setBucket] = useState<BacklogBucket>("open");
   const [kind, setKind] = useState<ItemKind | "all">("all");
-  const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [activeTags, setActiveTags] = useState<ReadonlySet<string>>(new Set());
+  const [activeAssignees, setActiveAssignees] = useState<ReadonlySet<string>>(new Set());
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [tagsExpanded, setTagsExpanded] = useState(false);
+  const [assigneesExpanded, setAssigneesExpanded] = useState(false);
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedQuery(query), FILTER_DEBOUNCE_MS);
@@ -57,14 +59,30 @@ export function BacklogPane({
     { staleTime: 30_000 },
   );
   const settings = trpc.settings.list.useQuery(undefined, { staleTime: 60_000 });
+  const me = trpc.projects.me.useQuery(undefined, { staleTime: 5 * 60_000 });
+  const meIdentifier = me.data?.name ?? null;
   const maxVisibleTags = (() => {
     const raw = settings.data?.find((r) => r.key === "items.max-visible-tags")?.value;
     return typeof raw === "number" ? raw : 2;
+  })();
+  const maxVisibleAssignees = (() => {
+    const raw = settings.data?.find((r) => r.key === "items.max-visible-assignees")?.value;
+    return typeof raw === "number" ? raw : 2;
+  })();
+  const assigneeSelectorStyle: "chips" | "dropdown" = (() => {
+    const raw = settings.data?.find((r) => r.key === "items.assignee-selector-style")?.value;
+    return raw === "dropdown" ? "dropdown" : "chips";
+  })();
+  const showAvatars = (() => {
+    const raw = settings.data?.find((r) => r.key === "items.show-assignee-avatars")?.value;
+    return typeof raw === "boolean" ? raw : true;
   })();
   const showArchivedBucket = (() => {
     const raw = settings.data?.find((r) => r.key === "items.show-archived-bucket")?.value;
     return typeof raw === "boolean" ? raw : true;
   })();
+  const project = trpc.projects.get.useQuery({ projectId }, { staleTime: 5 * 60_000 });
+  const providerKind = project.data?.providerKind ?? "";
 
   // If the user disabled the archived bucket while it was selected, fall
   // back to open so the request and the (now-hidden) chip don't desync.
@@ -120,35 +138,95 @@ export function BacklogPane({
     return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   }, [data]);
 
+  const assigneeCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const it of data) {
+      const a = it.assignee;
+      if (!a) continue;
+      counts.set(a, (counts.get(a) ?? 0) + 1);
+    }
+    const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    if (meIdentifier !== null) {
+      const meIdx = sorted.findIndex(([name]) => name === meIdentifier);
+      if (meIdx > 0) {
+        const [meEntry] = sorted.splice(meIdx, 1);
+        sorted.unshift(meEntry);
+      }
+    }
+    return sorted;
+  }, [data, meIdentifier]);
+
   const filtered = useMemo(() => {
     const q = debouncedQuery.trim().toLowerCase();
     return data.filter((it) => {
       if (kind !== "all" && it.kind !== kind) return false;
-      if (activeTag && !(it.tags ?? []).includes(activeTag)) return false;
+      if (activeTags.size > 0) {
+        const tags = it.tags ?? [];
+        let matched = false;
+        for (const t of activeTags) {
+          if (tags.includes(t)) {
+            matched = true;
+            break;
+          }
+        }
+        if (!matched) return false;
+      }
+      if (activeAssignees.size > 0) {
+        const a = it.assignee;
+        let matched = false;
+        for (const sel of activeAssignees) {
+          if (sel === ASSIGNEE_UNASSIGNED) {
+            if (a === null || a === "") {
+              matched = true;
+              break;
+            }
+          } else if (a === sel) {
+            matched = true;
+            break;
+          }
+        }
+        if (!matched) return false;
+      }
       if (q) {
         const hay = `${it.providerItemId} ${it.title} ${(it.tags ?? []).join(" ")}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [data, kind, activeTag, debouncedQuery]);
+  }, [data, kind, activeTags, activeAssignees, debouncedQuery]);
 
   return (
     <div className="flex h-full flex-col bg-bg">
       <FilterBar
         projectId={projectId}
-        state={{ bucket, kind, activeTag, query, tagsExpanded }}
+        state={{
+          bucket,
+          kind,
+          activeTags,
+          activeAssignees,
+          query,
+          tagsExpanded,
+          assigneesExpanded,
+        }}
         handlers={{
           setBucket,
           setKind,
-          setActiveTag,
+          setActiveTags,
+          setActiveAssignees,
           setQuery,
           setTagsExpanded,
+          setAssigneesExpanded,
         }}
         visibleKinds={visibleKinds}
         tagCounts={tagCounts}
         tagCollapseLimit={maxVisibleTags}
+        assigneeCounts={assigneeCounts}
+        assigneeCollapseLimit={maxVisibleAssignees}
+        assigneeSelectorStyle={assigneeSelectorStyle}
+        meIdentifier={meIdentifier}
         showArchivedBucket={showArchivedBucket}
+        providerKind={providerKind}
+        showAvatars={showAvatars}
       />
 
       {recentItems.length > 0 && (

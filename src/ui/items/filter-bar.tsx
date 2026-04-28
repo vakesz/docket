@@ -1,32 +1,42 @@
 "use client";
 
-import { Input } from "@headlessui/react";
+import { Input, Listbox, ListboxButton, ListboxOption, ListboxOptions } from "@headlessui/react";
+import { Check, ChevronDown, X } from "lucide-react";
 import type { BacklogBucket, ItemKind } from "@/core/types";
+import { avatarUrl } from "@/lib/avatar-url";
 import { displayTag, formatKind } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { CreateItemForm } from "@/ui/items/create-item-form";
 
+const SUPPORTED_AVATAR_PROVIDERS = new Set(["github", "azure_devops"]);
+
+export const ASSIGNEE_UNASSIGNED = "__unassigned";
+
 export type FilterState = {
   bucket: BacklogBucket;
   kind: ItemKind | "all";
-  activeTag: string | null;
+  activeTags: ReadonlySet<string>;
+  activeAssignees: ReadonlySet<string>;
   query: string;
   tagsExpanded: boolean;
+  assigneesExpanded: boolean;
 };
 
 export type FilterHandlers = {
   setBucket: (b: BacklogBucket) => void;
   setKind: (k: ItemKind | "all") => void;
-  setActiveTag: (t: string | null) => void;
+  setActiveTags: (next: ReadonlySet<string>) => void;
+  setActiveAssignees: (next: ReadonlySet<string>) => void;
   setQuery: (q: string) => void;
   setTagsExpanded: (fn: (v: boolean) => boolean) => void;
+  setAssigneesExpanded: (fn: (v: boolean) => boolean) => void;
 };
 
 const BUCKET_LABEL: Record<BacklogBucket, string> = {
   open: "Open",
   closed: "Closed",
   archived: "Archived",
-  all: "All states",
+  all: "All",
 };
 
 const BUCKET_TITLE: Record<BacklogBucket, string> = {
@@ -36,6 +46,61 @@ const BUCKET_TITLE: Record<BacklogBucket, string> = {
   all: "every state, including archived",
 };
 
+function toggle(set: ReadonlySet<string>, value: string): Set<string> {
+  const next = new Set(set);
+  if (next.has(value)) next.delete(value);
+  else next.add(value);
+  return next;
+}
+
+function summarizeSelection(selected: ReadonlySet<string>, meIdentifier: string | null): string {
+  if (selected.size === 0) return "Anyone";
+  if (selected.size === 1) {
+    const [only] = [...selected];
+    if (only === ASSIGNEE_UNASSIGNED) return "Unassigned";
+    return only === meIdentifier ? "You" : only;
+  }
+  return `${selected.size} selected`;
+}
+
+function FilterRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-2">
+      <span className="mt-1 w-14 shrink-0 font-mono text-[10px] uppercase tracking-wider text-fg-faint">
+        {label}
+      </span>
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">{children}</div>
+    </div>
+  );
+}
+
+function ClearButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="ml-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-fg-faint transition-colors hover:bg-surface-alt hover:text-fg"
+      title="Clear selection"
+    >
+      <X aria-hidden="true" className="size-3" />
+      <span>clear</span>
+    </button>
+  );
+}
+
+function CountBadge({ n, selected }: { n: number; selected: boolean }) {
+  return (
+    <span
+      className={cn(
+        "rounded px-1 py-px text-[9px] tabular-nums",
+        selected ? "bg-accent-fg/15 text-accent-fg" : "bg-bg/60 text-fg-faint",
+      )}
+    >
+      {n}
+    </span>
+  );
+}
+
 export function FilterBar({
   projectId,
   state,
@@ -43,7 +108,13 @@ export function FilterBar({
   visibleKinds,
   tagCounts,
   tagCollapseLimit,
+  assigneeCounts,
+  assigneeCollapseLimit,
+  assigneeSelectorStyle,
+  meIdentifier,
   showArchivedBucket,
+  providerKind,
+  showAvatars,
 }: {
   projectId: string;
   state: FilterState;
@@ -51,12 +122,27 @@ export function FilterBar({
   visibleKinds: Array<ItemKind | "all">;
   tagCounts: Array<[string, number]>;
   tagCollapseLimit: number;
+  assigneeCounts: Array<[string, number]>;
+  assigneeCollapseLimit: number;
+  assigneeSelectorStyle: "chips" | "dropdown";
+  meIdentifier: string | null;
   showArchivedBucket: boolean;
+  providerKind: string;
+  showAvatars: boolean;
 }) {
-  const { bucket, kind, activeTag, query, tagsExpanded } = state;
+  const { bucket, kind, activeTags, activeAssignees, query, tagsExpanded, assigneesExpanded } =
+    state;
   const buckets: BacklogBucket[] = showArchivedBucket
     ? ["open", "closed", "archived", "all"]
     : ["open", "closed", "all"];
+
+  const onToggleTag = (value: string) => handlers.setActiveTags(toggle(activeTags, value));
+  const onClearTags = () => handlers.setActiveTags(new Set());
+  const onToggleAssignee = (value: string) => {
+    handlers.setActiveAssignees(toggle(activeAssignees, value));
+  };
+  const onClearAssignees = () => handlers.setActiveAssignees(new Set());
+
   return (
     <div className="flex flex-col gap-2 border-b border-border p-3">
       <div className="flex items-center gap-2">
@@ -65,63 +151,48 @@ export function FilterBar({
           placeholder="Filter by title, id, tag…"
           value={query}
           onChange={(e) => handlers.setQuery(e.target.value)}
-          className="min-w-0 flex-1 rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-fg placeholder:text-fg-faint focus:border-accent focus:outline-none"
+          className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2 py-1 text-xs text-fg placeholder:text-fg-faint focus:border-accent focus:outline-none"
         />
         <CreateItemForm projectId={projectId} />
       </div>
-      {visibleKinds.length > 2 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {visibleKinds.map((k) => (
-            <button
-              type="button"
-              key={k}
-              onClick={() => handlers.setKind(k)}
-              className={cn(
-                "rounded-md px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition-colors",
-                kind === k ? "bg-fg text-bg" : "text-fg-muted hover:bg-surface-alt",
-              )}
+
+      <FilterRow label="State">
+        <SegmentedGroup>
+          {buckets.map((b) => (
+            <SegmentedButton
+              key={b}
+              selected={bucket === b}
+              onClick={() => handlers.setBucket(b)}
+              title={BUCKET_TITLE[b]}
             >
-              {k === "all" ? "All" : formatKind(k)}
-            </button>
+              {BUCKET_LABEL[b]}
+            </SegmentedButton>
           ))}
-        </div>
+        </SegmentedGroup>
+      </FilterRow>
+
+      {visibleKinds.length > 2 && (
+        <FilterRow label="Kind">
+          <SegmentedGroup>
+            {visibleKinds.map((k) => (
+              <SegmentedButton key={k} selected={kind === k} onClick={() => handlers.setKind(k)}>
+                {k === "all" ? "All" : formatKind(k)}
+              </SegmentedButton>
+            ))}
+          </SegmentedGroup>
+        </FilterRow>
       )}
-      <div className="flex flex-wrap items-center gap-1">
-        {buckets.map((b) => (
-          <button
-            type="button"
-            key={b}
-            onClick={() => handlers.setBucket(b)}
-            className={cn(
-              "rounded px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider",
-              bucket === b ? "bg-accent text-accent-fg" : "text-fg-muted hover:bg-surface-alt",
-            )}
-            title={BUCKET_TITLE[b]}
-          >
-            {BUCKET_LABEL[b]}
-          </button>
-        ))}
-      </div>
+
       {tagCounts.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1">
-          <button
-            type="button"
-            onClick={() => handlers.setActiveTag(null)}
-            className={cn(
-              "rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition-colors",
-              activeTag === null ? "bg-fg text-bg" : "text-fg-faint hover:bg-surface-alt",
-            )}
-          >
-            Any tag
-          </button>
+        <FilterRow label="Tag">
           {(tagsExpanded ? tagCounts : tagCounts.slice(0, tagCollapseLimit)).map(([t, n]) => {
             const label = displayTag(t);
-            const selected = activeTag === t;
+            const selected = activeTags.has(t);
             return (
               <button
                 type="button"
                 key={t}
-                onClick={() => handlers.setActiveTag(selected ? null : t)}
+                onClick={() => onToggleTag(t)}
                 className={cn(
                   "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[10px] lowercase tracking-wide transition-colors",
                   selected
@@ -131,14 +202,7 @@ export function FilterBar({
                 title={`${t} — ${n} item${n === 1 ? "" : "s"}`}
               >
                 <span>{label}</span>
-                <span
-                  className={cn(
-                    "text-[9px] tabular-nums",
-                    selected ? "text-accent-fg/75" : "text-fg-faint",
-                  )}
-                >
-                  {n}
-                </span>
+                <CountBadge n={n} selected={selected} />
               </button>
             );
           })}
@@ -146,13 +210,339 @@ export function FilterBar({
             <button
               type="button"
               onClick={() => handlers.setTagsExpanded((v) => !v)}
-              className="rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-faint hover:bg-surface-alt"
+              className="rounded-full px-2 py-0.5 font-mono text-[10px] lowercase tracking-wide text-fg-faint hover:bg-surface-alt"
             >
-              {tagsExpanded ? "Show less" : `+${tagCounts.length - tagCollapseLimit} more`}
+              {tagsExpanded ? "show less" : `+${tagCounts.length - tagCollapseLimit} more`}
             </button>
           )}
-        </div>
+          {activeTags.size > 0 && <ClearButton onClick={onClearTags} />}
+        </FilterRow>
       )}
+
+      {assigneeCounts.length > 0 || meIdentifier !== null ? (
+        assigneeSelectorStyle === "dropdown" ? (
+          <FilterRow label="Assignee">
+            <AssigneeDropdown
+              assigneeCounts={assigneeCounts}
+              activeAssignees={activeAssignees}
+              meIdentifier={meIdentifier}
+              onToggle={onToggleAssignee}
+              onClear={onClearAssignees}
+              providerKind={providerKind}
+              showAvatars={showAvatars}
+            />
+            {activeAssignees.size > 0 && <ClearButton onClick={onClearAssignees} />}
+          </FilterRow>
+        ) : (
+          <FilterRow label="Assignee">
+            <AssigneeChips
+              assigneeCounts={assigneeCounts}
+              activeAssignees={activeAssignees}
+              assigneesExpanded={assigneesExpanded}
+              assigneeCollapseLimit={assigneeCollapseLimit}
+              meIdentifier={meIdentifier}
+              onToggle={onToggleAssignee}
+              onToggleExpanded={() => handlers.setAssigneesExpanded((v) => !v)}
+              providerKind={providerKind}
+              showAvatars={showAvatars}
+            />
+            {activeAssignees.size > 0 && <ClearButton onClick={onClearAssignees} />}
+          </FilterRow>
+        )
+      ) : null}
     </div>
+  );
+}
+
+function SegmentedGroup({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="inline-flex overflow-hidden rounded-md border border-border">{children}</div>
+  );
+}
+
+function SegmentedButton({
+  selected,
+  onClick,
+  title,
+  children,
+}: {
+  selected: boolean;
+  onClick: () => void;
+  title?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      className={cn(
+        "px-2.5 py-1 font-mono text-[10px] lowercase tracking-wide transition-colors not-first:border-l not-first:border-border",
+        selected ? "bg-accent text-accent-fg" : "bg-surface text-fg-muted hover:bg-surface-alt",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function AssigneeChips({
+  assigneeCounts,
+  activeAssignees,
+  assigneesExpanded,
+  assigneeCollapseLimit,
+  meIdentifier,
+  onToggle,
+  onToggleExpanded,
+  providerKind,
+  showAvatars,
+}: {
+  assigneeCounts: Array<[string, number]>;
+  activeAssignees: ReadonlySet<string>;
+  assigneesExpanded: boolean;
+  assigneeCollapseLimit: number;
+  meIdentifier: string | null;
+  onToggle: (value: string) => void;
+  onToggleExpanded: () => void;
+  providerKind: string;
+  showAvatars: boolean;
+}) {
+  const visibleCounts = assigneesExpanded
+    ? assigneeCounts
+    : assigneeCounts.slice(0, assigneeCollapseLimit);
+  const overflow = assigneeCounts.length - assigneeCollapseLimit;
+
+  return (
+    <>
+      <ChipPill
+        label="unassigned"
+        selected={activeAssignees.has(ASSIGNEE_UNASSIGNED)}
+        onClick={() => onToggle(ASSIGNEE_UNASSIGNED)}
+      />
+      {visibleCounts.map(([name, n]) => {
+        const selected = activeAssignees.has(name);
+        const isMe = meIdentifier !== null && name === meIdentifier;
+        return (
+          <button
+            type="button"
+            key={name}
+            onClick={() => onToggle(name)}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full py-0.5 pr-2 font-mono text-[10px] lowercase tracking-wide transition-colors",
+              showAvatars ? "pl-0.5" : "pl-2",
+              selected
+                ? "bg-accent text-accent-fg"
+                : "bg-surface-alt text-fg-muted hover:bg-surface",
+            )}
+            title={`${name}${isMe ? " (you)" : ""} — ${n} item${n === 1 ? "" : "s"}`}
+          >
+            {showAvatars ? <AssigneeAvatar name={name} providerKind={providerKind} /> : null}
+            <span>{name}</span>
+            {isMe ? (
+              <span
+                className={cn(
+                  "font-mono text-[9px] uppercase",
+                  selected ? "text-accent-fg/75" : "text-fg-faint",
+                )}
+              >
+                you
+              </span>
+            ) : null}
+            <CountBadge n={n} selected={selected} />
+          </button>
+        );
+      })}
+      {overflow > 0 && (
+        <button
+          type="button"
+          onClick={onToggleExpanded}
+          className="rounded-full px-2 py-0.5 font-mono text-[10px] lowercase tracking-wide text-fg-faint hover:bg-surface-alt"
+        >
+          {assigneesExpanded ? "show less" : `+${overflow} more`}
+        </button>
+      )}
+    </>
+  );
+}
+
+function ChipPill({
+  label,
+  selected,
+  onClick,
+}: {
+  label: string;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "rounded-full px-2 py-0.5 font-mono text-[10px] lowercase tracking-wide transition-colors",
+        selected ? "bg-accent text-accent-fg" : "bg-surface-alt text-fg-muted hover:bg-surface",
+      )}
+    >
+      {label}
+    </button>
+  );
+}
+
+/**
+ * Avatars now resolve through `/api/avatars/{providerKind}/{identifier}`,
+ * which serves cached bytes out of the `Avatar` table. The route lazily
+ * populates on first hit (GitHub uses the public CDN; AzDO assignees stay
+ * 404 until the signed-in user's row supplies bytes), and returns a
+ * deterministic 404 when nothing is available so the `onError` fallback to
+ * an initial chip kicks in.
+ */
+function avatarUrlFor(providerKind: string, name: string): string | null {
+  if (!SUPPORTED_AVATAR_PROVIDERS.has(providerKind)) return null;
+  return avatarUrl(providerKind, name);
+}
+
+function AssigneeAvatar({ name, providerKind }: { name: string; providerKind: string }) {
+  const url = avatarUrlFor(providerKind, name);
+  const initial = name.charAt(0).toUpperCase() || "?";
+  return (
+    <span
+      aria-hidden="true"
+      className="relative flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full bg-bg/40 font-sans text-[8px] font-medium text-fg-faint"
+    >
+      <span>{initial}</span>
+      {url ? (
+        <>
+          {/* biome-ignore lint/performance/noImgElement: same-origin avatar route already streams cached bytes; next/image would add a layout layer for no benefit at this size. */}
+          <img
+            src={url}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            className="absolute inset-0 size-full object-cover"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).style.display = "none";
+            }}
+          />
+        </>
+      ) : null}
+    </span>
+  );
+}
+
+function AssigneeDropdown({
+  assigneeCounts,
+  activeAssignees,
+  meIdentifier,
+  onToggle,
+  onClear,
+  providerKind,
+  showAvatars,
+}: {
+  assigneeCounts: Array<[string, number]>;
+  activeAssignees: ReadonlySet<string>;
+  meIdentifier: string | null;
+  onToggle: (value: string) => void;
+  onClear: () => void;
+  providerKind: string;
+  showAvatars: boolean;
+}) {
+  const summary = summarizeSelection(activeAssignees, meIdentifier);
+  const sentinels: Array<{ value: string; label: string }> = [
+    { value: ASSIGNEE_UNASSIGNED, label: "Unassigned" },
+  ];
+
+  return (
+    <Listbox
+      value={[...activeAssignees]}
+      onChange={() => {
+        /* selection handled in option onClick to support sentinel exclusivity + Any */
+      }}
+      multiple
+    >
+      <div className="relative">
+        <ListboxButton className="inline-flex min-w-[10rem] items-center justify-between gap-2 rounded-md border border-border bg-surface px-2 py-1 text-xs text-fg hover:bg-surface-alt">
+          <span className="truncate">{summary}</span>
+          <ChevronDown aria-hidden="true" className="size-3 shrink-0 text-fg-faint" />
+        </ListboxButton>
+        <ListboxOptions
+          anchor="bottom start"
+          className="z-30 mt-1 max-h-72 w-64 overflow-auto rounded-md border border-border bg-surface p-1 text-xs shadow-lg focus:outline-none"
+        >
+          <button
+            type="button"
+            onClick={onClear}
+            className={cn(
+              "flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left",
+              activeAssignees.size === 0
+                ? "bg-accent/10 text-fg"
+                : "text-fg-muted hover:bg-surface-alt",
+            )}
+          >
+            <span>Anyone</span>
+            {activeAssignees.size === 0 ? <Check aria-hidden="true" className="size-3" /> : null}
+          </button>
+          <div className="my-1 border-t border-border" />
+          {sentinels.map((s) => {
+            const selected = activeAssignees.has(s.value);
+            return (
+              <ListboxOption
+                key={s.value}
+                value={s.value}
+                as="button"
+                onClick={(e: React.MouseEvent) => {
+                  e.preventDefault();
+                  onToggle(s.value);
+                }}
+                className={cn(
+                  "flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left",
+                  selected ? "bg-accent/10 text-fg" : "text-fg-muted hover:bg-surface-alt",
+                )}
+              >
+                <span>{s.label}</span>
+                {selected ? <Check aria-hidden="true" className="size-3" /> : null}
+              </ListboxOption>
+            );
+          })}
+          {assigneeCounts.length > 0 ? (
+            <>
+              <div className="my-1 border-t border-border" />
+              {assigneeCounts.map(([name, n]) => {
+                const selected = activeAssignees.has(name);
+                const isMe = meIdentifier !== null && name === meIdentifier;
+                return (
+                  <ListboxOption
+                    key={name}
+                    value={name}
+                    as="button"
+                    onClick={(e: React.MouseEvent) => {
+                      e.preventDefault();
+                      onToggle(name);
+                    }}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left",
+                      selected ? "bg-accent/10 text-fg" : "text-fg-muted hover:bg-surface-alt",
+                    )}
+                  >
+                    <span className="flex items-center gap-1.5 truncate">
+                      {showAvatars ? (
+                        <AssigneeAvatar name={name} providerKind={providerKind} />
+                      ) : null}
+                      <span className="truncate">{name}</span>
+                      {isMe ? (
+                        <span className="font-mono text-[9px] uppercase text-fg-faint">you</span>
+                      ) : null}
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="font-mono text-[9px] tabular-nums text-fg-faint">{n}</span>
+                      {selected ? <Check aria-hidden="true" className="size-3" /> : null}
+                    </span>
+                  </ListboxOption>
+                );
+              })}
+            </>
+          ) : null}
+        </ListboxOptions>
+      </div>
+    </Listbox>
   );
 }

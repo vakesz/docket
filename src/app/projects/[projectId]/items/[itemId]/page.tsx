@@ -2,8 +2,10 @@ import { TRPCError } from "@trpc/server";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { cache } from "react";
+import { resolveEffectiveStaleThreshold } from "@/lib/staleness";
+import { auth } from "@/server/auth";
 import { db } from "@/server/db";
-import { loadGlobalSetting } from "@/server/settings/effective";
+import { loadProjectSetting, loadUserSetting } from "@/server/settings/effective";
 import { createCaller } from "@/server/trpc-caller";
 import { DetailPane } from "@/ui/items/detail-pane";
 
@@ -72,7 +74,15 @@ export default async function ItemDetailPage({
     throw err;
   }
 
-  const staleThresholdDays = await loadGlobalSetting(db, "items.stale-after-days");
+  const session = await auth();
+  const userId = session?.user?.id ?? null;
+  const [projectStale, userStale] = await Promise.all([
+    loadProjectSetting(db, projectId, "items.stale-after-days"),
+    userId
+      ? loadUserSetting(db, userId, "items.stale-after-days.user")
+      : Promise.resolve(-1 as number),
+  ]);
+  const staleThresholdDays = resolveEffectiveStaleThreshold(userStale, projectStale);
 
   return (
     <DetailPane
@@ -80,7 +90,7 @@ export default async function ItemDetailPage({
       providerKind={project.providerKind}
       capabilities={project.capabilities}
       item={item}
-      staleThresholdDays={staleThresholdDays > 0 ? staleThresholdDays : null}
+      staleThresholdDays={staleThresholdDays}
     />
   );
 }

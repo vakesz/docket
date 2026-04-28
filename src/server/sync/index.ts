@@ -25,6 +25,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import type { Comment as CanonicalComment, Item as CanonicalItem, ChangedItem } from "@/core/types";
 import { Prisma } from "@/db/generated/client";
+import { warmAvatars } from "@/server/avatars/service";
 import type { db as Db } from "@/server/db";
 import {
   injectExternalChange,
@@ -122,7 +123,7 @@ async function processChunk(
   projectId: string,
   bundles: readonly ChangedItem[],
   syncedAt: Date,
-  ctx: { syncId: string; chunkIndex: number },
+  ctx: { syncId: string; chunkIndex: number; providerKind: string },
 ): Promise<ChunkResult> {
   const startedAt = Date.now();
   const ids = bundles.map((b) => b.item.id);
@@ -222,6 +223,29 @@ async function processChunk(
     for (const n of results) commentsReconciled += n;
   }
 
+  // Warm the avatar cache for assignees in this chunk so the first item-
+  // list render after sync has bytes ready instead of flickering through
+  // the lazy-fetch path. Best-effort + fire-and-forget — sync should never
+  // fail because an avatar fetch did, and the loop itself bounds
+  // concurrency internally.
+  const assignees = collectAssignees(bundles);
+  if (assignees.length > 0) {
+    void warmAvatars(db, {
+      providerKind: ctx.providerKind,
+      identifiers: assignees,
+    }).catch((err) => {
+      logger.warn(
+        {
+          syncId: ctx.syncId,
+          projectId,
+          chunkIndex: ctx.chunkIndex,
+          err: err instanceof Error ? err.message : String(err),
+        },
+        "sync: avatar warm failed",
+      );
+    });
+  }
+
   logger.debug(
     {
       syncId: ctx.syncId,
@@ -239,6 +263,18 @@ async function processChunk(
   );
 
   return { upserted, inboundConversations, commentsReconciled };
+}
+
+function collectAssignees(bundles: readonly ChangedItem[]): string[] {
+  const set = new Set<string>();
+  for (const bundle of bundles) {
+    const item = bundle.item;
+    if (item.assignee) set.add(item.assignee);
+    for (const a of item.assignees ?? []) {
+      if (a) set.add(a);
+    }
+  }
+  return Array.from(set);
 }
 
 /**
@@ -311,6 +347,7 @@ export async function reconcileComments(
 async function upsertItems(
   db: typeof Db,
   projectId: string,
+  providerKind: string,
   bundles: AsyncIterable<ChangedItem>,
   syncedAt: Date,
   syncId: string,
@@ -339,6 +376,7 @@ async function upsertItems(
     const task = processChunk(db, projectId, chunk, syncedAt, {
       syncId,
       chunkIndex,
+      providerKind,
     }).then((r) => {
       upserted += r.upserted;
       inboundConversations += r.inboundConversations;
@@ -449,7 +487,14 @@ export async function runIncrementalSync(
       commentsReconciled,
       chunks,
       itemsSeen,
-    } = await upsertItems(db, project.id, provider.listChangesSince(watermark), syncedAt, syncId);
+    } = await upsertItems(
+      db,
+      project.id,
+      project.providerKind,
+      provider.listChangesSince(watermark),
+      syncedAt,
+      syncId,
+    );
 
     phase = "cursor";
     const newWatermark = latestUpdatedAt ?? watermark;
@@ -509,7 +554,14 @@ export async function runFullSync(
       commentsReconciled,
       chunks,
       itemsSeen,
-    } = await upsertItems(db, project.id, provider.listChangesSince(null), syncedAt, syncId);
+    } = await upsertItems(
+      db,
+      project.id,
+      project.providerKind,
+      provider.listChangesSince(null),
+      syncedAt,
+      syncId,
+    );
 
     // Archive any cached row not seen in the full walk. Excluding already-
     // archived rows keeps the update count meaningful.

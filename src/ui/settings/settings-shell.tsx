@@ -10,13 +10,16 @@ import { AutoAcceptPanel } from "@/ui/settings/auto-accept-panel";
 import { BudgetAuditPanel } from "@/ui/settings/budget-audit-panel";
 import { ChatDisplayPanel } from "@/ui/settings/chat-display-panel";
 import { ExportPanel } from "@/ui/settings/export-panel";
-import { ItemsDisplayPanel } from "@/ui/settings/items-display-panel";
+import { ItemDetailPanel } from "@/ui/settings/item-detail-panel";
+import { ItemsListPanel } from "@/ui/settings/items-list-panel";
 import { LlmProvidersPanel } from "@/ui/settings/llm-providers-panel";
 import { MembersPanel } from "@/ui/settings/members-panel";
 import { OauthProvidersPanel } from "@/ui/settings/oauth-providers-panel";
 import { ProfilePanel } from "@/ui/settings/profile-panel";
+import { ProjectItemsPanel } from "@/ui/settings/project-items-panel";
 import { ProjectLlmPanel } from "@/ui/settings/project-llm-panel";
 import { ProjectsPanel } from "@/ui/settings/projects-panel";
+import { ReadOnlyModePanel } from "@/ui/settings/read-only-mode-panel";
 import {
   readPersistedSection,
   SECTION_STORAGE_KEY,
@@ -26,7 +29,6 @@ import {
 import { SettingsSidebar } from "@/ui/settings/settings-sidebar";
 import { SyncPanel } from "@/ui/settings/sync-panel";
 import { WebFetchPanel } from "@/ui/settings/web-fetch-panel";
-import { WorkspacePanel } from "@/ui/settings/workspace-panel";
 import { useRegisterSidebarMount, useSidebarDrawer } from "@/ui/shell/sidebar-drawer-context";
 import { SourcesPane } from "@/ui/sources/sources-pane";
 
@@ -194,16 +196,18 @@ function SectionContent({
       return projectId ? <MembersPanel projectId={projectId} /> : null;
     case "project-export":
       return projectId ? <ExportPanel projectId={projectId} /> : null;
+    case "project-items":
+      return projectId ? <ProjectItemsPanel projectId={projectId} /> : null;
     case "projects":
       return <ProjectsPanel />;
     case "profile":
       return <ProfilePanel />;
     case "chat":
       return <ChatDisplayPanel />;
-    case "items-display":
-      return <ItemsDisplayPanel />;
-    case "workspace":
-      return <WorkspacePanel />;
+    case "items-list":
+      return <ItemsListPanel />;
+    case "item-detail":
+      return <ItemDetailPanel projectId={projectId} />;
     case "budget-audit":
       return <BudgetAuditPanel />;
     case "global-analytics":
@@ -212,5 +216,7 @@ function SectionContent({
       return <LlmProvidersPanel />;
     case "oauth-providers":
       return <OauthProvidersPanel publicBase={publicBase} />;
+    case "read-only-mode":
+      return <ReadOnlyModePanel />;
   }
 }

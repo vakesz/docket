@@ -1,8 +1,8 @@
 "use client";
 
-// UI-only preference — see src/lib/ui-prefs.ts. Deliberately not in SETTINGS_CATALOG.
-
-import { Description, Field, Label, Radio, RadioGroup } from "@headlessui/react";
+import { Description, Field, Label, Radio, RadioGroup, Switch } from "@headlessui/react";
+import { switchThumbClass, switchTrackClass } from "@/lib/form-classes";
+import { trpc } from "@/lib/trpc-client";
 import { type ToolDisplayMode, useToolDisplayMode } from "@/lib/ui-prefs";
 
 const OPTIONS: { value: ToolDisplayMode; label: string; helper: string }[] = [
@@ -23,18 +23,28 @@ const OPTIONS: { value: ToolDisplayMode; label: string; helper: string }[] = [
   },
 ];
 
+/**
+ * Chat section — chat-pane preferences. Mixes browser-local rendering
+ * preferences (tool-call display mode, stored on this device) with
+ * catalog-backed keybinding preferences (send-on-Enter, synced to your
+ * account).
+ */
 export function ChatDisplayPanel() {
   const [mode, setMode] = useToolDisplayMode();
 
+  const utils = trpc.useUtils();
+  const list = trpc.settings.list.useQuery();
+  const update = trpc.settings.update.useMutation({
+    onSuccess: async () => {
+      await utils.settings.list.invalidate();
+    },
+  });
+
+  const sendOnEnter = list.data?.find((r) => r.key === "chat.send-on-enter")?.value ?? true;
+  const disabled = list.isPending || update.isPending;
+
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h2 className="text-base font-medium text-fg">Chat</h2>
-        <p className="text-sm text-fg-muted">
-          Browser-local display preferences for the chat pane. Stored on this device only.
-        </p>
-      </header>
-
       <RadioGroup
         value={mode}
         onChange={setMode}
@@ -43,7 +53,8 @@ export function ChatDisplayPanel() {
       >
         <Label className="text-sm font-medium text-fg">Tool calls in chat</Label>
         <p className="text-xs text-fg-muted">
-          Controls how tool invocations the agent makes appear inside the chat transcript.
+          Controls how the agent's tool invocations appear inside the chat transcript. Stored on
+          this device only.
         </p>
         <div className="flex flex-col gap-2">
           {OPTIONS.map((opt) => (
@@ -65,6 +76,26 @@ export function ChatDisplayPanel() {
           ))}
         </div>
       </RadioGroup>
+
+      <Field className="flex flex-col gap-1 border-t border-border pt-6">
+        <Label className="text-sm font-medium text-fg">Send on Enter</Label>
+        <p className="text-xs text-fg-muted">
+          When on, Enter sends a message and Shift+Enter inserts a newline. When off, Enter inserts
+          a newline and Cmd/Ctrl+Enter sends.
+        </p>
+        <Field className="flex items-center gap-2 text-sm text-fg">
+          <Switch
+            checked={sendOnEnter === true}
+            disabled={disabled}
+            onChange={(next) => update.mutate({ key: "chat.send-on-enter" as never, value: next })}
+            className={switchTrackClass}
+          >
+            <span aria-hidden className={switchThumbClass} />
+          </Switch>
+          <Label>{sendOnEnter === true ? "Enabled" : "Disabled"}</Label>
+        </Field>
+        {update.error ? <p className="text-xs text-danger-fg">{update.error.message}</p> : null}
+      </Field>
     </div>
   );
 }

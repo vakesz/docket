@@ -2,20 +2,20 @@ import {
   BarChart3,
   Bot,
   Brain,
+  Clock,
   Cpu,
   Download,
   FileText,
   FolderPlus,
   Globe,
   KeyRound,
-  LineChart,
   ListOrdered,
   MessageSquare,
+  Power,
   RefreshCw,
   ScrollText,
   ServerCog,
   Shield,
-  SlidersHorizontal,
   UserRound,
   Users,
 } from "lucide-react";
@@ -31,17 +31,19 @@ export type SectionKey =
   | "project-analytics"
   | "project-members"
   | "project-export"
+  | "project-items"
   | "projects"
   | "profile"
   | "chat"
-  | "items-display"
-  | "workspace"
+  | "items-list"
+  | "item-detail"
   | "budget-audit"
   | "global-analytics"
   | "llm-providers"
-  | "oauth-providers";
+  | "oauth-providers"
+  | "read-only-mode";
 
-export type SectionGroup = "project" | "you" | "workspace" | "deployment";
+export type SectionGroup = "project" | "you" | "deployment";
 
 export type SectionMeta = {
   key: SectionKey;
@@ -115,10 +117,19 @@ export const SECTIONS: SectionMeta[] = [
     needsProject: true,
   },
   {
+    key: "project-items",
+    label: "Items defaults",
+    description:
+      "Project-level defaults for the items list — currently the staleness threshold (members can override theirs under Profile → Item detail).",
+    icon: Clock,
+    group: "project",
+    needsProject: true,
+  },
+  {
     key: "project-analytics",
     label: "Analytics",
     description: "Daily LLM usage and spend for this project.",
-    icon: LineChart,
+    icon: BarChart3,
     group: "project",
     needsProject: true,
   },
@@ -150,31 +161,31 @@ export const SECTIONS: SectionMeta[] = [
   {
     key: "profile",
     label: "Profile",
-    description: "Default project and chat send-key.",
+    description: "Identity, theme, time zone, and dashboard polling.",
     icon: UserRound,
+    group: "you",
+  },
+  {
+    key: "items-list",
+    label: "Items list",
+    description: "Backlog filter bar defaults, row appearance, and recently-viewed items.",
+    icon: ListOrdered,
+    group: "you",
+  },
+  {
+    key: "item-detail",
+    label: "Item detail",
+    description:
+      "How item-detail headers render for me — including a personal staleness override that wins over each project's value.",
+    icon: Clock,
     group: "you",
   },
   {
     key: "chat",
     label: "Chat",
-    description: "How tool calls render in the chat pane.",
+    description: "Tool-call rendering and the send-on-Enter key in the chat pane.",
     icon: MessageSquare,
     group: "you",
-  },
-  {
-    key: "items-display",
-    label: "Items pane",
-    description: "Browser-local layout knobs for the backlog list — recents count, etc.",
-    icon: ListOrdered,
-    group: "you",
-  },
-
-  {
-    key: "workspace",
-    label: "Workspace",
-    description: "Staleness threshold, system read-only mode, and other site-wide knobs.",
-    icon: SlidersHorizontal,
-    group: "workspace",
   },
 
   {
@@ -205,12 +216,19 @@ export const SECTIONS: SectionMeta[] = [
     icon: KeyRound,
     group: "deployment",
   },
+  {
+    key: "read-only-mode",
+    label: "Read-only mode",
+    description:
+      "Kill-switch for every mutation route — including proposal confirms. Reads stay open. Flip on for maintenance windows.",
+    icon: Power,
+    group: "deployment",
+  },
 ];
 
 export const GROUPS: { key: SectionGroup; label: string }[] = [
   { key: "project", label: "Project" },
   { key: "you", label: "You" },
-  { key: "workspace", label: "Workspace" },
   { key: "deployment", label: "Deployment" },
 ];
 

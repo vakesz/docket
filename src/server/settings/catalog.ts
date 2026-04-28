@@ -33,7 +33,11 @@ export type SettingDef<S extends z.ZodTypeAny> = {
 
 const BoolSchema = z.boolean();
 const PositiveIntSchema = z.number().int().min(0).max(3650);
+// User staleness override: -1 = inherit project default, 0 = force-disabled
+// for me on every project, >0 = my personal threshold (wins over project).
+const UserStaleOverrideSchema = z.number().int().min(-1).max(3650);
 const VisibleChipsSchema = z.number().int().min(0).max(20);
+const AssigneeSelectorStyleSchema = z.enum(["chips", "dropdown"]);
 const BacklogSortSchema = z.enum(["updated", "created", "priority", "title"]);
 const BacklogStateFilterSchema = z.enum(["all", "open", "in_progress", "done"]);
 const BacklogDensitySchema = z.enum(["compact", "cozy"]);
@@ -105,6 +109,33 @@ export const SETTINGS_CATALOG = {
     description:
       "How many tag chips render inline (on each backlog row, and in the tag-filter bar at the top of the backlog pane) before the rest collapse into a +N badge. Set to 0 to always collapse (just the count, no chips).",
   },
+  "items.max-visible-assignees": {
+    key: "items.max-visible-assignees",
+    scope: "user",
+    schema: VisibleChipsSchema,
+    default: 2,
+    label: "Backlog — max assignee chips shown",
+    description:
+      "How many assignee chips render in the backlog filter row before the rest collapse into a +N badge. Only applies when the assignee selector style is set to chips. Set to 0 to always collapse.",
+  },
+  "items.assignee-selector-style": {
+    key: "items.assignee-selector-style",
+    scope: "user",
+    schema: AssigneeSelectorStyleSchema,
+    default: "chips",
+    label: "Backlog — assignee selector style",
+    description:
+      "How the assignee filter renders. 'chips' shows each assignee as a toggleable pill (good for small teams). 'dropdown' shows a multi-select dropdown — switch to this when the project has many people and chips would overflow. The list always offers Any, Unassigned, and the project's assignees; if your name is recognised, it is pinned to the front.",
+  },
+  "items.show-assignee-avatars": {
+    key: "items.show-assignee-avatars",
+    scope: "user",
+    schema: BoolSchema,
+    default: true,
+    label: "Backlog — show assignee avatars",
+    description:
+      "When on, assignee chips render with the user's profile picture pulled from the provider (currently GitHub only — a deterministic CDN URL, no extra API calls). Other providers fall back to a colored initial circle. Turn off to show only the username.",
+  },
   "items.show-archived-bucket": {
     key: "items.show-archived-bucket",
     scope: "user",
@@ -134,12 +165,21 @@ export const SETTINGS_CATALOG = {
   },
   "items.stale-after-days": {
     key: "items.stale-after-days",
-    scope: "global",
+    scope: "project",
     schema: PositiveIntSchema,
     default: 7,
     label: "Stale-after threshold (days)",
     description:
-      "Backlog rows tint amber once an item has been untouched this long, and red at 2x. Set to 0 to disable the freshness tint entirely.",
+      "Project-level default for the freshness tint. Backlog rows tint amber once an item has been untouched this long, and red at 2x. Set to 0 to disable the freshness tint for everyone viewing this project. Each member can override the value with their own under Profile → Item detail.",
+  },
+  "items.stale-after-days.user": {
+    key: "items.stale-after-days.user",
+    scope: "user",
+    schema: UserStaleOverrideSchema,
+    default: -1,
+    label: "My staleness threshold (override)",
+    description:
+      "Personal override for the freshness tint, applied across every project I view. -1 means inherit the project default; 0 force-disables the tint for me everywhere; any positive integer wins over the project value.",
   },
   "backlog.default-sort": {
     key: "backlog.default-sort",

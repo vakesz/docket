@@ -22,73 +22,46 @@
 
 import "server-only";
 import type { OIDCConfig } from "next-auth/providers";
+import { avatarUrl } from "@/lib/avatar-url";
+import { fetchAvatarFromProvider } from "@/server/avatars/fetchers";
+import { persistAvatar } from "@/server/avatars/service";
+import { db } from "@/server/db";
 import { logger } from "@/server/logger";
 
 const AZDO_RESOURCE_ID = "499b84ac-1321-427f-aa17-267ca6975798";
 
-const AZDO_AVATAR_URL =
-  "https://app.vssps.visualstudio.com/_apis/profile/profiles/me/avatar?size=medium&api-version=7.1-preview.1";
-
-const AVATAR_FETCH_TIMEOUT_MS = 5000;
-
 /**
- * Fetch the signed-in user's avatar from the AzDO Profile API and return it
- * as a `data:` URL the browser can render directly.
- *
- * We can't reach Microsoft Graph (`/me/photo/$value`) here because Entra
- * tokens are per-resource — our access token carries the AzDO `.default`
- * scope, not Graph. Asking for both would force a multi-resource consent
- * dance. The AzDO Profile API uses the same scope we already have, returns
- * the avatar inline as base64, and matches GitHub's "image is captured at
- * sign-in" behavior.
- *
- * Returns null on any failure (no token, network error, 404 because the
- * user never set a custom avatar) — the topbar falls back to an initial
- * just like for any provider that doesn't surface an image.
+ * Fetch the signed-in user's avatar via the shared fetcher, write the bytes
+ * into the `Avatar` cache keyed by the same identifier `Item.assignee`
+ * carries for AzDO work items (the Entra `preferred_username`, which is
+ * the email-shaped `uniqueName` AzDO stamps onto AssignedTo). Returns the
+ * relative `/api/avatars/...` URL the UI should render — bytes flow
+ * through our route handler so the User row no longer carries a base64
+ * data URL.
  */
-async function fetchAzureDevOpsAvatar(accessToken: string | undefined): Promise<string | null> {
-  if (!accessToken) return null;
+async function captureAzureDevOpsAvatar(
+  identifier: string,
+  accessToken: string | undefined,
+): Promise<void> {
+  if (!accessToken) return;
   try {
-    const res = await fetch(AZDO_AVATAR_URL, {
-      headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
-      signal: AbortSignal.timeout(AVATAR_FETCH_TIMEOUT_MS),
+    const fetched = await fetchAvatarFromProvider("azure_devops", identifier, {
+      accessToken,
+      isSelf: true,
     });
-    if (!res.ok) {
-      // 404 = user has no custom avatar (AzDO renders initials there too).
-      // 401/403 = token doesn't carry profile read perms; surface as null.
-      if (res.status !== 404) {
-        logger.warn(
-          { status: res.status },
-          "azure-devops: avatar fetch returned non-OK; falling back to initial",
-        );
-      }
-      return null;
-    }
-    const json = (await res.json()) as { value?: string };
-    const b64 = json.value?.trim();
-    if (!b64) return null;
-    return `data:${detectImageMime(b64)};base64,${b64}`;
+    await persistAvatar(db, {
+      providerKind: "azure_devops",
+      identifier,
+      bytes: fetched?.bytes ?? null,
+      contentType: fetched?.contentType ?? null,
+      etag: fetched?.etag ?? null,
+    });
   } catch (err) {
     logger.warn(
       { err: err instanceof Error ? err.message : String(err) },
-      "azure-devops: avatar fetch threw; falling back to initial",
+      "azure-devops: avatar capture failed; route will surface 404 until next sign-in",
     );
-    return null;
   }
-}
-
-/**
- * The AzDO avatar endpoint doesn't return a content-type alongside the
- * base64 payload — it's whatever the user uploaded. Sniff the leading
- * base64 bytes (which decode 1:1 to the file's magic header) so the data
- * URL renders correctly in browsers that strict-check MIME.
- */
-function detectImageMime(b64: string): string {
-  if (b64.startsWith("iVBORw0K")) return "image/png";
-  if (b64.startsWith("/9j/")) return "image/jpeg";
-  if (b64.startsWith("R0lGOD")) return "image/gif";
-  if (b64.startsWith("UklGR")) return "image/webp";
-  return "image/png";
 }
 
 /**
@@ -144,12 +117,23 @@ export function azureDevOpsProvider(
     // Entra's userinfo doesn't include a photo, so we hop to the AzDO
     // Profile API at sign-in time using the access token we just issued.
     // Same lifecycle as GitHub: captured once, refreshed on the next sign-in.
+    //
+    // Avatar identifier intentionally uses `preferred_username` (the
+    // email-shaped UPN) rather than `oid` — that's what AzDO stamps into
+    // `System.AssignedTo.uniqueName` on work items, and the assignee chip
+    // renders avatars via that same identifier. Aligning the two means the
+    // signed-in user's chip and the account-menu button hit the same row.
     async profile(profile, tokens) {
+      const identifier = profile.preferred_username ?? profile.email ?? profile.oid ?? profile.sub;
+      const accessToken = tokens?.access_token;
+      if (identifier && accessToken) {
+        await captureAzureDevOpsAvatar(identifier, accessToken);
+      }
       return {
         id: profile.oid || profile.sub,
         name: profile.name ?? null,
         email: profile.email ?? profile.preferred_username ?? null,
-        image: await fetchAzureDevOpsAvatar(tokens?.access_token),
+        image: identifier ? avatarUrl("azure_devops", identifier) : null,
       };
     },
   };

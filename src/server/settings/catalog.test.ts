@@ -60,11 +60,26 @@ describe("settings catalog", () => {
     expect(decodeSettingValue("setup.complete", JSON.stringify(true))).toBe(true);
   });
 
-  it("items.stale-after-days accepts non-negative ints, rejects negative or fractional", () => {
+  it("items.stale-after-days is project-scoped and accepts non-negative ints", () => {
+    const def = getSettingDef("items.stale-after-days");
+    expect(def.scope).toBe("project");
     expect(decodeSettingValue("items.stale-after-days", null)).toBe(7);
     expect(decodeSettingValue("items.stale-after-days", JSON.stringify(0))).toBe(0);
     expect(decodeSettingValue("items.stale-after-days", JSON.stringify(30))).toBe(30);
     expect(decodeSettingValue("items.stale-after-days", JSON.stringify(-1))).toBe(7);
     expect(decodeSettingValue("items.stale-after-days", JSON.stringify(1.5))).toBe(7);
+  });
+
+  it("items.stale-after-days.user is user-scoped with -1 sentinel", () => {
+    const def = getSettingDef("items.stale-after-days.user");
+    expect(def.scope).toBe("user");
+    expect(def.default).toBe(-1);
+    expect(decodeSettingValue("items.stale-after-days.user", null)).toBe(-1);
+    expect(decodeSettingValue("items.stale-after-days.user", JSON.stringify(-1))).toBe(-1);
+    expect(decodeSettingValue("items.stale-after-days.user", JSON.stringify(0))).toBe(0);
+    expect(decodeSettingValue("items.stale-after-days.user", JSON.stringify(14))).toBe(14);
+    // values below -1 fall back to default
+    expect(decodeSettingValue("items.stale-after-days.user", JSON.stringify(-5))).toBe(-1);
+    expect(decodeSettingValue("items.stale-after-days.user", JSON.stringify(2.5))).toBe(-1);
   });
 });

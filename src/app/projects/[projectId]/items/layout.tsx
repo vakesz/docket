@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
+import { resolveEffectiveStaleThreshold } from "@/lib/staleness";
+import { auth } from "@/server/auth";
 import { db } from "@/server/db";
-import { loadGlobalSetting } from "@/server/settings/effective";
+import { loadProjectSetting, loadUserSetting } from "@/server/settings/effective";
 import { ItemsShell } from "@/ui/shell/items-shell";
 
 /**
@@ -18,13 +20,19 @@ export default async function ItemsLayout({
   params: Promise<{ projectId: string }>;
 }) {
   const { projectId } = await params;
-  const staleThresholdDays = await loadGlobalSetting(db, "items.stale-after-days");
+  const session = await auth();
+  const userId = session?.user?.id ?? null;
+
+  const [projectStale, userStale] = await Promise.all([
+    loadProjectSetting(db, projectId, "items.stale-after-days"),
+    userId
+      ? loadUserSetting(db, userId, "items.stale-after-days.user")
+      : Promise.resolve(-1 as number),
+  ]);
+  const staleThresholdDays = resolveEffectiveStaleThreshold(userStale, projectStale);
 
   return (
-    <ItemsShell
-      projectId={projectId}
-      staleThresholdDays={staleThresholdDays > 0 ? staleThresholdDays : null}
-    >
+    <ItemsShell projectId={projectId} staleThresholdDays={staleThresholdDays}>
       {children}
     </ItemsShell>
   );

@@ -19,7 +19,9 @@
  * tools tolerate providers that don't implement them.
  */
 
+import { Readable } from "node:stream";
 import * as azdev from "azure-devops-node-api";
+import type { IGitApi } from "azure-devops-node-api/GitApi.js";
 import type { JsonPatchOperation } from "azure-devops-node-api/interfaces/common/VSSInterfaces.js";
 import {
   type Comment as AzdoComment,
@@ -35,8 +37,20 @@ import type {
   CreateFields,
   Item,
   ItemKind,
+  PRMatch,
+  PullRequestDetail,
+  PullRequestFile,
+  PullRequestReview,
   TransitionIntent,
 } from "@/core/types";
+import {
+  changeTypeToStatus,
+  parseAzdoPullRequestId,
+  parseVstfsPRRef,
+  pullRequestStatusToCanonical,
+  stripRefPrefix,
+  voteToReviewState,
+} from "@/providers/azure-devops/pr-link";
 import {
   KIND_BY_WIT,
   mapState,
@@ -145,26 +159,43 @@ type WorkItemPayload = {
   id?: number;
   fields?: Record<string, unknown>;
   url?: string;
-  relations?: Array<{ rel?: string; url?: string }>;
+  relations?: Array<{ rel?: string; url?: string; attributes?: Record<string, unknown> }>;
 };
+
+type VstfsRef = NonNullable<ReturnType<typeof parseVstfsPRRef>>;
 
 export class AzureDevOpsProvider implements WorkItemProvider {
   private readonly config: Config;
   private readonly providerKey: string;
   private wit: IWorkItemTrackingApi | null = null;
+  private git: IGitApi | null = null;
+  private conn: azdev.WebApi | null = null;
 
   constructor(rawConfig: Record<string, unknown>) {
     this.config = readConfig(rawConfig);
     this.providerKey = `azure_devops:${this.config.orgUrl}/${this.config.project}`;
   }
 
+  private connection(): azdev.WebApi {
+    if (!this.conn) {
+      const handler = azdev.getBearerHandler(this.config.accessToken);
+      this.conn = new azdev.WebApi(this.config.orgUrl, handler);
+    }
+    return this.conn;
+  }
+
   private async witApi(): Promise<IWorkItemTrackingApi> {
     if (!this.wit) {
-      const handler = azdev.getBearerHandler(this.config.accessToken);
-      const conn = new azdev.WebApi(this.config.orgUrl, handler);
-      this.wit = await conn.getWorkItemTrackingApi();
+      this.wit = await this.connection().getWorkItemTrackingApi();
     }
     return this.wit;
+  }
+
+  private async gitApi(): Promise<IGitApi> {
+    if (!this.git) {
+      this.git = await this.connection().getGitApi();
+    }
+    return this.git;
   }
 
   private webUrl(workItemId: number | string): string {
@@ -257,9 +288,7 @@ export class AzureDevOpsProvider implements WorkItemProvider {
     // the same email the assignee field uses. Wrap in try/catch and degrade
     // to null so `@me` falls back to "no narrowing" instead of hiding rows.
     try {
-      const handler = azdev.getBearerHandler(this.config.accessToken);
-      const conn = new azdev.WebApi(this.config.orgUrl, handler);
-      const profile = await conn.getProfileApi();
+      const profile = await this.connection().getProfileApi();
       const me = await profile.getProfile("me");
       const email = (me as { emailAddress?: string }).emailAddress;
       if (typeof email === "string" && email) return email;
@@ -465,15 +494,185 @@ export class AzureDevOpsProvider implements WorkItemProvider {
   }
 
   async uploadAttachment(
-    _id: string,
-    _filename: string,
-    _content: Uint8Array,
+    id: string,
+    filename: string,
+    content: Uint8Array,
     _contentType: string,
   ): Promise<string> {
-    // AzDO attachment upload requires streaming a NodeJS.ReadableStream into
-    // createAttachment (Buffer→Readable shim) plus a second updateWorkItem to
-    // add the relation. Not yet implemented.
-    throw new ProviderError("Azure DevOps attachment upload not implemented yet");
+    // AzDO splits attachment upload into two calls: blob upload, then relation
+    // attach. The SDK's createAttachment wants a NodeJS.ReadableStream, so wrap
+    // the in-memory bytes via Readable.from(Buffer.from(...)). contentType is
+    // intentionally unused — AzDO infers it server-side and the parameter
+    // exists only for interface symmetry with GitHub.
+    const wit = await this.witApi();
+    const stream = Readable.from(Buffer.from(content));
+    let ref: Awaited<ReturnType<typeof wit.createAttachment>>;
+    try {
+      ref = await wit.createAttachment(null, stream, filename, "Simple", this.config.project);
+    } catch (err) {
+      wrapError(err);
+    }
+    const url = ref.url;
+    if (!url) {
+      throw new ProviderError("Azure DevOps createAttachment returned no url");
+    }
+    const patch: JsonPatchOperation[] = [
+      {
+        op: 0,
+        path: "/relations/-",
+        value: {
+          rel: "AttachedFile",
+          url,
+          attributes: { name: filename, comment: "" },
+        },
+      } as JsonPatchOperation,
+    ];
+    try {
+      await wit.updateWorkItem(null, patch, Number.parseInt(id, 10));
+    } catch (err) {
+      // The blob is uploaded but unreferenced. AzDO doesn't expose a clean
+      // delete-attachment-without-relation path, and orphan blobs are GC'd
+      // eventually; surface the relation-add failure rather than papering over.
+      wrapError(err);
+    }
+    return url;
+  }
+
+  async findRelatedPRs(id: string): Promise<PRMatch[]> {
+    const workItemId = Number.parseInt(id, 10);
+    if (!Number.isFinite(workItemId)) {
+      throw new ProviderError(`Invalid Azure DevOps work item id: ${id}`);
+    }
+    const wit = await this.witApi();
+    let raw: Awaited<ReturnType<typeof wit.getWorkItem>>;
+    try {
+      raw = await wit.getWorkItem(workItemId, undefined, undefined, WorkItemExpand.Relations);
+    } catch (err) {
+      wrapError(err);
+    }
+    const relations = (raw as unknown as WorkItemPayload).relations ?? [];
+    const refs: VstfsRef[] = [];
+    for (const rel of relations) {
+      if (rel.rel !== "ArtifactLink") continue;
+      const url = rel.url ?? "";
+      const parsed = parseVstfsPRRef(url);
+      if (!parsed) continue;
+      refs.push(parsed);
+    }
+    if (refs.length === 0) return [];
+    let git: IGitApi;
+    try {
+      git = await this.gitApi();
+    } catch (err) {
+      wrapError(err);
+    }
+    const settled = await Promise.allSettled(
+      refs.map((ref) => git.getPullRequestById(ref.pullRequestId, this.config.project)),
+    );
+    const matches: PRMatch[] = [];
+    for (const result of settled) {
+      if (result.status !== "fulfilled") continue;
+      const pr = result.value;
+      const url = this.webPullRequestUrl(pr.repository?.name ?? "", pr.pullRequestId ?? 0);
+      if (!url) continue;
+      matches.push({
+        url,
+        title: pr.title ?? "",
+        branch: stripRefPrefix(pr.sourceRefName),
+        state: pullRequestStatusToCanonical(pr.status as unknown as number),
+        author: pr.createdBy?.uniqueName ?? pr.createdBy?.displayName ?? "",
+        confidence: 0.95,
+      });
+    }
+    return matches;
+  }
+
+  async getPullRequest(prId: string): Promise<PullRequestDetail> {
+    const num = parseAzdoPullRequestId(prId);
+    if (num === null) {
+      throw new ProviderError(`Invalid Azure DevOps pullRequestId: ${prId}`);
+    }
+    let git: IGitApi;
+    try {
+      git = await this.gitApi();
+    } catch (err) {
+      wrapError(err);
+    }
+    let pr: Awaited<ReturnType<typeof git.getPullRequestById>>;
+    try {
+      pr = await git.getPullRequestById(num, this.config.project);
+    } catch (err) {
+      wrapError(err);
+    }
+    const reviews: PullRequestReview[] = (pr.reviewers ?? []).map((r) => ({
+      author: r.uniqueName ?? r.displayName ?? "",
+      state: voteToReviewState(r.vote ?? 0),
+      bodyMd: "",
+      submittedAt: null,
+    }));
+    let files: PullRequestFile[] = [];
+    if (pr.repository?.id && typeof pr.pullRequestId === "number") {
+      try {
+        const iters = await git.getPullRequestIterations(
+          pr.repository.id,
+          pr.pullRequestId,
+          this.config.project,
+        );
+        const lastIter = iters[iters.length - 1];
+        if (typeof lastIter?.id === "number") {
+          const changes = await git.getPullRequestIterationChanges(
+            pr.repository.id,
+            pr.pullRequestId,
+            lastIter.id,
+            this.config.project,
+          );
+          files = (changes.changeEntries ?? []).map((c) => ({
+            path: (c.item as { path?: string } | undefined)?.path ?? "",
+            status: changeTypeToStatus(c.changeType as unknown as number),
+            additions: 0,
+            deletions: 0,
+          }));
+        }
+      } catch {
+        // File-list discovery failing should not blank the rest of the
+        // detail payload — the agent gets metadata even if change-walk 404s.
+      }
+    }
+    const status = pr.status as unknown as number;
+    const repoName = pr.repository?.name ?? "";
+    const url = this.webPullRequestUrl(repoName, pr.pullRequestId ?? num);
+    return {
+      id: prId,
+      url,
+      title: pr.title ?? "",
+      number: pr.pullRequestId ?? num,
+      state: pullRequestStatusToCanonical(status),
+      author: pr.createdBy?.uniqueName ?? pr.createdBy?.displayName ?? "",
+      bodyMd: pr.description ?? "",
+      headRef: stripRefPrefix(pr.sourceRefName),
+      baseRef: stripRefPrefix(pr.targetRefName),
+      headSha: pr.lastMergeSourceCommit?.commitId ?? "",
+      draft: pr.isDraft ?? false,
+      merged: status === 3,
+      mergeable: null,
+      labels: (pr.labels ?? []).map((l) => l.name ?? "").filter((n): n is string => Boolean(n)),
+      requestedReviewers: (pr.reviewers ?? [])
+        .map((r) => r.uniqueName ?? r.displayName ?? "")
+        .filter((n) => Boolean(n)),
+      additions: 0,
+      deletions: 0,
+      changedFiles: files.length,
+      files,
+      reviews,
+      commentsCount: 0,
+      reviewCommentsCount: 0,
+      updatedAt: pr.closedDate ?? pr.creationDate ?? null,
+    };
+  }
+
+  private webPullRequestUrl(repoName: string, pullRequestId: number): string {
+    if (!repoName || !pullRequestId) return "";
+    return `${this.config.orgUrl}/${encodeURIComponent(this.config.project)}/_git/${encodeURIComponent(repoName)}/pullrequest/${pullRequestId}`;
   }
 
   async addComment(id: string, bodyMd: string): Promise<Comment> {

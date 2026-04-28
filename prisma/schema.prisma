@@ -684,6 +684,41 @@ model Audit {
 }
 
 // ----------------------------------------------------------------------------
+// Avatar — cached binary profile pictures for both signed-in users and
+// assignees. One row per (providerKind, identifier). `bytes = null` is the
+// "we checked, the provider has nothing" marker so we don't refetch every
+// render. Lifecycle:
+//   - Sign-in: the auth profile callback writes a row for the user.
+//   - Sync warm: bulk best-effort fetch keyed off the assignees on each
+//     persisted chunk (GitHub today; AzDO assignees stay as initials until
+//     the user-resolution path is wired).
+//   - Lazy serve: `/api/avatars/{kind}/{identifier}` populates on miss when
+//     the provider exposes a public fetcher.
+// ----------------------------------------------------------------------------
+
+model Avatar {
+  id           String    @id @default(cuid())
+  providerKind String
+  /// Provider-native person identifier — GitHub `login`, AzDO `uniqueName`.
+  identifier   String
+  /// Image bytes; null after a confirmed-missing fetch (404 etc) so the
+  /// route can serve a deterministic 404 without re-hitting the provider.
+  bytes        Bytes?
+  contentType  String?
+  /// Strong validator from the source response, used to short-circuit
+  /// refresh fetches with a conditional GET. Null when the provider doesn't
+  /// surface one (the public `github.com/{login}.png` redirect doesn't).
+  etag         String?
+  fetchedAt    DateTime  @default(now())
+  /// Stamped on transient failures so the lazy path can back off rather
+  /// than hammering on every render. Cleared on the next successful fetch.
+  failedAt     DateTime?
+
+  @@unique([providerKind, identifier])
+  @@index([fetchedAt])
+}
+
+// ----------------------------------------------------------------------------
 // WebFetchEvent — append-only log of every URL the agent's web_fetch tool
 // pulled on behalf of a user. Separate from Audit so the
 // "audit writes only from the proposal executor" invariant (CLAUDE.md rule 9)

@@ -25,6 +25,18 @@ import type {
   Reactions,
   TransitionIntent,
 } from "@/core/types";
+import {
+  bodyHasClosingKeyword,
+  branchMatchesIssue,
+  CONFIDENCE_BRANCH_NAME,
+  CONFIDENCE_SEARCH_BODY,
+  CONFIDENCE_SEARCH_TITLE,
+  CONFIDENCE_TIMELINE_CLOSING,
+  CONFIDENCE_TIMELINE_CONNECTED,
+  CONFIDENCE_TIMELINE_MENTION,
+  mergeMatches,
+  titleMentionsIssue,
+} from "@/providers/github/pr-link-heuristics";
 import { GITHUB_REACTION_KINDS, type GithubReactionKind } from "@/providers/github/reactions";
 import {
   type GithubIssueState,
@@ -147,6 +159,28 @@ function assertGithubReaction(reaction: string): GithubReactionKind {
   throw new ProviderError(
     `GitHub does not support reaction kind '${reaction}'. Supported: ${GITHUB_REACTION_KINDS.join(", ")}`,
   );
+}
+
+type TimelineEvent = {
+  event?: string;
+  source?: {
+    issue?: {
+      title?: string | null;
+      body?: string | null;
+      state?: string | null;
+      html_url?: string | null;
+      user?: { login?: string | null } | null;
+      pull_request?: {
+        html_url?: string | null;
+        merged_at?: string | null;
+      } | null;
+    } | null;
+  } | null;
+};
+
+function derivePRState(state: string | null | undefined, mergedAt: string | null): string {
+  if (mergedAt) return "merged";
+  return state === "closed" ? "closed" : "open";
 }
 
 function wrapOctokitError(err: unknown): never {
@@ -565,10 +599,122 @@ export class GitHubProvider implements WorkItemProvider {
     }
   }
 
-  async findRelatedPRs(_id: string): Promise<PRMatch[]> {
-    // The heuristic-based PR matcher is not wired yet. Returning [] keeps
-    // the agent's PR tools quiet rather than throwing.
-    return [];
+  async findRelatedPRs(id: string): Promise<PRMatch[]> {
+    const { owner, repo, number } = parseProviderItemId(id);
+    // Run all three signals in parallel; settle individually so a flaky search
+    // endpoint or a rate-limited timeline doesn't blank out the others. Only
+    // throw if every probe failed — "no signal" and "everything failed" are
+    // genuinely different answers.
+    const [timelineRes, searchRes, branchRes] = await Promise.allSettled([
+      this.collectTimelineMatches(owner, repo, number),
+      this.collectSearchMatches(owner, repo, number),
+      this.collectBranchMatches(owner, repo, number),
+    ]);
+    const all: PRMatch[] = [];
+    if (timelineRes.status === "fulfilled") all.push(...timelineRes.value);
+    if (searchRes.status === "fulfilled") all.push(...searchRes.value);
+    if (branchRes.status === "fulfilled") all.push(...branchRes.value);
+    if (
+      timelineRes.status === "rejected" &&
+      searchRes.status === "rejected" &&
+      branchRes.status === "rejected"
+    ) {
+      wrapOctokitError(timelineRes.reason);
+    }
+    return mergeMatches(all);
+  }
+
+  private async collectTimelineMatches(
+    owner: string,
+    repo: string,
+    number: number,
+  ): Promise<PRMatch[]> {
+    const events = await this.octokit.paginate(this.octokit.issues.listEventsForTimeline, {
+      owner,
+      repo,
+      issue_number: number,
+      per_page: 100,
+    });
+    const out: PRMatch[] = [];
+    for (const event of events as ReadonlyArray<TimelineEvent>) {
+      const ev = event.event;
+      if (ev !== "cross-referenced" && ev !== "connected") continue;
+      const source = event.source?.issue;
+      if (!source?.pull_request) continue;
+      const url = source.pull_request.html_url ?? source.html_url ?? "";
+      if (!url) continue;
+      const body = source.body ?? "";
+      const closing = bodyHasClosingKeyword(body, number);
+      const confidence =
+        ev === "connected"
+          ? CONFIDENCE_TIMELINE_CONNECTED
+          : closing
+            ? CONFIDENCE_TIMELINE_CLOSING
+            : CONFIDENCE_TIMELINE_MENTION;
+      out.push({
+        url,
+        title: source.title ?? "",
+        branch: "",
+        state: derivePRState(source.state, source.pull_request.merged_at ?? null),
+        author: source.user?.login ?? "",
+        confidence,
+      });
+    }
+    return out;
+  }
+
+  private async collectSearchMatches(
+    owner: string,
+    repo: string,
+    number: number,
+  ): Promise<PRMatch[]> {
+    const q = `repo:${owner}/${repo} type:pr ${number} in:title,body`;
+    const res = await this.octokit.search.issuesAndPullRequests({ q, per_page: 50 });
+    const out: PRMatch[] = [];
+    for (const item of res.data.items) {
+      if (!item.pull_request) continue;
+      const url = item.pull_request.html_url ?? item.html_url;
+      if (!url) continue;
+      const titleHit = titleMentionsIssue(item.title ?? "", number);
+      out.push({
+        url,
+        title: item.title ?? "",
+        branch: "",
+        state: derivePRState(item.state, item.pull_request.merged_at ?? null),
+        author: item.user?.login ?? "",
+        confidence: titleHit ? CONFIDENCE_SEARCH_TITLE : CONFIDENCE_SEARCH_BODY,
+      });
+    }
+    return out;
+  }
+
+  private async collectBranchMatches(
+    owner: string,
+    repo: string,
+    number: number,
+  ): Promise<PRMatch[]> {
+    const prs = await this.octokit.pulls.list({
+      owner,
+      repo,
+      state: "all",
+      per_page: 100,
+      sort: "updated",
+      direction: "desc",
+    });
+    const out: PRMatch[] = [];
+    for (const pr of prs.data) {
+      const branch = pr.head?.ref ?? "";
+      if (!branchMatchesIssue(branch, number)) continue;
+      out.push({
+        url: pr.html_url,
+        title: pr.title,
+        branch,
+        state: derivePRState(pr.state, pr.merged_at ?? null),
+        author: pr.user?.login ?? "",
+        confidence: CONFIDENCE_BRANCH_NAME,
+      });
+    }
+    return out;
   }
 
   async getPullRequest(prId: string): Promise<PullRequestDetail> {

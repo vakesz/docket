@@ -17,8 +17,29 @@ import "server-only";
 import type { Provider } from "next-auth/providers";
 import GitHub from "next-auth/providers/github";
 import type { OauthProviderConfig } from "@/db/generated/client";
+import { avatarUrl } from "@/lib/avatar-url";
 import { azureDevOpsProvider } from "@/providers/azure-devops/auth";
+import { fetchAvatarFromProvider } from "@/server/avatars/fetchers";
+import { persistAvatar } from "@/server/avatars/service";
+import { db } from "@/server/db";
+import { logger } from "@/server/logger";
 import { decryptSecret } from "@/server/secrets/encryption";
+
+/**
+ * GitHub returns the OAuth profile shape NextAuth's built-in provider maps
+ * onto a User row. We override the `profile` callback so we can intercept
+ * the avatar URL, fetch the bytes ourselves, write them to the `Avatar`
+ * cache, and rewrite `image` to point at our own `/api/avatars/...` route
+ * — that way the rest of the app reads avatars from a single source of
+ * truth and we drop the cross-origin hot-link to `avatars.githubusercontent.com`.
+ */
+type GitHubProfile = {
+  id: number | string;
+  name?: string | null;
+  email?: string | null;
+  login: string;
+  avatar_url?: string | null;
+};
 
 export function buildAuthProvider(row: OauthProviderConfig): Provider | null {
   // `clientSecret` is encrypted at rest with `SECRETS_KEY`. Legacy plaintext
@@ -33,6 +54,16 @@ export function buildAuthProvider(row: OauthProviderConfig): Provider | null {
         // GitHub's NextAuth provider derives scopes from the default
         // authorization URL; if the row carries an override, splice it in.
         ...(row.scopes ? { authorization: { params: { scope: row.scopes } } } : {}),
+        async profile(profile: GitHubProfile) {
+          const login = profile.login;
+          const image = login ? await captureAvatarBytes("github", login) : null;
+          return {
+            id: String(profile.id),
+            name: profile.name ?? login ?? null,
+            email: profile.email ?? null,
+            image,
+          };
+        },
       });
     case "azure_devops":
       // Tenant id rides in the `baseUrl` column for now — the schema's
@@ -49,3 +80,35 @@ export function buildAuthProvider(row: OauthProviderConfig): Provider | null {
       return null;
   }
 }
+
+/**
+ * Best-effort: pull the bytes from the public fetcher, stash them in the
+ * `Avatar` cache, and return the relative URL the UI should render. If the
+ * provider 404s or the network blows up, we still return the URL — the
+ * route handler will surface a 404 and the UI's `onError` falls back to an
+ * initial chip.
+ */
+async function captureAvatarBytes(providerKind: string, identifier: string): Promise<string> {
+  try {
+    const fetched = await fetchAvatarFromProvider(providerKind, identifier);
+    await persistAvatar(db, {
+      providerKind,
+      identifier,
+      bytes: fetched?.bytes ?? null,
+      contentType: fetched?.contentType ?? null,
+      etag: fetched?.etag ?? null,
+    });
+  } catch (err) {
+    logger.warn(
+      {
+        providerKind,
+        identifier,
+        err: err instanceof Error ? err.message : String(err),
+      },
+      "auth: avatar capture failed; route will surface 404 until next sign-in",
+    );
+  }
+  return avatarUrl(providerKind, identifier);
+}
+
+export { captureAvatarBytes };
