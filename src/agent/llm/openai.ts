@@ -108,14 +108,17 @@ export class OpenAiAdapter implements LlmAdapter {
 
     let stream: AsyncIterable<unknown>;
     try {
-      stream = (await this.client.responses.create({
-        model,
-        input,
-        tools: tools.length > 0 ? tools : undefined,
-        stream: true,
-        ...(req.maxOutputTokens ? { max_output_tokens: req.maxOutputTokens } : {}),
-        ...(effectiveTemperature !== undefined ? { temperature: effectiveTemperature } : {}),
-      } as unknown as Parameters<OpenAI["responses"]["create"]>[0])) as AsyncIterable<unknown>;
+      stream = (await this.client.responses.create(
+        {
+          model,
+          input,
+          tools: tools.length > 0 ? tools : undefined,
+          stream: true,
+          ...(req.maxOutputTokens ? { max_output_tokens: req.maxOutputTokens } : {}),
+          ...(effectiveTemperature !== undefined ? { temperature: effectiveTemperature } : {}),
+        } as unknown as Parameters<OpenAI["responses"]["create"]>[0],
+        req.signal ? { signal: req.signal } : undefined,
+      )) as AsyncIterable<unknown>;
     } catch (err) {
       logger.error(
         {

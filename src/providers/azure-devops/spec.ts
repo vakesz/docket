@@ -23,6 +23,7 @@
 
 import type { AxisExtractor, AxisMatcher, LabelTemplate, ProviderSpec } from "@/core/provider";
 import type { Item } from "@/core/types";
+import { asPlainObject } from "@/lib/json";
 import { AzureDevOpsProvider } from "@/providers/azure-devops/provider";
 
 const labelTemplate: LabelTemplate = (config) => {
@@ -37,9 +38,8 @@ const labelTemplate: LabelTemplate = (config) => {
 
 function fieldsOf(item: Item): Record<string, unknown> | null {
   const raw = item.providerRaw?.fields;
-  return raw && typeof raw === "object" && !Array.isArray(raw)
-    ? (raw as Record<string, unknown>)
-    : null;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  return asPlainObject(raw);
 }
 
 function matchesPath(item: Item, fieldKey: string, expected: string): boolean {
@@ -90,33 +90,41 @@ export const azureDevOpsSpec: ProviderSpec = {
   factory: (config) => new AzureDevOpsProvider(config),
   setupFields: [
     {
-      key: "orgUrl",
-      label: "Organization URL",
-      kind: "url",
+      key: "organization",
+      label: "Organization",
+      kind: "string",
       required: true,
-      placeholder: "https://dev.azure.com/contoso",
-      help: "Base URL of your Azure DevOps organization.",
+      placeholder: "contoso",
+      help: "Your Azure DevOps organization name (the segment after dev.azure.com/).",
     },
     {
       key: "project",
       label: "Project",
       kind: "string",
       required: true,
-      placeholder: "Web",
+      placeholder: "Platform",
       help: "The Azure DevOps project that owns the work items you want to track.",
     },
   ],
   requiresCli: [],
   grouping: "by_kind",
   supportedKinds: ["epic", "feature", "story", "task", "bug"],
+  // Accept either the bare org name (the friendly form input) or a full
+  // `https://dev.azure.com/<org>` URL — for backwards compatibility with
+  // any project rows already storing the full URL form.
   normalizeConfig: (raw) => {
-    const orgUrl = typeof raw.orgUrl === "string" ? raw.orgUrl.trim().replace(/\/$/, "") : "";
+    const orgRaw =
+      typeof raw.organization === "string" && raw.organization.trim()
+        ? raw.organization.trim()
+        : typeof raw.orgUrl === "string"
+          ? raw.orgUrl.trim()
+          : "";
     const project = typeof raw.project === "string" ? raw.project.trim() : "";
-    if (!orgUrl) throw new Error("Azure DevOps: 'orgUrl' is required");
+    if (!orgRaw) throw new Error("Azure DevOps: 'organization' is required");
     if (!project) throw new Error("Azure DevOps: 'project' is required");
-    if (!/^https?:\/\//.test(orgUrl)) {
-      throw new Error("Azure DevOps: 'orgUrl' must start with http:// or https://");
-    }
+    const orgUrl = /^https?:\/\//.test(orgRaw)
+      ? orgRaw.replace(/\/$/, "")
+      : `https://dev.azure.com/${orgRaw.replace(/^\/+|\/+$/g, "")}`;
     return { orgUrl, project };
   },
   labelTemplate,

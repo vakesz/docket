@@ -98,6 +98,15 @@ export const SETTINGS_CATALOG = {
     description:
       "How many tag chips render inline (on each backlog row, and in the tag-filter bar at the top of the backlog pane) before the rest collapse into a +N badge. Set to 0 to always collapse (just the count, no chips).",
   },
+  "items.show-archived-bucket": {
+    key: "items.show-archived-bucket",
+    scope: "user",
+    schema: BoolSchema,
+    default: true,
+    label: "Backlog — show Archived bucket",
+    description:
+      "When on, the backlog filter bar offers an Archived bucket alongside Open / Closed / All. Archived rows are still reachable via the All-states bucket regardless of this setting.",
+  },
   "app.read-only": {
     key: "app.read-only",
     scope: "global",

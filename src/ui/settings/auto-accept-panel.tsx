@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { primaryButtonClass, secondaryButtonClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
+import { Toggle } from "@/ui/primitives/toggle";
 
 /**
  * Per-project auto-accept policy.
@@ -96,15 +97,12 @@ export function AutoAcceptPanel({ projectId }: { projectId: string }) {
           const checked = selected.has(k.key);
           return (
             <li key={k.key} className="flex flex-col gap-1">
-              <label className="flex items-center gap-2 text-sm text-fg">
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  disabled={save.isPending}
-                  onChange={() => toggle(k.key)}
-                />
-                <span>{k.label}</span>
-              </label>
+              <Toggle
+                checked={checked}
+                disabled={save.isPending}
+                onChange={() => toggle(k.key)}
+                label={k.label}
+              />
               <p className="ml-6 text-xs text-fg-muted">{k.hint}</p>
             </li>
           );

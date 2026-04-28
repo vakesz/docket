@@ -3,10 +3,12 @@
 // UI-only preference — see src/lib/ui-prefs.ts. Deliberately not in SETTINGS_CATALOG.
 
 import { fieldClass } from "@/lib/form-classes";
-import { RECENT_LIMIT_MAX, useRecentLimit } from "@/lib/ui-prefs";
+import { RECENT_LIMIT_MAX, useRecentEnabled, useRecentLimit } from "@/lib/ui-prefs";
+import { Toggle } from "@/ui/primitives/toggle";
 
 export function ItemsDisplayPanel() {
   const [limit, setLimit] = useRecentLimit();
+  const [enabled, setEnabled] = useRecentEnabled();
 
   return (
     <div className="flex flex-col gap-6">
@@ -19,10 +21,14 @@ export function ItemsDisplayPanel() {
 
       <fieldset className="flex flex-col gap-3">
         <legend className="text-sm font-medium text-fg">Recently viewed</legend>
+        <Toggle
+          checked={enabled}
+          onChange={setEnabled}
+          label="Show recently-viewed items above the backlog"
+        />
         <p className="text-xs text-fg-muted">
           Pin recently-opened items to the top of the backlog so you can hop back without scrolling.
-          Set to <code className="rounded bg-surface-alt px-1 py-0.5 font-mono">0</code> to hide the
-          Recent section entirely. Maximum {RECENT_LIMIT_MAX}.
+          Maximum {RECENT_LIMIT_MAX}.
         </p>
         <div className="flex items-center gap-3">
           <input
@@ -31,6 +37,7 @@ export function ItemsDisplayPanel() {
             max={RECENT_LIMIT_MAX}
             step={1}
             value={limit}
+            disabled={!enabled}
             onChange={(e) => {
               const next = Number.parseInt(e.target.value, 10);
               if (!Number.isFinite(next) || next < 0) return;
@@ -39,7 +46,11 @@ export function ItemsDisplayPanel() {
             className={`${fieldClass} max-w-[6rem]`}
           />
           <span className="text-xs text-fg-muted">
-            {limit === 0 ? "Recents are hidden." : `Up to ${limit} item${limit === 1 ? "" : "s"}.`}
+            {!enabled
+              ? "Recents are hidden."
+              : limit === 0
+                ? "Recents are hidden."
+                : `Up to ${limit} item${limit === 1 ? "" : "s"}.`}
           </span>
         </div>
       </fieldset>

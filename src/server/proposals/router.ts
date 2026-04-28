@@ -29,6 +29,10 @@ const ListInput = ProjectId.extend({
   limit: z.number().int().min(1).max(100).default(50),
 });
 
+const CountInput = ProjectId.extend({
+  status: z.enum(["pending", "confirmed", "rejected", "all"]).default("pending"),
+});
+
 const ProposalIdInput = ProjectId.extend({ proposalId: z.string().min(1) });
 
 const AuditListInput = ProjectId.extend({
@@ -119,11 +123,18 @@ export const proposalsRouter = router({
     }));
   }),
 
-  get: projectScopedProcedure.input(ProposalIdInput).query(async ({ ctx, input }) => {
-    const row = await ctx.db.proposal.findFirst({
-      where: { id: input.proposalId, projectId: ctx.projectId },
+  count: projectScopedProcedure.input(CountInput).query(({ ctx, input }) => {
+    return ctx.db.proposal.count({
+      where: {
+        projectId: ctx.projectId,
+        ...(input.status === "all" ? {} : { status: input.status }),
+      },
     });
-    if (!row) {
+  }),
+
+  get: projectScopedProcedure.input(ProposalIdInput).query(async ({ ctx, input }) => {
+    const row = await ctx.db.proposal.findUnique({ where: { id: input.proposalId } });
+    if (!row || row.projectId !== ctx.projectId) {
       throw new TRPCError({ code: "NOT_FOUND", message: "proposal not found" });
     }
     const proposal = hydrateProposal(row);

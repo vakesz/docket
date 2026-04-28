@@ -25,15 +25,34 @@ import { ownsConversation } from "@/server/conversations/storage";
 import { db } from "@/server/db";
 import { logger } from "@/server/logger";
 import { projectForUser } from "@/server/projects/access";
+import { loadGlobalSetting } from "@/server/settings/effective";
+import { getSetupStatus } from "@/server/setup/status";
 
 export const runtime = "nodejs"; // Prisma + openai SDK both need node, not edge.
 export const dynamic = "force-dynamic";
+
+/**
+ * Hard ceiling on the JSON body the stream endpoint will accept. The browser
+ * UI already caps the input box well below this; the limit is a backstop
+ * against runaway bodies (mistakes, hostile clients) before we spend memory
+ * parsing them. Set generously enough to cover pasted code blocks but not
+ * full attachments — those should land via dedicated upload endpoints.
+ */
+const MAX_BODY_BYTES = 100 * 1024;
 
 type RouteContext = {
   params: Promise<{ projectId: string; conversationId: string }>;
 };
 
 export async function POST(req: Request, context: RouteContext): Promise<Response> {
+  // Setup-required gate: server components call `requireSetupComplete()` which
+  // redirects, but a streaming POST is no place for an HTML redirect — surface
+  // the same condition as a 503 so the client can show a normal error.
+  const setup = await getSetupStatus(db);
+  if (!setup.complete) {
+    return NextResponse.json({ error: "setup not complete" }, { status: 503 });
+  }
+
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -53,9 +72,25 @@ export async function POST(req: Request, context: RouteContext): Promise<Respons
     return NextResponse.json({ error: "conversation not found" }, { status: 404 });
   }
 
+  // Trust the Content-Length header for the cheap reject; if it's missing or
+  // lying, fall back to checking the consumed body length below.
+  const declaredLength = Number(req.headers.get("content-length") ?? "");
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
+    return NextResponse.json({ error: "request body too large" }, { status: 413 });
+  }
+
+  let bodyText: string;
+  try {
+    bodyText = await req.text();
+  } catch {
+    return NextResponse.json({ error: "could not read request body" }, { status: 400 });
+  }
+  if (bodyText.length > MAX_BODY_BYTES) {
+    return NextResponse.json({ error: "request body too large" }, { status: 413 });
+  }
   let body: { content?: unknown };
   try {
-    body = (await req.json()) as { content?: unknown };
+    body = JSON.parse(bodyText) as { content?: unknown };
   } catch {
     return NextResponse.json({ error: "invalid JSON body" }, { status: 400 });
   }
@@ -66,13 +101,21 @@ export async function POST(req: Request, context: RouteContext): Promise<Respons
 
   // Resolve the LLM adapter for this project (override > project default >
   // global default). Errors here are configuration problems, not stream
-  // failures — surface them as a normal HTTP error.
+  // failures — surface them as a normal HTTP error. The read-only flag
+  // rides along: when global read-only is on, the agent registry strips
+  // mutating tools so the agent can't stage proposals against a DB the
+  // tRPC mutation procedures already refuse.
   let adapter: Awaited<ReturnType<typeof selectAdapterFor>>;
+  let readOnly: boolean;
   try {
-    const conv = await db.conversation.findUnique({
-      where: { id: conversationId },
-      select: { llmProviderIdOverride: true },
-    });
+    const [conv, readOnlySetting] = await Promise.all([
+      db.conversation.findUnique({
+        where: { id: conversationId },
+        select: { llmProviderIdOverride: true },
+      }),
+      loadGlobalSetting(db, "app.read-only"),
+    ]);
+    readOnly = readOnlySetting;
     adapter = await selectAdapterFor(db, {
       project: {
         id: project.id,
@@ -125,7 +168,8 @@ export async function POST(req: Request, context: RouteContext): Promise<Respons
           conversationId,
           userId,
           userMessage: content,
-          readOnly: false,
+          readOnly,
+          signal: req.signal,
         })) {
           send(event);
           if (event.kind === "done") {

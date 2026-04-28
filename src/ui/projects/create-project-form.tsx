@@ -9,6 +9,7 @@ import {
 } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
 import { SelectField } from "@/ui/forms/select-field";
+import { Toggle } from "@/ui/primitives/toggle";
 
 type ProviderKind = "github" | "azure_devops";
 
@@ -198,14 +199,12 @@ export function CreateProjectForm({ defaultMakeDefault = true, onCreated }: Prop
         </div>
       )}
 
-      <label className="inline-flex items-center gap-2 text-sm text-fg">
-        <input
-          type="checkbox"
-          checked={makeDefault}
-          onChange={(e) => setMakeDefault(e.target.checked)}
-        />
-        <span>Set as my default project</span>
-      </label>
+      <Toggle
+        inline
+        checked={makeDefault}
+        onChange={setMakeDefault}
+        label="Set as my default project"
+      />
 
       {create.error ? <p className={errorMessageClass}>{create.error.message}</p> : null}
 

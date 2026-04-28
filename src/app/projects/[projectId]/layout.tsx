@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { notFound, redirect } from "next/navigation";
 import type { ReactNode } from "react";
+import { mostRecent } from "@/lib/format";
 import { auth } from "@/server/auth";
 import { db } from "@/server/db";
 import { loadGlobalSetting } from "@/server/settings/effective";
@@ -35,14 +36,14 @@ export default async function ProjectLayout({
   let project: Awaited<ReturnType<typeof trpc.projects.get>>;
   let projects: Awaited<ReturnType<typeof trpc.projects.list>>;
   let readOnly: Awaited<ReturnType<typeof loadGlobalSetting<"app.read-only">>>;
-  let pendingProposals: Awaited<ReturnType<typeof trpc.proposals.list>>;
+  let pendingProposalsCount: number;
   let syncCursor: { watermark: Date | null; lastFullSyncAt: Date | null; updatedAt: Date } | null;
   try {
-    [project, projects, readOnly, pendingProposals, syncCursor] = await Promise.all([
+    [project, projects, readOnly, pendingProposalsCount, syncCursor] = await Promise.all([
       trpc.projects.get({ projectId }),
       trpc.projects.list(),
       loadGlobalSetting(db, "app.read-only"),
-      trpc.proposals.list({ projectId, status: "pending", limit: 100 }),
+      trpc.proposals.count({ projectId, status: "pending" }),
       db.syncCursor.findUnique({
         where: { projectId },
         select: { watermark: true, lastFullSyncAt: true, updatedAt: true },
@@ -81,7 +82,7 @@ export default async function ProjectLayout({
           projectName={project.name}
           providerKind={project.providerKind}
           lastSyncAt={lastSyncAt}
-          pendingProposals={pendingProposals.length}
+          pendingProposals={pendingProposalsCount}
           readOnly={readOnly}
         />
         <CommandPalette projectId={project.id} projects={projectOptions} />
@@ -89,13 +90,4 @@ export default async function ProjectLayout({
       </WorkspaceProviders>
     </div>
   );
-}
-
-function mostRecent(dates: Array<Date | null | undefined>): Date | null {
-  let best: Date | null = null;
-  for (const d of dates) {
-    if (!d) continue;
-    if (!best || d.getTime() > best.getTime()) best = d;
-  }
-  return best;
 }

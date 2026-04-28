@@ -25,6 +25,9 @@ const RECENT_LIMIT_KEY = "docket.items.recentLimit";
 const RECENT_LIMIT_DEFAULT = 5;
 export const RECENT_LIMIT_MAX = 20;
 
+const RECENT_ENABLED_KEY = "docket.items.recentEnabled";
+const RECENT_ENABLED_DEFAULT = true;
+
 export function readToolDisplayMode(): ToolDisplayMode {
   if (typeof window === "undefined") return "collapse";
   const raw = window.localStorage.getItem(TOOL_DISPLAY_KEY);
@@ -100,6 +103,47 @@ export function useRecentLimit(): [number, (v: number) => void] {
     (next: number) => {
       writeRecentLimit(next);
       setValue(readRecentLimit());
+    },
+  ];
+}
+
+/**
+ * Whether the Recent section is shown at all. Independent from the
+ * numeric limit so flipping it off (and back on) preserves the user's
+ * preferred count.
+ */
+export function readRecentEnabled(): boolean {
+  if (typeof window === "undefined") return RECENT_ENABLED_DEFAULT;
+  const raw = window.localStorage.getItem(RECENT_ENABLED_KEY);
+  if (raw === null) return RECENT_ENABLED_DEFAULT;
+  return raw === "1" || raw === "true";
+}
+
+export function writeRecentEnabled(value: boolean): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(RECENT_ENABLED_KEY, value ? "1" : "0");
+  window.dispatchEvent(new CustomEvent(PREF_EVENT));
+}
+
+export function useRecentEnabled(): [boolean, (v: boolean) => void] {
+  const [value, setValue] = useState<boolean>(RECENT_ENABLED_DEFAULT);
+
+  useEffect(() => {
+    setValue(readRecentEnabled());
+    const onChange = () => setValue(readRecentEnabled());
+    window.addEventListener("storage", onChange);
+    window.addEventListener(PREF_EVENT, onChange);
+    return () => {
+      window.removeEventListener("storage", onChange);
+      window.removeEventListener(PREF_EVENT, onChange);
+    };
+  }, []);
+
+  return [
+    value,
+    (next: boolean) => {
+      writeRecentEnabled(next);
+      setValue(next);
     },
   ];
 }

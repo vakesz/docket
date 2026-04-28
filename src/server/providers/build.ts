@@ -14,6 +14,7 @@
 import "server-only";
 import { ProviderAuthError, ProviderError, type WorkItemProvider } from "@/core/provider";
 import type { Project } from "@/db/generated/client";
+import { asPlainObject } from "@/lib/json";
 import type { db as Db } from "@/server/db";
 import { getProviderSpec } from "@/server/provider-registry";
 
@@ -32,6 +33,11 @@ export async function buildProviderForUser(
   const account = await db.account.findFirst({
     where: { userId, provider: project.providerKind },
     select: { access_token: true },
+    // Deterministic order: a user can in theory have multiple Account rows
+    // for the same provider (re-link with a different OAuth identity).
+    // Without orderBy, Postgres is free to pick a different one on different
+    // connections — fine until two queries in the same turn disagree.
+    orderBy: [{ providerAccountId: "asc" }],
   });
   if (!account?.access_token) {
     throw new ProviderAuthError(
@@ -39,11 +45,7 @@ export async function buildProviderForUser(
     );
   }
 
-  const scope =
-    project.providerScope && typeof project.providerScope === "object"
-      ? (project.providerScope as Record<string, unknown>)
-      : {};
-
+  const scope = asPlainObject(project.providerScope);
   const config = { ...scope, accessToken: account.access_token };
   return spec.factory(config, project.name);
 }

@@ -29,6 +29,12 @@ export type LlmRequest = {
   temperature?: number;
   /** Hard cap on output tokens, including tool-call arguments. */
   maxOutputTokens?: number;
+  /**
+   * Aborts the in-flight request when the caller (e.g. the SSE handler's
+   * `req.signal`) goes away. Adapters forward this to the vendor SDK so a
+   * cancelled browser request stops billing the LLM.
+   */
+  signal?: AbortSignal;
 };
 
 export type LlmMessage =

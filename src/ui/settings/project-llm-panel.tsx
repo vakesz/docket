@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { fieldClass, primaryButtonClass, secondaryButtonClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
 import { SelectField } from "@/ui/forms/select-field";
+import { Toggle } from "@/ui/primitives/toggle";
 
 type CompactionStrategy = "summary" | "drop-tools";
 
@@ -192,15 +193,12 @@ export function ProjectLlmPanel({ projectId }: { projectId: string }) {
           </p>
         </div>
 
-        <label className="flex items-center gap-2 text-sm text-fg">
-          <input
-            type="checkbox"
-            checked={compactEnabled}
-            disabled={saveSetting.isPending}
-            onChange={(e) => setCompactEnabled(e.target.checked)}
-          />
-          <span>Auto-compact long conversations</span>
-        </label>
+        <Toggle
+          checked={compactEnabled}
+          disabled={saveSetting.isPending}
+          onChange={setCompactEnabled}
+          label="Auto-compact long conversations"
+        />
 
         <div className="flex flex-col gap-2">
           <label htmlFor="compact-threshold" className="text-sm font-medium text-fg">

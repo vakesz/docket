@@ -37,6 +37,15 @@ export type TransitionIntent = (typeof TRANSITION_INTENTS)[number];
 export const STATE_BUCKETS = ["open", "closed", "all"] as const;
 export type StateBucket = (typeof STATE_BUCKETS)[number];
 
+/**
+ * Backlog filter bucket — superset of `StateBucket` plus the cache-only
+ * `"archived"` bucket. Saved views still store the narrower `StateBucket`
+ * (archived isn't a canonical state). The items router maps each backlog
+ * bucket to a (state-clause, archived-flag) pair before querying.
+ */
+export const BACKLOG_BUCKETS = ["open", "closed", "archived", "all"] as const;
+export type BacklogBucket = (typeof BACKLOG_BUCKETS)[number];
+
 export type Attachment = {
   filename: string;
   url: string | null;

@@ -9,6 +9,15 @@
 
 import type { ItemKind, ItemState, TransitionIntent } from "@/core/types";
 
+export function mostRecent(dates: Array<Date | null | undefined>): Date | null {
+  let best: Date | null = null;
+  for (const d of dates) {
+    if (!d) continue;
+    if (!best || d.getTime() > best.getTime()) best = d;
+  }
+  return best;
+}
+
 export function formatRelative(input: Date | string | null | undefined): string {
   if (!input) return "—";
   const date = typeof input === "string" ? new Date(input) : input;

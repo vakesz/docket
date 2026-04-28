@@ -17,24 +17,9 @@ type ProjectRow = {
   description: string;
   providerKind: string;
   providerScope: unknown;
+  scopeLabel: string;
   ownerUserId: string;
 };
-
-function scopeLabel(kind: string, scope: unknown): string {
-  if (!scope || typeof scope !== "object") return "";
-  const obj = scope as Record<string, unknown>;
-  if (kind === "github") {
-    const owner = typeof obj.owner === "string" ? obj.owner : "";
-    const repo = typeof obj.repo === "string" ? obj.repo : "";
-    return owner && repo ? `${owner}/${repo}` : "";
-  }
-  if (kind === "azure_devops") {
-    const org = typeof obj.organization === "string" ? obj.organization : "";
-    const project = typeof obj.project === "string" ? obj.project : "";
-    return org && project ? `${org}/${project}` : "";
-  }
-  return "";
-}
 
 /**
  * Settings → You → Projects. Lists every project the caller can see and
@@ -83,7 +68,7 @@ export function ProjectsPanel() {
         ) : (
           <ul className="flex flex-col gap-2">
             {projects.map((p) => {
-              const label = scopeLabel(p.providerKind, p.providerScope);
+              const label = p.scopeLabel;
               const isDefault = defaultId === p.id;
               return (
                 <li

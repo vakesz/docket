@@ -13,7 +13,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { RECENT_LIMIT_MAX, readRecentLimit } from "@/lib/ui-prefs";
+import { RECENT_LIMIT_MAX, readRecentEnabled, readRecentLimit } from "@/lib/ui-prefs";
 
 const STORAGE_KEY = "docket.recentItems";
 const RECENT_EVENT = "docket:recent-items";
@@ -52,6 +52,7 @@ function writeStore(store: Store): void {
 
 export function recordRecentItem(projectId: string, itemId: string): void {
   if (!projectId || !itemId) return;
+  if (!readRecentEnabled()) return;
   if (readRecentLimit() === 0) return;
   const store = readStore();
   const prev = store[projectId] ?? [];
@@ -64,6 +65,10 @@ export function useRecentItemIds(projectId: string): string[] {
 
   useEffect(() => {
     const sync = () => {
+      if (!readRecentEnabled()) {
+        setIds([]);
+        return;
+      }
       const limit = readRecentLimit();
       if (limit === 0) {
         setIds([]);

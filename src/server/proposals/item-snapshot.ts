@@ -6,6 +6,7 @@
 
 import type { Item as CanonicalItem, ItemKind, ItemState } from "@/core/types";
 import type { Item as PrismaItem } from "@/db/generated/client";
+import { asPlainObject } from "@/lib/json";
 
 export function snapshotFromRow(row: PrismaItem): CanonicalItem {
   return {
@@ -23,10 +24,7 @@ export function snapshotFromRow(row: PrismaItem): CanonicalItem {
     url: row.url,
     repositoryUrl: row.repositoryUrl,
     attachments: [],
-    providerRaw:
-      row.providerRaw && typeof row.providerRaw === "object"
-        ? (row.providerRaw as Record<string, unknown>)
-        : {},
+    providerRaw: asPlainObject(row.providerRaw),
     providerKey: "",
   };
 }

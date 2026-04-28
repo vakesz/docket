@@ -8,6 +8,7 @@ import {
   secondaryButtonClass,
 } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
+import { Toggle } from "@/ui/primitives/toggle";
 
 /**
  * Per-project knobs for the agent's web_fetch tool.
@@ -66,15 +67,12 @@ export function WebFetchPanel({ projectId }: { projectId: string }) {
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <label className="flex items-center gap-2 text-sm text-fg">
-          <input
-            type="checkbox"
-            checked={enabled}
-            disabled={save.isPending}
-            onChange={(e) => setEnabled(e.target.checked)}
-          />
-          <span>Allow agent to fetch web pages</span>
-        </label>
+        <Toggle
+          checked={enabled}
+          disabled={save.isPending}
+          onChange={setEnabled}
+          label="Allow agent to fetch web pages"
+        />
         <p className="text-xs text-fg-muted">
           When on, the agent can call web_fetch to read public URLs (RFCs, docs, changelogs).
           Private IPs and cloud metadata endpoints are blocked regardless of this flag.

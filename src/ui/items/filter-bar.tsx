@@ -1,14 +1,12 @@
 "use client";
 
-import type { ItemKind, StateBucket } from "@/core/types";
-import { metaLabelFaintClass } from "@/lib/form-classes";
+import type { BacklogBucket, ItemKind } from "@/core/types";
 import { displayTag, formatKind } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { CreateItemForm } from "@/ui/items/create-item-form";
 
 export type FilterState = {
-  bucket: StateBucket;
-  showArchived: boolean;
+  bucket: BacklogBucket;
   kind: ItemKind | "all";
   activeTag: string | null;
   query: string;
@@ -16,12 +14,25 @@ export type FilterState = {
 };
 
 export type FilterHandlers = {
-  setBucket: (b: StateBucket) => void;
-  setShowArchived: (b: boolean) => void;
+  setBucket: (b: BacklogBucket) => void;
   setKind: (k: ItemKind | "all") => void;
   setActiveTag: (t: string | null) => void;
   setQuery: (q: string) => void;
   setTagsExpanded: (fn: (v: boolean) => boolean) => void;
+};
+
+const BUCKET_LABEL: Record<BacklogBucket, string> = {
+  open: "Open",
+  closed: "Closed",
+  archived: "Archived",
+  all: "All states",
+};
+
+const BUCKET_TITLE: Record<BacklogBucket, string> = {
+  open: "new, active, blocked, needs info",
+  closed: "resolved, closed",
+  archived: "items the provider no longer returns",
+  all: "every state, including archived",
 };
 
 export function FilterBar({
@@ -31,6 +42,7 @@ export function FilterBar({
   visibleKinds,
   tagCounts,
   tagCollapseLimit,
+  showArchivedBucket,
 }: {
   projectId: string;
   state: FilterState;
@@ -38,8 +50,12 @@ export function FilterBar({
   visibleKinds: Array<ItemKind | "all">;
   tagCounts: Array<[string, number]>;
   tagCollapseLimit: number;
+  showArchivedBucket: boolean;
 }) {
-  const { bucket, showArchived, kind, activeTag, query, tagsExpanded } = state;
+  const { bucket, kind, activeTag, query, tagsExpanded } = state;
+  const buckets: BacklogBucket[] = showArchivedBucket
+    ? ["open", "closed", "archived", "all"]
+    : ["open", "closed", "all"];
   return (
     <div className="flex flex-col gap-2 border-b border-border p-3">
       <div className="flex items-center gap-2">
@@ -52,9 +68,9 @@ export function FilterBar({
         />
         <CreateItemForm projectId={projectId} />
       </div>
-      <div className="flex flex-wrap items-center gap-1.5">
-        {visibleKinds.length > 2 &&
-          visibleKinds.map((k) => (
+      {visibleKinds.length > 2 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {visibleKinds.map((k) => (
             <button
               type="button"
               key={k}
@@ -67,24 +83,10 @@ export function FilterBar({
               {k === "all" ? "All" : formatKind(k)}
             </button>
           ))}
-        <label
-          className={cn(
-            "flex items-center gap-1",
-            metaLabelFaintClass,
-            visibleKinds.length > 2 && "ml-auto",
-          )}
-        >
-          <input
-            type="checkbox"
-            checked={showArchived}
-            onChange={(e) => handlers.setShowArchived(e.target.checked)}
-            className="accent-accent"
-          />
-          Archived
-        </label>
-      </div>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-1">
-        {(["open", "closed", "all"] as StateBucket[]).map((b) => (
+        {buckets.map((b) => (
           <button
             type="button"
             key={b}
@@ -93,15 +95,9 @@ export function FilterBar({
               "rounded px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider",
               bucket === b ? "bg-accent text-accent-fg" : "text-fg-muted hover:bg-surface-alt",
             )}
-            title={
-              b === "open"
-                ? "new, active, blocked, needs info"
-                : b === "closed"
-                  ? "resolved, closed"
-                  : "every state"
-            }
+            title={BUCKET_TITLE[b]}
           >
-            {b === "open" ? "Open" : b === "closed" ? "Closed" : "All states"}
+            {BUCKET_LABEL[b]}
           </button>
         ))}
       </div>

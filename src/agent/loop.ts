@@ -82,6 +82,11 @@ export type RunTurnArgs = {
   readOnly: boolean;
   /** Optional override of the iteration cap, mainly for tests. */
   maxToolRounds?: number;
+  /**
+   * Aborts the LLM request when the caller goes away. The SSE route forwards
+   * `req.signal` here so closing the browser tab stops billing tokens.
+   */
+  signal?: AbortSignal;
 };
 
 /**
@@ -92,7 +97,7 @@ export type RunTurnArgs = {
  * event — the loop never throws.
  */
 export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
-  const { db, adapter, conversationId, userId, userMessage, readOnly } = args;
+  const { db, adapter, conversationId, userId, userMessage, readOnly, signal } = args;
   const cap = args.maxToolRounds ?? MAX_TOOL_ROUNDS;
   const turnId = randomUUID();
   const turnStartedAt = Date.now();
@@ -215,6 +220,7 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
       model: "", // adapter falls back to its configured model
       messages,
       tools: tools.map((t) => t.def),
+      ...(signal ? { signal } : {}),
     });
 
     let sawDone = false;

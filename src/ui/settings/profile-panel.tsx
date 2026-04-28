@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { fieldClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
 import { SelectField } from "@/ui/forms/select-field";
+import { Toggle } from "@/ui/primitives/toggle";
 import { DefaultProjectPicker } from "@/ui/settings/default-project-picker";
 import { ThemePicker } from "@/ui/shell/theme-picker";
 
@@ -24,6 +25,11 @@ export function ProfilePanel() {
   const sendOnEnter = list.data?.find((r) => r.key === "chat.send-on-enter")?.value ?? true;
   const maxVisibleTagsRaw = list.data?.find((r) => r.key === "items.max-visible-tags")?.value;
   const maxVisibleTags = typeof maxVisibleTagsRaw === "number" ? maxVisibleTagsRaw : 2;
+  const showArchivedBucketRaw = list.data?.find(
+    (r) => r.key === "items.show-archived-bucket",
+  )?.value;
+  const showArchivedBucket =
+    typeof showArchivedBucketRaw === "boolean" ? showArchivedBucketRaw : true;
   const backlogSortRaw = list.data?.find((r) => r.key === "backlog.default-sort")?.value;
   const backlogSort = typeof backlogSortRaw === "string" ? backlogSortRaw : "updated";
   const backlogStateRaw = list.data?.find((r) => r.key === "backlog.default-state-filter")?.value;
@@ -46,6 +52,25 @@ export function ProfilePanel() {
           preference; a fixed theme overrides it.
         </p>
         <ThemePicker />
+      </div>
+
+      <div className="flex flex-col gap-2 border-t border-border pt-6">
+        <span className="text-sm font-medium text-fg">Backlog — show Archived bucket</span>
+        <p className="text-xs text-fg-muted">
+          When on, the backlog filter bar offers an Archived bucket alongside Open / Closed / All.
+          Archived rows remain reachable via the All-states bucket either way.
+        </p>
+        <Toggle
+          checked={showArchivedBucket}
+          disabled={update.isPending || list.isPending}
+          onChange={(next) =>
+            update.mutate({
+              key: "items.show-archived-bucket" as never,
+              value: next,
+            })
+          }
+          label={showArchivedBucket ? "Visible" : "Hidden"}
+        />
       </div>
 
       <div className="flex flex-col gap-2 border-t border-border pt-6">
@@ -183,20 +208,18 @@ export function ProfilePanel() {
           When on, Enter sends a message and Shift+Enter inserts a newline. When off, Enter inserts
           a newline and Cmd/Ctrl+Enter sends.
         </p>
-        <label className="inline-flex items-center gap-2 text-sm text-fg">
-          <input
-            type="checkbox"
-            checked={sendOnEnter === true}
-            disabled={update.isPending || list.isPending}
-            onChange={(e) =>
-              update.mutate({
-                key: "chat.send-on-enter" as never,
-                value: e.target.checked,
-              })
-            }
-          />
-          <span>Enabled</span>
-        </label>
+        <Toggle
+          inline
+          checked={sendOnEnter === true}
+          disabled={update.isPending || list.isPending}
+          onChange={(next) =>
+            update.mutate({
+              key: "chat.send-on-enter" as never,
+              value: next,
+            })
+          }
+          label="Enabled"
+        />
         {update.error ? <p className="text-xs text-danger-fg">{update.error.message}</p> : null}
       </div>
     </div>

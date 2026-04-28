@@ -1,6 +1,7 @@
 "use client";
 import { fieldClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
+import { Toggle } from "@/ui/primitives/toggle";
 
 /**
  * Deployment-wide knobs that aren't tied to a specific provider row.
@@ -62,20 +63,18 @@ export function WorkspacePanel() {
           {readOnly?.description ??
             "When on, every mutation route — including proposal confirms — is blocked. Reads stay open. Flip on for maintenance windows."}
         </p>
-        <label className="inline-flex items-center gap-2 text-sm text-fg">
-          <input
-            type="checkbox"
-            checked={readOnly?.value === true}
-            disabled={list.isPending || update.isPending}
-            onChange={(e) =>
-              update.mutate({
-                key: "app.read-only" as never,
-                value: e.target.checked,
-              })
-            }
-          />
-          <span>{readOnly?.value === true ? "Enabled — all writes blocked" : "Disabled"}</span>
-        </label>
+        <Toggle
+          inline
+          checked={readOnly?.value === true}
+          disabled={list.isPending || update.isPending}
+          onChange={(next) =>
+            update.mutate({
+              key: "app.read-only" as never,
+              value: next,
+            })
+          }
+          label={readOnly?.value === true ? "Enabled — all writes blocked" : "Disabled"}
+        />
       </div>
 
       {update.error ? <p className="text-xs text-danger-fg">{update.error.message}</p> : null}

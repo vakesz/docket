@@ -88,10 +88,8 @@ async function recordAudit(
 }
 
 async function loadPending(ctx: ExecutorContext, proposalId: string) {
-  const row = await ctx.db.proposal.findFirst({
-    where: { id: proposalId, projectId: ctx.projectId },
-  });
-  if (!row) {
+  const row = await ctx.db.proposal.findUnique({ where: { id: proposalId } });
+  if (!row || row.projectId !== ctx.projectId) {
     throw new TRPCError({ code: "NOT_FOUND", message: "proposal not found" });
   }
   if (row.status !== "pending") {
@@ -195,12 +193,20 @@ export async function confirmProposal(
       case "comment_add": {
         const comment = await provider.addComment(proposal.item.id, proposal.bodyMd);
         commentId = comment.id;
-        // Refresh the cached comment row alongside the item.
-        const cachedItem = await ctx.db.item.findFirst({
-          where: { projectId: ctx.projectId, providerItemId: proposal.item.id },
-        });
-        if (cachedItem) {
-          await ctx.db.comment.upsert({
+        // Cached-item lookup + comment upsert run in one transaction so the
+        // comment row can never reference a stale or missing Item id.
+        await ctx.db.$transaction(async (tx) => {
+          const cachedItem = await tx.item.findUnique({
+            where: {
+              projectId_providerItemId: {
+                projectId: ctx.projectId,
+                providerItemId: proposal.item.id,
+              },
+            },
+            select: { id: true },
+          });
+          if (!cachedItem) return;
+          await tx.comment.upsert({
             where: {
               itemId_providerCommentId: {
                 itemId: cachedItem.id,
@@ -220,7 +226,7 @@ export async function confirmProposal(
               createdAt: comment.createdAt,
             },
           });
-        }
+        });
         break;
       }
       case "item_create":

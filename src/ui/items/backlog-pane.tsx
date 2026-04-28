@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import type { ItemKind, StateBucket } from "@/core/types";
+import type { BacklogBucket, ItemKind } from "@/core/types";
 import { metaLabelFaintClass } from "@/lib/form-classes";
 import { useRecentItemIds } from "@/lib/recent-items";
 import { trpc } from "@/lib/trpc-client";
@@ -23,7 +23,9 @@ const FILTER_DEBOUNCE_MS = 150;
  * the surrounding layout (this pane stays mounted across detail clicks).
  *
  * Filters split server-side vs client-side by who pays for them:
- * - `bucket` and `archived` reshape the server query (sent through tRPC).
+ * - `bucket` reshapes the server query (sent through tRPC). It encodes
+ *   open/closed/archived/all as a single axis; the router maps it onto a
+ *   state-bucket + archived-flag pair.
  * - `kind`, `tag`, and search live in component state and just decide
  *   which already-fetched rows render.
  */
@@ -34,8 +36,7 @@ export function BacklogPane({
   projectId: string;
   staleThresholdDays: number | null;
 }) {
-  const [bucket, setBucket] = useState<StateBucket>("open");
-  const [showArchived, setShowArchived] = useState(false);
+  const [bucket, setBucket] = useState<BacklogBucket>("open");
   const [kind, setKind] = useState<ItemKind | "all">("all");
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -48,7 +49,7 @@ export function BacklogPane({
   }, [query]);
 
   const items = trpc.items.list.useQuery(
-    { projectId, bucket, archived: showArchived, limit: ITEMS_QUERY_LIMIT },
+    { projectId, bucket, limit: ITEMS_QUERY_LIMIT },
     { staleTime: 30_000 },
   );
   const pinned = trpc.watchlist.list.useQuery(
@@ -60,6 +61,16 @@ export function BacklogPane({
     const raw = settings.data?.find((r) => r.key === "items.max-visible-tags")?.value;
     return typeof raw === "number" ? raw : 2;
   })();
+  const showArchivedBucket = (() => {
+    const raw = settings.data?.find((r) => r.key === "items.show-archived-bucket")?.value;
+    return typeof raw === "boolean" ? raw : true;
+  })();
+
+  // If the user disabled the archived bucket while it was selected, fall
+  // back to open so the request and the (now-hidden) chip don't desync.
+  useEffect(() => {
+    if (!showArchivedBucket && bucket === "archived") setBucket("open");
+  }, [showArchivedBucket, bucket]);
 
   const pathname = usePathname();
   const selectedId = useMemo(() => {
@@ -126,10 +137,9 @@ export function BacklogPane({
     <div className="flex h-full flex-col bg-bg">
       <FilterBar
         projectId={projectId}
-        state={{ bucket, showArchived, kind, activeTag, query, tagsExpanded }}
+        state={{ bucket, kind, activeTag, query, tagsExpanded }}
         handlers={{
           setBucket,
-          setShowArchived,
           setKind,
           setActiveTag,
           setQuery,
@@ -138,6 +148,7 @@ export function BacklogPane({
         visibleKinds={visibleKinds}
         tagCounts={tagCounts}
         tagCollapseLimit={maxVisibleTags}
+        showArchivedBucket={showArchivedBucket}
       />
 
       {recentItems.length > 0 && (

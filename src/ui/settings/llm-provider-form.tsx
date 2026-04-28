@@ -11,6 +11,7 @@ import {
 import { formatPriceCentsAsDollars, parsePriceDollarsToCents } from "@/lib/pricing";
 import { trpc } from "@/lib/trpc-client";
 import { SelectField } from "@/ui/forms/select-field";
+import { Toggle } from "@/ui/primitives/toggle";
 
 const KINDS = ["openai", "anthropic", "gemini", "bedrock", "mistral", "ollama"] as const;
 type Kind = (typeof KINDS)[number];
@@ -246,20 +247,19 @@ export function LlmProviderForm(props: Props) {
       </p>
 
       {!isEdit ? (
-        <label className="flex flex-col gap-1">
-          <span className="inline-flex items-center gap-2 text-xs text-fg-muted">
-            <input
-              type="checkbox"
-              checked={isDefault}
-              onChange={(e) => setIsDefault(e.target.checked)}
-            />
-            Make this the global default
-          </span>
+        <div className="flex flex-col gap-1">
+          <Toggle
+            inline
+            size="muted"
+            checked={isDefault}
+            onChange={setIsDefault}
+            label="Make this the global default"
+          />
           <p className="text-xs text-fg-muted">
             Becomes the fallback used by any project that hasn't picked its own LLM.
             Per-conversation overrides still win.
           </p>
-        </label>
+        </div>
       ) : null}
 
       {mutation.error ? <p className={errorMessageClass}>{mutation.error.message}</p> : null}

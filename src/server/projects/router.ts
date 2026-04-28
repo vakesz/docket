@@ -2,7 +2,9 @@ import "server-only";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import type { Prisma } from "@/db/generated/client";
+import { asPlainObject } from "@/lib/json";
 import { buildProjectExport } from "@/server/projects/export";
+import { getProviderSpec, PROVIDER_TYPE_IDS } from "@/server/provider-registry";
 import {
   mutationProcedure,
   projectScopedApproverProcedure,
@@ -14,17 +16,12 @@ import {
 
 const MEMBER_ROLE = z.enum(["viewer", "member", "approver"]);
 
-/**
- * Provider kinds the UI exposes in the "create project" form. Source of
- * truth for which providers exist at runtime is `provider-registry.ts`.
- */
-const PROVIDER_KIND = z.enum(["github", "azure_devops"]);
+const PROVIDER_KIND = z.enum(PROVIDER_TYPE_IDS);
 
 const CreateProjectInput = z.object({
   name: z.string().min(1).max(120),
   description: z.string().max(2000).default(""),
   providerKind: PROVIDER_KIND,
-  /// Free-form per-provider scope (e.g. { owner, repo } for GitHub).
   providerScope: z.record(z.string(), z.unknown()),
 });
 
@@ -35,7 +32,7 @@ export const projectsRouter = router({
     if (!userId) {
       return [];
     }
-    return ctx.db.project.findMany({
+    const rows = await ctx.db.project.findMany({
       where: {
         archivedAt: null,
         OR: [{ ownerUserId: userId }, { memberships: { some: { userId } } }],
@@ -54,6 +51,14 @@ export const projectsRouter = router({
         updatedAt: true,
       },
     });
+    // Precompute scopeLabel server-side so client surfaces never branch on
+    // providerKind — labelTemplate is the single rendering rule per spec.
+    return rows.map((row) => {
+      const spec = getProviderSpec(row.providerKind);
+      const scopeObj = asPlainObject(row.providerScope);
+      const scopeLabel = spec?.labelTemplate ? spec.labelTemplate(scopeObj) : "";
+      return { ...row, scopeLabel };
+    });
   }),
 
   /** Get a single project the user has access to. */
@@ -71,12 +76,29 @@ export const projectsRouter = router({
     if (!userId) {
       throw new Error("session has no user id");
     }
+    const spec = getProviderSpec(input.providerKind);
+    if (!spec) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: `unknown provider kind: ${input.providerKind}`,
+      });
+    }
+    const rawScope = asPlainObject(input.providerScope);
+    let normalizedScope: Record<string, unknown>;
+    try {
+      normalizedScope = spec.normalizeConfig ? spec.normalizeConfig(rawScope) : rawScope;
+    } catch (err) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: err instanceof Error ? err.message : "invalid provider scope",
+      });
+    }
     return ctx.db.project.create({
       data: {
         name: input.name,
         description: input.description,
         providerKind: input.providerKind,
-        providerScope: input.providerScope as Prisma.InputJsonValue,
+        providerScope: normalizedScope as Prisma.InputJsonValue,
         ownerUserId: userId,
         memberships: {
           create: {

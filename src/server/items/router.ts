@@ -1,10 +1,11 @@
 import "server-only";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import type { Item, ItemKind, ItemState, StateBucket } from "@/core/types";
-import { STATE_BUCKETS } from "@/core/types";
+import type { BacklogBucket, Item, ItemKind, ItemState, StateBucket } from "@/core/types";
+import { BACKLOG_BUCKETS } from "@/core/types";
 import { applyViewFilter, STATE_BUCKET_MEMBERS, type ViewFilter } from "@/core/view-filter";
 import type { Prisma, Item as PrismaItem } from "@/db/generated/client";
+import { asPlainObject } from "@/lib/json";
 import { injectExternalChange, materialDiff } from "@/server/inbound-changes/inject";
 import { getProviderSpec } from "@/server/provider-registry";
 import { buildProviderForUser } from "@/server/providers/build";
@@ -13,12 +14,12 @@ import { projectScopedProcedure, router } from "@/server/trpc";
 
 const ProjectId = z.object({ projectId: z.string().min(1) });
 
-const StateBucketEnum = z.enum(STATE_BUCKETS);
+const BacklogBucketEnum = z.enum(BACKLOG_BUCKETS);
 
 const ListInput = ProjectId.extend({
   kind: z.string().optional(),
   state: z.string().optional(),
-  bucket: StateBucketEnum.default("open"),
+  bucket: BacklogBucketEnum.default("open"),
   /// Optional saved view to apply on top of the inline filters. When set,
   /// the view's stateBucket/assignees/axes win over `bucket` and the inline
   /// `assignees`/`axes` inputs (the surface either drives a saved view or
@@ -31,7 +32,6 @@ const ListInput = ProjectId.extend({
   /// are treated as "no constraint" by the view-filter layer.
   axes: z.record(z.string().min(1).max(64), z.string().max(500)).default({}),
   search: z.string().max(200).optional(),
-  archived: z.boolean().default(false),
   limit: z.number().int().min(1).max(200).default(100),
 });
 
@@ -51,6 +51,35 @@ function userIdOrThrow(ctx: { session: { user: { id?: string } } }): string {
 
 type ListInputResolved = z.infer<typeof ListInput>;
 
+type ResolvedFilter = {
+  view: ViewFilter;
+  /// `true` = only archived rows, `false` = only non-archived, `undefined`
+  /// = no archived clause (both kinds visible). Saved views default to
+  /// non-archived since they store a canonical `StateBucket` and never the
+  /// cache-only archived axis.
+  archivedFlag: boolean | undefined;
+};
+
+/**
+ * Map a `BacklogBucket` to the canonical state bucket used by saved views
+ * and the in-memory filter, plus the cache-only archived flag. The four
+ * buckets correspond to: open/closed → state filter on non-archived rows,
+ * archived → no state filter on archived rows, all → no filter at all.
+ */
+function bucketToFilter(bucket: BacklogBucket): {
+  stateBucket: StateBucket;
+  archivedFlag: boolean | undefined;
+} {
+  switch (bucket) {
+    case "archived":
+      return { stateBucket: "all", archivedFlag: true };
+    case "all":
+      return { stateBucket: "all", archivedFlag: undefined };
+    default:
+      return { stateBucket: bucket, archivedFlag: false };
+  }
+}
+
 /**
  * Resolve the effective view filter for a list call. A `viewId` wins over
  * inline knobs (the surface either drives a saved view or drives ad-hoc
@@ -62,7 +91,7 @@ async function resolveViewFilter(
   projectId: string,
   userId: string,
   input: ListInputResolved,
-): Promise<ViewFilter> {
+): Promise<ResolvedFilter> {
   if (input.viewId) {
     const row = await db.savedView.findFirst({
       where: { id: input.viewId, userId, projectId },
@@ -71,15 +100,22 @@ async function resolveViewFilter(
       throw new TRPCError({ code: "NOT_FOUND", message: "view not found" });
     }
     return {
-      stateBucket: row.stateBucket as StateBucket,
-      assignees: row.assignees,
-      axes: (row.axes ?? {}) as Record<string, string>,
+      view: {
+        stateBucket: row.stateBucket as StateBucket,
+        assignees: row.assignees,
+        axes: (row.axes ?? {}) as Record<string, string>,
+      },
+      archivedFlag: false,
     };
   }
+  const { stateBucket, archivedFlag } = bucketToFilter(input.bucket);
   return {
-    stateBucket: input.bucket,
-    assignees: input.assignees,
-    axes: input.axes,
+    view: {
+      stateBucket,
+      assignees: input.assignees,
+      axes: input.axes,
+    },
+    archivedFlag,
   };
 }
 
@@ -96,6 +132,7 @@ function buildItemListWhere(
   projectId: string,
   input: ListInputResolved,
   view: ViewFilter,
+  archivedFlag: boolean | undefined,
 ): Prisma.ItemWhereInput {
   const stateClause: Prisma.ItemWhereInput = input.state
     ? { state: input.state }
@@ -116,7 +153,7 @@ function buildItemListWhere(
 
   return {
     projectId,
-    archived: input.archived,
+    ...(archivedFlag === undefined ? {} : { archived: archivedFlag }),
     ...(input.kind ? { kind: input.kind } : {}),
     ...stateClause,
     ...assigneeClause,
@@ -169,10 +206,7 @@ function filterRowsByAxes(
 }
 
 function liftRowToCanonical(row: PrismaItem, providerKind: string): Item {
-  const providerRaw =
-    row.providerRaw && typeof row.providerRaw === "object" && !Array.isArray(row.providerRaw)
-      ? (row.providerRaw as Record<string, unknown>)
-      : {};
+  const providerRaw = asPlainObject(row.providerRaw);
   return {
     id: row.id,
     kind: row.kind as ItemKind,
@@ -210,22 +244,42 @@ function liftRowToCanonical(row: PrismaItem, providerKind: string): Item {
 export const itemsRouter = router({
   list: projectScopedProcedure.input(ListInput).query(async ({ ctx, input }) => {
     const userId = userIdOrThrow(ctx);
-    const view = await resolveViewFilter(ctx.db, ctx.projectId, userId, input);
-    const where = buildItemListWhere(ctx.projectId, input, view);
-    const rows = await ctx.db.item.findMany({
-      where,
-      orderBy: [{ updatedAt: "desc" }],
-      // Axes filter is applied in-app via the spec's matcher, so over-fetch
-      // by a small factor when axes are present to keep the after-filter
-      // page size near the requested limit. When no axes are set the SQL
-      // result already matches the final shape.
-      take: hasAxisFilter(view) ? Math.min(input.limit * 4, 800) : input.limit,
-    });
+    const { view, archivedFlag } = await resolveViewFilter(ctx.db, ctx.projectId, userId, input);
+    const where = buildItemListWhere(ctx.projectId, input, view, archivedFlag);
+    const axesActive = hasAxisFilter(view);
+    // The provider matcher reads providerRaw via liftRowToCanonical, so we
+    // can only narrow the SQL projection when no axis filter is active.
+    // Otherwise we'd lose the column the matcher needs.
+    const rows = axesActive
+      ? await ctx.db.item.findMany({
+          where,
+          orderBy: [{ updatedAt: "desc" }],
+          take: Math.min(input.limit * 4, 800),
+        })
+      : await ctx.db.item.findMany({
+          where,
+          orderBy: [{ updatedAt: "desc" }],
+          take: input.limit,
+          select: {
+            id: true,
+            providerItemId: true,
+            kind: true,
+            title: true,
+            state: true,
+            assignee: true,
+            author: true,
+            tags: true,
+            url: true,
+            updatedAt: true,
+            syncedAt: true,
+          },
+        });
 
-    const filteredRows = filterRowsByAxes(rows, view, ctx.project.providerKind);
-    const trimmed = filteredRows.slice(0, input.limit);
+    const filteredRows = axesActive
+      ? filterRowsByAxes(rows as PrismaItem[], view, ctx.project.providerKind).slice(0, input.limit)
+      : rows;
 
-    return trimmed.map((row) => ({
+    return filteredRows.map((row) => ({
       id: row.id,
       providerItemId: row.providerItemId,
       kind: row.kind,
@@ -241,13 +295,13 @@ export const itemsRouter = router({
   }),
 
   get: projectScopedProcedure.input(ItemRef).query(async ({ ctx, input }) => {
-    const item = await ctx.db.item.findFirst({
-      where: { projectId: ctx.projectId, id: input.itemId },
+    const item = await ctx.db.item.findUnique({
+      where: { id: input.itemId },
       include: {
         comments: { orderBy: [{ createdAt: "asc" }] },
       },
     });
-    if (!item) {
+    if (!item || item.projectId !== ctx.projectId) {
       throw new TRPCError({ code: "NOT_FOUND", message: "item not found in this project" });
     }
     return item;
@@ -320,10 +374,11 @@ export const itemsRouter = router({
    */
   refreshItem: projectScopedProcedure.input(ItemRef).mutation(async ({ ctx, input }) => {
     const userId = userIdOrThrow(ctx);
-    const cached = await ctx.db.item.findFirst({
-      where: { id: input.itemId, projectId: ctx.projectId },
+    const cached = await ctx.db.item.findUnique({
+      where: { id: input.itemId },
       select: {
         id: true,
+        projectId: true,
         providerItemId: true,
         state: true,
         title: true,
@@ -331,7 +386,7 @@ export const itemsRouter = router({
         assignee: true,
       },
     });
-    if (!cached) {
+    if (!cached || cached.projectId !== ctx.projectId) {
       throw new TRPCError({ code: "NOT_FOUND", message: "item not found in this project" });
     }
     const provider = await buildProviderForUser(ctx.db, ctx.project, userId);

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
+import { mostRecent } from "@/lib/format";
 import { auth } from "@/server/auth";
 import { db } from "@/server/db";
 import { loadGlobalSetting } from "@/server/settings/effective";
@@ -66,15 +67,15 @@ export default async function SettingsLayout({
   // sync/pending signal while navigating into /settings. Without this the
   // footer shows "never synced" on settings even when the selected project
   // has been syncing happily.
-  const [pendingProposals, syncCursor] = currentProjectId
+  const [pendingProposalsCount, syncCursor] = currentProjectId
     ? await Promise.all([
-        trpc.proposals.list({ projectId: currentProjectId, status: "pending", limit: 100 }),
+        trpc.proposals.count({ projectId: currentProjectId, status: "pending" }),
         db.syncCursor.findUnique({
           where: { projectId: currentProjectId },
           select: { watermark: true, lastFullSyncAt: true, updatedAt: true },
         }),
       ])
-    : [[], null];
+    : [0, null];
 
   const lastSyncAt = syncCursor
     ? mostRecent([syncCursor.watermark, syncCursor.lastFullSyncAt, syncCursor.updatedAt])
@@ -98,7 +99,7 @@ export default async function SettingsLayout({
           projectName={currentProject?.name ?? null}
           providerKind={currentProject?.providerKind ?? null}
           lastSyncAt={lastSyncAt}
-          pendingProposals={pendingProposals.length}
+          pendingProposals={pendingProposalsCount}
           readOnly={readOnly}
         />
         {currentProjectId ? (
@@ -108,13 +109,4 @@ export default async function SettingsLayout({
       </WorkspaceProviders>
     </div>
   );
-}
-
-function mostRecent(dates: Array<Date | null | undefined>): Date | null {
-  let best: Date | null = null;
-  for (const d of dates) {
-    if (!d) continue;
-    if (!best || d.getTime() > best.getTime()) best = d;
-  }
-  return best;
 }
