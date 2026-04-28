@@ -11,6 +11,10 @@
  *     admin tweak in the UI is not stomped.
  *   - `DEV_GITHUB_CLIENT_ID` + `DEV_GITHUB_CLIENT_SECRET` → an
  *     `OauthProviderConfig` row (kind=github).
+ *   - `DEV_AZURE_DEVOPS_CLIENT_ID` + `DEV_AZURE_DEVOPS_CLIENT_SECRET`
+ *     (+ optional `DEV_AZURE_DEVOPS_TENANT_ID`) → an `OauthProviderConfig`
+ *     row (kind=azure_devops). The tenant id rides in `baseUrl` to match
+ *     `auth-build.ts`; empty falls back to the multi-tenant `common` endpoint.
  *
  * Idempotency comes from each branch's own existence check. There is no
  * gate on `setup.complete` — that bit is owned by the in-browser wizard
@@ -44,6 +48,7 @@ async function main() {
   try {
     await seedOpenAi(db);
     await seedGithubOAuth(db);
+    await seedAzureDevOpsOAuth(db);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.warn(`[seed-dev] Skipped: ${message}`);
@@ -143,7 +148,7 @@ async function seedGithubOAuth(db: PrismaClient): Promise<void> {
     await db.oauthProviderConfig.create({
       data: {
         kind: "github",
-        label: "GitHub (dev)",
+        label: "GitHub",
         clientId,
         clientSecret: writeSecret,
         scopes: "read:user user:email repo",
@@ -172,6 +177,59 @@ async function seedGithubOAuth(db: PrismaClient): Promise<void> {
     console.log("[seed-dev] Updated OauthProviderConfig(kind=github) credentials.");
   } else {
     console.log("[seed-dev] OauthProviderConfig(kind=github) already up to date.");
+  }
+}
+
+async function seedAzureDevOpsOAuth(db: PrismaClient): Promise<void> {
+  const clientId = process.env.DEV_AZURE_DEVOPS_CLIENT_ID;
+  const clientSecret = process.env.DEV_AZURE_DEVOPS_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    console.warn(
+      "[seed-dev] DEV_AZURE_DEVOPS_CLIENT_ID / DEV_AZURE_DEVOPS_CLIENT_SECRET not set — skipping Azure DevOps OAuth seed.",
+    );
+    return;
+  }
+
+  const tenant = process.env.DEV_AZURE_DEVOPS_TENANT_ID?.trim() ?? "";
+  const existing = await db.oauthProviderConfig.findFirst({ where: { kind: "azure_devops" } });
+  const writeSecret = encryptSecret(clientSecret);
+
+  if (!existing) {
+    await db.oauthProviderConfig.create({
+      data: {
+        kind: "azure_devops",
+        label: "Azure DevOps",
+        clientId,
+        clientSecret: writeSecret,
+        scopes: "",
+        baseUrl: tenant,
+        enabled: true,
+      },
+    });
+    console.log(
+      `[seed-dev] Created OauthProviderConfig(kind=azure_devops)${isEncryptionConfigured() ? " (encrypted)" : ""}.`,
+    );
+    return;
+  }
+
+  // Same approach as GitHub: compare by clientId, rewrap the secret each
+  // time (fresh IV → ciphertexts can't be byte-compared). Tenant change
+  // also forces a refresh so `.env` edits propagate without a manual UI poke.
+  const idChanged = existing.clientId !== clientId;
+  const tenantChanged = existing.baseUrl !== tenant;
+  if (idChanged || tenantChanged) {
+    await db.oauthProviderConfig.update({
+      where: { id: existing.id },
+      data: {
+        clientId,
+        clientSecret: writeSecret,
+        baseUrl: tenant,
+        enabled: true,
+      },
+    });
+    console.log("[seed-dev] Updated OauthProviderConfig(kind=azure_devops) credentials.");
+  } else {
+    console.log("[seed-dev] OauthProviderConfig(kind=azure_devops) already up to date.");
   }
 }
 

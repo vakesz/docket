@@ -6,6 +6,7 @@ import {
   fieldClass,
   fieldMonoClass,
   primaryButtonClass,
+  secondaryButtonClass,
   settingsPanelClass,
 } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
@@ -27,39 +28,72 @@ const DEFAULTS: Record<Kind, { label: string; scopes: string; baseUrlHint: strin
   },
 };
 
-export function OauthProviderForm() {
+export type OauthProviderFormInitial = {
+  id: string;
+  kind: string;
+  label: string;
+  clientId: string;
+  scopes: string;
+  baseUrl: string;
+};
+
+type Props =
+  | { mode?: "create"; initial?: undefined; onDone?: () => void }
+  | { mode: "edit"; initial: OauthProviderFormInitial; onDone?: () => void };
+
+export function OauthProviderForm(props: Props) {
+  const mode = props.mode ?? "create";
+  const initial = props.initial;
   const utils = trpc.useUtils();
+
   const create = trpc.oauthProviders.create.useMutation({
     onSuccess: async () => {
-      setLabel(DEFAULTS[kind].label);
+      setLabel(DEFAULTS[kind as Kind].label);
       setClientId("");
       setClientSecret("");
-      setScopes(DEFAULTS[kind].scopes);
+      setScopes(DEFAULTS[kind as Kind].scopes);
       setBaseUrl("");
       await utils.oauthProviders.list.invalidate();
+      props.onDone?.();
+    },
+  });
+  const update = trpc.oauthProviders.update.useMutation({
+    onSuccess: async () => {
+      await utils.oauthProviders.list.invalidate();
+      props.onDone?.();
     },
   });
 
   const kindId = useId();
-  const [kind, setKind] = useState<Kind>("github");
-  const [label, setLabel] = useState(DEFAULTS.github.label);
-  const [clientId, setClientId] = useState("");
+  const [kind, setKind] = useState<string>(initial?.kind ?? "github");
+  const [label, setLabel] = useState(initial?.label ?? DEFAULTS.github.label);
+  const [clientId, setClientId] = useState(initial?.clientId ?? "");
   const [clientSecret, setClientSecret] = useState("");
-  const [scopes, setScopes] = useState(DEFAULTS.github.scopes);
-  const [baseUrl, setBaseUrl] = useState("");
+  const [scopes, setScopes] = useState(initial?.scopes ?? DEFAULTS.github.scopes);
+  const [baseUrl, setBaseUrl] = useState(initial?.baseUrl ?? "");
 
   function onKindChange(next: Kind) {
     setKind(next);
-    // Reset the kind-specific defaults so the user doesn't have to remember
-    // GitHub's scopes when they flip to AzDO and vice versa.
     setLabel(DEFAULTS[next].label);
     setScopes(DEFAULTS[next].scopes);
   }
 
   function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (mode === "edit" && initial) {
+      update.mutate({
+        id: initial.id,
+        label: label.trim(),
+        clientId: clientId.trim(),
+        // Preserve existing ciphertext when the field is left blank.
+        clientSecret: clientSecret.trim() ? clientSecret : undefined,
+        scopes: scopes.trim(),
+        baseUrl: baseUrl.trim(),
+      });
+      return;
+    }
     create.mutate({
-      kind,
+      kind: kind as Kind,
       label: label.trim(),
       clientId: clientId.trim(),
       clientSecret: clientSecret.trim(),
@@ -68,26 +102,41 @@ export function OauthProviderForm() {
     });
   }
 
+  const pending = mode === "edit" ? update.isPending : create.isPending;
+  const error = (mode === "edit" ? update.error : create.error)?.message;
+  const baseUrlHint = (DEFAULTS[kind as Kind] ?? DEFAULTS.github).baseUrlHint;
+
   return (
     <form onSubmit={onSubmit} className={`${settingsPanelClass} flex flex-col gap-4 text-sm`}>
-      <h2 className="text-base font-medium text-fg">Add OAuth provider</h2>
+      <h2 className="text-base font-medium text-fg">
+        {mode === "edit" ? "Edit OAuth provider" : "Add OAuth provider"}
+      </h2>
 
       <div className="flex gap-3">
         <div className="flex w-40 flex-col gap-1">
           <label htmlFor={kindId} className="text-xs text-fg-muted">
             Kind
           </label>
-          <SelectField
-            id={kindId}
-            value={kind}
-            onChange={(e) => onKindChange(e.target.value as Kind)}
-          >
-            {KINDS.map((k) => (
-              <option key={k} value={k}>
-                {k.replace("_", " ")}
-              </option>
-            ))}
-          </SelectField>
+          {mode === "edit" ? (
+            <Input
+              id={kindId}
+              value={kind.replace("_", " ")}
+              readOnly
+              className={`${fieldClass} cursor-not-allowed opacity-70`}
+            />
+          ) : (
+            <SelectField
+              id={kindId}
+              value={kind}
+              onChange={(e) => onKindChange(e.target.value as Kind)}
+            >
+              {KINDS.map((k) => (
+                <option key={k} value={k}>
+                  {k.replace("_", " ")}
+                </option>
+              ))}
+            </SelectField>
+          )}
         </div>
         <Field className="flex flex-1 flex-col gap-1">
           <Label className="text-xs text-fg-muted">Label</Label>
@@ -111,11 +160,17 @@ export function OauthProviderForm() {
           />
         </Field>
         <Field className="flex flex-1 flex-col gap-1">
-          <Label className="text-xs text-fg-muted">Client secret</Label>
+          <Label className="text-xs text-fg-muted">
+            Client secret
+            {mode === "edit" ? (
+              <span className="ml-1 font-normal text-fg-faint">(leave blank to keep current)</span>
+            ) : null}
+          </Label>
           <Input
-            required
+            required={mode !== "edit"}
             type="password"
             autoComplete="off"
+            placeholder={mode === "edit" ? "•••••••• (unchanged)" : undefined}
             value={clientSecret}
             onChange={(e) => setClientSecret(e.target.value)}
             className={fieldMonoClass}
@@ -140,7 +195,7 @@ export function OauthProviderForm() {
         <Input
           value={baseUrl}
           onChange={(e) => setBaseUrl(e.target.value)}
-          placeholder={DEFAULTS[kind].baseUrlHint}
+          placeholder={baseUrlHint}
           className={fieldClass}
         />
         <p className="text-xs text-fg-muted">
@@ -154,15 +209,29 @@ export function OauthProviderForm() {
         </p>
       </Field>
 
-      {create.error ? <p className={errorMessageClass}>{create.error.message}</p> : null}
+      {error ? <p className={errorMessageClass}>{error}</p> : null}
 
-      <button
-        type="submit"
-        disabled={create.isPending}
-        className={`${primaryButtonClass} self-start`}
-      >
-        {create.isPending ? "Creating…" : "Create"}
-      </button>
+      <div className="flex gap-2">
+        <button type="submit" disabled={pending} className={primaryButtonClass}>
+          {pending
+            ? mode === "edit"
+              ? "Saving…"
+              : "Creating…"
+            : mode === "edit"
+              ? "Save"
+              : "Create"}
+        </button>
+        {mode === "edit" ? (
+          <button
+            type="button"
+            onClick={() => props.onDone?.()}
+            disabled={pending}
+            className={secondaryButtonClass}
+          >
+            Cancel
+          </button>
+        ) : null}
+      </div>
     </form>
   );
 }

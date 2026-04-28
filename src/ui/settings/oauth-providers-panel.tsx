@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import { badgeClass, emptyStateClass } from "@/lib/form-classes";
 import { nextAuthCallbackPath } from "@/lib/next-auth-provider-id";
 import { trpc } from "@/lib/trpc-client";
@@ -14,6 +15,7 @@ function callbackUrl(kind: string, base: string): string {
 export function OauthProvidersPanel({ publicBase }: { publicBase: string }) {
   const refetchInterval = useAutoRefreshIntervalMs();
   const list = trpc.oauthProviders.list.useQuery(undefined, { refetchInterval });
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   if (list.isPending) {
     return <p className="text-sm text-fg-faint">Loading providers…</p>;
@@ -37,25 +39,44 @@ export function OauthProvidersPanel({ publicBase }: { publicBase: string }) {
                 key={row.id}
                 className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4 shadow-sm"
               >
-                <div className="flex items-baseline justify-between gap-3">
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-baseline gap-2">
-                      <span className="font-medium text-fg">{row.label}</span>
-                      <span className="text-xs uppercase tracking-wide text-fg-muted">
-                        {row.kind.replace("_", " ")}
-                      </span>
-                      {!row.enabled ? <span className={badgeClass}>disabled</span> : null}
+                {editingId === row.id ? (
+                  <OauthProviderForm
+                    mode="edit"
+                    initial={{
+                      id: row.id,
+                      kind: row.kind,
+                      label: row.label,
+                      clientId: row.clientId,
+                      scopes: row.scopes,
+                      baseUrl: row.baseUrl,
+                    }}
+                    onDone={() => setEditingId(null)}
+                  />
+                ) : (
+                  <div className="flex items-baseline justify-between gap-3">
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-baseline gap-2">
+                        <span className="font-medium text-fg">{row.label}</span>
+                        <span className="text-xs uppercase tracking-wide text-fg-muted">
+                          {row.kind.replace("_", " ")}
+                        </span>
+                        {!row.enabled ? <span className={badgeClass}>disabled</span> : null}
+                      </div>
+                      <p className="font-mono text-xs text-fg-muted">{row.clientId}</p>
+                      <p className="text-xs text-fg-muted">
+                        Callback URL:{" "}
+                        <code className="rounded bg-surface-alt px-1 py-0.5 font-mono text-fg">
+                          {callbackUrl(row.kind, publicBase)}
+                        </code>
+                      </p>
                     </div>
-                    <p className="font-mono text-xs text-fg-muted">{row.clientId}</p>
-                    <p className="text-xs text-fg-muted">
-                      Callback URL:{" "}
-                      <code className="rounded bg-surface-alt px-1 py-0.5 font-mono text-fg">
-                        {callbackUrl(row.kind, publicBase)}
-                      </code>
-                    </p>
+                    <OauthProviderActions
+                      id={row.id}
+                      enabled={row.enabled}
+                      onEdit={() => setEditingId(row.id)}
+                    />
                   </div>
-                  <OauthProviderActions id={row.id} enabled={row.enabled} />
-                </div>
+                )}
               </li>
             ))}
           </ul>

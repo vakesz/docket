@@ -2,10 +2,14 @@
 
 export type StepperStep = {
   title: string;
-  detail: string;
   done: boolean;
 };
 
+/**
+ * Thin progress indicator: a horizontal hairline with one named dot per
+ * step. Three visual states — empty (pending), filled (done), filled +
+ * outer ring (current). Labels under each dot.
+ */
 export function WizardStepper({
   steps,
   activeIndex,
@@ -13,46 +17,30 @@ export function WizardStepper({
   steps: StepperStep[];
   activeIndex: number;
 }) {
+  const inset = `${50 / steps.length}%`;
   return (
-    <ol className="flex items-stretch gap-2">
+    <ol className="relative flex w-full items-start">
+      <span
+        aria-hidden
+        className="pointer-events-none absolute top-1.5 h-px -translate-y-1/2 bg-border"
+        style={{ left: inset, right: inset }}
+      />
       {steps.map((step, i) => {
-        const state = step.done
-          ? "done"
-          : i === activeIndex || (activeIndex === -1 && i === steps.length - 1)
-            ? "active"
-            : "pending";
+        const state = step.done ? "done" : i === activeIndex ? "active" : "pending";
         return (
-          <li
-            key={step.title}
-            className={`flex flex-1 items-center gap-3 rounded-2xl border px-3 py-2 ${
-              state === "done"
-                ? "border-success-fg/30 bg-success-bg/30"
-                : state === "active"
-                  ? "border-accent/40 bg-surface-alt"
-                  : "border-border bg-surface"
-            }`}
-          >
+          <li key={step.title} className="flex flex-1 flex-col items-center">
             <span
               aria-hidden
-              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+              className={`relative h-3 w-3 rounded-full ${
                 state === "done"
-                  ? "bg-success-fg text-bg"
+                  ? "bg-fg"
                   : state === "active"
-                    ? "bg-accent text-bg"
-                    : "bg-surface-alt text-fg-faint"
+                    ? "bg-fg ring-2 ring-fg ring-offset-2 ring-offset-bg"
+                    : "border border-border bg-bg"
               }`}
-            >
-              {state === "done" ? "✓" : i + 1}
-            </span>
-            <span className="flex flex-col leading-tight">
-              <span
-                className={`text-sm font-medium ${
-                  state === "pending" ? "text-fg-muted" : "text-fg"
-                }`}
-              >
-                {step.title}
-              </span>
-              <span className="text-xs text-fg-faint">{step.detail}</span>
+            />
+            <span className={`mt-3 text-xs ${state === "pending" ? "text-fg-faint" : "text-fg"}`}>
+              {step.title}
             </span>
           </li>
         );

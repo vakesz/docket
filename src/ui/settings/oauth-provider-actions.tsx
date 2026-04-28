@@ -2,7 +2,15 @@
 import { xsBorderButtonClass, xsDangerButtonClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
 
-export function OauthProviderActions({ id, enabled }: { id: string; enabled: boolean }) {
+export function OauthProviderActions({
+  id,
+  enabled,
+  onEdit,
+}: {
+  id: string;
+  enabled: boolean;
+  onEdit: () => void;
+}) {
   const utils = trpc.useUtils();
   const refresh = () => utils.oauthProviders.list.invalidate();
 
@@ -13,6 +21,9 @@ export function OauthProviderActions({ id, enabled }: { id: string; enabled: boo
 
   return (
     <div className="flex items-center gap-2 text-xs">
+      <button type="button" disabled={pending} onClick={onEdit} className={xsBorderButtonClass}>
+        Edit
+      </button>
       <button
         type="button"
         disabled={pending}

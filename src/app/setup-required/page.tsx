@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import { setupCardClass } from "@/lib/form-classes";
 import { db } from "@/server/db";
 import { getSetupStatus } from "@/server/setup/status";
 import { SetupWizardForm } from "@/ui/setup/wizard-form";
@@ -30,15 +29,13 @@ export default async function SetupRequiredPage() {
   const openaiExisting = await db.llmProvider.findFirst({ where: { kind: "openai" } });
 
   return (
-    <main className="flex min-h-screen items-start justify-center bg-bg p-8 text-fg">
-      <div className={`${setupCardClass} flex flex-col gap-6`}>
-        <SetupWizardForm
-          publicBaseUrl={publicBaseUrl}
-          hasGithub={Boolean(githubExisting)}
-          hasAzureDevops={Boolean(azureDevopsExisting)}
-          hasOpenai={Boolean(openaiExisting)}
-        />
-      </div>
+    <main className="min-h-screen bg-bg text-fg">
+      <SetupWizardForm
+        publicBaseUrl={publicBaseUrl}
+        hasGithub={Boolean(githubExisting)}
+        hasAzureDevops={Boolean(azureDevopsExisting)}
+        hasOpenai={Boolean(openaiExisting)}
+      />
     </main>
   );
 }

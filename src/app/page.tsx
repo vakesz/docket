@@ -3,7 +3,8 @@ import { auth } from "@/server/auth";
 import { db } from "@/server/db";
 import { requireSetupComplete } from "@/server/setup/guard";
 import { CreateProjectForm } from "@/ui/projects/create-project-form";
-import { SignInWithGitHubButton } from "@/ui/shell/sign-in-button";
+import { DocketLogo } from "@/ui/setup/docket-logo";
+import { SignInButtons } from "@/ui/shell/sign-in-button";
 
 export default async function Home() {
   await requireSetupComplete();
@@ -12,9 +13,10 @@ export default async function Home() {
   if (!session?.user) {
     return (
       <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-6 bg-bg p-8 text-center text-fg">
+        <DocketLogo size={50} />
         <h1 className="text-3xl font-semibold tracking-tight">docket</h1>
         <p className="text-sm text-fg-muted">Sign in to manage projects.</p>
-        <SignInWithGitHubButton />
+        <SignInButtons />
       </main>
     );
   }

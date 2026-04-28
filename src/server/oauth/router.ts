@@ -30,6 +30,21 @@ const CreateOauthProviderInput = z.object({
   baseUrl: z.string().max(500).default(""),
 });
 
+/**
+ * Edit shape — same as create minus `kind` (immutable, since it pins the
+ * callback URL + the `Account.provider` foreign key on existing sessions),
+ * and with `clientSecret` optional. Empty/missing secret means "keep the
+ * existing ciphertext" so admins can edit a label without re-pasting it.
+ */
+const UpdateOauthProviderInput = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1).max(80),
+  clientId: z.string().min(1).max(200),
+  clientSecret: z.string().optional(),
+  scopes: z.string().max(500).default(""),
+  baseUrl: z.string().max(500).default(""),
+});
+
 export const oauthProvidersRouter = router({
   /** List all configured OAuth providers. Visible to any authenticated user. */
   list: protectedProcedure.query(async ({ ctx }) => {
@@ -55,6 +70,17 @@ export const oauthProvidersRouter = router({
       data: { ...input, clientSecret: encryptSecret(input.clientSecret) },
     });
     return { id: created.id, kind: created.kind, label: created.label };
+  }),
+
+  update: mutationProcedure.input(UpdateOauthProviderInput).mutation(async ({ ctx, input }) => {
+    const { id, clientSecret, ...rest } = input;
+    const data: Record<string, unknown> = { ...rest };
+    const trimmedSecret = clientSecret?.trim();
+    if (trimmedSecret) {
+      data.clientSecret = encryptSecret(trimmedSecret);
+    }
+    await ctx.db.oauthProviderConfig.update({ where: { id }, data });
+    return { ok: true } as const;
   }),
 
   /** Toggle the row's enabled flag — hides the sign-in button without losing config. */

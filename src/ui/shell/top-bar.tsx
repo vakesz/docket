@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { signOut } from "@/server/auth";
+import { DocketLogo } from "@/ui/setup/docket-logo";
 import { AccountMenu } from "@/ui/shell/account-menu";
 import { BacklogDrawerTrigger } from "@/ui/shell/backlog-drawer-trigger";
 import { ProjectSwitcher } from "@/ui/shell/project-switcher";
@@ -36,10 +37,7 @@ export function TopBar({
         className="flex shrink-0 items-center gap-2 text-fg hover:text-accent"
         aria-label="Docket"
       >
-        <span
-          aria-hidden="true"
-          className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-accent"
-        />
+        <DocketLogo size={20} className="shrink-0" />
         <span className="text-[13px] font-semibold uppercase tracking-[0.18em]">DOCKET</span>
         <span className="ml-1 hidden text-[12px] font-light italic tracking-wide text-fg-muted sm:inline">
           build something cool together

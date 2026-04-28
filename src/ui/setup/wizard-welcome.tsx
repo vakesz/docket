@@ -7,7 +7,7 @@ import { ThemePicker } from "@/ui/shell/theme-picker";
 export function WizardWelcome({ onStart }: { onStart: () => void }) {
   return (
     <div className="flex flex-col items-center gap-8 py-6 text-center">
-      <DocketLogo className="h-20 w-20" />
+      <DocketLogo size={50} />
       <div className="flex flex-col items-center gap-2">
         <h1 className="text-2xl font-semibold tracking-tight text-fg">Welcome to Docket</h1>
         <p className="max-w-md text-sm text-fg-muted">

@@ -73,10 +73,6 @@ export const metaLabelClass = "text-xs uppercase tracking-wide text-fg-muted";
 
 export const metaLabelFaintClass = "text-xs uppercase tracking-wide text-fg-faint";
 
-/** Setup wizard / setup-required page card. Centered, large, tactile. */
-export const setupCardClass =
-  "w-full max-w-2xl rounded-3xl border border-border bg-surface p-8 shadow-xl";
-
 export const dangerTextClass = "text-sm text-danger-fg";
 
 /** Settings & admin page panel. Use for each grouped section. */

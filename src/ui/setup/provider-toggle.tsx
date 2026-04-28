@@ -21,7 +21,7 @@ export function ProviderToggle({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-border bg-surface-alt p-4">
+    <div className="flex flex-col gap-4 border-t border-border pt-4 first:border-t-0 first:pt-0">
       <Field
         className={`flex items-start gap-3 ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
       >
@@ -43,7 +43,7 @@ export function ProviderToggle({
           {help ? <span className="text-xs text-fg-muted">{help}</span> : null}
         </Label>
       </Field>
-      {checked && !disabled ? <div className="mt-4 flex flex-col gap-3">{children}</div> : null}
+      {checked && !disabled ? <div className="flex flex-col gap-3 pl-12">{children}</div> : null}
     </div>
   );
 }

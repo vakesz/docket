@@ -104,8 +104,8 @@ export function StepGithub({
         </Field>
       </div>
 
-      <details className="rounded-xl border border-border bg-surface p-3">
-        <summary className="cursor-pointer select-none text-xs font-medium text-fg-muted">
+      <details className="flex flex-col gap-3">
+        <summary className="cursor-pointer select-none text-xs font-medium text-fg-muted hover:text-fg">
           Advanced
         </summary>
         <div className="mt-3 flex flex-col gap-3">
