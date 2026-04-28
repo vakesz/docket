@@ -10,7 +10,7 @@ import {
   proposeTagsChange,
   proposeTransition,
 } from "@/server/proposals/builders";
-import { diffOf } from "@/server/proposals/diff";
+import { diffOf, isEmptyDiff } from "@/server/proposals/diff";
 import { confirmProposal, maybeAutoAccept, rejectProposal } from "@/server/proposals/executor";
 import {
   projectIdSchema,
@@ -139,7 +139,8 @@ export const proposalsRouter = router({
       throw new TRPCError({ code: "NOT_FOUND", message: "proposal not found" });
     }
     const proposal = hydrateProposal(row);
-    return { row, diff: diffOf(proposal) };
+    const diff = diffOf(proposal);
+    return { row, diff, isEmpty: isEmptyDiff(diff) };
   }),
 
   proposeTransition: projectScopedMutationProcedure

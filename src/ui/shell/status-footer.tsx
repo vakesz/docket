@@ -2,7 +2,7 @@
 
 import { RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { formatRelative } from "@/lib/format";
 import { trpc } from "@/lib/trpc-client";
 import { cn } from "@/lib/utils";
@@ -137,11 +137,12 @@ export function StatusFooter({
 }
 
 /**
- * "{N} pending" footer button. Click → navigate to the ticket whose
- * proposal is next in the queue and open the confirm dialog. Acts on a
- * single proposal at a time — to clear the next one the user taps the
- * pending bar again. Keeps orphaned proposals (rate-limited LLM turn,
- * abandoned chat) reachable from anywhere in the workspace.
+ * "{N} pending" footer button. Click → open the confirm dialog for the
+ * oldest pending proposal in place. The dialog is self-contained (it
+ * loads everything via `proposals.get`), so we deliberately do NOT
+ * navigate to the underlying ticket — `providerItemId` is GitHub-shaped
+ * (`owner/repo#123`) and would break the `/items/[itemId]` route, and
+ * memory + item-create proposals have no item to navigate to at all.
  *
  * The query is `staleTime: 0` because count drift after a confirm/reject
  * matters more here than refetch chatter — the moment the dialog closes,
@@ -154,7 +155,6 @@ function PendingProposalsButton({
   projectId: string;
   initialCount: number;
 }) {
-  const router = useRouter();
   const utils = trpc.useUtils();
   const [activeProposalId, setActiveProposalId] = useState<string | null>(null);
 
@@ -166,18 +166,21 @@ function PendingProposalsButton({
   const proposals = list.data ?? [];
   const count = list.data ? proposals.length : initialCount;
 
-  if (count === 0) return null;
-
-  const openNext = () => {
-    if (proposals.length === 0) return;
-    // Oldest-first drains the queue in the order the agent staged them,
-    // matching the user's mental model of "the one I forgot about first."
+  // Oldest-first drains the queue in the order the agent staged them,
+  // matching the user's mental model of "the one I forgot about first."
+  const oldestPendingId = useMemo(() => {
+    if (proposals.length === 0) return null;
     const next = [...proposals].sort(
       (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
     )[0];
-    if (!next) return;
-    setActiveProposalId(next.id);
-    router.push(`/projects/${projectId}/items/${next.providerItemId}`);
+    return next?.id ?? null;
+  }, [proposals]);
+
+  if (count === 0) return null;
+
+  const openNext = () => {
+    if (!oldestPendingId) return;
+    setActiveProposalId(oldestPendingId);
   };
 
   return (

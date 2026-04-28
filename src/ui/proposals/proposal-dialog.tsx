@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@headlessui/react";
 import { useRouter } from "next/navigation";
+import { useEffect, useRef } from "react";
 import { ghostButtonClass, primaryButtonClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
 import { ProposalDiffView } from "@/ui/proposals/proposal-diff-view";
@@ -58,6 +59,22 @@ export function ProposalDialog({
     },
   });
 
+  // Auto-dismiss proposals whose diff would be a no-op against the current
+  // snapshot (e.g. someone applied the change manually before review). The
+  // ref guards against re-firing if reject.mutate triggers a re-render
+  // before the proposalId clears.
+  const autoRejectedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!proposalId) {
+      autoRejectedRef.current = null;
+      return;
+    }
+    if (!query.data?.isEmpty) return;
+    if (autoRejectedRef.current === proposalId) return;
+    autoRejectedRef.current = proposalId;
+    reject.mutate({ projectId, proposalId });
+  }, [proposalId, projectId, query.data?.isEmpty, reject.mutate]);
+
   const busy = confirm.isPending || reject.isPending;
   const errorMessage =
     query.error?.message ?? confirm.error?.message ?? reject.error?.message ?? null;
@@ -86,6 +103,10 @@ export function ProposalDialog({
           <div className="min-h-[6rem]">
             {query.isPending ? (
               <p className="text-sm text-fg-muted">Loading proposal…</p>
+            ) : query.data?.isEmpty ? (
+              <p className="text-sm text-fg-muted">
+                Nothing to apply — the change is already reflected. Dismissing…
+              </p>
             ) : query.data ? (
               <>
                 {query.data.row.advisory ? (

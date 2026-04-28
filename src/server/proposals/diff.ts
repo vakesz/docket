@@ -90,6 +90,37 @@ export type ProposalDiff =
   | MemoryWriteDiff
   | MemoryDeleteDiff;
 
+/**
+ * A proposal is "empty" when confirming it would be a no-op against the
+ * current snapshot — usually because somebody already applied the change
+ * manually between staging and review. Returning this flag lets the UI
+ * silently auto-reject stale entries instead of showing a blank diff.
+ *
+ * Conservative by design: kinds that always do something (`item_create`,
+ * `memory_delete`, `attachment_upload`, `state_change`) are never empty.
+ */
+export function isEmptyDiff(diff: ProposalDiff): boolean {
+  switch (diff.kind) {
+    case "comment_add":
+      return diff.bodyMd.trim().length === 0;
+    case "description_patch":
+      return diff.before === diff.after;
+    case "tags_change":
+      return diff.added.length === 0 && diff.removed.length === 0;
+    case "memory_write":
+      return (
+        diff.memoryId !== null &&
+        diff.previousTitle === diff.title &&
+        diff.previousBodyMd === diff.bodyMd
+      );
+    case "state_change":
+    case "item_create":
+    case "memory_delete":
+    case "attachment_upload":
+      return false;
+  }
+}
+
 export function diffOf(proposal: Proposal): ProposalDiff {
   switch (proposal.kind) {
     case "state_change":
