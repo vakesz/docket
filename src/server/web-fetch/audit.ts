@@ -25,11 +25,35 @@ export type WebFetchAuditRow = {
   contentType: string | null;
   bytes: number;
   errorMessage: string | null;
+  /**
+   * HTML-cleanup outcome. null = cleaning didn't apply (raw=true, non-HTML
+   * response, denial before fetch). true = HTML successfully converted to
+   * markdown. false = cleaning was attempted but failed/produced empty
+   * output and the tool fell back to the raw body.
+   */
+  cleaned?: boolean | null;
+  /** UTF-8 byte length of the cleaned markdown when `cleaned === true`. */
+  cleanedBytes?: number | null;
+  /** Reason cleaning failed when `cleaned === false`. */
+  cleanError?: string | null;
 };
 
 export async function recordWebFetchEvent(db: typeof Db, row: WebFetchAuditRow): Promise<void> {
   try {
-    await db.webFetchEvent.create({ data: row });
+    await db.webFetchEvent.create({
+      data: {
+        projectId: row.projectId,
+        userId: row.userId,
+        url: row.url,
+        status: row.status,
+        contentType: row.contentType,
+        bytes: row.bytes,
+        errorMessage: row.errorMessage,
+        cleaned: row.cleaned ?? null,
+        cleanedBytes: row.cleanedBytes ?? null,
+        cleanError: row.cleanError ?? null,
+      },
+    });
   } catch (err) {
     logger.warn(
       { err, projectId: row.projectId, status: row.status },

@@ -16,6 +16,12 @@
  *   5. Body return — text only. Binary content types are denied
  *      (`denied_type`) so the agent doesn't try to reason over a PDF or
  *      a tarball as if it were prose.
+ *   6. HTML cleanup — for HTML responses (sniffed even on misleading
+ *      content-types), strip head/script/style/noscript/iframe/svg +
+ *      comments and run Turndown to emit cleaned markdown. The agent
+ *      can opt out per call with `raw: true`. On parse failure or
+ *      empty cleaned output the tool falls back to the raw body and
+ *      records a `cleanError` in the audit row.
  *
  * Every outcome — including the deny paths — writes one
  * `WebFetchEvent` row so an admin can audit who fetched what. That
@@ -28,6 +34,7 @@ import { z } from "zod";
 import { zodToJsonSchema } from "@/agent/tools/schema";
 import type { ToolFactory } from "@/agent/tools/types";
 import { fail, ok } from "@/agent/tools/types";
+import { cleanHtml, shouldCleanHtml } from "@/agent/tools/web-fetch-clean";
 import { loadProjectSetting } from "@/server/settings/effective";
 import { recordWebFetchEvent } from "@/server/web-fetch/audit";
 import { assertFetchTargetSafe } from "@/server/web-fetch/ssrf";
@@ -61,19 +68,26 @@ function hostAllowed(host: string, allowlist: readonly string[]): boolean {
   return allowlist.some((entry) => entry.toLowerCase() === h);
 }
 
+const webFetchInputSchema = z.object({
+  url: z.string().min(1).max(2_000),
+  raw: z
+    .boolean()
+    .optional()
+    .describe(
+      "If true, return the raw response body without HTML→markdown cleaning. Default false. Try this if the cleaned output looks wrong, looks empty, or you specifically need the raw HTML/JSON.",
+    ),
+});
+
 export const webFetchTool: ToolFactory = (ctx) => ({
   def: {
     name: "web_fetch",
     description:
-      "Fetch a public URL and return its body as text. Use it to read RFCs, vendor docs, changelogs, or anything else outside the project. Private IPs and cloud metadata endpoints are blocked. Project admins can disable the tool or restrict it to an allowlist of hosts in settings.",
-    parameters: zodToJsonSchema(
-      z.object({
-        url: z.string().min(1).max(2_000),
-      }),
-    ),
+      "Fetch a public URL and return its body. HTML responses are converted to cleaned markdown by default — head, script, style, noscript, iframe, embedded SVG, and HTML comments are stripped, and relative links are resolved to absolute URLs, so you only see the readable content. Pass `raw: true` to skip cleaning and get the original body verbatim — use this when the cleaned markdown looks wrong or empty, when you need to inspect raw HTML/JSON structure, or after a fetch returns `cleaned: false` with a `cleanError`. Non-HTML responses (JSON, XML, plain text, YAML) are always returned unchanged regardless of `raw`. Private IPs and cloud metadata endpoints are blocked. Project admins can disable the tool or restrict it to an allowlist of hosts in settings.",
+    parameters: zodToJsonSchema(webFetchInputSchema),
   },
   handler: async (raw) => {
-    const args = z.object({ url: z.string().min(1).max(2_000) }).parse(raw);
+    const args = webFetchInputSchema.parse(raw);
+    const wantRaw = args.raw === true;
     const auditBase = {
       projectId: ctx.projectId,
       userId: ctx.userId,
@@ -219,7 +233,6 @@ export const webFetchTool: ToolFactory = (ctx) => ({
       const detail = err instanceof Error ? err.message : String(err);
       await recordWebFetchEvent(ctx.db, {
         ...auditBase,
-        url: currentUrl.toString(),
         status: "error",
         contentType: null,
         bytes: 0,
@@ -280,8 +293,28 @@ export const webFetchTool: ToolFactory = (ctx) => ({
       buffer.set(c, offset);
       offset += c.byteLength;
     }
-    const body = new TextDecoder("utf-8", { fatal: false }).decode(buffer);
+    const rawBody = new TextDecoder("utf-8", { fatal: false }).decode(buffer);
     const finalBytes = buffer.byteLength;
+
+    // HTML cleanup pass. Truncated HTML is still cleaned (jsdom is tolerant);
+    // the agent can refetch with `raw: true` if a partial trailing section
+    // matters.
+    let cleaned: boolean | null = null;
+    let cleanedBytes: number | null = null;
+    let cleanError: string | null = null;
+    let body = rawBody;
+    if (!wantRaw && shouldCleanHtml(contentType, rawBody)) {
+      try {
+        const result = cleanHtml(rawBody, currentUrl.toString());
+        body = result.markdown;
+        cleaned = true;
+        cleanedBytes = result.bytes;
+      } catch (err) {
+        cleaned = false;
+        cleanError = err instanceof Error ? err.message : String(err);
+        body = rawBody;
+      }
+    }
 
     if (truncated) {
       await recordWebFetchEvent(ctx.db, {
@@ -290,12 +323,18 @@ export const webFetchTool: ToolFactory = (ctx) => ({
         contentType,
         bytes: finalBytes,
         errorMessage: `response exceeded ${maxBytes} bytes; truncated`,
+        cleaned,
+        cleanedBytes,
+        cleanError,
       });
       return ok({
         status: response.status,
         contentType,
         truncated: true,
         bytes: finalBytes,
+        cleaned,
+        cleanedBytes,
+        cleanError,
         body,
         note: `response truncated at ${maxBytes} bytes`,
       });
@@ -307,12 +346,18 @@ export const webFetchTool: ToolFactory = (ctx) => ({
       contentType,
       bytes: finalBytes,
       errorMessage: response.ok ? null : `HTTP ${response.status}`,
+      cleaned,
+      cleanedBytes,
+      cleanError,
     });
     return ok({
       status: response.status,
       contentType,
       truncated: false,
       bytes: finalBytes,
+      cleaned,
+      cleanedBytes,
+      cleanError,
       body,
     });
   },

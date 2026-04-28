@@ -10,6 +10,7 @@ This file is the load-bearing reference for anyone (or anything) editing the cod
 - **Postgres-backed cache.** The provider stays the source of truth; `Item` rows in Postgres cache what the user has seen for instant filter/search. Memory, prompts, MCP server configs, settings, and the audit log all live in the same DB.
 - **Project-scoped runtime.** One project per provider scope. Per-project: memory, sources, MCP fleet, default LLM, saved views.
 - Primary safety property: **proposal-first mutation**. Stage a `Proposal`, render a diff, require explicit confirmation before any provider write or memory mutation.
+- **Cleaned-by-default `web_fetch`.** HTML responses pulled by the agent are stripped of head/script/style/noscript/iframe/svg + comments and converted to markdown via Turndown before reaching the model — saves context tokens and keeps inline assets out of reasoning. The agent can opt out per call with `raw: true`. Implementation in `src/agent/tools/web-fetch-clean.ts`; cleanup outcome (success / fallback reason / cleaned byte count) is recorded on each `WebFetchEvent`.
 
 ## Commands
 
@@ -58,7 +59,7 @@ bin/generate-secrets.sh                 # mint AUTH_SECRET + SECRETS_KEY into .e
     6. mutating provider tools (`mutating.ts`) — stripped in read-only
     7. memory mutations (`memory-mutating.ts`) — stripped in read-only
     8. out-of-band: `ask_user_question` (`question.ts`) — the loop dispatches it specially but it's still a registered tool
-    9. `web_fetch` (`web-fetch.ts`) — read-only network tool, gated by per-project `web-fetch.enabled`. Pinned after `ask_user_question` so toggling its presence doesn't shift any earlier tool's slot.
+    9. `web_fetch` (`web-fetch.ts`) — read-only network tool, gated by per-project `web-fetch.enabled`. HTML responses are converted to cleaned markdown by default (head/script/style/comments stripped, relative links resolved); the agent can pass `raw: true` to skip cleaning when the cleaned output looks wrong. Cleaning lives in `web-fetch-clean.ts` (jsdom + Turndown). Pinned after `ask_user_question` so toggling its presence doesn't shift any earlier tool's slot.
     10. discovery (`discovery.ts`) — read-only tools added after the original cohort (`search_items`, `list_audit`, `get_pull_request_diff`, `search_code`). Pinned at the tail so introducing more later doesn't shift any earlier tool's slot.
 
     Pinned by `src/__arch__/tool-registration-order.test.ts`. Reorder = invalidate every open conversation's prompt cache.

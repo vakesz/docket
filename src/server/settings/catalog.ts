@@ -248,7 +248,7 @@ export const SETTINGS_CATALOG = {
     default: true,
     label: "Allow agent to fetch web pages",
     description:
-      "When on, the agent can call the web_fetch tool to read public URLs (docs, RFCs, vendor changelogs). SSRF guards block private addresses and cloud metadata endpoints regardless of this setting.",
+      "When on, the agent can call the web_fetch tool to read public URLs (docs, RFCs, vendor changelogs). HTML pages are cleaned to markdown (head/script/style/comments stripped, relative links resolved) before reaching the agent; the agent can request the raw body when the cleaned output looks wrong. SSRF guards block private addresses and cloud metadata endpoints regardless of this setting.",
   },
   "web-fetch.allowed-hosts": {
     key: "web-fetch.allowed-hosts",
@@ -266,7 +266,7 @@ export const SETTINGS_CATALOG = {
     default: 200_000,
     label: "Web-fetch response size cap (bytes)",
     description:
-      "Upper bound on the response body web_fetch will return to the agent. Larger payloads are truncated and reported as denied_size. Range: 64 KB to 8 MB. Keep small — a single turn can fan out to several fetches, and each one's body lands in the model's context window.",
+      "Upper bound on the wire response body web_fetch will read. Larger payloads are truncated and reported as denied_size. Range: 64 KB to 8 MB. Keep small — a single turn can fan out to several fetches, and each one's body lands in the model's context window (after HTML cleaning, when applicable).",
   },
   "proposals.auto-accept-kinds": {
     key: "proposals.auto-accept-kinds",

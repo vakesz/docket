@@ -656,6 +656,16 @@ model WebFetchEvent {
   /// Error text when status != 'ok' — SSRF denial reason, host mismatch,
   /// fetch error, etc. Null on success.
   errorMessage String?
+  /// HTML cleaning outcome. null = cleaning didn't apply (raw=true, non-HTML
+  /// response, or denial before fetch). true = HTML was successfully converted
+  /// to markdown. false = cleaning was attempted but failed/produced empty
+  /// output and the tool fell back to the raw body.
+  cleaned     Boolean?
+  /// UTF-8 byte length of the cleaned markdown when `cleaned = true`.
+  cleanedBytes Int?
+  /// Reason cleaning failed when `cleaned = false` (parser error, empty
+  /// output, etc.).
+  cleanError  String?
   createdAt   DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
