@@ -31,6 +31,7 @@ import { buildProviderForUser } from "@/server/providers/build";
 import { AUTO_ACCEPT_ELIGIBLE_KINDS_LIST } from "@/server/settings/catalog";
 import { loadGlobalSetting, loadProjectSetting } from "@/server/settings/effective";
 import { reconcileComments, toItemRow } from "@/server/sync";
+import { assertFound } from "@/server/trpc";
 
 type ConfirmPhase = "load" | "provider_build" | "provider_call" | "cache_refresh" | "audit";
 
@@ -85,10 +86,12 @@ async function recordAudit(
 }
 
 async function loadPending(ctx: ExecutorContext, proposalId: string) {
-  const row = await ctx.db.proposal.findUnique({ where: { id: proposalId } });
-  if (!row || row.projectId !== ctx.projectId) {
-    throw new TRPCError({ code: "NOT_FOUND", message: "proposal not found" });
-  }
+  const row = assertFound(
+    await ctx.db.proposal.findFirst({
+      where: { id: proposalId, projectId: ctx.projectId },
+    }),
+    "proposal not found",
+  );
   if (row.status !== "pending") {
     throw new TRPCError({
       code: "BAD_REQUEST",
@@ -152,12 +155,10 @@ export async function confirmProposal(
   logger.info(baseCtx, "proposals: confirm start");
 
   phase = "provider_build";
-  const project = await ctx.db.project.findUnique({
-    where: { id: ctx.projectId },
-  });
-  if (!project) {
-    throw new TRPCError({ code: "NOT_FOUND", message: "project not found" });
-  }
+  const project = assertFound(
+    await ctx.db.project.findUnique({ where: { id: ctx.projectId } }),
+    "project not found",
+  );
 
   const confirmedAt = new Date();
   await ctx.db.proposal.update({

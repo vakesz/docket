@@ -65,7 +65,7 @@ describe("arch: audit write boundary", () => {
       const text = await readFile(file, "utf8");
       const lines = text.split("\n");
       for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
+        const line = lines[i] ?? "";
         if (AUDIT_WRITE.test(line)) {
           offenders.push({ file: rel, line: i + 1, text: line.trim() });
         }

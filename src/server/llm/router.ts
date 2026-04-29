@@ -4,6 +4,7 @@ import { z } from "zod";
 import { LLM_KINDS } from "@/agent/llm/types";
 import { encryptSecret } from "@/server/secrets/encryption";
 import {
+  assertFound,
   mutationProcedure,
   projectScopedMutationProcedure,
   protectedProcedure,
@@ -142,13 +143,13 @@ export const llmProvidersRouter = router({
       // role with no default at all (the updateMany clears flags, then the
       // update would 404 — Postgres rolls the whole tx back).
       await ctx.db.$transaction(async (tx) => {
-        const row = await tx.llmProvider.findUnique({
-          where: { id: input.id },
-          select: { id: true, role: true },
-        });
-        if (!row) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Provider row not found." });
-        }
+        const row = assertFound(
+          await tx.llmProvider.findUnique({
+            where: { id: input.id },
+            select: { id: true, role: true },
+          }),
+          "Provider row not found.",
+        );
         await tx.llmProvider.updateMany({
           where: { role: row.role, isDefault: true },
           data: { isDefault: false },
@@ -192,13 +193,13 @@ export const llmProvidersRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       if (input.id) {
-        const row = await ctx.db.llmProvider.findUnique({
-          where: { id: input.id },
-          select: { id: true, role: true, enabled: true },
-        });
-        if (!row) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Provider row not found." });
-        }
+        const row = assertFound(
+          await ctx.db.llmProvider.findUnique({
+            where: { id: input.id },
+            select: { id: true, role: true, enabled: true },
+          }),
+          "Provider row not found.",
+        );
         if (row.role !== input.role) {
           throw new TRPCError({
             code: "BAD_REQUEST",

@@ -201,7 +201,7 @@ describe("agent loop", () => {
 
     // user + assistant rows persisted in order.
     expect(state.messages.map((m) => m.role)).toEqual(["user", "assistant"]);
-    expect(state.messages[1].content).toBe("Hello, world.");
+    expect(state.messages[1]?.content).toBe("Hello, world.");
 
     // Usage event surfaced AND committed back to the conversation row.
     const usage = events.find(
@@ -272,7 +272,7 @@ describe("agent loop", () => {
 
     // Persisted: user, assistant (turn 1 had only tool calls, empty text), tool result, assistant ("0 items.").
     expect(state.messages.map((m) => m.role)).toEqual(["user", "assistant", "tool", "assistant"]);
-    expect(state.messages[3].content).toBe("0 items.");
+    expect(state.messages[3]?.content).toBe("0 items.");
 
     // Two LLM round-trips happened.
     expect(llm.requests.length).toBe(2);
@@ -427,7 +427,7 @@ describe("agent loop", () => {
     expect(events.at(-1)).toEqual({ kind: "error", message: "rate limit exceeded" });
     // We still persisted the user message and a partial assistant message.
     expect(state.messages.map((m) => m.role)).toEqual(["user", "assistant"]);
-    expect(state.messages[1].content).toBe("partial...");
+    expect(state.messages[1]?.content).toBe("partial...");
   });
 
   it("returns an error if the conversation does not exist", async () => {

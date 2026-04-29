@@ -205,6 +205,7 @@ export async function warmAvatars(
           const idx = cursor++;
           if (idx >= todo.length) return;
           const identifier = todo[idx];
+          if (identifier === undefined) return;
           const single = {
             providerKind: opts.providerKind,
             identifier,

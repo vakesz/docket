@@ -17,6 +17,7 @@ import "server-only";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
+  assertFound,
   projectIdSchema,
   projectScopedMutationProcedure,
   projectScopedProcedure,
@@ -72,13 +73,12 @@ export const sourcesRouter = router({
   }),
 
   get: projectScopedProcedure.input(GetInput).query(async ({ ctx, input }) => {
-    const row = await ctx.db.sourceDoc.findFirst({
-      where: { id: input.sourceId, projectId: ctx.projectId },
-    });
-    if (!row) {
-      throw new TRPCError({ code: "NOT_FOUND", message: "source not found" });
-    }
-    return row;
+    return assertFound(
+      await ctx.db.sourceDoc.findFirst({
+        where: { id: input.sourceId, projectId: ctx.projectId },
+      }),
+      "source not found",
+    );
   }),
 
   create: projectScopedMutationProcedure.input(CreateInput).mutation(async ({ ctx, input }) => {

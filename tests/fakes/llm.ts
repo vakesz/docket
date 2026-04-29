@@ -49,6 +49,7 @@ export class FakeLlm implements LlmAdapter {
       );
     }
     const turn = this.script[this.cursor++];
+    if (!turn) return;
     for (const event of turn) {
       yield event;
     }

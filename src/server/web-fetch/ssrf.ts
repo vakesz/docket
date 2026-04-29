@@ -141,11 +141,11 @@ export function isPrivateIp(address: string, family: number): boolean {
 function isPrivateV4(address: string): boolean {
   const parts = address.split(".");
   if (parts.length !== 4) return true;
-  const num = parts.map((p) => Number(p));
+  const num = parts.map((p) => Number(p)) as [number, number, number, number];
   if (num.some((n) => Number.isNaN(n) || n < 0 || n > 255)) return true;
   const ipNum = ((num[0] << 24) | (num[1] << 16) | (num[2] << 8) | num[3]) >>> 0;
   for (const [base, bits] of BLOCKED_V4_RANGES) {
-    const baseParts = base.split(".").map((p) => Number(p));
+    const baseParts = base.split(".").map((p) => Number(p)) as [number, number, number, number];
     const baseNum =
       ((baseParts[0] << 24) | (baseParts[1] << 16) | (baseParts[2] << 8) | baseParts[3]) >>> 0;
     const mask = bits === 0 ? 0 : (0xffffffff << (32 - bits)) >>> 0;

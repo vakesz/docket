@@ -55,7 +55,8 @@ function toggle(set: ReadonlySet<string>, value: string): Set<string> {
 function summarizeSelection(selected: ReadonlySet<string>, meIdentifier: string | null): string {
   if (selected.size === 0) return "Anyone";
   if (selected.size === 1) {
-    const [only] = [...selected];
+    const only = [...selected][0];
+    if (!only) return "Anyone";
     if (only === ASSIGNEE_UNASSIGNED) return "Unassigned";
     return only === meIdentifier ? "You" : only;
   }

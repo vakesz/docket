@@ -3,7 +3,7 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import NextAuth, { type NextAuthConfig } from "next-auth";
 import { db } from "@/server/db";
 import { logger } from "@/server/logger";
-import { buildAuthProvider } from "@/server/providers/auth-build";
+import { buildAuthProvider, UnknownOauthKindError } from "@/server/providers/auth-build";
 
 /**
  * Dynamic NextAuth config — the `providers` array is built at request time
@@ -39,11 +39,18 @@ async function buildProviders(): Promise<NextAuthConfig["providers"]> {
 
   const providers: NextAuthConfig["providers"] = [];
   for (const row of rows) {
-    const provider = buildAuthProvider(row);
-    if (provider) {
-      providers.push(provider);
-    } else {
-      logger.warn({ kind: row.kind }, "auth: unknown OauthProviderConfig kind, skipping");
+    try {
+      providers.push(buildAuthProvider(row));
+    } catch (err) {
+      if (err instanceof UnknownOauthKindError) {
+        // A row exists for a provider kind that isn't wired into auth-build.
+        // Skip the row so the rest of the sign-in page still renders, but log
+        // loudly so the gap surfaces in dev/CI rather than disappearing into a
+        // silent return null.
+        logger.warn({ kind: err.kind }, "auth: unknown OauthProviderConfig kind, skipping");
+        continue;
+      }
+      throw err;
     }
   }
   return providers;

@@ -6,6 +6,7 @@ import { asPlainObject } from "@/lib/json";
 import { buildProjectExport } from "@/server/projects/export";
 import { getProviderSpec, listProviderSpecs, PROVIDER_TYPE_IDS } from "@/server/provider-registry";
 import {
+  assertFound,
   mutationProcedure,
   projectIdSchema,
   projectScopedApproverProcedure,
@@ -13,7 +14,6 @@ import {
   projectScopedProcedure,
   protectedProcedure,
   router,
-  userIdOrThrow,
 } from "@/server/trpc";
 
 const MEMBER_ROLE = z.enum(["viewer", "member", "approver"]);
@@ -53,10 +53,7 @@ export const projectsRouter = router({
 
   /** List projects the current user owns or is a member of (non-archived). */
   list: protectedProcedure.query(async ({ ctx }) => {
-    const userId = ctx.session.user.id;
-    if (!userId) {
-      return [];
-    }
+    const userId = ctx.userId;
     const rows = await ctx.db.project.findMany({
       where: {
         archivedAt: null,
@@ -113,7 +110,7 @@ export const projectsRouter = router({
    * `projectScopedProcedure` works uniformly.
    */
   create: mutationProcedure.input(CreateProjectInput).mutation(async ({ ctx, input }) => {
-    const userId = userIdOrThrow(ctx);
+    const userId = ctx.userId;
     const spec = getProviderSpec(input.providerKind);
     if (!spec) {
       throw new TRPCError({
@@ -154,14 +151,14 @@ export const projectsRouter = router({
    * procedure can flip archivedAt back to null.
    */
   archive: mutationProcedure.input(projectIdSchema).mutation(async ({ ctx, input }) => {
-    const userId = userIdOrThrow(ctx);
-    const project = await ctx.db.project.findUnique({
-      where: { id: input.projectId },
-      select: { ownerUserId: true },
-    });
-    if (!project) {
-      throw new TRPCError({ code: "NOT_FOUND", message: "project not found" });
-    }
+    const userId = ctx.userId;
+    const project = assertFound(
+      await ctx.db.project.findUnique({
+        where: { id: input.projectId },
+        select: { ownerUserId: true },
+      }),
+      "project not found",
+    );
     if (project.ownerUserId !== userId) {
       throw new TRPCError({
         code: "FORBIDDEN",
@@ -182,22 +179,19 @@ export const projectsRouter = router({
   setDefault: mutationProcedure
     .input(z.object({ projectId: z.string().min(1).nullable() }))
     .mutation(async ({ ctx, input }) => {
-      const userId = userIdOrThrow(ctx);
+      const userId = ctx.userId;
       if (input.projectId) {
-        const project = await ctx.db.project.findFirst({
-          where: {
-            id: input.projectId,
-            archivedAt: null,
-            OR: [{ ownerUserId: userId }, { memberships: { some: { userId } } }],
-          },
-          select: { id: true },
-        });
-        if (!project) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "project not found or you no longer have access",
-          });
-        }
+        assertFound(
+          await ctx.db.project.findFirst({
+            where: {
+              id: input.projectId,
+              archivedAt: null,
+              OR: [{ ownerUserId: userId }, { memberships: { some: { userId } } }],
+            },
+            select: { id: true },
+          }),
+          "project not found or you no longer have access",
+        );
       }
       await ctx.db.user.update({
         where: { id: userId },
@@ -221,13 +215,13 @@ export const projectsRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       if (input.llmProviderId) {
-        const provider = await ctx.db.llmProvider.findUnique({
-          where: { id: input.llmProviderId },
-          select: { id: true, enabled: true },
-        });
-        if (!provider) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "LLM provider not found" });
-        }
+        const provider = assertFound(
+          await ctx.db.llmProvider.findUnique({
+            where: { id: input.llmProviderId },
+            select: { id: true, enabled: true },
+          }),
+          "LLM provider not found",
+        );
         if (!provider.enabled) {
           throw new TRPCError({
             code: "BAD_REQUEST",
@@ -255,7 +249,7 @@ export const projectsRouter = router({
    * member can pull their own archive.
    */
   export: projectScopedProcedure.input(projectIdSchema).query(async ({ ctx }) => {
-    const userId = userIdOrThrow(ctx);
+    const userId = ctx.userId;
     return buildProjectExport(ctx.db, ctx.projectId, userId);
   }),
 
@@ -283,9 +277,8 @@ export const projectsRouter = router({
         },
       },
     });
-    const callerId = ctx.session.user.id;
     return {
-      callerIsOwner: project.ownerUserId === callerId,
+      callerIsOwner: project.ownerUserId === ctx.userId,
       owner: project.owner,
       members: project.memberships.map((m) => ({
         membershipId: m.id,
@@ -313,16 +306,13 @@ export const projectsRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const user = await ctx.db.user.findUnique({
-        where: { email: input.email.toLowerCase() },
-        select: { id: true },
-      });
-      if (!user) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "no user with that email has signed in yet",
-        });
-      }
+      const user = assertFound(
+        await ctx.db.user.findUnique({
+          where: { email: input.email.toLowerCase() },
+          select: { id: true },
+        }),
+        "no user with that email has signed in yet",
+      );
       const project = await ctx.db.project.findUniqueOrThrow({
         where: { id: input.projectId },
         select: { ownerUserId: true },
@@ -367,13 +357,13 @@ export const projectsRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const membership = await ctx.db.projectMembership.findFirst({
-        where: { id: input.membershipId, projectId: input.projectId },
-        select: { id: true },
-      });
-      if (!membership) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "membership not found" });
-      }
+      const membership = assertFound(
+        await ctx.db.projectMembership.findFirst({
+          where: { id: input.membershipId, projectId: input.projectId },
+          select: { id: true },
+        }),
+        "membership not found",
+      );
       return ctx.db.projectMembership.update({
         where: { id: membership.id },
         data: { role: input.role },
@@ -393,24 +383,22 @@ export const projectsRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const membership = await ctx.db.projectMembership.findFirst({
-        where: { id: input.membershipId, projectId: input.projectId },
-        select: { id: true, userId: true },
-      });
-      if (!membership) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "membership not found" });
-      }
+      const membership = assertFound(
+        await ctx.db.projectMembership.findFirst({
+          where: { id: input.membershipId, projectId: input.projectId },
+          select: { id: true, userId: true },
+        }),
+        "membership not found",
+      );
       await ctx.db.projectMembership.delete({ where: { id: membership.id } });
       return { ok: true as const, membershipId: membership.id };
     }),
 
   /** Read the caller's profile bits the UI needs (default project picker). */
   me: protectedProcedure.query(async ({ ctx }) => {
-    const userId = ctx.session.user.id;
-    const user = await ctx.db.user.findUnique({
-      where: { id: userId },
+    return ctx.db.user.findUnique({
+      where: { id: ctx.userId },
       select: { id: true, name: true, email: true, defaultProjectId: true },
     });
-    return user;
   }),
 });

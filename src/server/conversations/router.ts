@@ -27,11 +27,11 @@ import {
 } from "@/server/conversations/storage";
 import { logger } from "@/server/logger";
 import {
+  assertFound,
   projectIdSchema,
   projectScopedMutationProcedure,
   projectScopedProcedure,
   router,
-  userIdOrThrow,
 } from "@/server/trpc";
 
 const ConversationRef = projectIdSchema.extend({ conversationId: z.string().min(1) });
@@ -53,13 +53,12 @@ const SetLlmOverrideInput = ConversationRef.extend({
 async function ensureOwn(
   ctx: {
     db: typeof import("@/server/db").db;
-    session: { user: { id?: string } };
+    userId: string;
   },
   conversationId: string,
   projectId: string,
 ): Promise<void> {
-  const userId = userIdOrThrow(ctx);
-  const ok = await ownsConversation(ctx.db, conversationId, projectId, userId);
+  const ok = await ownsConversation(ctx.db, conversationId, projectId, ctx.userId);
   if (!ok) {
     throw new TRPCError({ code: "NOT_FOUND", message: "conversation not found" });
   }
@@ -69,7 +68,7 @@ export const conversationsRouter = router({
   list: projectScopedProcedure.input(ListInput).query(async ({ ctx, input }) => {
     return listConversations(ctx.db, {
       projectId: ctx.projectId,
-      userId: userIdOrThrow(ctx),
+      userId: ctx.userId,
       itemId: input.itemId,
       limit: input.limit,
       archived: input.archived,
@@ -78,15 +77,14 @@ export const conversationsRouter = router({
 
   get: projectScopedProcedure.input(ConversationRef).query(async ({ ctx, input }) => {
     await ensureOwn(ctx, input.conversationId, ctx.projectId);
-    const conv = await getConversation(ctx.db, input.conversationId);
-    if (!conv) {
-      throw new TRPCError({ code: "NOT_FOUND", message: "conversation not found" });
-    }
-    return conv;
+    return assertFound(
+      await getConversation(ctx.db, input.conversationId),
+      "conversation not found",
+    );
   }),
 
   create: projectScopedMutationProcedure.input(CreateInput).mutation(async ({ ctx, input }) => {
-    const userId = userIdOrThrow(ctx);
+    const userId = ctx.userId;
     const conv = await createConversation(ctx.db, {
       projectId: ctx.projectId,
       userId,
@@ -116,13 +114,13 @@ export const conversationsRouter = router({
     .mutation(async ({ ctx, input }) => {
       await ensureOwn(ctx, input.conversationId, ctx.projectId);
       if (input.llmProviderId) {
-        const provider = await ctx.db.llmProvider.findUnique({
-          where: { id: input.llmProviderId },
-          select: { id: true, enabled: true },
-        });
-        if (!provider) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "LLM provider not found" });
-        }
+        const provider = assertFound(
+          await ctx.db.llmProvider.findUnique({
+            where: { id: input.llmProviderId },
+            select: { id: true, enabled: true },
+          }),
+          "LLM provider not found",
+        );
         if (!provider.enabled) {
           throw new TRPCError({
             code: "BAD_REQUEST",

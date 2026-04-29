@@ -16,6 +16,7 @@
 
 import "server-only";
 import { TRPCError } from "@trpc/server";
+import { assertFound } from "@/server/trpc";
 import type {
   CommentAddProposal,
   DescriptionPatchProposal,
@@ -107,16 +108,12 @@ async function loadCachedItem(ctx: ProposalContext, providerItemId: string) {
   // (projectId, providerItemId) is the canonical compound unique on `Item`
   // — using findUnique lets Postgres hit the unique index directly instead
   // of running a generic equality plan via findFirst.
-  const row = await ctx.db.item.findUnique({
-    where: { projectId_providerItemId: { projectId: ctx.projectId, providerItemId } },
-  });
-  if (!row) {
-    throw new TRPCError({
-      code: "NOT_FOUND",
-      message: `Item '${providerItemId}' not found in cache; sync the project first.`,
-    });
-  }
-  return row;
+  return assertFound(
+    await ctx.db.item.findUnique({
+      where: { projectId_providerItemId: { projectId: ctx.projectId, providerItemId } },
+    }),
+    `Item '${providerItemId}' not found in cache; sync the project first.`,
+  );
 }
 
 export async function proposeTransition(
@@ -309,15 +306,12 @@ export async function proposeMemoryWrite(
   let previousTitle = "";
   let previousBodyMd = "";
   if (args.memoryId) {
-    const existing = await ctx.db.memoryEntry.findFirst({
-      where: { id: args.memoryId, projectId: ctx.projectId },
-    });
-    if (!existing) {
-      throw new TRPCError({
-        code: "NOT_FOUND",
-        message: `memory entry '${args.memoryId}' not found`,
-      });
-    }
+    const existing = assertFound(
+      await ctx.db.memoryEntry.findFirst({
+        where: { id: args.memoryId, projectId: ctx.projectId },
+      }),
+      `memory entry '${args.memoryId}' not found`,
+    );
     previousTitle = existing.title;
     previousBodyMd = existing.bodyMd;
     if (existing.title === title && existing.bodyMd === args.bodyMd) {
@@ -350,15 +344,12 @@ export async function proposeMemoryDelete(
   ctx: ProposalContext,
   args: { memoryId: string },
 ): Promise<ProposalRow> {
-  const existing = await ctx.db.memoryEntry.findFirst({
-    where: { id: args.memoryId, projectId: ctx.projectId },
-  });
-  if (!existing) {
-    throw new TRPCError({
-      code: "NOT_FOUND",
-      message: `memory entry '${args.memoryId}' not found`,
-    });
-  }
+  const existing = assertFound(
+    await ctx.db.memoryEntry.findFirst({
+      where: { id: args.memoryId, projectId: ctx.projectId },
+    }),
+    `memory entry '${args.memoryId}' not found`,
+  );
   const draft: Omit<MemoryDeleteProposal, "id"> = {
     kind: "memory_delete",
     projectId: ctx.projectId,

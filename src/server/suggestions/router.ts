@@ -26,7 +26,6 @@ import {
   projectScopedProcedure,
   protectedProcedure,
   router,
-  userIdOrThrow,
 } from "@/server/trpc";
 
 const ListInput = projectIdSchema.extend({
@@ -85,7 +84,7 @@ export const suggestionsRouter = router({
    * available on the row if a richer ranking is needed later.
    */
   recents: protectedProcedure.input(RecentsInput).query(async ({ ctx, input }) => {
-    const userId = userIdOrThrow(ctx);
+    const userId = ctx.userId;
     return ctx.db.commandUsage.findMany({
       where: {
         userId,
@@ -103,7 +102,7 @@ export const suggestionsRouter = router({
    * commands (the unique key treats `projectId == null` as its own slot).
    */
   bump: protectedProcedure.input(BumpInput).mutation(async ({ ctx, input }) => {
-    const userId = userIdOrThrow(ctx);
+    const userId = ctx.userId;
     const projectId = input.projectId ?? null;
     // Compound unique includes a nullable column, so Postgres won't enforce
     // uniqueness on null-projectId rows. Find-then-update/create like the

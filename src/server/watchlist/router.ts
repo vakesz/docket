@@ -18,7 +18,6 @@ import {
   projectScopedMutationProcedure,
   projectScopedProcedure,
   router,
-  userIdOrThrow,
 } from "@/server/trpc";
 
 const ListInput = projectIdSchema.extend({
@@ -36,7 +35,7 @@ export const watchlistRouter = router({
    * omitted (the pin row stays — the next sync re-attaches it).
    */
   list: projectScopedProcedure.input(ListInput).query(async ({ ctx, input }) => {
-    const userId = userIdOrThrow(ctx);
+    const userId = ctx.userId;
     const pins = await ctx.db.watchlistEntry.findMany({
       where: { userId, projectId: ctx.projectId },
       orderBy: [{ pinnedAt: "desc" }],
@@ -73,7 +72,7 @@ export const watchlistRouter = router({
   }),
 
   isPinned: projectScopedProcedure.input(PinInput).query(async ({ ctx, input }) => {
-    const userId = userIdOrThrow(ctx);
+    const userId = ctx.userId;
     const found = await ctx.db.watchlistEntry.findUnique({
       where: {
         userId_projectId_providerItemId: {
@@ -88,7 +87,7 @@ export const watchlistRouter = router({
   }),
 
   pin: projectScopedMutationProcedure.input(PinInput).mutation(async ({ ctx, input }) => {
-    const userId = userIdOrThrow(ctx);
+    const userId = ctx.userId;
     return ctx.db.watchlistEntry.upsert({
       where: {
         userId_projectId_providerItemId: {
@@ -107,7 +106,7 @@ export const watchlistRouter = router({
   }),
 
   unpin: projectScopedMutationProcedure.input(PinInput).mutation(async ({ ctx, input }) => {
-    const userId = userIdOrThrow(ctx);
+    const userId = ctx.userId;
     await ctx.db.watchlistEntry.deleteMany({
       where: {
         userId,

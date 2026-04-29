@@ -268,7 +268,7 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
   };
 
   const hovered = hover !== null ? buckets[hover] : null;
-  const hoveredAvg = hover !== null ? trend.movingAverage[hover] : null;
+  const hoveredAvg = hover !== null ? (trend.movingAverage[hover] ?? null) : null;
 
   return (
     <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">

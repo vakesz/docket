@@ -32,7 +32,6 @@ import {
   projectScopedProcedure,
   protectedProcedure,
   router,
-  userIdOrThrow,
 } from "@/server/trpc";
 
 /**
@@ -111,7 +110,7 @@ export const settingsRouter = router({
    * settings page by a corrupt row).
    */
   list: protectedProcedure.query(async ({ ctx }) => {
-    const userId = userIdOrThrow(ctx);
+    const userId = ctx.userId;
     const userKeys = SETTING_KEYS.filter((k) => SETTINGS_CATALOG[k].scope === "user");
     const rows = await ctx.db.setting.findMany({
       where: { userId, scope: "user", key: { in: userKeys } },
@@ -125,7 +124,7 @@ export const settingsRouter = router({
   }),
 
   update: protectedProcedure.input(UserUpdateInput).mutation(async ({ ctx, input }) => {
-    const userId = userIdOrThrow(ctx);
+    const userId = ctx.userId;
     const encoded = JSON.stringify(input.value);
     // Prisma's `upsert` won't accept `null` in a compound-unique `where`,
     // and Postgres treats `null` columns in a unique as unconstrained — so
@@ -143,7 +142,7 @@ export const settingsRouter = router({
   }),
 
   reset: protectedProcedure.input(UserResetInput).mutation(async ({ ctx, input }) => {
-    const userId = userIdOrThrow(ctx);
+    const userId = ctx.userId;
     const def = getSettingDef(input.key);
     await ctx.db.setting.deleteMany({
       where: { key: input.key, userId, scope: "user" },

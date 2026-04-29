@@ -13,16 +13,15 @@
  */
 
 import "server-only";
-import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { proposeMemoryDelete, proposeMemoryWrite } from "@/server/proposals/builders";
 import { maybeAutoAccept } from "@/server/proposals/executor";
 import {
+  assertFound,
   projectIdSchema,
   projectScopedMutationProcedure,
   projectScopedProcedure,
   router,
-  userIdOrThrow,
 } from "@/server/trpc";
 
 const ListInput = projectIdSchema.extend({
@@ -67,13 +66,12 @@ export const memoryRouter = router({
   }),
 
   get: projectScopedProcedure.input(GetInput).query(async ({ ctx, input }) => {
-    const row = await ctx.db.memoryEntry.findFirst({
-      where: { id: input.memoryId, projectId: ctx.projectId },
-    });
-    if (!row) {
-      throw new TRPCError({ code: "NOT_FOUND", message: "memory entry not found" });
-    }
-    return row;
+    return assertFound(
+      await ctx.db.memoryEntry.findFirst({
+        where: { id: input.memoryId, projectId: ctx.projectId },
+      }),
+      "memory entry not found",
+    );
   }),
 
   proposeWrite: projectScopedMutationProcedure
@@ -82,7 +80,7 @@ export const memoryRouter = router({
       const c = {
         db: ctx.db,
         projectId: ctx.projectId,
-        userId: userIdOrThrow(ctx),
+        userId: ctx.userId,
         origin: "ui" as const,
       };
       const proposal = await maybeAutoAccept(
@@ -104,7 +102,7 @@ export const memoryRouter = router({
       const c = {
         db: ctx.db,
         projectId: ctx.projectId,
-        userId: userIdOrThrow(ctx),
+        userId: ctx.userId,
         origin: "ui" as const,
       };
       const proposal = await maybeAutoAccept(

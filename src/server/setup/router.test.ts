@@ -106,7 +106,7 @@ describe("applyBootstrap", () => {
     expect(result).toEqual({ complete: true, hasLlm: false, hasOauth: true });
     expect(state.oauthRows).toHaveLength(1);
     expect(state.oauthRows[0]).toMatchObject({ kind: "github", clientId: "Iv1.abc" });
-    expect(state.oauthRows[0].clientSecret).toBe("ENC(secret)");
+    expect(state.oauthRows[0]?.clientSecret).toBe("ENC(secret)");
     expect(state.llmRows).toHaveLength(0);
     expect(state.sticky).toBe(true);
   });
@@ -127,7 +127,7 @@ describe("applyBootstrap", () => {
     expect(result).toEqual({ complete: true, hasLlm: true, hasOauth: true });
     expect(state.oauthRows.map((r) => r.kind).sort()).toEqual(["azure_devops", "github"]);
     expect(state.llmRows[0]).toMatchObject({ kind: "openai", role: "chat", isDefault: true });
-    expect(state.llmRows[0].apiKey).toBe("ENC(sk-test)");
+    expect(state.llmRows[0]?.apiKey).toBe("ENC(sk-test)");
   });
 
   it("creates chat + guardrail LLM rows in one shot, each as its role's default", async () => {
@@ -196,7 +196,7 @@ describe("applyBootstrap", () => {
         llms: [{ role: "chat", apiKey: "sk-test", model: "", baseUrl: "" }],
       }),
     );
-    expect(state.llmRows[0].isDefault).toBe(true);
+    expect(state.llmRows[0]?.isDefault).toBe(true);
   });
 
   it("CONFLICT is a TRPCError", async () => {

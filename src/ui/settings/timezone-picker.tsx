@@ -51,7 +51,7 @@ function offsetFor(zone: string): string {
     const m = tzn.match(/^(?:GMT|UTC)([+-])(\d{1,2})(?::?(\d{2}))?$/);
     if (!m) return tzn;
     const sign = m[1];
-    const hh = m[2].padStart(2, "0");
+    const hh = (m[2] ?? "0").padStart(2, "0");
     const mm = m[3] ?? "00";
     return `UTC${sign}${hh}:${mm}`;
   } catch {

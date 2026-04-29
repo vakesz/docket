@@ -160,12 +160,12 @@ function parsePath(path: string): PathSegment[] {
 }
 
 function collectSnippets(value: unknown, segments: PathSegment[], out: string[]): void {
-  if (segments.length === 0) {
+  const [head, ...rest] = segments;
+  if (!head) {
     appendValue(value, out);
     return;
   }
   if (value === null || value === undefined) return;
-  const [head, ...rest] = segments;
   // Empty key (from a leading `[]`) means "iterate the current value
   // itself" rather than descending into a property. Lets a path like
   // `[].title` work when `data` is itself an array.

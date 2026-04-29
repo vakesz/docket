@@ -1,5 +1,4 @@
 import "server-only";
-import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { ITEM_KINDS, TRANSITION_INTENTS } from "@/core/types";
 import {
@@ -14,6 +13,7 @@ import {
 import { diffOf, isEmptyDiff } from "@/server/proposals/diff";
 import { confirmProposal, maybeAutoAccept, rejectProposal } from "@/server/proposals/executor";
 import {
+  assertFound,
   projectIdSchema,
   projectScopedApproverProcedure,
   projectScopedMutationProcedure,
@@ -92,13 +92,9 @@ const ProposeNewItemInput = projectIdSchema.extend({
 function ctxFor(ctx: {
   db: typeof import("@/server/db").db;
   projectId: string;
-  session: { user: { id?: string } };
+  userId: string;
 }) {
-  const userId = ctx.session.user.id;
-  if (!userId) {
-    throw new TRPCError({ code: "UNAUTHORIZED" });
-  }
-  return { db: ctx.db, projectId: ctx.projectId, userId, origin: "ui" as const };
+  return { db: ctx.db, projectId: ctx.projectId, userId: ctx.userId, origin: "ui" as const };
 }
 
 /**
@@ -150,10 +146,12 @@ export const proposalsRouter = router({
   }),
 
   get: projectScopedProcedure.input(ProposalIdInput).query(async ({ ctx, input }) => {
-    const row = await ctx.db.proposal.findUnique({ where: { id: input.proposalId } });
-    if (!row || row.projectId !== ctx.projectId) {
-      throw new TRPCError({ code: "NOT_FOUND", message: "proposal not found" });
-    }
+    const row = assertFound(
+      await ctx.db.proposal.findFirst({
+        where: { id: input.proposalId, projectId: ctx.projectId },
+      }),
+      "proposal not found",
+    );
     const proposal = hydrateProposal(row);
     const diff = diffOf(proposal);
     return { row, diff, isEmpty: isEmptyDiff(diff) };

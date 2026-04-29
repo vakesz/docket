@@ -20,6 +20,7 @@ import { Prisma } from "@/db/generated/client";
 import { decodeHeaders, encodeHeaders } from "@/server/mcp/headers-codec";
 import { mcpOauthRouter } from "@/server/mcp/oauth/router";
 import {
+  assertFound,
   projectIdSchema,
   projectScopedMutationProcedure,
   projectScopedProcedure,
@@ -89,12 +90,12 @@ export const mcpRouter = router({
   }),
 
   get: projectScopedProcedure.input(ServerRef).query(async ({ ctx, input }) => {
-    const row = await ctx.db.mcpServerConfig.findFirst({
-      where: { id: input.serverId, projectId: ctx.projectId },
-    });
-    if (!row) {
-      throw new TRPCError({ code: "NOT_FOUND", message: "MCP server not found" });
-    }
+    const row = assertFound(
+      await ctx.db.mcpServerConfig.findFirst({
+        where: { id: input.serverId, projectId: ctx.projectId },
+      }),
+      "MCP server not found",
+    );
     return shapeRow(row);
   }),
 
@@ -126,14 +127,8 @@ export const mcpRouter = router({
   }),
 
   update: projectScopedMutationProcedure.input(UpdateInput).mutation(async ({ ctx, input }) => {
-    const existing = await ctx.db.mcpServerConfig.findFirst({
+    const result = await ctx.db.mcpServerConfig.updateMany({
       where: { id: input.serverId, projectId: ctx.projectId },
-    });
-    if (!existing) {
-      throw new TRPCError({ code: "NOT_FOUND", message: "MCP server not found" });
-    }
-    const row = await ctx.db.mcpServerConfig.update({
-      where: { id: existing.id },
       data: {
         ...(input.url !== undefined ? { url: input.url } : {}),
         ...(input.headersJson !== undefined
@@ -141,6 +136,12 @@ export const mcpRouter = router({
           : {}),
         ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
       },
+    });
+    if (result.count === 0) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "MCP server not found" });
+    }
+    const row = await ctx.db.mcpServerConfig.findUniqueOrThrow({
+      where: { id: input.serverId },
     });
     return shapeRow(row);
   }),

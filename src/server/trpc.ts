@@ -73,27 +73,30 @@ export const publicProcedure = t.procedure;
 export const projectIdSchema = z.object({ projectId: z.string().min(1) });
 
 /**
- * Pull a non-empty `userId` off a session that's already passed
- * `protectedProcedure`. The shape check survives if the session type
- * widens; throw `UNAUTHORIZED` rather than letting `undefined` leak into
- * a Prisma `where` clause.
+ * Generic NOT_FOUND assertion for router handlers. Use whenever a Prisma
+ * lookup may return null and the router should surface a 404 to the client
+ * rather than letting `undefined` leak into a downstream call.
  */
-export function userIdOrThrow(ctx: { session: { user: { id?: string } } }): string {
-  const userId = ctx.session.user.id;
-  if (!userId) {
-    throw new TRPCError({ code: "UNAUTHORIZED" });
+export function assertFound<T>(value: T | null | undefined, message: string): T {
+  if (value === null || value === undefined) {
+    throw new TRPCError({ code: "NOT_FOUND", message });
   }
-  return userId;
+  return value;
 }
 
 const requireSession = t.middleware(({ ctx, next }) => {
-  if (!ctx.session?.user) {
+  const userId = ctx.session?.user?.id;
+  if (!ctx.session?.user || !userId) {
     throw new TRPCError({ code: "UNAUTHORIZED" });
   }
   return next({
     ctx: {
       ...ctx,
-      session: { ...ctx.session, user: ctx.session.user },
+      userId,
+      session: {
+        ...ctx.session,
+        user: { ...ctx.session.user, id: userId },
+      },
     },
   });
 });
@@ -132,12 +135,11 @@ export const mutationProcedure = protectedProcedure.use(enforceReadWrite);
  * `projectId: z.string()` — the middleware reads it via getRawInput().
  */
 const enforceProjectMembership = t.middleware(async ({ ctx, getRawInput, next }) => {
-  if (!ctx.session?.user) {
-    throw new TRPCError({ code: "UNAUTHORIZED" });
-  }
-  const userId = ctx.session.user.id;
+  // `requireSession` runs upstream and narrows ctx.userId to a non-empty string.
+  const sessionCtx = ctx as Context & { userId?: string };
+  const userId = sessionCtx.userId;
   if (!userId) {
-    throw new TRPCError({ code: "UNAUTHORIZED", message: "session has no user id" });
+    throw new TRPCError({ code: "UNAUTHORIZED" });
   }
 
   const raw = await getRawInput();
@@ -160,7 +162,6 @@ const enforceProjectMembership = t.middleware(async ({ ctx, getRawInput, next })
   return next({
     ctx: {
       ...ctx,
-      session: { ...ctx.session, user: ctx.session.user },
       projectId: project.id,
       project,
     },
@@ -175,10 +176,10 @@ export const projectScopedProcedure = protectedProcedure.use(enforceProjectMembe
  * stored role; users with no membership row return `null`.
  */
 async function effectiveProjectRole(
-  ctx: Context & { project?: { id: string; ownerUserId: string } },
+  ctx: Context & { userId?: string; project?: { id: string; ownerUserId: string } },
 ): Promise<"owner" | "approver" | "member" | "viewer" | null> {
   const project = ctx.project;
-  const userId = ctx.session?.user?.id;
+  const userId = ctx.userId;
   if (!project || !userId) {
     throw new TRPCError({
       code: "INTERNAL_SERVER_ERROR",

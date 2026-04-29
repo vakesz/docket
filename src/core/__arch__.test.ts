@@ -21,7 +21,7 @@ const importLine = /from\s+["']([^"']+)["']/g;
 
 function imports(file: string): string[] {
   const src = readFileSync(file, "utf8");
-  return Array.from(src.matchAll(importLine), (m) => m[1]);
+  return Array.from(src.matchAll(importLine), (m) => m[1] ?? "");
 }
 
 describe("architecture: import boundaries", () => {

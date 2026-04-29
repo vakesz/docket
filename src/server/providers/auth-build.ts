@@ -8,10 +8,18 @@
  * `src/server/auth.ts` clean of concrete provider imports (the arch test
  * allows this file alongside `build.ts` and `provider-registry.ts`).
  *
- * Returns `null` for an unknown `kind` so the caller can log + skip rather
- * than blow up the whole sign-in page when the database carries a row from
- * a yet-to-be-implemented provider.
+ * Throws `UnknownOauthKindError` when `row.kind` doesn't match a wired
+ * adapter. The caller in `src/server/auth.ts` catches and logs so the
+ * sign-in page still renders the remaining buttons; raising rather than
+ * returning null surfaces the gap loudly in dev/CI.
  */
+
+export class UnknownOauthKindError extends Error {
+  constructor(public readonly kind: string) {
+    super(`Unknown OauthProviderConfig kind: '${kind}'`);
+    this.name = "UnknownOauthKindError";
+  }
+}
 
 import "server-only";
 import type { Provider } from "next-auth/providers";
@@ -41,7 +49,7 @@ type GitHubProfile = {
   avatar_url?: string | null;
 };
 
-export function buildAuthProvider(row: OauthProviderConfig): Provider | null {
+export function buildAuthProvider(row: OauthProviderConfig): Provider {
   // `clientSecret` is encrypted at rest with `SECRETS_KEY`. Legacy plaintext
   // rows are returned as-is by `decryptSecret`, so this is a no-op until the
   // operator rolls a key.
@@ -77,7 +85,7 @@ export function buildAuthProvider(row: OauthProviderConfig): Provider | null {
         extraScope: row.scopes || undefined,
       });
     default:
-      return null;
+      throw new UnknownOauthKindError(row.kind);
   }
 }
 

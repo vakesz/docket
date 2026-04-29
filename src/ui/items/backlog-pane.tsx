@@ -143,7 +143,7 @@ export function BacklogPane({
       const meIdx = assigneeCounts.findIndex(([name]) => name === meIdentifier);
       if (meIdx > 0) {
         const [meEntry] = assigneeCounts.splice(meIdx, 1);
-        assigneeCounts.unshift(meEntry);
+        if (meEntry) assigneeCounts.unshift(meEntry);
       }
     }
     return { visibleKinds, tagCounts, assigneeCounts };

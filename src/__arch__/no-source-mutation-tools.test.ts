@@ -69,7 +69,10 @@ describe("arch: no source-mutating agent tools", () => {
       const text = await readFile(file, "utf8");
       for (const match of text.matchAll(NAME_LITERAL)) {
         const name = match[1];
-        if (FORBIDDEN_PREFIXES.some((prefix) => name === prefix || name.startsWith(`${prefix}_`))) {
+        if (
+          name &&
+          FORBIDDEN_PREFIXES.some((prefix) => name === prefix || name.startsWith(`${prefix}_`))
+        ) {
           offenders.push({
             file: relative(PROJECT_ROOT, file),
             toolName: name,

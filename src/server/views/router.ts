@@ -22,11 +22,11 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { STATE_BUCKETS } from "@/core/types";
 import {
+  assertFound,
   projectIdSchema,
   projectScopedMutationProcedure,
   projectScopedProcedure,
   router,
-  userIdOrThrow,
 } from "@/server/trpc";
 
 const StateBucketEnum = z.enum(STATE_BUCKETS);
@@ -54,7 +54,7 @@ const UpdateInput = projectIdSchema.extend({
 
 export const viewsRouter = router({
   list: projectScopedProcedure.input(projectIdSchema).query(async ({ ctx }) => {
-    const userId = userIdOrThrow(ctx);
+    const userId = ctx.userId;
     return ctx.db.savedView.findMany({
       where: { userId, projectId: ctx.projectId },
       orderBy: [{ isDefault: "desc" }, { name: "asc" }],
@@ -62,18 +62,17 @@ export const viewsRouter = router({
   }),
 
   get: projectScopedProcedure.input(ViewIdInput).query(async ({ ctx, input }) => {
-    const userId = userIdOrThrow(ctx);
-    const view = await ctx.db.savedView.findFirst({
-      where: { id: input.viewId, userId, projectId: ctx.projectId },
-    });
-    if (!view) {
-      throw new TRPCError({ code: "NOT_FOUND", message: "view not found" });
-    }
-    return view;
+    const userId = ctx.userId;
+    return assertFound(
+      await ctx.db.savedView.findFirst({
+        where: { id: input.viewId, userId, projectId: ctx.projectId },
+      }),
+      "view not found",
+    );
   }),
 
   create: projectScopedMutationProcedure.input(CreateInput).mutation(async ({ ctx, input }) => {
-    const userId = userIdOrThrow(ctx);
+    const userId = ctx.userId;
     return ctx.db.$transaction(async (tx) => {
       if (input.isDefault) {
         await tx.savedView.updateMany({
@@ -96,16 +95,9 @@ export const viewsRouter = router({
   }),
 
   update: projectScopedMutationProcedure.input(UpdateInput).mutation(async ({ ctx, input }) => {
-    const userId = userIdOrThrow(ctx);
-    const existing = await ctx.db.savedView.findFirst({
+    const userId = ctx.userId;
+    const result = await ctx.db.savedView.updateMany({
       where: { id: input.viewId, userId, projectId: ctx.projectId },
-      select: { id: true },
-    });
-    if (!existing) {
-      throw new TRPCError({ code: "NOT_FOUND", message: "view not found" });
-    }
-    return ctx.db.savedView.update({
-      where: { id: input.viewId },
       data: {
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(input.stateBucket !== undefined ? { stateBucket: input.stateBucket } : {}),
@@ -113,10 +105,14 @@ export const viewsRouter = router({
         ...(input.axes !== undefined ? { axes: input.axes } : {}),
       },
     });
+    if (result.count === 0) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "view not found" });
+    }
+    return ctx.db.savedView.findUniqueOrThrow({ where: { id: input.viewId } });
   }),
 
   delete: projectScopedMutationProcedure.input(ViewIdInput).mutation(async ({ ctx, input }) => {
-    const userId = userIdOrThrow(ctx);
+    const userId = ctx.userId;
     const result = await ctx.db.savedView.deleteMany({
       where: { id: input.viewId, userId, projectId: ctx.projectId },
     });
@@ -132,15 +128,15 @@ export const viewsRouter = router({
    * No-op (still returns the row) when the view is already the default.
    */
   setDefault: projectScopedMutationProcedure.input(ViewIdInput).mutation(async ({ ctx, input }) => {
-    const userId = userIdOrThrow(ctx);
+    const userId = ctx.userId;
     return ctx.db.$transaction(async (tx) => {
-      const target = await tx.savedView.findFirst({
-        where: { id: input.viewId, userId, projectId: ctx.projectId },
-        select: { id: true, isDefault: true },
-      });
-      if (!target) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "view not found" });
-      }
+      const target = assertFound(
+        await tx.savedView.findFirst({
+          where: { id: input.viewId, userId, projectId: ctx.projectId },
+          select: { id: true, isDefault: true },
+        }),
+        "view not found",
+      );
       if (target.isDefault) {
         return tx.savedView.findUniqueOrThrow({ where: { id: input.viewId } });
       }

@@ -30,10 +30,10 @@ import { mcpOauthRedirectUri } from "@/server/mcp/oauth/redirect-uri";
 import { registerOauthClient } from "@/server/mcp/oauth/register";
 import { decryptSecret, encryptSecret } from "@/server/secrets/encryption";
 import {
+  assertFound,
   projectIdSchema,
   projectScopedMutationProcedure,
   router,
-  userIdOrThrow,
 } from "@/server/trpc";
 
 const STATE_TTL_MS = 10 * 60 * 1000;
@@ -57,13 +57,13 @@ const CompleteInput = z.object({
 
 export const mcpOauthRouter = router({
   start: projectScopedMutationProcedure.input(StartInput).mutation(async ({ ctx, input }) => {
-    const userId = userIdOrThrow(ctx);
-    const row = await ctx.db.mcpServerConfig.findFirst({
-      where: { id: input.serverId, projectId: ctx.projectId },
-    });
-    if (!row) {
-      throw new TRPCError({ code: "NOT_FOUND", message: "MCP server not found" });
-    }
+    const userId = ctx.userId;
+    const row = assertFound(
+      await ctx.db.mcpServerConfig.findFirst({
+        where: { id: input.serverId, projectId: ctx.projectId },
+      }),
+      "MCP server not found",
+    );
 
     const meta = await discoverOauthEndpoints(row.url);
     const redirectUri = mcpOauthRedirectUri();
@@ -133,13 +133,13 @@ export const mcpOauthRouter = router({
   disconnect: projectScopedMutationProcedure
     .input(projectIdSchema.extend({ serverId: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
-      const userId = userIdOrThrow(ctx);
-      const row = await ctx.db.mcpServerConfig.findFirst({
-        where: { id: input.serverId, projectId: ctx.projectId },
-      });
-      if (!row) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "MCP server not found" });
-      }
+      const userId = ctx.userId;
+      const row = assertFound(
+        await ctx.db.mcpServerConfig.findFirst({
+          where: { id: input.serverId, projectId: ctx.projectId },
+        }),
+        "MCP server not found",
+      );
       const headers = decodeHeaders(row.headersJson);
       delete headers.Authorization;
       const updated = await ctx.db.mcpServerConfig.update({

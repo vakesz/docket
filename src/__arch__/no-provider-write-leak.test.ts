@@ -74,10 +74,10 @@ describe("arch: provider write-method boundary", () => {
       const text = await readFile(file, "utf8");
       const lines = text.split("\n");
       for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
+        const line = lines[i] ?? "";
         const match = line.match(WRITE_CALL);
         if (match) {
-          offenders.push({ file: rel, line: i + 1, method: match[1], text: line.trim() });
+          offenders.push({ file: rel, line: i + 1, method: match[1] ?? "", text: line.trim() });
         }
       }
     }

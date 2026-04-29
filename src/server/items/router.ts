@@ -1,5 +1,4 @@
 import "server-only";
-import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import type { BacklogBucket, Item, ItemKind, ItemState, StateBucket } from "@/core/types";
 import { BACKLOG_BUCKETS } from "@/core/types";
@@ -11,7 +10,7 @@ import { injectExternalChange, materialDiff } from "@/server/inbound-changes/inj
 import { getProviderSpec } from "@/server/provider-registry";
 import { buildProviderForUser } from "@/server/providers/build";
 import { reconcileComments, runFullSync, runIncrementalSync, toItemRow } from "@/server/sync";
-import { projectIdSchema, projectScopedProcedure, router, userIdOrThrow } from "@/server/trpc";
+import { assertFound, projectIdSchema, projectScopedProcedure, router } from "@/server/trpc";
 
 const BacklogBucketEnum = z.enum(BACKLOG_BUCKETS);
 
@@ -84,12 +83,12 @@ async function resolveViewFilter(
   input: ListInputResolved,
 ): Promise<ResolvedFilter> {
   if (input.viewId) {
-    const row = await db.savedView.findFirst({
-      where: { id: input.viewId, userId, projectId },
-    });
-    if (!row) {
-      throw new TRPCError({ code: "NOT_FOUND", message: "view not found" });
-    }
+    const row = assertFound(
+      await db.savedView.findFirst({
+        where: { id: input.viewId, userId, projectId },
+      }),
+      "view not found",
+    );
     return {
       view: {
         stateBucket: row.stateBucket as StateBucket,
@@ -234,7 +233,7 @@ function liftRowToCanonical(row: PrismaItem, providerKind: string): Item {
  */
 export const itemsRouter = router({
   list: projectScopedProcedure.input(ListInput).query(async ({ ctx, input }) => {
-    const userId = userIdOrThrow(ctx);
+    const userId = ctx.userId;
     const { view, archivedFlag } = await resolveViewFilter(ctx.db, ctx.projectId, userId, input);
     const where = buildItemListWhere(ctx.projectId, input, view, archivedFlag);
     const axesActive = hasAxisFilter(view);
@@ -288,42 +287,41 @@ export const itemsRouter = router({
   get: projectScopedProcedure.input(ItemRef).query(async ({ ctx, input }) => {
     // Explicit select keeps the `providerRaw` JSON blob (often kilobytes of
     // unfiltered provider response) off the wire — nothing in the UI reads it.
-    const item = await ctx.db.item.findUnique({
-      where: { id: input.itemId },
-      select: {
-        id: true,
-        projectId: true,
-        providerItemId: true,
-        kind: true,
-        title: true,
-        descriptionMd: true,
-        state: true,
-        assignee: true,
-        author: true,
-        parentId: true,
-        tags: true,
-        url: true,
-        reactions: true,
-        createdAt: true,
-        updatedAt: true,
-        syncedAt: true,
-        comments: {
-          orderBy: [{ createdAt: "asc" }],
-          select: {
-            id: true,
-            providerCommentId: true,
-            author: true,
-            bodyMd: true,
-            reactions: true,
-            createdAt: true,
+    return assertFound(
+      await ctx.db.item.findFirst({
+        where: { id: input.itemId, projectId: ctx.projectId },
+        select: {
+          id: true,
+          projectId: true,
+          providerItemId: true,
+          kind: true,
+          title: true,
+          descriptionMd: true,
+          state: true,
+          assignee: true,
+          author: true,
+          parentId: true,
+          tags: true,
+          url: true,
+          reactions: true,
+          createdAt: true,
+          updatedAt: true,
+          syncedAt: true,
+          comments: {
+            orderBy: [{ createdAt: "asc" }],
+            select: {
+              id: true,
+              providerCommentId: true,
+              author: true,
+              bodyMd: true,
+              reactions: true,
+              createdAt: true,
+            },
           },
         },
-      },
-    });
-    if (!item || item.projectId !== ctx.projectId) {
-      throw new TRPCError({ code: "NOT_FOUND", message: "item not found in this project" });
-    }
-    return item;
+      }),
+      "item not found in this project",
+    );
   }),
 
   search: projectScopedProcedure
@@ -362,7 +360,7 @@ export const itemsRouter = router({
    * cached row the provider no longer returns. Both bump SyncCursor.
    */
   runSync: projectScopedProcedure.input(SyncInput).mutation(async ({ ctx, input }) => {
-    const userId = userIdOrThrow(ctx);
+    const userId = ctx.userId;
     return input.mode === "full"
       ? runFullSync(ctx.db, ctx.project, userId)
       : runIncrementalSync(ctx.db, ctx.project, userId);
@@ -398,22 +396,22 @@ export const itemsRouter = router({
    * conversations.
    */
   refreshItem: projectScopedProcedure.input(ItemRef).mutation(async ({ ctx, input }) => {
-    const userId = userIdOrThrow(ctx);
-    const cached = await ctx.db.item.findUnique({
-      where: { id: input.itemId },
-      select: {
-        id: true,
-        projectId: true,
-        providerItemId: true,
-        state: true,
-        title: true,
-        descriptionMd: true,
-        assignee: true,
-      },
-    });
-    if (!cached || cached.projectId !== ctx.projectId) {
-      throw new TRPCError({ code: "NOT_FOUND", message: "item not found in this project" });
-    }
+    const userId = ctx.userId;
+    const cached = assertFound(
+      await ctx.db.item.findFirst({
+        where: { id: input.itemId, projectId: ctx.projectId },
+        select: {
+          id: true,
+          projectId: true,
+          providerItemId: true,
+          state: true,
+          title: true,
+          descriptionMd: true,
+          assignee: true,
+        },
+      }),
+      "item not found in this project",
+    );
     const provider = await buildProviderForUser(ctx.db, ctx.project, userId);
     const syncedAt = new Date();
     const fresh = await provider.getItem(cached.providerItemId);
