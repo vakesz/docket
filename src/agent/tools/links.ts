@@ -33,6 +33,9 @@ export const findRelatedPullRequestsTool: ToolFactory = (ctx) => ({
       }),
     ),
   },
+  // PRMatch carries a contributor-authored title; everything else (url,
+  // branch name, state, author handle, confidence) is provider metadata.
+  guardrailScan: { mode: "fields", untrusted: ["matches[].title"] },
   handler: async (raw) => {
     const args = z.object({ providerItemId: z.string().min(1).optional() }).parse(raw);
     const providerItemId = args.providerItemId ?? ctx.providerItemId;

@@ -27,6 +27,9 @@ export const listSourcesTool: ToolFactory = (ctx) => ({
       }),
     ),
   },
+  // List view returns id/title/kind/uri/tags/updatedAt — only the title is
+  // author-controlled prose. Body markdown is fetched separately.
+  guardrailScan: { mode: "fields", untrusted: ["[].title"] },
   handler: async (raw) => {
     const args = z
       .object({
@@ -62,6 +65,9 @@ export const readSourceTool: ToolFactory = (ctx) => ({
     description: "Read a source document by id. Returns full body markdown.",
     parameters: zodToJsonSchema(z.object({ sourceId: z.string().min(1) })),
   },
+  // Title and bodyMd are author-authored markdown. The rest of the
+  // envelope (id/kind/uri/tags/updatedAt) is server / project metadata.
+  guardrailScan: { mode: "fields", untrusted: ["title", "bodyMd"] },
   handler: async (raw) => {
     const { sourceId } = z.object({ sourceId: z.string().min(1) }).parse(raw);
     const row = await ctx.db.sourceDoc.findFirst({
@@ -92,6 +98,8 @@ export const searchSourcesTool: ToolFactory = (ctx) => ({
       }),
     ),
   },
+  // Same shape as list_sources — title is the only author-authored field.
+  guardrailScan: { mode: "fields", untrusted: ["[].title"] },
   handler: async (raw) => {
     const args = z
       .object({

@@ -45,6 +45,8 @@ export const proposeMemoryWriteTool: ToolFactory = (ctx) => ({
       }),
     ),
   },
+  // Returns server-generated proposal metadata only — no foreign content.
+  guardrailScan: { mode: "skip" },
   handler: async (raw) => {
     const args = z
       .object({
@@ -81,6 +83,8 @@ export const proposeMemoryDeleteTool: ToolFactory = (ctx) => ({
     description: "Stage deletion of a project-memory entry. The human confirms before delete.",
     parameters: zodToJsonSchema(z.object({ memoryId: z.string().min(1) })),
   },
+  // Returns server-generated proposal metadata only — no foreign content.
+  guardrailScan: { mode: "skip" },
   handler: async (raw) => {
     const { memoryId } = z.object({ memoryId: z.string().min(1) }).parse(raw);
     try {

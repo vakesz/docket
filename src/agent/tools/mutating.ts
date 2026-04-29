@@ -50,6 +50,12 @@ function resolveProviderItemId(
   return arg ?? ctx.providerItemId;
 }
 
+// Every propose_* tool returns server-generated metadata only —
+// `{ proposalId, kind, status, autoConfirmed }`. There is no foreign
+// content path, so the tool-result guardrail would just be flipping a
+// coin on opaque JSON. Skip the scan entirely.
+const PROPOSAL_SCAN = { mode: "skip" } as const;
+
 export const proposeTransitionTool: ToolFactory = (ctx) => ({
   def: {
     name: "propose_transition",
@@ -62,6 +68,7 @@ export const proposeTransitionTool: ToolFactory = (ctx) => ({
       }),
     ),
   },
+  guardrailScan: PROPOSAL_SCAN,
   handler: async (raw) => {
     const args = z
       .object({
@@ -103,6 +110,7 @@ export const proposeDescriptionPatchTool: ToolFactory = (ctx) => ({
       }),
     ),
   },
+  guardrailScan: PROPOSAL_SCAN,
   handler: async (raw) => {
     const args = z
       .object({
@@ -144,6 +152,7 @@ export const proposeCommentTool: ToolFactory = (ctx) => ({
       }),
     ),
   },
+  guardrailScan: PROPOSAL_SCAN,
   handler: async (raw) => {
     const args = z
       .object({
@@ -191,6 +200,7 @@ export const proposeNewItemTool: ToolFactory = (ctx) => ({
       }),
     ),
   },
+  guardrailScan: PROPOSAL_SCAN,
   handler: async (raw) => {
     const args = z
       .object({
@@ -231,6 +241,7 @@ export const proposeItemTagsTool: ToolFactory = (ctx) => ({
       }),
     ),
   },
+  guardrailScan: PROPOSAL_SCAN,
   handler: async (raw) => {
     const args = z
       .object({

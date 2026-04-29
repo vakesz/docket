@@ -41,6 +41,10 @@ export const listItemsTool: ToolFactory = (ctx) => ({
       }),
     ),
   },
+  // Result is an array of `{providerItemId,kind,title,state,assignee,url}`.
+  // The only field carrying foreign content is `title`; the rest are
+  // server-generated ids / provider-controlled enum strings.
+  guardrailScan: { mode: "fields", untrusted: ["[].title"] },
   handler: async (raw) => {
     const args = z
       .object({
@@ -95,6 +99,13 @@ export const getItemTool: ToolFactory = (ctx) => ({
       }),
     ),
   },
+  // Foreign content lives in title, descriptionMd, and each comment's
+  // bodyMd. The surrounding ids/state/tags/url/timestamps are server-
+  // controlled cache columns.
+  guardrailScan: {
+    mode: "fields",
+    untrusted: ["title", "descriptionMd", "comments[].bodyMd"],
+  },
   handler: async (raw) => {
     const args = z.object({ providerItemId: z.string().min(1).optional() }).parse(raw);
     const providerItemId = args.providerItemId ?? ctx.providerItemId;
@@ -134,6 +145,13 @@ export const getPullRequestTool: ToolFactory = (ctx) => ({
       "Fetch live pull-request detail (title, body, state, files, reviews) from the project's provider. Provider-specific id format (e.g. 'owner/repo#123' on GitHub).",
     parameters: zodToJsonSchema(z.object({ pullRequestId: z.string().min(1) })),
   },
+  // PullRequestDetail carries foreign content in title, bodyMd, and each
+  // review's bodyMd. Refs, shas, label arrays, file paths are provider-
+  // controlled and shouldn't be scanned for prompt injection.
+  guardrailScan: {
+    mode: "fields",
+    untrusted: ["title", "bodyMd", "reviews[].bodyMd"],
+  },
   handler: async (raw) => {
     const { pullRequestId } = z.object({ pullRequestId: z.string().min(1) }).parse(raw);
     try {
@@ -153,6 +171,9 @@ export const getCommitTool: ToolFactory = (ctx) => ({
     description: "Fetch live commit detail (sha, author, message, files) from the provider.",
     parameters: zodToJsonSchema(z.object({ sha: z.string().min(1) })),
   },
+  // Commit message is the only field a contributor authors. Sha, file
+  // paths, and counts are provider-generated identifiers.
+  guardrailScan: { mode: "fields", untrusted: ["message"] },
   handler: async (raw) => {
     const { sha } = z.object({ sha: z.string().min(1) }).parse(raw);
     try {
@@ -173,6 +194,9 @@ export const getCIStatusTool: ToolFactory = (ctx) => ({
       "Fetch CI / check status for a ref (branch name, commit sha, or tag) from the provider.",
     parameters: zodToJsonSchema(z.object({ ref: z.string().min(1) })),
   },
+  // Run name is the only field a repo author controls. Status / conclusion
+  // are enum strings; ids and shas are provider identifiers.
+  guardrailScan: { mode: "fields", untrusted: ["runs[].name"] },
   handler: async (raw) => {
     const { ref } = z.object({ ref: z.string().min(1) }).parse(raw);
     try {

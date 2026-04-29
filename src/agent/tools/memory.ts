@@ -32,6 +32,9 @@ export const listMemoryTool: ToolFactory = (ctx) => ({
       }),
     ),
   },
+  // List view returns id/title/tags/source/updatedAt — only the title is
+  // user-authored. Body markdown is fetched separately via get_memory.
+  guardrailScan: { mode: "fields", untrusted: ["[].title"] },
   handler: async (raw) => {
     const args = z
       .object({
@@ -73,6 +76,9 @@ export const getMemoryTool: ToolFactory = (ctx) => ({
     description: "Read one memory entry by id. Returns full body markdown.",
     parameters: zodToJsonSchema(z.object({ memoryId: z.string().min(1) })),
   },
+  // Title and bodyMd are user-authored. id/tags/source/updatedAt are
+  // server-controlled metadata.
+  guardrailScan: { mode: "fields", untrusted: ["title", "bodyMd"] },
   handler: async (raw) => {
     const { memoryId } = z.object({ memoryId: z.string().min(1) }).parse(raw);
     const row = await ctx.db.memoryEntry.findFirst({

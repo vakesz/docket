@@ -28,6 +28,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { selectGuardrailFor } from "@/agent/guardrail/registry";
 import type { GuardrailUsage } from "@/agent/guardrail/types";
+import { extractUntrustedFields } from "@/agent/guardrail/types";
 import type { LlmAdapter, LlmEvent, LlmMessage, LlmToolCall } from "@/agent/llm/types";
 import { buildSystemPrefix } from "@/agent/prompt";
 import { buildToolRegistry } from "@/agent/tools/registry";
@@ -446,32 +447,60 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
       // it's re-fed to the model — a `block` substitutes a refusal stub
       // (the model never sees the original text) and aborts the round so
       // the chat model doesn't keep generating off injected instructions.
+      //
+      // Tools tagged `guardrailScan: { mode: "skip" }` short-circuit here:
+      // their results are server-generated metadata only (proposal ids,
+      // echoed question text), so the LLM judge would just be flipping a
+      // coin on an opaque JSON envelope and occasionally producing
+      // false-positive blocks. No call, no usage accounting, no event.
+      //
+      // `mode: "fields"` extracts the listed dotted paths from
+      // `result.data` and hands the guardrail a focused string of just the
+      // foreign content (markdown body, comment text, diff). Empty
+      // extraction short-circuits the same way `skip` does — the result
+      // had no untrusted text to scan.
       let toolBlockReason: string | null = null;
-      const toolDecision = await guardrail.checkToolResult({ toolName: call.name, result }, signal);
-      accumulateGuardrailUsage(guardrailUsage, toolDecision.usage);
-      if (toolDecision.action === "block") {
-        toolBlockReason = toolDecision.reason;
-        result = {
-          ok: false,
-          error: `tool result blocked by guardrail: ${toolDecision.reason}`,
-        };
-        yield {
-          kind: "guardrail_blocked",
-          stage: "tool_result",
-          reason: toolDecision.reason,
-          ...(toolDecision.categories ? { categories: toolDecision.categories } : {}),
-        };
-        logger.info(
-          { ...baseCtx, round: rounds, callId: call.id, reason: toolDecision.reason },
-          "agent: tool result blocked by guardrail",
+      const scan = tool?.guardrailScan ?? { mode: "full" };
+      let runGuardrail = scan.mode !== "skip";
+      let untrusted: string | undefined;
+      if (scan.mode === "fields") {
+        untrusted = extractUntrustedFields(result, scan.untrusted);
+        if (untrusted.length === 0) runGuardrail = false;
+      }
+      if (runGuardrail) {
+        const toolDecision = await guardrail.checkToolResult(
+          {
+            toolName: call.name,
+            result,
+            ...(untrusted !== undefined ? { untrusted } : {}),
+          },
+          signal,
         );
-      } else if (toolDecision.action === "flag") {
-        yield {
-          kind: "guardrail_flagged",
-          stage: "tool_result",
-          reason: toolDecision.reason,
-          ...(toolDecision.categories ? { categories: toolDecision.categories } : {}),
-        };
+        accumulateGuardrailUsage(guardrailUsage, toolDecision.usage);
+        if (toolDecision.action === "block") {
+          toolBlockReason = toolDecision.reason;
+          result = {
+            ok: false,
+            error: `tool result blocked by guardrail: ${toolDecision.reason}`,
+          };
+          yield {
+            kind: "guardrail_blocked",
+            stage: "tool_result",
+            reason: toolDecision.reason,
+            ...(toolDecision.categories ? { categories: toolDecision.categories } : {}),
+          };
+          logger.info(
+            { ...baseCtx, round: rounds, callId: call.id, reason: toolDecision.reason },
+            "agent: tool result blocked by guardrail",
+          );
+        } else if (toolDecision.action === "flag") {
+          yield {
+            kind: "guardrail_flagged",
+            stage: "tool_result",
+            reason: toolDecision.reason,
+            ...(toolDecision.categories ? { categories: toolDecision.categories } : {}),
+          };
+        }
       }
 
       const formatted = adapter.formatToolResult(call, result);

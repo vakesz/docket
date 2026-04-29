@@ -49,6 +49,10 @@ export const askUserQuestionTool: ToolFactory = (_ctx) => ({
       "Pause and ask the user a question. Use this instead of guessing when you need information that isn't in the conversation, the cached item, or any tool result. Provide multiple-choice options when the answer space is closed.",
     parameters: zodToJsonSchema(QuestionInput),
   },
+  // The result echoes the agent's own question back to the loop so the UI
+  // can render it; nothing in this payload originates outside the trust
+  // boundary, so the LLM judge would just be classifying our own text.
+  guardrailScan: { mode: "skip" },
   handler: async (raw) => {
     const payload = QuestionInput.parse(raw);
     return ok({

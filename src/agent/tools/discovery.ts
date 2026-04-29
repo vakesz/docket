@@ -36,6 +36,9 @@ export const searchItemsTool: ToolFactory = (ctx) => ({
       }),
     ),
   },
+  // Returns `{query, count, items}`; only item titles carry foreign
+  // content. The query echoes the agent's own argument back.
+  guardrailScan: { mode: "fields", untrusted: ["items[].title"] },
   handler: async (raw) => {
     const args = z
       .object({
@@ -86,6 +89,10 @@ export const listAuditTool: ToolFactory = (ctx) => ({
       }),
     ),
   },
+  // The audit envelope is server-controlled, but `payload` is a JSON blob
+  // built by `confirmProposal` from the user's proposal contents — it can
+  // contain comment markdown / description patches. Scan only that field.
+  guardrailScan: { mode: "fields", untrusted: ["rows[].payload"] },
   handler: async (raw) => {
     const args = z
       .object({
@@ -121,6 +128,9 @@ export const getPullRequestDiffTool: ToolFactory = (ctx) => ({
       "Fetch the per-file unified diff for a pull request. Use this when reviewing a PR's content — get_pull_request gives metadata, this gives the actual code changes. Provider-specific id format (e.g. 'owner/repo#123' on GitHub).",
     parameters: zodToJsonSchema(z.object({ pullRequestId: z.string().min(1) })),
   },
+  // The patch text is the foreign code payload. Paths and counts are
+  // provider-controlled; the diff itself is the only injection surface.
+  guardrailScan: { mode: "fields", untrusted: ["files[].patch"] },
   handler: async (raw) => {
     const { pullRequestId } = z.object({ pullRequestId: z.string().min(1) }).parse(raw);
     try {
@@ -147,6 +157,9 @@ export const searchPullRequestsTool: ToolFactory = (ctx) => ({
       }),
     ),
   },
+  // PRMatch shape: `{url, title, branch, state, author, confidence}`.
+  // Only the title is contributor-authored prose.
+  guardrailScan: { mode: "fields", untrusted: ["matches[].title"] },
   handler: async (raw) => {
     const args = z
       .object({
@@ -184,6 +197,10 @@ export const searchCodeTool: ToolFactory = (ctx) => ({
       }),
     ),
   },
+  // CodeSearchResult is `{query, total, items: [{repository, path, url}]}`.
+  // Every field is a provider-controlled identifier (no snippets, no
+  // titles), so there's no foreign content for the guardrail to scan.
+  guardrailScan: { mode: "skip" },
   handler: async (raw) => {
     const args = z
       .object({

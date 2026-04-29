@@ -109,7 +109,7 @@ export class PatternGuardrail implements Guardrail {
   }
 
   async checkToolResult(args: CheckToolResultArgs): Promise<GuardrailDecision> {
-    const text = stringifyToolResult(args.result);
+    const text = args.untrusted !== undefined ? args.untrusted : stringifyToolResult(args.result);
     if (!text) return { action: "allow" };
     const hit = match(text, TOOL_RESULT_RULES);
     if (!hit) return { action: "allow" };
