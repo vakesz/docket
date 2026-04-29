@@ -43,7 +43,7 @@ export default function RootLayout({
       className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col bg-background text-foreground">
+      <body className="h-full flex flex-col overflow-hidden bg-background text-foreground">
         <ThemeProvider>
           <AppProviders>{children}</AppProviders>
           <Toaster />

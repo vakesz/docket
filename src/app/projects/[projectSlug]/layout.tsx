@@ -60,7 +60,7 @@ export default async function ProjectLayout({
   }));
 
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground">
+    <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
       <WorkspaceProviders>
         <TopBar
           projects={projectOptions}

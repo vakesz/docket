@@ -6,6 +6,7 @@ import { RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { trpc } from "@/lib/trpc-client";
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/ui/primitives/tooltip";
 
 /**
  * Shared incremental-sync trigger. Mounted in the topbar (glyph-only,
@@ -35,10 +36,6 @@ export function SyncButton({
       router.refresh();
     },
   });
-  // Share the in-flight signal across every SyncButton mounted in the
-  // tree by filtering on the canonical trpc mutation key. Without this,
-  // clicking the topbar glyph wouldn't spin the footer icon (and vice
-  // versa) because each `useMutation` keeps its own pending flag.
   const inflightCount = useIsMutating({ mutationKey: getMutationKey(trpc.items.runSync) });
   const inflight = inflightCount > 0 || sync.isPending;
   const canSync = Boolean(projectSlug) && !readOnly;
@@ -52,20 +49,26 @@ export function SyncButton({
 
   if (variant === "topbar") {
     return (
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={disabled}
-        aria-label="Sync now"
-        title={title}
-        className={cn(
-          "shrink-0 cursor-pointer text-muted-foreground transition-colors",
-          "hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring",
-          "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-muted-foreground",
-        )}
-      >
-        <RefreshCw aria-hidden="true" className={cn("h-3 w-3", inflight && "animate-spin")} />
-      </button>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={onClick}
+              disabled={disabled}
+              aria-label="Sync now"
+              className={cn(
+                "shrink-0 cursor-pointer text-muted-foreground transition-colors",
+                "hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring",
+                "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-muted-foreground",
+              )}
+            >
+              <RefreshCw aria-hidden="true" className={cn("h-3 w-3", inflight && "animate-spin")} />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">{title}</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     );
   }
 

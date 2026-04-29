@@ -4,14 +4,14 @@ import { BacklogDrawerTrigger } from "@/ui/shell/backlog-drawer-trigger";
 import { LogoLink } from "@/ui/shell/logo-link";
 import { ProjectSwitcher } from "@/ui/shell/project-switcher";
 import { SyncButton } from "@/ui/shell/sync-button";
+import { ThemeToggle } from "@/ui/shell/theme-toggle";
 
 type ProjectOption = { id: string; slug: string; name: string; providerKind: string };
 
 /**
  * Header used inside the workspace shell. Top-left is just the Docket
  * mark; top-right collapses theme/settings/sign-out into a single account
- * popover, with the project switcher sitting right next to it. Theme is
- * intentionally absent here — it lives under /settings.
+ * popover, with the project switcher sitting right next to it.
  */
 export function TopBar({
   projects,
@@ -38,6 +38,7 @@ export function TopBar({
       <div className="ml-auto flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
         {currentProjectSlug && projects.length > 0 ? (
           <>
+            <ThemeToggle />
             <SyncButton projectSlug={currentProjectSlug} readOnly={readOnly} variant="topbar" />
             <ProjectSwitcher projects={projects} currentProjectSlug={currentProjectSlug} />
           </>
