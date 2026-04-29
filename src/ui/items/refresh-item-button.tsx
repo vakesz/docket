@@ -1,13 +1,10 @@
 "use client";
 
-import { Button } from "@headlessui/react";
 import { RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { xsBorderButtonClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
-
-const ghostClass =
-  "inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60";
+import { cn } from "@/lib/utils";
+import { Button } from "@/ui/primitives/button";
 
 /**
  * Header button that re-syncs the open item from its provider — fresh body,
@@ -42,16 +39,14 @@ export function RefreshItemButton({
     return (
       <Button
         type="button"
+        variant="ghost"
+        size="icon-sm"
         disabled={refresh.isPending}
         onClick={onClick}
         title={title}
         aria-label="Refresh item"
-        className={ghostClass}
       >
-        <RefreshCw
-          aria-hidden="true"
-          className={`size-4 ${refresh.isPending ? "animate-spin" : ""}`}
-        />
+        <RefreshCw aria-hidden="true" className={cn(refresh.isPending && "animate-spin")} />
       </Button>
     );
   }
@@ -59,16 +54,14 @@ export function RefreshItemButton({
   return (
     <Button
       type="button"
+      variant="outline"
+      size="xs"
       disabled={refresh.isPending}
       onClick={onClick}
       title={title}
       aria-label="Refresh item"
-      className={xsBorderButtonClass}
     >
-      <RefreshCw
-        aria-hidden="true"
-        className={`size-3 ${refresh.isPending ? "animate-spin" : ""}`}
-      />
+      <RefreshCw aria-hidden="true" className={cn(refresh.isPending && "animate-spin")} />
       Refresh
     </Button>
   );

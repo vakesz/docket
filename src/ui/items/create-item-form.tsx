@@ -1,27 +1,31 @@
 "use client";
 
-import {
-  Button,
-  Description,
-  Dialog,
-  DialogBackdrop,
-  DialogPanel,
-  DialogTitle,
-  Input,
-  Textarea,
-} from "@headlessui/react";
 import { Plus } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { ITEM_KINDS, type ItemKind } from "@/core/types";
-import {
-  fieldClass,
-  ghostButtonClass,
-  primaryButtonClass,
-  xsBorderButtonClass,
-} from "@/lib/form-classes";
 import { formatKind } from "@/lib/format";
 import { trpc } from "@/lib/trpc-client";
-import { SelectField } from "@/ui/forms/select-field";
+import { Alert, AlertDescription } from "@/ui/primitives/alert";
+import { Button } from "@/ui/primitives/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/ui/primitives/dialog";
+import { Input } from "@/ui/primitives/input";
+import { Label } from "@/ui/primitives/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/ui/primitives/select";
+import { Textarea } from "@/ui/primitives/textarea";
 import { ProposalDialog } from "@/ui/proposals/proposal-dialog";
 
 /**
@@ -37,6 +41,12 @@ import { ProposalDialog } from "@/ui/proposals/proposal-dialog";
 export function CreateItemForm({ projectId }: { projectId: string }) {
   const [open, setOpen] = useState(false);
   const [pendingProposalId, setPendingProposalId] = useState<string | null>(null);
+  const formId = useId();
+  const kindId = useId();
+  const titleId = useId();
+  const descId = useId();
+  const assigneeId = useId();
+  const tagsId = useId();
 
   const [itemKind, setItemKind] = useState<ItemKind>("task");
   const [title, setTitle] = useState("");
@@ -66,175 +76,144 @@ export function CreateItemForm({ projectId }: { projectId: string }) {
 
   return (
     <>
-      <Button
-        type="button"
-        onClick={() => {
-          propose.reset();
-          setOpen(true);
-        }}
-        className={xsBorderButtonClass}
-        title="Stage a new item"
-      >
-        <Plus aria-hidden="true" className="size-3" />
-        New
-      </Button>
-
       <Dialog
         open={open}
-        onClose={() => {
-          if (!propose.isPending) setOpen(false);
+        onOpenChange={(next) => {
+          if (!next && propose.isPending) return;
+          setOpen(next);
+          if (next) propose.reset();
         }}
-        className="relative z-50"
       >
-        <DialogBackdrop className="fixed inset-0 bg-black/50" />
-        <div className="fixed inset-0 flex w-screen items-center justify-center p-4">
-          <DialogPanel className="grid w-full max-w-2xl gap-4 rounded-lg border border-border bg-card p-6 text-foreground shadow-lg">
-            <div className="flex flex-col gap-1.5">
-              <DialogTitle className="text-lg font-semibold leading-none tracking-tight">
-                New item
-              </DialogTitle>
-              <Description className="text-sm text-muted-foreground">
-                Stage a new work item for review. Nothing is sent to the provider until you confirm
-                the proposal.
-              </Description>
-            </div>
+        <DialogTrigger asChild>
+          <Button type="button" variant="outline" size="xs" title="Stage a new item">
+            <Plus aria-hidden="true" />
+            New
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>New item</DialogTitle>
+            <DialogDescription>
+              Stage a new work item for review. Nothing is sent to the provider until you confirm
+              the proposal.
+            </DialogDescription>
+          </DialogHeader>
 
-            <form
-              id="create-item-form"
-              className="flex flex-col gap-3"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!canSubmit) return;
-                const tags = tagsInput
-                  .split(",")
-                  .map((t) => t.trim())
-                  .filter((t) => t.length > 0);
-                propose.mutate({
-                  projectId,
-                  itemKind,
-                  fields: {
-                    title: trimmedTitle,
-                    descriptionMd,
-                    parentId: null,
-                    assignee: assignee.trim() || null,
-                    tags,
-                  },
-                });
-              }}
-            >
-              <div className="grid grid-cols-[8rem_1fr] gap-3">
-                <label
-                  htmlFor="create-item-kind"
-                  className="self-center text-xs uppercase tracking-wide text-muted-foreground"
-                >
-                  Kind
-                </label>
-                <SelectField
-                  id="create-item-kind"
-                  value={itemKind}
-                  onChange={(e) => setItemKind(e.target.value as ItemKind)}
-                  disabled={propose.isPending}
-                >
-                  {ITEM_KINDS.map((k) => (
-                    <option key={k} value={k}>
-                      {formatKind(k)}
-                    </option>
-                  ))}
-                </SelectField>
-
-                <label
-                  htmlFor="create-item-title"
-                  className="self-center text-xs uppercase tracking-wide text-muted-foreground"
-                >
-                  Title
-                </label>
-                <Input
-                  id="create-item-title"
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Short summary"
-                  required
-                  className={fieldClass}
-                  disabled={propose.isPending}
-                />
-
-                <label
-                  htmlFor="create-item-description"
-                  className="text-xs uppercase tracking-wide text-muted-foreground"
-                >
-                  Description
-                </label>
-                <Textarea
-                  id="create-item-description"
-                  value={descriptionMd}
-                  onChange={(e) => setDescriptionMd(e.target.value)}
-                  rows={5}
-                  placeholder="Markdown body (optional)"
-                  className={fieldClass}
-                  disabled={propose.isPending}
-                />
-
-                <label
-                  htmlFor="create-item-assignee"
-                  className="self-center text-xs uppercase tracking-wide text-muted-foreground"
-                >
-                  Assignee
-                </label>
-                <Input
-                  id="create-item-assignee"
-                  type="text"
-                  value={assignee}
-                  onChange={(e) => setAssignee(e.target.value)}
-                  placeholder="Provider username (optional)"
-                  className={fieldClass}
-                  disabled={propose.isPending}
-                />
-
-                <label
-                  htmlFor="create-item-tags"
-                  className="self-center text-xs uppercase tracking-wide text-muted-foreground"
-                >
-                  Tags
-                </label>
-                <Input
-                  id="create-item-tags"
-                  type="text"
-                  value={tagsInput}
-                  onChange={(e) => setTagsInput(e.target.value)}
-                  placeholder="comma, separated, labels"
-                  className={fieldClass}
-                  disabled={propose.isPending}
-                />
-              </div>
-
-              {error ? (
-                <p className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
-                  {error}
-                </p>
-              ) : null}
-            </form>
-
-            <div className="flex flex-row justify-end gap-2">
-              <Button
-                type="button"
+          <form
+            id={formId}
+            className="flex flex-col gap-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!canSubmit) return;
+              const tags = tagsInput
+                .split(",")
+                .map((t) => t.trim())
+                .filter((t) => t.length > 0);
+              propose.mutate({
+                projectId,
+                itemKind,
+                fields: {
+                  title: trimmedTitle,
+                  descriptionMd,
+                  parentId: null,
+                  assignee: assignee.trim() || null,
+                  tags,
+                },
+              });
+            }}
+          >
+            <div className="grid grid-cols-[8rem_1fr] items-center gap-3">
+              <Label htmlFor={kindId} className="text-xs uppercase tracking-wide">
+                Kind
+              </Label>
+              <Select
+                value={itemKind}
+                onValueChange={(v) => setItemKind(v as ItemKind)}
                 disabled={propose.isPending}
-                onClick={() => setOpen(false)}
-                className={ghostButtonClass}
               >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                form="create-item-form"
-                disabled={!canSubmit}
-                className={primaryButtonClass}
-              >
-                {propose.isPending ? "Staging…" : "Stage proposal"}
-              </Button>
+                <SelectTrigger id={kindId} className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ITEM_KINDS.map((k) => (
+                    <SelectItem key={k} value={k}>
+                      {formatKind(k)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Label htmlFor={titleId} className="text-xs uppercase tracking-wide">
+                Title
+              </Label>
+              <Input
+                id={titleId}
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Short summary"
+                required
+                disabled={propose.isPending}
+              />
+
+              <Label htmlFor={descId} className="self-start text-xs uppercase tracking-wide">
+                Description
+              </Label>
+              <Textarea
+                id={descId}
+                value={descriptionMd}
+                onChange={(e) => setDescriptionMd(e.target.value)}
+                rows={5}
+                placeholder="Markdown body (optional)"
+                disabled={propose.isPending}
+              />
+
+              <Label htmlFor={assigneeId} className="text-xs uppercase tracking-wide">
+                Assignee
+              </Label>
+              <Input
+                id={assigneeId}
+                type="text"
+                value={assignee}
+                onChange={(e) => setAssignee(e.target.value)}
+                placeholder="Provider username (optional)"
+                disabled={propose.isPending}
+              />
+
+              <Label htmlFor={tagsId} className="text-xs uppercase tracking-wide">
+                Tags
+              </Label>
+              <Input
+                id={tagsId}
+                type="text"
+                value={tagsInput}
+                onChange={(e) => setTagsInput(e.target.value)}
+                placeholder="comma, separated, labels"
+                disabled={propose.isPending}
+              />
             </div>
-          </DialogPanel>
-        </div>
+
+            {error ? (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            ) : null}
+          </form>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={propose.isPending}
+              onClick={() => setOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" form={formId} disabled={!canSubmit}>
+              {propose.isPending ? "Staging…" : "Stage proposal"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
       </Dialog>
 
       <ProposalDialog

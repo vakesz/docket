@@ -1,6 +1,5 @@
 "use client";
 
-import { Button } from "@headlessui/react";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -115,8 +114,9 @@ export function ReactionRow({
         const count = counts[kind] ?? 0;
         const active = count > 0;
         return (
-          <Button
+          <button
             key={kind}
+            type="button"
             disabled={busy !== null}
             aria-label={`React with ${labelFor(kind)}`}
             title={`React with ${labelFor(kind)}`}
@@ -146,7 +146,7 @@ export function ReactionRow({
             ) : count > 0 ? (
               <span className="font-mono text-[10px]">{count}</span>
             ) : null}
-          </Button>
+          </button>
         );
       })}
       {error ? <span className="text-xs text-destructive">{error}</span> : null}

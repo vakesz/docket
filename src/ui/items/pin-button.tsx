@@ -1,17 +1,8 @@
 "use client";
 
-import { Button } from "@headlessui/react";
 import { Pin, PinOff } from "lucide-react";
 import { trpc } from "@/lib/trpc-client";
-import { cn } from "@/lib/utils";
-
-const baseClass =
-  "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-60";
-const inactiveClass = "border-border bg-card text-foreground hover:bg-muted";
-const activeClass = "border-border bg-muted text-foreground hover:bg-card";
-
-const ghostClass =
-  "inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60 aria-pressed:bg-muted aria-pressed:text-foreground";
+import { Button } from "@/ui/primitives/button";
 
 /**
  * Pin/unpin toggle. `compact` collapses to a borderless icon-only button
@@ -56,14 +47,15 @@ export function PinButton({
     return (
       <Button
         type="button"
+        variant="ghost"
+        size="icon-sm"
         aria-pressed={pinned}
         aria-label={label}
         disabled={busy}
         title={busy ? "…" : label}
-        className={ghostClass}
         onClick={onClick}
       >
-        <Icon aria-hidden="true" className="size-4" />
+        <Icon aria-hidden="true" />
       </Button>
     );
   }
@@ -71,13 +63,14 @@ export function PinButton({
   return (
     <Button
       type="button"
+      variant={pinned ? "secondary" : "outline"}
+      size="xs"
       aria-pressed={pinned}
       disabled={busy}
       title={busy ? "…" : label}
-      className={cn(baseClass, pinned ? activeClass : inactiveClass)}
       onClick={onClick}
     >
-      <Icon aria-hidden="true" className="size-3" />
+      <Icon aria-hidden="true" />
       {busy ? "…" : label}
     </Button>
   );

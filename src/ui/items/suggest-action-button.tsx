@@ -1,12 +1,10 @@
 "use client";
 
-import { Button } from "@headlessui/react";
 import { Sparkles } from "lucide-react";
 import type { ItemKind, ItemState } from "@/core/types";
-import { xsAccentButtonClass } from "@/lib/form-classes";
-import { cn } from "@/lib/utils";
 import { useChatPaneController } from "@/ui/conversations/chat-pane-context";
 import { buildSuggestSeed } from "@/ui/items/suggest-seeds";
+import { Button } from "@/ui/primitives/button";
 
 /**
  * Header button that opens the chat pane on a fresh thread and auto-fires a
@@ -40,12 +38,12 @@ export function SuggestActionButton({
   return (
     <Button
       type="button"
+      size="xs"
       onClick={onClick}
       disabled={seedPending}
       title={seedPending ? "Opening chat…" : "Open chat with a 'next action' prompt"}
-      className={cn(xsAccentButtonClass, "disabled:cursor-not-allowed disabled:opacity-60")}
     >
-      <Sparkles aria-hidden="true" className="size-3" />
+      <Sparkles aria-hidden="true" />
       Suggest next action
     </Button>
   );

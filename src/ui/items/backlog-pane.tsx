@@ -3,12 +3,12 @@
 import { usePathname } from "next/navigation";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import type { BacklogBucket, ItemKind } from "@/core/types";
-import { metaLabelFaintClass } from "@/lib/form-classes";
 import { useRecentItemIds } from "@/lib/recent-items";
 import { trpc } from "@/lib/trpc-client";
-import { cn } from "@/lib/utils";
 import { ASSIGNEE_UNASSIGNED, FilterBar } from "@/ui/items/filter-bar";
 import { EmptyMessage, ItemRow, type ListItem, PinnedRow } from "@/ui/items/item-row";
+
+const META_LABEL_FAINT = "text-xs uppercase tracking-wide text-muted-foreground-faint";
 
 const KINDS: Array<ItemKind | "all"> = ["all", "epic", "feature", "story", "task", "bug"];
 
@@ -226,7 +226,7 @@ export function BacklogPane({
 
       {recentItems.length > 0 && (
         <div className="border-b border-border bg-card">
-          <div className={cn("flex items-center gap-2 px-3 pt-2 pb-1", metaLabelFaintClass)}>
+          <div className={`flex items-center gap-2 px-3 pt-2 pb-1 ${META_LABEL_FAINT}`}>
             <span>Recent</span>
             <span className="text-muted-foreground-faint">{recentItems.length}</span>
           </div>
@@ -243,7 +243,7 @@ export function BacklogPane({
 
       {pinned.data && pinned.data.length > 0 && (
         <div className="border-b border-border bg-card">
-          <div className={cn("flex items-center gap-2 px-3 pt-2 pb-1", metaLabelFaintClass)}>
+          <div className={`flex items-center gap-2 px-3 pt-2 pb-1 ${META_LABEL_FAINT}`}>
             <span className="text-primary">●</span>
             <span>Pinned</span>
             <span className="text-muted-foreground-faint">{pinned.data.length}</span>

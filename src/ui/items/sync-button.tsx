@@ -1,7 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { xsBorderButtonClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
+import { Button } from "@/ui/primitives/button";
 
 export function SyncButton({
   projectId,
@@ -21,14 +21,15 @@ export function SyncButton({
   const label = mode === "full" ? "Full sync" : "Refresh";
   return (
     <div className="flex items-center gap-2">
-      <button
+      <Button
         type="button"
+        variant="outline"
+        size="xs"
         disabled={sync.isPending}
         onClick={() => sync.mutate({ projectId, mode })}
-        className={xsBorderButtonClass}
       >
         {sync.isPending ? `${label}…` : label}
-      </button>
+      </Button>
       {sync.error ? (
         <span className="text-xs text-destructive">{sync.error.message}</span>
       ) : sync.data ? (

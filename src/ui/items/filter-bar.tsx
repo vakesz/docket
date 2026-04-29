@@ -1,12 +1,13 @@
 "use client";
 
-import { Input, Listbox, ListboxButton, ListboxOption, ListboxOptions } from "@headlessui/react";
 import { Check, ChevronDown, X } from "lucide-react";
 import type { BacklogBucket, ItemKind } from "@/core/types";
 import { avatarUrl } from "@/lib/avatar-url";
 import { displayTag, formatKind } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { CreateItemForm } from "@/ui/items/create-item-form";
+import { Input } from "@/ui/primitives/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/ui/primitives/popover";
 
 export const ASSIGNEE_UNASSIGNED = "__unassigned";
 
@@ -157,7 +158,7 @@ export function FilterBar({
           placeholder="Filter by title, id, tag…"
           value={query}
           onChange={(e) => handlers.setQuery(e.target.value)}
-          className="min-w-0 flex-1 rounded-md border border-border bg-card px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground-faint focus:border-primary focus:outline-none"
+          className="min-w-0 flex-1 text-xs"
         />
         <CreateItemForm projectId={projectId} />
       </div>
@@ -479,109 +480,91 @@ function AssigneeDropdown({
   ];
 
   return (
-    <Listbox
-      value={[...activeAssignees]}
-      onChange={() => {
-        /* selection handled in option onClick to support sentinel exclusivity + Any */
-      }}
-      multiple
-    >
-      <div className="relative">
-        <ListboxButton className="inline-flex min-w-[10rem] items-center justify-between gap-2 rounded-md border border-border bg-card px-2 py-1 text-xs text-foreground hover:bg-muted">
-          <span className="truncate">{summary}</span>
-          <ChevronDown aria-hidden="true" className="size-3 shrink-0 text-muted-foreground-faint" />
-        </ListboxButton>
-        <ListboxOptions
-          anchor="bottom start"
-          className="z-30 mt-1 max-h-72 w-64 overflow-auto rounded-md border border-border bg-card p-1 text-xs shadow-lg focus:outline-none"
+    <Popover>
+      <PopoverTrigger className="inline-flex min-w-[10rem] items-center justify-between gap-2 rounded-md border border-border bg-card px-2 py-1 text-xs text-foreground hover:bg-muted">
+        <span className="truncate">{summary}</span>
+        <ChevronDown aria-hidden="true" className="size-3 shrink-0 text-muted-foreground-faint" />
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="z-30 max-h-72 w-64 overflow-auto rounded-md p-1 text-xs"
+      >
+        <button
+          type="button"
+          onClick={onClear}
+          className={cn(
+            "flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left",
+            activeAssignees.size === 0
+              ? "bg-primary/10 text-foreground"
+              : "text-muted-foreground hover:bg-muted",
+          )}
         >
-          <button
-            type="button"
-            onClick={onClear}
-            className={cn(
-              "flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left",
-              activeAssignees.size === 0
-                ? "bg-primary/10 text-foreground"
-                : "text-muted-foreground hover:bg-muted",
-            )}
-          >
-            <span>Anyone</span>
-            {activeAssignees.size === 0 ? <Check aria-hidden="true" className="size-3" /> : null}
-          </button>
-          <div className="my-1 border-t border-border" />
-          {sentinels.map((s) => {
-            const selected = activeAssignees.has(s.value);
-            return (
-              <ListboxOption
-                key={s.value}
-                value={s.value}
-                as="button"
-                onClick={(e: React.MouseEvent) => {
-                  e.preventDefault();
-                  onToggle(s.value);
-                }}
-                className={cn(
-                  "flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left",
-                  selected
-                    ? "bg-primary/10 text-foreground"
-                    : "text-muted-foreground hover:bg-muted",
-                )}
-              >
-                <span>{s.label}</span>
-                {selected ? <Check aria-hidden="true" className="size-3" /> : null}
-              </ListboxOption>
-            );
-          })}
-          {assigneeCounts.length > 0 ? (
-            <>
-              <div className="my-1 border-t border-border" />
-              {assigneeCounts.map(([name, n]) => {
-                const selected = activeAssignees.has(name);
-                const isMe = meIdentifier !== null && name === meIdentifier;
-                return (
-                  <ListboxOption
-                    key={name}
-                    value={name}
-                    as="button"
-                    onClick={(e: React.MouseEvent) => {
-                      e.preventDefault();
-                      onToggle(name);
-                    }}
-                    className={cn(
-                      "flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left",
-                      selected
-                        ? "bg-primary/10 text-foreground"
-                        : "text-muted-foreground hover:bg-muted",
-                    )}
-                  >
-                    <span className="flex items-center gap-1.5 truncate">
-                      {showAvatars ? (
-                        <AssigneeAvatar
-                          name={name}
-                          providerKind={providerKind}
-                          providerHasAvatars={providerHasAvatars}
-                        />
-                      ) : null}
-                      <span className="truncate">{name}</span>
-                      {isMe ? (
-                        <span className="font-mono text-[9px] uppercase text-muted-foreground-faint">
-                          you
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <span className="font-mono text-[9px] tabular-nums text-muted-foreground-faint">
-                        {n}
+          <span>Anyone</span>
+          {activeAssignees.size === 0 ? <Check aria-hidden="true" className="size-3" /> : null}
+        </button>
+        <div className="my-1 border-t border-border" />
+        {sentinels.map((s) => {
+          const selected = activeAssignees.has(s.value);
+          return (
+            <button
+              type="button"
+              key={s.value}
+              onClick={() => onToggle(s.value)}
+              className={cn(
+                "flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left",
+                selected ? "bg-primary/10 text-foreground" : "text-muted-foreground hover:bg-muted",
+              )}
+            >
+              <span>{s.label}</span>
+              {selected ? <Check aria-hidden="true" className="size-3" /> : null}
+            </button>
+          );
+        })}
+        {assigneeCounts.length > 0 ? (
+          <>
+            <div className="my-1 border-t border-border" />
+            {assigneeCounts.map(([name, n]) => {
+              const selected = activeAssignees.has(name);
+              const isMe = meIdentifier !== null && name === meIdentifier;
+              return (
+                <button
+                  type="button"
+                  key={name}
+                  onClick={() => onToggle(name)}
+                  className={cn(
+                    "flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left",
+                    selected
+                      ? "bg-primary/10 text-foreground"
+                      : "text-muted-foreground hover:bg-muted",
+                  )}
+                >
+                  <span className="flex items-center gap-1.5 truncate">
+                    {showAvatars ? (
+                      <AssigneeAvatar
+                        name={name}
+                        providerKind={providerKind}
+                        providerHasAvatars={providerHasAvatars}
+                      />
+                    ) : null}
+                    <span className="truncate">{name}</span>
+                    {isMe ? (
+                      <span className="font-mono text-[9px] uppercase text-muted-foreground-faint">
+                        you
                       </span>
-                      {selected ? <Check aria-hidden="true" className="size-3" /> : null}
+                    ) : null}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="font-mono text-[9px] tabular-nums text-muted-foreground-faint">
+                      {n}
                     </span>
-                  </ListboxOption>
-                );
-              })}
-            </>
-          ) : null}
-        </ListboxOptions>
-      </div>
-    </Listbox>
+                    {selected ? <Check aria-hidden="true" className="size-3" /> : null}
+                  </span>
+                </button>
+              );
+            })}
+          </>
+        ) : null}
+      </PopoverContent>
+    </Popover>
   );
 }

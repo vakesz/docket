@@ -2,7 +2,6 @@
 
 import { ExternalLink } from "lucide-react";
 import Link from "next/link";
-import { metaLabelFaintClass } from "@/lib/form-classes";
 import { displayTag, formatKind } from "@/lib/format";
 import { freshnessTone } from "@/lib/staleness";
 import { cn } from "@/lib/utils";
@@ -58,12 +57,14 @@ export function ItemRow({
           "flex w-full flex-col gap-1 px-3 py-2 text-left transition-colors",
           "hover:bg-muted",
           selected && "bg-muted",
-          tone === "warning" && "bg-warning/10 hover:bg-warning/10/70",
-          tone === "stale" && "bg-destructive/10 hover:bg-destructive/10/70",
+          tone === "warning" && "bg-warning/10 hover:bg-warning/15",
+          tone === "stale" && "bg-destructive/10 hover:bg-destructive/15",
         )}
       >
         <div className="flex items-center gap-2 text-xs">
-          <span className={metaLabelFaintClass}>{formatKind(item.kind)}</span>
+          <span className="text-xs uppercase tracking-wide text-muted-foreground-faint">
+            {formatKind(item.kind)}
+          </span>
           <StatePill state={item.state} />
           {pinned && (
             <span className="font-mono text-[10px] text-primary" title="Pinned">
@@ -132,7 +133,9 @@ export function PinnedRow({
         selected && "bg-muted",
       )}
     >
-      <span className={metaLabelFaintClass}>{formatKind(item.kind)}</span>
+      <span className="text-xs uppercase tracking-wide text-muted-foreground-faint">
+        {formatKind(item.kind)}
+      </span>
       <StatePill state={item.state} />
       <span className="flex-1 truncate text-foreground">{item.title}</span>
       <span className="font-mono text-[10px] text-muted-foreground-faint">

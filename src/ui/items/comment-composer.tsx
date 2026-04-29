@@ -1,10 +1,11 @@
 "use client";
 
-import { Button, Textarea } from "@headlessui/react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { xsAccentButtonClass } from "@/lib/form-classes";
+import { useId, useState } from "react";
 import { trpc } from "@/lib/trpc-client";
+import { Button } from "@/ui/primitives/button";
+import { Label } from "@/ui/primitives/label";
+import { Textarea } from "@/ui/primitives/textarea";
 import { ProposalDialog } from "@/ui/proposals/proposal-dialog";
 
 /**
@@ -25,6 +26,7 @@ export function CommentComposer({
   const utils = trpc.useUtils();
   const [pendingProposalId, setPendingProposalId] = useState<string | null>(null);
   const [body, setBody] = useState("");
+  const fieldId = useId();
 
   const propose = trpc.proposals.proposeComment.useMutation({
     onSuccess: async (res) => {
@@ -50,27 +52,22 @@ export function CommentComposer({
         propose.mutate({ projectId, providerItemId, bodyMd: trimmed });
       }}
     >
-      <label
-        htmlFor="comment-body"
+      <Label
+        htmlFor={fieldId}
         className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground"
       >
         Add comment
-      </label>
+      </Label>
       <Textarea
-        id="comment-body"
+        id={fieldId}
         value={body}
         onChange={(e) => setBody(e.target.value)}
         rows={3}
         placeholder="Write a comment…"
-        className="rounded-md border border-border bg-card p-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
         disabled={propose.isPending}
       />
       <div className="flex items-center gap-2">
-        <Button
-          type="submit"
-          disabled={propose.isPending || !body.trim()}
-          className={xsAccentButtonClass}
-        >
+        <Button type="submit" size="xs" disabled={propose.isPending || !body.trim()}>
           {propose.isPending ? "Posting…" : "Post comment"}
         </Button>
         {error ? <span className="text-xs text-destructive">{error}</span> : null}

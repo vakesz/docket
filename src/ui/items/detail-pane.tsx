@@ -1,7 +1,6 @@
 import { Clock, ExternalLink, GitBranch, Tag, User, UserX } from "lucide-react";
 import Link from "next/link";
 import { type ItemState, isItemKind, isItemState } from "@/core/types";
-import { metaLabelClass } from "@/lib/form-classes";
 import { displayTag, formatKind, formatRelative, providerProfileUrl } from "@/lib/format";
 import { ChatToggleButton } from "@/ui/items/chat-toggle-button";
 import { CommentAvatar } from "@/ui/items/comment-avatar";
@@ -80,7 +79,9 @@ export function DetailPane({
       <header className="flex flex-col gap-3 border-b border-border p-4">
         {/* Row 1: chips left, utility cluster + primary CTAs right */}
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className={metaLabelClass}>{formatKind(item.kind)}</span>
+          <span className="text-xs uppercase tracking-wide text-muted-foreground">
+            {formatKind(item.kind)}
+          </span>
           <StatePill state={item.state} />
           <CopyIdButton value={item.providerItemId} />
           <span className="ml-auto inline-flex items-center gap-1 text-muted-foreground-faint">

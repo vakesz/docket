@@ -1,9 +1,8 @@
 "use client";
 
-import { Button } from "@headlessui/react";
 import { MessageSquare, MessageSquareOff } from "lucide-react";
-import { xsBorderButtonClass } from "@/lib/form-classes";
 import { useChatPaneController } from "@/ui/conversations/chat-pane-context";
+import { Button } from "@/ui/primitives/button";
 
 /**
  * Header button that toggles the right-hand chat pane. The pane is closed
@@ -17,12 +16,13 @@ export function ChatToggleButton() {
   return (
     <Button
       type="button"
+      variant="outline"
+      size="xs"
       aria-pressed={open}
       onClick={() => setOpen(!open)}
       title={open ? "Close chat" : "Open chat"}
-      className={xsBorderButtonClass}
     >
-      <Icon aria-hidden="true" className="size-3" />
+      <Icon aria-hidden="true" />
       {open ? "Close chat" : "Chat"}
     </Button>
   );
