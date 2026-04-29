@@ -20,6 +20,10 @@ updates:
         update-types:
           - version-update:semver-major
 
+  # Covers the root Dockerfile (Node base image, pinned via the
+  # NODE_VERSION ARG default) and docker-compose.yml (the postgres image).
+  # Dependabot resolves ARG-based FROM tags, so updates to NODE_VERSION's
+  # default land here. Sub-major bumps land grouped; majors stay manual.
   - package-ecosystem: docker
     directory: /
     schedule:
@@ -27,6 +31,18 @@ updates:
       day: monday
     assignees:
       - vakesz
+    groups:
+      minor-patch:
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # Major base-image bumps (e.g. Node 22 -> 24, Postgres 16 -> 17) need
+      # manual review — they often coincide with engine constraints in
+      # transitive deps and OS-level breakage.
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
 
   - package-ecosystem: github-actions
     directory: /

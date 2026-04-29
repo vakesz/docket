@@ -1,12 +1,18 @@
 # syntax=docker/dockerfile:1.7
 #
-# Self-host image for Docket. Three stages:
+# Self-host image for Docket. Four stages:
 #
-#   deps     — install all node_modules (incl. dev deps; needed for prisma generate
-#              and next build). Cached on package.json + pnpm-lock.yaml.
-#   builder  — generate the Prisma client into ./src/db/generated and run `next build`.
-#   runner   — copy only the artifacts the runtime needs (node_modules, .next,
-#              prisma schema, generated client, bin scripts) and run `next start`.
+#   deps      — install all node_modules (incl. dev deps; needed for prisma
+#               generate and next build). Cached on package.json + pnpm-lock.yaml.
+#   builder   — generate the Prisma client into ./src/db/generated, run
+#               `next build`, and esbuild-bundle the seed/raw-sql scripts.
+#   prod-deps — install production-only node_modules from the same lockfile.
+#               This is what the runner ships, so devDependencies (esbuild,
+#               biome, vitest, tsx, prisma CLI, @types/*, …) never make it
+#               into the runtime image.
+#   runner    — copy only the artifacts the runtime needs (prod node_modules,
+#               .next, prisma schema, generated client, bundled bin scripts)
+#               and run `next start`.
 #
 # We deliberately do NOT use Next's `output: standalone` mode here — Prisma 7
 # with a custom client output directory hits enough tracing edge cases that
@@ -16,30 +22,38 @@
 # pnpm exists only at build time. The runner stage launches Next directly
 # via the bundled binary so the runtime image stays free of pnpm + corepack.
 
-ARG NODE_VERSION=22.11
+# Pinned to a full patch so the image is bit-for-bit reproducible.
+# Dependabot's `docker` ecosystem (.github/dependabot.yml) tracks this ARG
+# default and will open PRs when a new patch lands. Must satisfy the strictest
+# transitive engines.node constraint in pnpm-lock.yaml (currently Prisma 7's
+# `^22.12 || >=24`), which `engine-strict=true` in .npmrc enforces at install.
+ARG NODE_VERSION=22.22.2
+ARG PNPM_VERSION=9.15.4
 
 # ---------------------------------------------------------------------------
-# deps — install dependencies
+# deps — install all dependencies (dev + prod) for the build
 # ---------------------------------------------------------------------------
 FROM node:${NODE_VERSION}-alpine AS deps
 WORKDIR /app
 
-RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
+ARG PNPM_VERSION
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
 COPY package.json pnpm-lock.yaml .npmrc ./
 RUN pnpm install --frozen-lockfile
 
 # ---------------------------------------------------------------------------
-# builder — prisma generate + next build
+# builder — prisma generate + next build + bundle bin scripts
 # ---------------------------------------------------------------------------
 FROM node:${NODE_VERSION}-alpine AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
+ARG PNPM_VERSION
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
 COPY --from=deps /app/node_modules ./node_modules
-COPY package.json pnpm-lock.yaml .npmrc tsconfig.json next.config.ts postcss.config.mjs biome.json components.json ./
+COPY package.json pnpm-lock.yaml .npmrc tsconfig.json next.config.ts postcss.config.mjs ./
 COPY prisma ./prisma
 COPY prisma.config.ts ./prisma.config.ts
 COPY src ./src
@@ -62,6 +76,18 @@ RUN pnpm run build
 # `require()` from an ESM context (Prisma's runtime relies on this).
 RUN pnpm exec esbuild bin/seed-dev.ts --bundle --platform=node --target=node22 --format=esm --conditions=react-server --outfile=bin/seed-dev.mjs --banner:js='import { createRequire } from "node:module"; const require = createRequire(import.meta.url);'
 RUN pnpm exec esbuild bin/apply-raw-sql.ts --bundle --platform=node --target=node22 --format=esm --conditions=react-server --outfile=bin/apply-raw-sql.mjs --banner:js='import { createRequire } from "node:module"; const require = createRequire(import.meta.url);'
+
+# ---------------------------------------------------------------------------
+# prod-deps — production-only node_modules for the runtime image
+# ---------------------------------------------------------------------------
+FROM node:${NODE_VERSION}-alpine AS prod-deps
+WORKDIR /app
+
+ARG PNPM_VERSION
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
+
+COPY package.json pnpm-lock.yaml .npmrc ./
+RUN pnpm install --frozen-lockfile --prod
 
 # ---------------------------------------------------------------------------
 # runner — minimal runtime image
@@ -90,17 +116,30 @@ RUN addgroup -S -g 1001 docket && adduser -S -G docket -u 1001 docket
 # they survive container removal.
 RUN mkdir -p /app/data && chown -R docket:docket /app/data
 
-COPY --from=builder --chown=docket:docket /app/node_modules ./node_modules
+# Production-only node_modules (no devDependencies). Sourced from the
+# dedicated prod-deps stage so esbuild/biome/vitest/tsx/prisma-CLI never
+# reach the runtime image.
+COPY --from=prod-deps --chown=docket:docket /app/node_modules ./node_modules
 COPY --from=builder --chown=docket:docket /app/.next ./.next
 COPY --from=builder --chown=docket:docket /app/prisma ./prisma
 COPY --from=builder --chown=docket:docket /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder --chown=docket:docket /app/src/db/generated ./src/db/generated
-COPY --from=builder --chown=docket:docket /app/bin ./bin
+# Only the runtime files — the .ts sources are bundled into the .mjs files
+# in the builder stage and not needed at runtime.
+COPY --from=builder --chown=docket:docket /app/bin/docker-entrypoint.sh ./bin/docker-entrypoint.sh
+COPY --from=builder --chown=docket:docket /app/bin/seed-dev.mjs ./bin/seed-dev.mjs
+COPY --from=builder --chown=docket:docket /app/bin/apply-raw-sql.mjs ./bin/apply-raw-sql.mjs
 COPY --from=builder --chown=docket:docket /app/package.json ./package.json
 
 RUN chmod +x ./bin/docker-entrypoint.sh
 USER docket
 EXPOSE 3000
+
+# Liveness probe hits the public tRPC `health.ping` query (no auth required).
+# wget ships with busybox in node-alpine; --spider returns non-zero on a
+# non-2xx response, which is what HEALTHCHECK wants.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD wget --spider -q "http://127.0.0.1:${PORT}/api/trpc/health.ping" || exit 1
 
 ENTRYPOINT ["./bin/docker-entrypoint.sh"]
 CMD ["node", "node_modules/next/dist/bin/next", "start"]
