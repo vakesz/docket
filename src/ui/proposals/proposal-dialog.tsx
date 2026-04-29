@@ -1,17 +1,18 @@
 "use client";
 
-import {
-  Button,
-  Description,
-  Dialog,
-  DialogBackdrop,
-  DialogPanel,
-  DialogTitle,
-} from "@headlessui/react";
 import { useRouter } from "next/navigation";
 import { startTransition, useEffect, useRef } from "react";
-import { ghostButtonClass, primaryButtonClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
+import { Alert, AlertDescription } from "@/ui/primitives/alert";
+import { Button } from "@/ui/primitives/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/ui/primitives/dialog";
 import { ProposalDiffView } from "@/ui/proposals/proposal-diff-view";
 
 /**
@@ -90,73 +91,65 @@ export function ProposalDialog({
   return (
     <Dialog
       open={open}
-      onClose={() => {
-        if (!busy) onClose();
+      onOpenChange={(next) => {
+        if (!next && !busy) onClose();
       }}
-      className="relative z-50"
     >
-      <DialogBackdrop className="fixed inset-0 bg-black/50" />
-      <div className="fixed inset-0 flex w-screen items-center justify-center p-4">
-        <DialogPanel className="grid w-full max-w-2xl gap-4 rounded-lg border border-border bg-card p-6 text-foreground shadow-lg">
-          <div className="flex flex-col gap-1.5">
-            <DialogTitle className="text-lg font-semibold leading-none tracking-tight">
-              Confirm proposal
-            </DialogTitle>
-            <Description className="text-sm text-muted-foreground">
-              Review the change before it&rsquo;s sent to the provider. Nothing has been written
-              yet.
-            </Description>
-          </div>
+      <DialogContent className="sm:max-w-2xl" showCloseButton={false}>
+        <DialogHeader>
+          <DialogTitle>Confirm proposal</DialogTitle>
+          <DialogDescription>
+            Review the change before it&rsquo;s sent to the provider. Nothing has been written yet.
+          </DialogDescription>
+        </DialogHeader>
 
-          <div className="min-h-[6rem]">
-            {query.isPending ? (
-              <p className="text-sm text-muted-foreground">Loading proposal…</p>
-            ) : query.data?.isEmpty ? (
-              <p className="text-sm text-muted-foreground">
-                Nothing to apply — the change is already reflected. Dismissing…
-              </p>
-            ) : query.data ? (
-              <>
-                {query.data.row.advisory ? (
-                  <p className="mb-3 rounded-md border border-warning/40 bg-warning/10 p-2 text-xs text-warning">
-                    Heads up: {query.data.row.advisory}
-                  </p>
-                ) : null}
-                <ProposalDiffView diff={query.data.diff} />
-              </>
-            ) : null}
-          </div>
-
-          {errorMessage ? (
-            <p className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
-              {errorMessage}
+        <div className="min-h-[6rem]">
+          {query.isPending ? (
+            <p className="text-sm text-muted-foreground">Loading proposal…</p>
+          ) : query.data?.isEmpty ? (
+            <p className="text-sm text-muted-foreground">
+              Nothing to apply — the change is already reflected. Dismissing…
             </p>
+          ) : query.data ? (
+            <>
+              {query.data.row.advisory ? (
+                <Alert variant="warning" className="mb-3">
+                  <AlertDescription>Heads up: {query.data.row.advisory}</AlertDescription>
+                </Alert>
+              ) : null}
+              <ProposalDiffView diff={query.data.diff} />
+            </>
           ) : null}
+        </div>
 
-          <div className="flex flex-row justify-end gap-2">
-            <Button
-              disabled={busy || !proposalId}
-              onClick={() => {
-                if (!proposalId) return;
-                reject.mutate({ projectId, proposalId });
-              }}
-              className={ghostButtonClass}
-            >
-              {reject.isPending ? "Rejecting…" : "Reject"}
-            </Button>
-            <Button
-              disabled={busy || !proposalId || !query.data}
-              onClick={() => {
-                if (!proposalId) return;
-                confirm.mutate({ projectId, proposalId });
-              }}
-              className={primaryButtonClass}
-            >
-              {confirm.isPending ? "Confirming…" : "Confirm"}
-            </Button>
-          </div>
-        </DialogPanel>
-      </div>
+        {errorMessage ? (
+          <Alert variant="destructive">
+            <AlertDescription>{errorMessage}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        <DialogFooter>
+          <Button
+            variant="ghost"
+            disabled={busy || !proposalId}
+            onClick={() => {
+              if (!proposalId) return;
+              reject.mutate({ projectId, proposalId });
+            }}
+          >
+            {reject.isPending ? "Rejecting…" : "Reject"}
+          </Button>
+          <Button
+            disabled={busy || !proposalId || !query.data}
+            onClick={() => {
+              if (!proposalId) return;
+              confirm.mutate({ projectId, proposalId });
+            }}
+          >
+            {confirm.isPending ? "Confirming…" : "Confirm"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
     </Dialog>
   );
 }

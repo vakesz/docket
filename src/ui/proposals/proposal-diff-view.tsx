@@ -1,4 +1,5 @@
 import type { ProposalDiff } from "@/server/proposals/diff";
+import { Badge } from "@/ui/primitives/badge";
 
 export function ProposalDiffView({ diff }: { diff: ProposalDiff }) {
   switch (diff.kind) {
@@ -173,11 +174,18 @@ function Pill({
   children: React.ReactNode;
   tone?: "muted" | "primary";
 }) {
-  const cls =
-    tone === "primary"
-      ? "rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-primary"
-      : "rounded-full bg-muted px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-muted-foreground";
-  return <span className={cls}>{children}</span>;
+  return (
+    <Badge
+      variant={tone === "primary" ? "default" : "secondary"}
+      className={
+        tone === "primary"
+          ? "bg-primary/10 text-primary uppercase tracking-wide"
+          : "uppercase tracking-wide"
+      }
+    >
+      {children}
+    </Badge>
+  );
 }
 
 function DiffBlock({

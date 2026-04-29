@@ -2,9 +2,11 @@
 
 import { ChevronDown, X } from "lucide-react";
 import { useRef, useState } from "react";
-import { metaLabelClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
 import { cn } from "@/lib/utils";
+import { Alert, AlertDescription } from "@/ui/primitives/alert";
+import { Badge } from "@/ui/primitives/badge";
+import { Button } from "@/ui/primitives/button";
 import { ProposalDiffView } from "@/ui/proposals/proposal-diff-view";
 
 const KIND_LABELS: Record<string, string> = {
@@ -92,17 +94,20 @@ export function ProposalCard({
   }
   if (query.error) {
     return (
-      <section className="flex items-center gap-2 rounded border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-        <span className="flex-1">Failed to load proposal: {query.error.message}</span>
-        <button
-          type="button"
+      <Alert variant="destructive" className="flex items-center gap-2 py-2">
+        <AlertDescription className="flex-1">
+          Failed to load proposal: {query.error.message}
+        </AlertDescription>
+        <Button
+          variant="ghost"
+          size="icon-xs"
           onClick={onDismiss}
-          className="rounded p-1 hover:bg-destructive/15"
           aria-label="Dismiss"
+          className="text-destructive hover:bg-destructive/15 hover:text-destructive"
         >
-          <X className="h-3 w-3" />
-        </button>
-      </section>
+          <X />
+        </Button>
+      </Alert>
     );
   }
   if (!query.data) {
@@ -117,13 +122,13 @@ export function ProposalCard({
     row.status === "confirmed" && row.executedAt !== null && row.errorMessage === null;
   const isRejected = row.status === "rejected";
 
-  let pill: { tone: "success" | "danger" | "muted"; text: string } | null = null;
+  let pill: { variant: "success" | "destructive" | "secondary"; text: string } | null = null;
   if (isSuccess) {
-    pill = { tone: "success", text: autoApplied ? "Auto-applied" : "Confirmed" };
+    pill = { variant: "success", text: autoApplied ? "Auto-applied" : "Confirmed" };
   } else if (isFailed) {
-    pill = { tone: "danger", text: "Failed" };
+    pill = { variant: "destructive", text: "Failed" };
   } else if (isRejected) {
-    pill = { tone: "muted", text: "Rejected" };
+    pill = { variant: "secondary", text: "Rejected" };
   }
 
   return (
@@ -143,9 +148,7 @@ export function ProposalCard({
           <ChevronDown
             className={cn("h-3 w-3 shrink-0 transition-transform", open ? "" : "-rotate-90")}
           />
-          <span className="rounded bg-primary px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-primary-foreground">
-            propose
-          </span>
+          <Badge className="font-mono uppercase tracking-wider">propose</Badge>
           <span className="truncate font-medium">{kindLabel}</span>
           {row.providerItemId ? (
             <span className="truncate font-mono text-[11px] text-muted-foreground-faint">
@@ -154,45 +157,43 @@ export function ProposalCard({
           ) : null}
         </button>
 
-        {pill ? <StatusPill tone={pill.tone}>{pill.text}</StatusPill> : null}
+        {pill ? (
+          <Badge variant={pill.variant} className="uppercase tracking-wide">
+            {pill.text}
+          </Badge>
+        ) : null}
 
         {isPending ? (
           <div className="flex items-center gap-2">
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="xs"
               disabled={busy}
               onClick={() => reject.mutate({ projectId, proposalId })}
-              className="rounded border border-border bg-background px-2 py-1 text-xs text-foreground hover:bg-muted disabled:opacity-60"
             >
               {reject.isPending ? "Rejecting…" : "Reject"}
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              size="xs"
               disabled={busy}
               onClick={() => confirm.mutate({ projectId, proposalId })}
-              className="rounded bg-primary px-2 py-1 text-xs font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-60"
             >
               {confirm.isPending ? "Confirming…" : "Confirm"}
-            </button>
+            </Button>
           </div>
         ) : (
-          <button
-            type="button"
-            onClick={onDismiss}
-            className="rounded p-1 text-muted-foreground-faint hover:bg-muted hover:text-foreground"
-            aria-label="Dismiss"
-          >
-            <X className="h-3 w-3" />
-          </button>
+          <Button variant="ghost" size="icon-xs" onClick={onDismiss} aria-label="Dismiss">
+            <X />
+          </Button>
         )}
       </header>
 
       {open ? (
         <div className="border-t border-border px-3 py-2">
           {row.advisory ? (
-            <p className="mb-3 rounded-md border border-warning/40 bg-warning/10 p-2 text-xs text-warning">
-              Heads up: {row.advisory}
-            </p>
+            <Alert variant="warning" className="mb-3">
+              <AlertDescription>Heads up: {row.advisory}</AlertDescription>
+            </Alert>
           ) : null}
           <ProposalDiffView diff={diff} />
         </div>
@@ -200,45 +201,22 @@ export function ProposalCard({
 
       {isFailed && row.errorMessage ? (
         <div className="border-t border-border px-3 py-2">
-          <p className={cn("mb-1", metaLabelClass)}>Provider error</p>
-          <p className="rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1 text-xs text-destructive">
-            {row.errorMessage}
+          <p className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">
+            Provider error
           </p>
+          <Alert variant="destructive">
+            <AlertDescription>{row.errorMessage}</AlertDescription>
+          </Alert>
         </div>
       ) : null}
 
       {mutationError ? (
         <div className="border-t border-border px-3 py-2">
-          <p className="rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1 text-xs text-destructive">
-            {mutationError}
-          </p>
+          <Alert variant="destructive">
+            <AlertDescription>{mutationError}</AlertDescription>
+          </Alert>
         </div>
       ) : null}
     </section>
-  );
-}
-
-function StatusPill({
-  tone,
-  children,
-}: {
-  tone: "success" | "danger" | "muted";
-  children: React.ReactNode;
-}) {
-  const cls =
-    tone === "success"
-      ? "border-success/40 bg-success/10 text-success"
-      : tone === "danger"
-        ? "border-destructive/40 bg-destructive/10 text-destructive"
-        : "border-border bg-muted text-muted-foreground";
-  return (
-    <span
-      className={cn(
-        "rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide",
-        cls,
-      )}
-    >
-      {children}
-    </span>
   );
 }
