@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { primaryButtonClass } from "@/lib/form-classes";
+import { Button } from "@/ui/primitives/button";
 
 /**
  * Root error boundary for any uncaught error in pages or layouts.
@@ -30,13 +30,9 @@ export default function RootError({
             Error ref: <code className="font-mono">{error.digest}</code>
           </p>
         ) : null}
-        <button
-          type="button"
-          onClick={() => reset()}
-          className={`${primaryButtonClass} self-start`}
-        >
+        <Button type="button" onClick={() => reset()} className="self-start">
           Try again
-        </button>
+        </Button>
       </div>
     </div>
   );

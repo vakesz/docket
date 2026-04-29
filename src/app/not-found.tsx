@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { primaryButtonClass } from "@/lib/form-classes";
+import { Button } from "@/ui/primitives/button";
 
 export default function NotFound() {
   return (
@@ -9,9 +9,9 @@ export default function NotFound() {
         <p className="text-sm text-muted-foreground">
           That page doesn&rsquo;t exist, or you don&rsquo;t have access to it.
         </p>
-        <Link href="/" className={`${primaryButtonClass} self-start`}>
-          Back to projects
-        </Link>
+        <Button asChild className="self-start">
+          <Link href="/">Back to projects</Link>
+        </Button>
       </div>
     </div>
   );

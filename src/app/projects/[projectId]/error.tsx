@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect } from "react";
-import { primaryButtonClass, secondaryButtonClass } from "@/lib/form-classes";
+import { Button } from "@/ui/primitives/button";
 
 /**
  * Project-scope error boundary. Catches failures inside any project page so
@@ -30,12 +30,12 @@ export default function ProjectError({
           </p>
         ) : null}
         <div className="flex gap-2">
-          <button type="button" onClick={() => reset()} className={primaryButtonClass}>
+          <Button type="button" onClick={() => reset()}>
             Try again
-          </button>
-          <Link href="/" className={secondaryButtonClass}>
-            Back to projects
-          </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/">Back to projects</Link>
+          </Button>
         </div>
       </div>
     </div>
