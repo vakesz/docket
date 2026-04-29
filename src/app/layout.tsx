@@ -3,7 +3,7 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import { AppProviders } from "@/app/providers";
 import { publicBaseUrl } from "@/lib/public-base-url";
 import { Toaster } from "@/ui/primitives/sonner";
-import { ThemeBootScript } from "@/ui/shell/theme-boot-script";
+import { ThemeProvider } from "@/ui/shell/theme-provider";
 import "./globals.css";
 
 const inter = Inter({
@@ -43,12 +43,11 @@ export default function RootLayout({
       className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <head>
-        <ThemeBootScript />
-      </head>
       <body className="min-h-full flex flex-col bg-background text-foreground">
-        <AppProviders>{children}</AppProviders>
-        <Toaster />
+        <ThemeProvider>
+          <AppProviders>{children}</AppProviders>
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );

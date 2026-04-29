@@ -7,7 +7,7 @@ import { Badge } from "@/ui/primitives/badge";
 import { Button } from "@/ui/primitives/button";
 import { MCP_TEMPLATES, type McpTemplate } from "./templates";
 
-const FEATURED_IDS = new Set(["github", "context7", "deepwiki", "notion"]);
+const FEATURED_IDS = new Set(["github", "notion", "atlassian", "linear"]);
 
 /**
  * Template chip grid above the free-form add form. Clicking "Add" stages
@@ -56,7 +56,10 @@ export function McpTemplatePicker({
       className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-3 shadow-sm"
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium text-foreground">{t.label}</span>
+        <span className="flex min-w-0 items-center gap-2">
+          <TemplateIcon template={t} />
+          <span className="truncate text-sm font-medium text-foreground">{t.label}</span>
+        </span>
         <Badge variant="secondary" className="uppercase tracking-wide">
           {authBadge(t)}
         </Badge>
@@ -114,6 +117,23 @@ export function McpTemplatePicker({
       )}
     </section>
   );
+}
+
+function TemplateIcon({ template }: { template: McpTemplate }) {
+  if (template.iconDark) {
+    return (
+      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center">
+        <img src={template.icon} alt="" className="h-7 w-7 dark:hidden" aria-hidden="true" />
+        <img
+          src={template.iconDark}
+          alt=""
+          className="hidden h-7 w-7 dark:block"
+          aria-hidden="true"
+        />
+      </span>
+    );
+  }
+  return <img src={template.icon} alt="" className="h-7 w-7 shrink-0" aria-hidden="true" />;
 }
 
 function authBadge(t: McpTemplate): string {

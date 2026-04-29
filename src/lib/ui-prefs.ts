@@ -4,10 +4,9 @@
  * Browser-local UI preferences.
  *
  * These deliberately bypass the Setting table — they're cosmetic,
- * device-specific, and shouldn't sync across machines. Tone matches
- * `lib/theme.ts`: tiny read/write functions plus a hook that subscribes
- * to a custom event so multiple mounts stay in sync without prop
- * drilling.
+ * device-specific, and shouldn't sync across machines. Tiny read/write
+ * functions plus a hook that subscribes to a custom event so multiple
+ * mounts stay in sync without prop drilling.
  *
  * Keep this list small. If a preference grows server-side semantics
  * (gates a feature, drives audit, etc.) promote it into the catalog.

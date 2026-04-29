@@ -37,6 +37,10 @@ export type McpTemplate = {
   supportsOauth: boolean;
   oauthHint?: string;
   docsUrl: string;
+  /** Public-served path to the brand SVG used at the chip head. */
+  icon: string;
+  /** Optional dark-theme variant when the light-theme SVG doesn't read on a dark background. */
+  iconDark?: string;
 };
 
 export const MCP_TEMPLATES: McpTemplate[] = [
@@ -59,6 +63,8 @@ export const MCP_TEMPLATES: McpTemplate[] = [
       },
     ],
     docsUrl: "https://docs.github.com/en/copilot/how-tos/provide-context/use-mcp",
+    icon: "/mcp-icons/github_light.svg",
+    iconDark: "/mcp-icons/github_dark.svg",
   },
   {
     id: "sentry",
@@ -78,6 +84,7 @@ export const MCP_TEMPLATES: McpTemplate[] = [
       },
     ],
     docsUrl: "https://docs.sentry.io/product/sentry-mcp/",
+    icon: "/mcp-icons/sentry.svg",
   },
   {
     id: "atlassian",
@@ -97,6 +104,7 @@ export const MCP_TEMPLATES: McpTemplate[] = [
       },
     ],
     docsUrl: "https://www.atlassian.com/platform/remote-mcp-server",
+    icon: "/mcp-icons/atlassian.svg",
   },
   {
     id: "linear",
@@ -117,6 +125,7 @@ export const MCP_TEMPLATES: McpTemplate[] = [
       },
     ],
     docsUrl: "https://linear.app/docs/mcp",
+    icon: "/mcp-icons/linear.svg",
   },
   {
     id: "notion",
@@ -138,6 +147,7 @@ export const MCP_TEMPLATES: McpTemplate[] = [
       },
     ],
     docsUrl: "https://developers.notion.com/docs/get-started-with-mcp",
+    icon: "/mcp-icons/notion.svg",
   },
   {
     id: "context7",
@@ -156,6 +166,7 @@ export const MCP_TEMPLATES: McpTemplate[] = [
       },
     ],
     docsUrl: "https://github.com/upstash/context7",
+    icon: "/mcp-icons/mcp.svg",
   },
   {
     id: "deepwiki",
@@ -167,6 +178,7 @@ export const MCP_TEMPLATES: McpTemplate[] = [
     supportsOauth: false,
     fields: [],
     docsUrl: "https://cognition.ai/blog/deepwiki-mcp-server",
+    icon: "/mcp-icons/mcp.svg",
   },
   {
     id: "cloudflare-docs",
@@ -178,6 +190,7 @@ export const MCP_TEMPLATES: McpTemplate[] = [
     supportsOauth: false,
     fields: [],
     docsUrl: "https://developers.cloudflare.com/agents/model-context-protocol/",
+    icon: "/mcp-icons/cloudflare.svg",
   },
 ];
 
