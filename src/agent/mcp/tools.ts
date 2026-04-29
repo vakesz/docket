@@ -48,6 +48,11 @@ function adaptTool(
       description: schema.description || `MCP tool '${schema.name}' on server '${server.name}'`,
       parameters: schema.inputSchema,
     },
+    // MCP tools wrap arbitrary remote payloads — we have no schema to
+    // tell which fields are foreign and which are server-controlled. Full
+    // scan it is. Tagged explicitly so the registry-coverage arch test
+    // can confirm no MCP tool slips through unclassified.
+    guardrailScan: { mode: "full" },
     handler: async (raw) => {
       try {
         const args = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;

@@ -1,7 +1,7 @@
 # Keep the build context clean: nothing built locally is allowed in.
 # Every artifact the runtime image needs is produced inside the builder stage.
 
-# Dependencies (reinstalled in the deps stage from package.json + bun.lock).
+# Dependencies (reinstalled in the deps stage from package.json + pnpm-lock.yaml).
 node_modules
 **/node_modules
 
@@ -23,8 +23,9 @@ next-env.d.ts
 # Prisma client (regenerated inside the builder stage).
 src/db/generated
 
-# Locally-bundled seed (the builder stage rebuilds bin/seed-dev.js from .ts).
-bin/seed-dev.js
+# Locally-bundled seed (the builder stage rebuilds bin/seed-dev.mjs from .ts).
+bin/seed-dev.mjs
+bin/apply-raw-sql.mjs
 
 # Test / coverage artifacts.
 coverage
@@ -53,8 +54,8 @@ CLAUDE.md
 .claude
 .agent-logs
 
-# Bun / package-manager caches and logs.
-.bun
+# Package-manager caches and logs.
+.pnpm-store
 *.log
 npm-debug.log*
 yarn-debug.log*

@@ -3,36 +3,43 @@
 # Self-host image for Docket. Three stages:
 #
 #   deps     — install all node_modules (incl. dev deps; needed for prisma generate
-#              and next build). Cached on package.json + bun.lock.
+#              and next build). Cached on package.json + pnpm-lock.yaml.
 #   builder  — generate the Prisma client into ./src/db/generated and run `next build`.
 #   runner   — copy only the artifacts the runtime needs (node_modules, .next,
-#              prisma schema, generated client, bin scripts) and run `next start` via bun.
+#              prisma schema, generated client, bin scripts) and run `next start`.
 #
 # We deliberately do NOT use Next's `output: standalone` mode here — Prisma 7
-# with a custom client output directory + Bun runtime hits enough tracing
-# edge cases that the marginal image-size win isn't worth the moving parts.
-# Revisit if image size becomes a real cost.
+# with a custom client output directory hits enough tracing edge cases that
+# the marginal image-size win isn't worth the moving parts. Revisit if image
+# size becomes a real cost.
+#
+# pnpm exists only at build time. The runner stage launches Next directly
+# via the bundled binary so the runtime image stays free of pnpm + corepack.
 
-ARG BUN_VERSION=1.3.13
+ARG NODE_VERSION=22.11
 
 # ---------------------------------------------------------------------------
 # deps — install dependencies
 # ---------------------------------------------------------------------------
-FROM oven/bun:${BUN_VERSION}-alpine AS deps
+FROM node:${NODE_VERSION}-alpine AS deps
 WORKDIR /app
 
-COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile
+RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
+
+COPY package.json pnpm-lock.yaml .npmrc ./
+RUN pnpm install --frozen-lockfile
 
 # ---------------------------------------------------------------------------
 # builder — prisma generate + next build
 # ---------------------------------------------------------------------------
-FROM oven/bun:${BUN_VERSION}-alpine AS builder
+FROM node:${NODE_VERSION}-alpine AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 
+RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
+
 COPY --from=deps /app/node_modules ./node_modules
-COPY package.json bun.lock tsconfig.json next.config.ts postcss.config.mjs biome.json components.json ./
+COPY package.json pnpm-lock.yaml .npmrc tsconfig.json next.config.ts postcss.config.mjs biome.json components.json ./
 COPY prisma ./prisma
 COPY prisma.config.ts ./prisma.config.ts
 COPY src ./src
@@ -42,22 +49,24 @@ COPY bin ./bin
 # artifact that may have slipped into the build context before we generate
 # our own. If these existed in the context, they shouldn't influence the
 # image we ship.
-RUN rm -rf .next out .turbo .vercel build dist src/db/generated bin/seed-dev.js bin/apply-raw-sql.js \
+RUN rm -rf .next out .turbo .vercel build dist src/db/generated bin/seed-dev.mjs bin/apply-raw-sql.mjs \
     && find . -name '*.tsbuildinfo' -delete
 
-RUN bunx prisma generate
-RUN bun run build
+RUN pnpm exec prisma generate
+RUN pnpm run build
 # Bundle the bootstrap seed and the post-`prisma db push` raw-SQL script
-# into single self-contained JS files so the runtime image doesn't need the
-# TS source tree. `--conditions react-server` resolves the `server-only`
+# into single self-contained ESM files so the runtime image doesn't need the
+# TS source tree. `--conditions=react-server` resolves the `server-only`
 # marker package to its no-op shim instead of the throw-on-import default.
-RUN bun build bin/seed-dev.ts --target=bun --conditions react-server --outfile bin/seed-dev.js
-RUN bun build bin/apply-raw-sql.ts --target=bun --conditions react-server --outfile bin/apply-raw-sql.js
+# The `createRequire` banner lets any CJS deps inside the bundle keep using
+# `require()` from an ESM context (Prisma's runtime relies on this).
+RUN pnpm exec esbuild bin/seed-dev.ts --bundle --platform=node --target=node22 --format=esm --conditions=react-server --outfile=bin/seed-dev.mjs --banner:js='import { createRequire } from "node:module"; const require = createRequire(import.meta.url);'
+RUN pnpm exec esbuild bin/apply-raw-sql.ts --bundle --platform=node --target=node22 --format=esm --conditions=react-server --outfile=bin/apply-raw-sql.mjs --banner:js='import { createRequire } from "node:module"; const require = createRequire(import.meta.url);'
 
 # ---------------------------------------------------------------------------
 # runner — minimal runtime image
 # ---------------------------------------------------------------------------
-FROM oven/bun:${BUN_VERSION}-alpine AS runner
+FROM node:${NODE_VERSION}-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -94,4 +103,4 @@ USER docket
 EXPOSE 3000
 
 ENTRYPOINT ["./bin/docker-entrypoint.sh"]
-CMD ["bun", "run", "start"]
+CMD ["node", "node_modules/next/dist/bin/next", "start"]

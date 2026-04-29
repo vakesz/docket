@@ -3,7 +3,8 @@
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](https://nextjs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-6-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
-[![Bun](https://img.shields.io/badge/Bun-1.3-fbf0df?logo=bun)](https://bun.sh)
+[![Node](https://img.shields.io/badge/Node-22-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+[![pnpm](https://img.shields.io/badge/pnpm-9-f69220?logo=pnpm&logoColor=white)](https://pnpm.io)
 [![Prisma](https://img.shields.io/badge/Prisma-7-2d3748?logo=prisma)](https://www.prisma.io)
 [![Self-hostable](https://img.shields.io/badge/self--hostable-Docker-2496ed?logo=docker&logoColor=white)](https://docs.docker.com)
 
@@ -11,7 +12,7 @@
 
 One web app over your GitHub Issues and Azure DevOps work items. The backlog, the selected item, and a chat panel live on the same screen. Every write — UI button, agent tool, raw API — flows through a **proposal → diff → confirm** gate, so the assistant can never quietly transition a ticket, edit a description, or post a comment behind your back.
 
-**Stack:** Next.js 16 App Router · tRPC v11 · Prisma 7 · Postgres 16 · NextAuth v5 · Bun 1.3
+**Stack:** Next.js 16 App Router · tRPC v11 · Prisma 7 · Postgres 16 · NextAuth v5 · Node 22 (pnpm 9)
 
 ---
 
@@ -55,24 +56,25 @@ docker compose pull && docker compose up -d --build   # update
 ## Local development
 
 ```bash
-bun install
+corepack enable          # one-time, activates the pinned pnpm version
+pnpm install
 cp .env.example .env.local
-$EDITOR .env.local      # DATABASE_URL required; DEV_* seeds optional
-bun run dev             # prisma db push + seed + next dev (Turbopack)
+$EDITOR .env.local       # DATABASE_URL required; DEV_* seeds optional
+pnpm dev                 # prisma db push + seed + next dev (Turbopack)
 ```
 
 Leave `DEV_*` empty and you'll land on the setup wizard at `http://localhost:3000`. If you don't have a local Postgres, `docker compose up -d db` starts just the bundled DB service.
 
 ```bash
-bun run dev              # next dev (Turbopack) + auto-seed
-bun run build && bun run start   # production build
-bun run check            # biome + tsc + vitest
-bun run test             # vitest
-bun run test:watch       # vitest watch
-bunx prisma migrate dev  # schema migration
-bunx prisma db push      # push schema without a migration file
-bunx prisma generate     # regenerate client into src/db/generated/
-bunx prisma studio       # browse the DB
+pnpm dev                 # next dev (Turbopack) + auto-seed
+pnpm build && pnpm start # production build
+pnpm check               # biome + tsc + vitest
+pnpm test                # vitest
+pnpm test:watch          # vitest watch
+pnpm exec prisma migrate dev   # schema migration
+pnpm exec prisma db push       # push schema without a migration file
+pnpm exec prisma generate      # regenerate client into src/db/generated/
+pnpm exec prisma studio        # browse the DB
 ```
 
 ---

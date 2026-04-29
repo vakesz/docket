@@ -168,16 +168,58 @@ export class LlmJudgeGuardrail implements Guardrail {
     const text = args.untrusted !== undefined ? args.untrusted : stringifyToolResult(args.result);
     if (!text) return { action: "allow" };
     const snippet = text.slice(0, MAX_TOOL_RESULT_CHARS);
-    const userMsg = `tool=${args.toolName}\n---\n${snippet}`;
-    const { verdict, usage } = await this.classify(
+    // The classifier's user message is the snippet alone — no `tool=NAME`
+    // prefix. Verb-laden tool names ("propose_*", "delete_*") biased small
+    // models toward "injection" verdicts on otherwise-benign payloads.
+    const labels = ["safe", "suspicious", "injection"] as const;
+    const first = await this.classify(
       "tool_result",
       INJECTION_SYSTEM,
-      userMsg,
-      ["safe", "injection"],
+      snippet,
+      labels,
       signal,
       args.toolName,
     );
-    if (verdict !== "injection") return withUsage({ action: "allow" }, usage);
+    let usage = first.usage;
+    if (first.verdict === "safe" || first.verdict === null) {
+      return withUsage({ action: "allow" }, usage);
+    }
+    if (first.verdict === "suspicious") {
+      return withUsage(
+        {
+          action: "flag",
+          reason: `llm-judge: suspicious content in tool result (${args.toolName})`,
+          categories: ["suspicious"],
+        },
+        usage,
+      );
+    }
+    // first.verdict === "injection". When we're configured to block, run
+    // a second pass — gpt-5-nano with `reasoning_effort: minimal` is
+    // non-deterministic on opaque payloads, and one positive isn't enough
+    // to hard-stop the turn. Disagreement downgrades to `flag` so the
+    // user still sees a banner without losing their conversation.
+    if (this.blockOnInjection) {
+      const second = await this.classify(
+        "tool_result",
+        INJECTION_SYSTEM,
+        snippet,
+        labels,
+        signal,
+        args.toolName,
+      );
+      usage = mergeUsage(usage, second.usage);
+      if (second.verdict !== "injection") {
+        return withUsage(
+          {
+            action: "flag",
+            reason: `llm-judge: prompt injection suspected in tool result (${args.toolName}, single-shot only)`,
+            categories: ["injection"],
+          },
+          usage,
+        );
+      }
+    }
     const reason = `llm-judge: prompt injection in tool result (${args.toolName})`;
     const decision: GuardrailDecision = this.blockOnInjection
       ? { action: "block", reason, categories: ["injection"] }
@@ -334,6 +376,25 @@ function withUsage(
 ): GuardrailDecision {
   if (!usage) return decision;
   return { ...decision, usage } as GuardrailDecision;
+}
+
+/**
+ * Sum two usage blocks. Used by self-consistency in `checkToolResult` to
+ * bill the operator for both the first and the confirmation classify
+ * calls. Either side may be undefined (failed call → no usage surfaced).
+ */
+function mergeUsage(
+  a: GuardrailUsage | undefined,
+  b: GuardrailUsage | undefined,
+): GuardrailUsage | undefined {
+  if (!a) return b;
+  if (!b) return a;
+  const tokensIn = a.tokensIn + b.tokensIn;
+  const tokensOut = a.tokensOut + b.tokensOut;
+  if (a.costCents === undefined && b.costCents === undefined) {
+    return { tokensIn, tokensOut };
+  }
+  return { tokensIn, tokensOut, costCents: (a.costCents ?? 0) + (b.costCents ?? 0) };
 }
 
 /**

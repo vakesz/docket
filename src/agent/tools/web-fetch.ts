@@ -85,6 +85,11 @@ export const webFetchTool: ToolFactory = (ctx) => ({
       "Fetch a public URL and return its body. HTML responses are converted to cleaned markdown by default — head, script, style, noscript, iframe, embedded SVG, and HTML comments are stripped, and relative links are resolved to absolute URLs, so you only see the readable content. Pass `raw: true` to skip cleaning and get the original body verbatim — use this when the cleaned markdown looks wrong or empty, when you need to inspect raw HTML/JSON structure, or after a fetch returns `cleaned: false` with a `cleanError`. Non-HTML responses (JSON, XML, plain text, YAML) are always returned unchanged regardless of `raw`. Private IPs and cloud metadata endpoints are blocked. Project admins can disable the tool or restrict it to an allowlist of hosts in settings.",
     parameters: zodToJsonSchema(webFetchInputSchema),
   },
+  // The body comes straight from a third-party URL. The whole envelope
+  // (status / contentType / body) is foreign content — full scan is the
+  // only safe choice here. Tagged explicitly so the arch test doesn't
+  // need a "default = full" escape hatch.
+  guardrailScan: { mode: "full" },
   handler: async (raw) => {
     const args = webFetchInputSchema.parse(raw);
     const wantRaw = args.raw === true;

@@ -4,7 +4,7 @@ This file is the load-bearing reference for anyone (or anything) editing the cod
 
 ## Project Snapshot
 
-- **Next.js 16 App Router** + **tRPC v11** + **Prisma 7** + **Postgres 16** + **NextAuth v5**, running on **Bun**. One Node-shaped process serves the SSR pages (`src/app/`), the SPA-style React UI (`src/ui/`), the tRPC API at `/api/trpc/*` (`src/server/routers/`), and the SSE chat stream at `/api/projects/:id/conversations/:id/stream` (`src/app/api/`).
+- **Next.js 16 App Router** + **tRPC v11** + **Prisma 7** + **Postgres 16** + **NextAuth v5**, running on **Node 22** with **pnpm 9**. One Node process serves the SSR pages (`src/app/`), the SPA-style React UI (`src/ui/`), the tRPC API at `/api/trpc/*` (`src/server/routers/`), and the SSE chat stream at `/api/projects/:id/conversations/:id/stream` (`src/app/api/`).
 - **Layered ports-and-adapters.** Surfaces in `src/app/` and `src/ui/`. Canonical types in `src/core/`. Orchestration in `src/server/<feature>/` and `src/agent/`. Adapters in `src/providers/{github,azure-devops}/`, `src/server/secrets/`, `src/server/db.ts`, `src/server/logger.ts`.
 - **Multi-provider.** Built-ins: `github`, `azure_devops`. Specs registered in `src/server/provider-registry.ts`; concrete instances built per-user via `src/server/providers/build.ts` (work-item) and `src/server/providers/auth-build.ts` (NextAuth sign-in).
 - **Postgres-backed cache.** The provider stays the source of truth; `Item` rows in Postgres cache what the user has seen for instant filter/search. Memory, prompts, MCP server configs, settings, and the audit log all live in the same DB.
@@ -16,20 +16,21 @@ This file is the load-bearing reference for anyone (or anything) editing the cod
 ## Commands
 
 ```bash
-bun install
+corepack enable                         # one-time; activates the pinned pnpm version
+pnpm install
 cp .env.example .env.local              # at minimum: DATABASE_URL, AUTH_SECRET, plus DEV_* seeds
-bun run dev                             # predev: prisma db push + bin/seed-dev.ts, then next dev (Turbopack)
+pnpm dev                                # predev: prisma db push + bin/seed-dev.ts, then next dev (Turbopack)
 
-bun run build                           # next build
-bun run start                           # next start (production)
-bun run check                           # biome + tsc + vitest run
-bun run test                            # vitest run (full suite)
-bun run test:watch                      # vitest in watch mode
+pnpm build                              # next build
+pnpm start                              # next start (production)
+pnpm check                              # biome + tsc + vitest run
+pnpm test                               # vitest run (full suite)
+pnpm test:watch                         # vitest in watch mode
 
-bunx prisma migrate dev                 # apply schema changes against your dev DB
-bunx prisma db push                     # push the schema without producing a migration (dev/docker entrypoint)
-bunx prisma generate                    # regenerate the client into src/db/generated/
-bunx prisma studio                      # browse the DB
+pnpm exec prisma migrate dev            # apply schema changes against your dev DB
+pnpm exec prisma db push                # push the schema without producing a migration (dev/docker entrypoint)
+pnpm exec prisma generate               # regenerate the client into src/db/generated/
+pnpm exec prisma studio                 # browse the DB
 
 # Self-host stack
 docker compose up -d                    # start Postgres + app
@@ -182,18 +183,18 @@ Aspirational direction (consistent with current refactors, not a hard rule):
 - **Guardrail is pluggable and runs on every turn.** Kinds: `noop`, `pattern`, `llm-judge`, `composite`. The `llm-judge` kind uses the `guardrail`-role `LlmProvider` row (`src/agent/guardrail/llm-judge.ts`). Toggles: prompt-injection blocking, off-topic detection, scope check, output check. If `llm-judge` is configured but no matching provider row resolves, the pipeline falls back to `pattern`. LLM vendor SDK for the judge is quarantined to `src/agent/guardrail/llm-judge.ts`, which is one of the two allowed importers in `no-llm-vendor-leak.test.ts`.
 - **Encrypted-at-rest fields on `LlmProvider.apiKey` and `OauthProviderConfig.clientSecret`** use `enc:v1:<iv>:<ct+tag>`. Reads transparently decrypt; writes always encrypt. Plain-text legacy rows remain readable until the next write.
 - **Prisma client lives at `src/db/generated/`** (custom output dir, gitignored). Never import from `@prisma/client` — always from `@/db/generated/client`.
-- **The seed script is bundled for production.** The Docker builder runs `bun build bin/seed-dev.ts --target=bun --conditions react-server --outfile bin/seed-dev.js` so the runtime image doesn't need the TS source tree. The `--conditions react-server` flag resolves the `server-only` marker package to its no-op shim instead of throwing on import.
+- **The seed script is bundled for production.** The Docker builder runs `pnpm exec esbuild bin/seed-dev.ts --bundle --platform=node --target=node22 --format=esm --conditions=react-server --outfile=bin/seed-dev.mjs` (plus a `createRequire` banner so bundled CJS deps still resolve `require()`) so the runtime image doesn't need the TS source tree. The `--conditions=react-server` flag resolves the `server-only` marker package to its no-op shim instead of throwing on import. In dev the same scripts run via `tsx --conditions=react-server` (no build step).
 
 ## Testing
 
 - **Layout by intent.** `src/__arch__/` for architectural guards (regex-scanning tests that fail CI on forbidden imports). Co-located `*.test.ts` files for unit/service tests next to the module they cover. Integration tests against a test Postgres go in `tests/` if the surface area grows.
-- **Stack.** Vitest, with `bun run test` driving it. The arch tests are pure file-system scans — no DB, no fixtures. Service tests use Vitest mocking + a per-test Prisma transaction where touching the DB.
+- **Stack.** Vitest, with `pnpm test` driving it. The arch tests are pure file-system scans — no DB, no fixtures. Service tests use Vitest mocking + a per-test Prisma transaction where touching the DB.
 - **Architecture tests are not optional.** `src/__arch__/no-router-provider-import.test.ts`, `no-provider-write-leak.test.ts`, `no-audit-write-leak.test.ts`, `no-octokit-leak.test.ts`, `no-llm-vendor-leak.test.ts`, `no-nextauth-provider-leak.test.ts`, `no-source-mutation-tools.test.ts`, `tool-registration-order.test.ts`, `llm-kinds-have-adapters.test.ts`. If they fail, fix the leak — don't relax the test.
 - **When you change agent tooling, prompt loading, or the proposal executor**, cover both the pure unit and at least one router-level path that exercises the same flow.
 
 ## Linting and Code Style
 
-- **Biome** is the formatter and linter (`biome.json`). `bun run check` runs `biome check`, `tsc --noEmit`, then Vitest.
+- **Biome** is the formatter and linter (`biome.json`). `pnpm check` runs `biome check`, `tsc --noEmit`, then Vitest.
 - **TypeScript strict** is on. New code carries real types — no `any` placeholders, no `// @ts-expect-error` without a justification comment.
 - **Prefer editing existing files.** Default to no comments; only write a comment when the WHY is non-obvious (a hidden constraint, a workaround for a specific bug, an invariant a future reader would otherwise miss). Don't explain WHAT the code does — well-named identifiers already do that.
 - **No `Co-Authored-By: Claude` trailers** on commit messages. No emojis in source unless the user requests them.
@@ -201,5 +202,5 @@ Aspirational direction (consistent with current refactors, not a hard rule):
 ## When in doubt
 
 - **Skim** `src/server/proposals/executor.ts` and `src/agent/tools/registry.ts` — they're the spine of the safety story.
-- **Run** the architecture tests (`bun run test src/__arch__/`) before pushing a refactor.
+- **Run** the architecture tests (`pnpm test src/__arch__/`) before pushing a refactor.
 - **Read** [README.md](README.md) for the user-facing tour and self-hosting walkthrough.

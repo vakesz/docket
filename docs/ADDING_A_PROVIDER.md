@@ -375,8 +375,8 @@ state-map test is the smallest reference.
 Once everything's wired:
 
 ```bash
-bun run check                    # biome + tsc + vitest run
-bun run dev                      # next dev (Turbopack) + auto-seed
+pnpm check                       # biome + tsc + vitest run
+pnpm dev                         # next dev (Turbopack) + auto-seed
 ```
 
 Then through the UI:

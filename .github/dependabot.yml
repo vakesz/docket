@@ -1,7 +1,7 @@
 version: 2
 
 updates:
-  # Dependabot has no bun ecosystem — npm handles all package.json-based projects
+  # Dependabot's `npm` ecosystem covers all package.json-based projects, including pnpm.
   - package-ecosystem: npm
     directory: /
     schedule:

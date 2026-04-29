@@ -68,7 +68,7 @@ fi
 require_env DATABASE_URL "Postgres connection string, e.g. postgresql://docket:docket@db:5432/docket?schema=public"
 require_env PUBLIC_BASE_URL "Canonical URL the app is reached at, e.g. https://docket.example.com (no trailing slash)."
 
-# TODO: switch to `bunx prisma migrate deploy` before the first deployment
+# TODO: switch to `npx prisma migrate deploy` before the first deployment
 # that holds real user data. Reasons:
 #   - `db push --accept-data-loss` will silently drop columns/tables when
 #     the local schema diverges from the live DB. Fine for solo dev (no
@@ -77,24 +77,24 @@ require_env PUBLIC_BASE_URL "Canonical URL the app is reached at, e.g. https://d
 #     records them in `_prisma_migrations` — auditable history, idempotent
 #     re-runs across container boots, hand-editable for renames / backfills
 #     / partial uniques that `db push` can't express.
-# Migration: run `bunx prisma migrate dev --name init` once on a clean dev
-# DB to create the baseline, commit `prisma/migrations/`, then flip the
-# command below to `bunx prisma migrate deploy`.
+# Migration: run `pnpm exec prisma migrate dev --name init` once on a clean
+# dev DB to create the baseline, commit `prisma/migrations/`, then flip the
+# command below to `npx prisma migrate deploy`.
 echo "[entrypoint] Applying database schema (prisma db push)..."
-bunx prisma db push --accept-data-loss
+npx --no-install prisma db push --accept-data-loss
 
 # Raw-SQL post-push: pg_trgm extension, partial uniques on Setting, GIN
 # trgm indexes on Item. Idempotent. Runs before the seed so any code path
 # the seed exercises sees the final index set.
 echo "[entrypoint] Applying raw-SQL indexes (idempotent)..."
-bun run bin/apply-raw-sql.js || echo "[entrypoint] apply-raw-sql exited non-zero; continuing."
+node bin/apply-raw-sql.mjs || echo "[entrypoint] apply-raw-sql exited non-zero; continuing."
 
 # Bootstrap seed: writes the initial LlmProvider + OauthProviderConfig rows
 # from BOOTSTRAP/DEV_* env vars. Idempotent — once a row of a given kind
 # exists, the seed leaves it alone, so the wizard's writes and env-driven
 # writes coexist.
 echo "[entrypoint] Running bootstrap seed (idempotent)..."
-bun run bin/seed-dev.js || echo "[entrypoint] Seed exited non-zero; continuing."
+node bin/seed-dev.mjs || echo "[entrypoint] Seed exited non-zero; continuing."
 
 echo "[entrypoint] Starting: $*"
 exec "$@"
