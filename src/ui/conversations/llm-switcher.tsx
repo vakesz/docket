@@ -1,7 +1,13 @@
 "use client";
 
 import { trpc } from "@/lib/trpc-client";
-import { SelectField } from "@/ui/forms/select-field";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/ui/primitives/select";
 
 type LlmRow = {
   id: string;
@@ -12,6 +18,8 @@ type LlmRow = {
   isDefault: boolean;
   enabled: boolean;
 };
+
+const DEFAULT_VALUE = "default";
 
 /**
  * Per-conversation LLM picker, surfaced in the chat-pane header.
@@ -50,30 +58,34 @@ export function LlmSwitcher({
   const onlyOne = enabled.length <= 1;
   const disabled = !conversationId || onlyOne || setOverride.isPending;
 
-  const value = currentOverrideId ?? "default";
+  const value = currentOverrideId ?? DEFAULT_VALUE;
 
   return (
     <span className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground-faint">
       <span>LLM</span>
-      <SelectField
-        className="rounded-md py-0.5 pl-2 pr-7 text-[11px] normal-case tracking-normal"
+      <Select
         value={value}
         disabled={disabled}
-        onChange={(e) => {
+        onValueChange={(next) => {
           if (!conversationId) return;
-          const next = e.target.value === "default" ? null : e.target.value;
-          setOverride.mutate({ projectId, conversationId, llmProviderId: next });
+          const resolved = next === DEFAULT_VALUE ? null : next;
+          setOverride.mutate({ projectId, conversationId, llmProviderId: resolved });
         }}
       >
-        <option value="default">{labelForDefault(rows)}</option>
-        {enabled
-          .filter((r) => !r.isDefault)
-          .map((r) => (
-            <option key={r.id} value={r.id}>
-              {formatRow(r)}
-            </option>
-          ))}
-      </SelectField>
+        <SelectTrigger size="sm" className="h-6 py-0.5 text-[11px] normal-case tracking-normal">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={DEFAULT_VALUE}>{labelForDefault(rows)}</SelectItem>
+          {enabled
+            .filter((r) => !r.isDefault)
+            .map((r) => (
+              <SelectItem key={r.id} value={r.id}>
+                {formatRow(r)}
+              </SelectItem>
+            ))}
+        </SelectContent>
+      </Select>
     </span>
   );
 }

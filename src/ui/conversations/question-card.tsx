@@ -1,9 +1,9 @@
 "use client";
 
-import { Input } from "@headlessui/react";
 import { useState } from "react";
-import { metaLabelClass } from "@/lib/form-classes";
 import { cn } from "@/lib/utils";
+import { Button } from "@/ui/primitives/button";
+import { Input } from "@/ui/primitives/input";
 
 type QuestionPayload = {
   question: string;
@@ -64,7 +64,9 @@ export function QuestionCard({
         </span>
         <span className="font-mono text-[11px] text-muted-foreground">Awaiting your answer</span>
         {question.multiSelect && (
-          <span className={cn("ml-auto", metaLabelClass)}>multi-select</span>
+          <span className="ml-auto text-xs uppercase tracking-wide text-muted-foreground">
+            multi-select
+          </span>
         )}
       </header>
       <p className="whitespace-pre-wrap">{question.question}</p>
@@ -101,17 +103,12 @@ export function QuestionCard({
           setOther(e.target.value);
           if (!question.multiSelect) setSelected(new Set());
         }}
-        className="mt-3 w-full rounded border border-border bg-background px-2 py-1 text-xs text-foreground focus:border-primary focus:outline-none disabled:bg-muted"
+        className="mt-3"
       />
       <div className="mt-3 flex justify-end">
-        <button
-          type="button"
-          disabled={disabled || !ready}
-          onClick={submit}
-          className="rounded bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-60"
-        >
+        <Button type="button" size="xs" disabled={disabled || !ready} onClick={submit}>
           {disabled ? "Sending…" : "Submit"}
-        </button>
+        </Button>
       </div>
     </section>
   );

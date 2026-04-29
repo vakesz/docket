@@ -1,9 +1,7 @@
 "use client";
 
-import { Textarea } from "@headlessui/react";
 import { Send, Square } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { metaLabelFaintClass, microCapsButtonClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
 import { type ToolDisplayMode, useToolDisplayMode } from "@/lib/ui-prefs";
 import { cn } from "@/lib/utils";
@@ -16,7 +14,13 @@ import { ToolCallProgress, ToolCallRow } from "@/ui/conversations/tool-call-row"
 import { buildRenderUnits, type PersistedMessage } from "@/ui/conversations/transcript";
 import { useChatStream } from "@/ui/conversations/use-chat-stream";
 import { extractSeedKind } from "@/ui/items/suggest-seeds";
+import { Alert, AlertDescription } from "@/ui/primitives/alert";
+import { Textarea } from "@/ui/primitives/textarea";
 import { ProposalCard } from "@/ui/proposals/proposal-card";
+
+const MICRO_CAPS_BUTTON =
+  "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground hover:bg-muted hover:text-foreground";
+const META_LABEL_FAINT = "text-xs uppercase tracking-wide text-muted-foreground-faint";
 
 /**
  * Right pane of the workspace: per-item chat. Reuses the persisted
@@ -251,7 +255,7 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
           <button
             type="button"
             onClick={() => void startNewThread()}
-            className={microCapsButtonClass}
+            className={MICRO_CAPS_BUTTON}
             title={
               inFlight
                 ? "Stop this thread, dismiss any open proposals, and start a new one"
@@ -265,7 +269,7 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
               type="button"
               onClick={() => archive.mutate({ projectId, conversationId })}
               disabled={archive.isPending || inFlight}
-              className={cn(microCapsButtonClass, "disabled:opacity-50")}
+              className={cn(MICRO_CAPS_BUTTON, "disabled:opacity-50")}
               title="Archive this conversation"
             >
               Archive
@@ -328,27 +332,25 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
             {streaming.guardrailNotices.length > 0 && (
               <div className="mt-1 flex flex-col gap-1">
                 {streaming.guardrailNotices.map((notice, idx) => (
-                  <div
+                  <Alert
                     // biome-ignore lint/suspicious/noArrayIndexKey: notices are append-only within one stream.
                     key={`guardrail:${idx}`}
-                    className={
-                      notice.blocked
-                        ? "rounded border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive"
-                        : "rounded border border-warning/40 bg-warning/15 px-3 py-2 text-xs text-warning"
-                    }
+                    variant={notice.blocked ? "destructive" : "warning"}
                   >
-                    <span className="font-medium uppercase tracking-wide">
-                      {notice.blocked ? "Blocked" : "Flagged"} · {notice.stage.replace("_", " ")}
-                    </span>
-                    <span className="ml-2">{notice.reason}</span>
-                  </div>
+                    <AlertDescription className="text-xs">
+                      <span className="font-medium uppercase tracking-wide">
+                        {notice.blocked ? "Blocked" : "Flagged"} · {notice.stage.replace("_", " ")}
+                      </span>
+                      <span className="ml-2">{notice.reason}</span>
+                    </AlertDescription>
+                  </Alert>
                 ))}
               </div>
             )}
             {streaming.error && (
-              <div className="mt-2 rounded border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                {streaming.error}
-              </div>
+              <Alert variant="destructive" className="mt-2">
+                <AlertDescription className="text-xs">{streaming.error}</AlertDescription>
+              </Alert>
             )}
             {((!inFlight && proposalIds.length > 0) || streaming.question) && (
               <div className="sticky bottom-0 -mx-3 mt-3 flex flex-col gap-2 border-t border-border bg-background/95 px-3 pb-1 pt-2 backdrop-blur-sm">
@@ -408,9 +410,9 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
               ? "Ask the agent… (⏎ to send, ⇧⏎ for newline)"
               : "Ask the agent… (⇧⏎ to send, ⏎ for newline)"
           }
-          className="w-full resize-none rounded border border-border bg-background p-2 text-sm text-foreground focus:border-primary focus:outline-none disabled:bg-muted"
+          className="resize-none"
         />
-        <div className={cn("mt-1 flex items-center justify-between gap-2", metaLabelFaintClass)}>
+        <div className={cn("mt-1 flex items-center justify-between gap-2", META_LABEL_FAINT)}>
           <LlmSwitcher
             projectId={projectId}
             conversationId={conversationId}
@@ -426,7 +428,7 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
                   void stopStream({ projectId, itemId, conversationId });
                 }}
                 className={cn(
-                  microCapsButtonClass,
+                  MICRO_CAPS_BUTTON,
                   "border border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive",
                 )}
                 title="Stop generation"
@@ -438,7 +440,7 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
               <button
                 type="submit"
                 disabled={!draft.trim()}
-                className={cn(microCapsButtonClass, "disabled:opacity-50")}
+                className={cn(MICRO_CAPS_BUTTON, "disabled:opacity-50")}
                 title="Send message"
               >
                 <Send className="h-3 w-3" aria-hidden />

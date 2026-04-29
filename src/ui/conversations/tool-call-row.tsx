@@ -2,10 +2,11 @@
 
 import { ChevronRight } from "lucide-react";
 import { useState } from "react";
-import { metaLabelClass } from "@/lib/form-classes";
 import type { ToolDisplayMode } from "@/lib/ui-prefs";
 import { cn } from "@/lib/utils";
 import { condenseArgs, safeStringify } from "@/ui/conversations/transcript";
+
+const META_LABEL = "text-xs uppercase tracking-wide text-muted-foreground";
 
 export function ToolCallRow({
   name,
@@ -39,7 +40,7 @@ export function ToolCallRow({
 
   const errored = ok === false;
   const palette = errored ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning";
-  const hoverBg = errored ? "hover:bg-destructive/10/70" : "hover:bg-warning/10/70";
+  const hoverBg = errored ? "hover:bg-destructive/15" : "hover:bg-warning/15";
 
   const prettyArgs = args ? safeStringify(args) : null;
 
@@ -54,7 +55,7 @@ export function ToolCallRow({
         <ChevronRight
           className={cn("h-3 w-3 shrink-0 transition-transform", open && "rotate-90")}
         />
-        <span className={metaLabelClass}>{label}</span>
+        <span className={META_LABEL}>{label}</span>
         {status && <span className="font-mono text-[11px]">{status}</span>}
         {!open && preview && (
           <span className="truncate font-mono text-[11px] text-muted-foreground-faint">
@@ -66,7 +67,7 @@ export function ToolCallRow({
         <div className="flex flex-col">
           {prettyArgs !== null && (
             <div className="px-3 pb-2">
-              <div className={cn("mb-1", metaLabelClass)}>arguments</div>
+              <div className={cn("mb-1", META_LABEL)}>arguments</div>
               <pre className="whitespace-pre-wrap font-mono text-xs">{prettyArgs}</pre>
             </div>
           )}
@@ -74,7 +75,7 @@ export function ToolCallRow({
             <div
               className={cn("px-3 pb-2", prettyArgs !== null && "border-t border-border/40 pt-2")}
             >
-              <div className={cn("mb-1", metaLabelClass)}>result</div>
+              <div className={cn("mb-1", META_LABEL)}>result</div>
               <pre className="whitespace-pre-wrap font-mono text-xs">{result}</pre>
             </div>
           )}
