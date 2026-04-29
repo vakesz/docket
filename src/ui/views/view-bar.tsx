@@ -1,23 +1,26 @@
 "use client";
-import { Input } from "@headlessui/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useMemo, useState } from "react";
 import type { StateBucket } from "@/core/types";
-import {
-  errorMessageClass,
-  fieldClass,
-  metaLabelFaintClass,
-  xsBorderButtonClass,
-} from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
 import { cn } from "@/lib/utils";
-import { SelectField } from "@/ui/forms/select-field";
+import { Alert, AlertDescription } from "@/ui/primitives/alert";
+import { Button } from "@/ui/primitives/button";
+import { Input } from "@/ui/primitives/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/ui/primitives/select";
 
 type Props = {
   projectId: string;
 };
 
 const BUCKETS: readonly StateBucket[] = ["open", "closed", "all"];
+const NO_VIEW = "__none";
 
 /**
  * View bar for the items page.
@@ -107,20 +110,24 @@ export function ViewBar({ projectId }: Props) {
     <section className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-3 text-sm shadow-sm">
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">
-          <span className={metaLabelFaintClass}>View</span>
-          <SelectField
-            aria-label="View"
-            value={activeViewId}
-            onChange={(e) => navigateWith({ viewId: e.target.value || undefined })}
+          <span className="text-xs uppercase tracking-wide text-muted-foreground-faint">View</span>
+          <Select
+            value={activeViewId === "" ? NO_VIEW : activeViewId}
+            onValueChange={(next) => navigateWith({ viewId: next === NO_VIEW ? undefined : next })}
           >
-            <option value="">All items (no view)</option>
-            {(views.data ?? []).map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.name}
-                {v.isDefault ? " ★" : ""}
-              </option>
-            ))}
-          </SelectField>
+            <SelectTrigger aria-label="View" className="min-w-48">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NO_VIEW}>All items (no view)</SelectItem>
+              {(views.data ?? []).map((v) => (
+                <SelectItem key={v.id} value={v.id}>
+                  {v.name}
+                  {v.isDefault ? " ★" : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <nav className="flex items-center gap-1">
@@ -150,17 +157,19 @@ export function ViewBar({ projectId }: Props) {
         <div className="ml-auto flex items-center gap-2 text-xs">
           {activeView ? (
             <>
-              <button
+              <Button
                 type="button"
-                className="text-muted-foreground hover:text-foreground disabled:opacity-50"
+                variant="ghost"
+                size="xs"
                 disabled={setDefault.isPending || activeView.isDefault}
                 onClick={() => setDefault.mutate({ projectId, viewId: activeView.id })}
               >
                 {activeView.isDefault ? "Default ★" : "Make default"}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="text-destructive hover:opacity-80 disabled:opacity-50"
+                variant="destructive"
+                size="xs"
                 disabled={remove.isPending}
                 onClick={() => {
                   if (confirm(`Delete view “${activeView.name}”?`)) {
@@ -169,16 +178,12 @@ export function ViewBar({ projectId }: Props) {
                 }}
               >
                 Delete
-              </button>
+              </Button>
             </>
           ) : (
-            <button
-              type="button"
-              className="text-muted-foreground hover:text-foreground"
-              onClick={() => setShowForm((v) => !v)}
-            >
+            <Button type="button" variant="ghost" size="xs" onClick={() => setShowForm((v) => !v)}>
               {showForm ? "Cancel" : "Save current as view…"}
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -190,18 +195,23 @@ export function ViewBar({ projectId }: Props) {
             placeholder="View name (e.g. ‘My open work’)"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            className={`${fieldClass} flex-1`}
+            className="flex-1"
           />
-          <button
+          <Button
             type="submit"
+            variant="outline"
+            size="xs"
             disabled={create.isPending || !newName.trim()}
-            className={xsBorderButtonClass}
           >
             {create.isPending ? "Saving…" : "Save"}
-          </button>
+          </Button>
         </form>
       ) : null}
-      {create.error ? <p className={errorMessageClass}>{create.error.message}</p> : null}
+      {create.error ? (
+        <Alert variant="destructive">
+          <AlertDescription>{create.error.message}</AlertDescription>
+        </Alert>
+      ) : null}
     </section>
   );
 }

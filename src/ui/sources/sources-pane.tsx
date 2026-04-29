@@ -1,15 +1,11 @@
 "use client";
 
-import { Button, Input, Textarea } from "@headlessui/react";
 import { useRef, useState } from "react";
-import {
-  emptyStateClass,
-  errorMessageClass,
-  fieldClass,
-  xsAccentButtonClass,
-  xsDangerButtonClass,
-} from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
+import { Alert, AlertDescription } from "@/ui/primitives/alert";
+import { Button } from "@/ui/primitives/button";
+import { Input } from "@/ui/primitives/input";
+import { Textarea } from "@/ui/primitives/textarea";
 
 /**
  * Sources pane on the project detail page.
@@ -76,7 +72,6 @@ export function SourcesPane({ projectId }: { projectId: string }) {
               value={draftTitle}
               onChange={(e) => setDraftTitle(e.target.value)}
               placeholder="Title"
-              className={fieldClass}
               maxLength={200}
             />
           </div>
@@ -86,7 +81,6 @@ export function SourcesPane({ projectId }: { projectId: string }) {
               value={draftKind}
               onChange={(e) => setDraftKind(e.target.value)}
               placeholder="Kind (e.g. runbook)"
-              className={fieldClass}
               maxLength={64}
             />
           </div>
@@ -96,7 +90,6 @@ export function SourcesPane({ projectId }: { projectId: string }) {
           onChange={(e) => setDraftBody(e.target.value)}
           placeholder="Paste markdown, or upload a .md / .txt file below."
           rows={4}
-          className={fieldClass}
         />
         <div className="flex items-center justify-between gap-2">
           <Input
@@ -109,21 +102,21 @@ export function SourcesPane({ projectId }: { projectId: string }) {
               if (file) void handleFile(file);
             }}
           />
-          <Button
-            type="submit"
-            disabled={create.isPending || !draftTitle.trim()}
-            className={xsAccentButtonClass}
-          >
+          <Button type="submit" size="xs" disabled={create.isPending || !draftTitle.trim()}>
             {create.isPending ? "Saving…" : "Save source"}
           </Button>
         </div>
-        {create.error && <p className={errorMessageClass}>{create.error.message}</p>}
+        {create.error && (
+          <Alert variant="destructive">
+            <AlertDescription>{create.error.message}</AlertDescription>
+          </Alert>
+        )}
       </form>
 
       {list.isPending ? (
         <p className="text-sm italic text-muted-foreground">Loading sources…</p>
       ) : list.data?.length === 0 ? (
-        <p className={emptyStateClass}>
+        <p className="rounded-2xl border border-dashed border-border bg-card p-6 text-center text-sm text-muted-foreground">
           No sources yet. Add one above so the agent has material to cite.
         </p>
       ) : (
@@ -150,9 +143,10 @@ export function SourcesPane({ projectId }: { projectId: string }) {
               </div>
               <Button
                 type="button"
+                variant="destructive"
+                size="xs"
                 disabled={remove.isPending}
                 onClick={() => void remove.mutateAsync({ projectId, sourceId: s.id })}
-                className={xsDangerButtonClass}
               >
                 Delete
               </Button>
@@ -161,7 +155,11 @@ export function SourcesPane({ projectId }: { projectId: string }) {
         </ul>
       )}
 
-      {remove.error && <p className={errorMessageClass}>{remove.error.message}</p>}
+      {remove.error && (
+        <Alert variant="destructive">
+          <AlertDescription>{remove.error.message}</AlertDescription>
+        </Alert>
+      )}
     </section>
   );
 }

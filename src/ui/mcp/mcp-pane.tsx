@@ -1,18 +1,12 @@
 "use client";
 
-import { Button, Input, Textarea } from "@headlessui/react";
 import { useState } from "react";
-import {
-  badgeClass,
-  emptyStateClass,
-  errorMessageClass,
-  fieldClass,
-  fieldMonoClass,
-  xsAccentButtonClass,
-  xsBorderButtonClass,
-  xsDangerButtonClass,
-} from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
+import { Alert, AlertDescription } from "@/ui/primitives/alert";
+import { Badge } from "@/ui/primitives/badge";
+import { Button } from "@/ui/primitives/button";
+import { Input } from "@/ui/primitives/input";
+import { Textarea } from "@/ui/primitives/textarea";
 
 /**
  * MCP servers pane on the project detail page.
@@ -93,7 +87,6 @@ export function McpPane({ projectId }: { projectId: string }) {
               value={draftName}
               onChange={(e) => setDraftName(e.target.value)}
               placeholder="server-name (lowercase, '-' or '_')"
-              className={fieldClass}
               maxLength={64}
               pattern="[a-z0-9][a-z0-9_-]*"
             />
@@ -104,7 +97,6 @@ export function McpPane({ projectId }: { projectId: string }) {
               value={draftUrl}
               onChange={(e) => setDraftUrl(e.target.value)}
               placeholder="https://mcp.example.com/sse"
-              className={fieldClass}
               maxLength={500}
             />
           </div>
@@ -114,7 +106,7 @@ export function McpPane({ projectId }: { projectId: string }) {
           onChange={(e) => setDraftHeaders(e.target.value)}
           placeholder='Optional headers JSON, e.g. {"Authorization": "Bearer ..."}'
           rows={2}
-          className={`${fieldMonoClass} text-xs`}
+          className="font-mono text-xs"
         />
         <p className="text-xs text-muted-foreground">
           Exposes a remote MCP server's tools to the agent. The name is the tool prefix the agent
@@ -125,20 +117,28 @@ export function McpPane({ projectId }: { projectId: string }) {
           <span className="text-xs text-muted-foreground">{list.data?.length ?? 0} configured</span>
           <Button
             type="submit"
+            size="xs"
             disabled={create.isPending || !draftName.trim() || !draftUrl.trim()}
-            className={xsAccentButtonClass}
           >
             {create.isPending ? "Adding…" : "Add server"}
           </Button>
         </div>
-        {headersError && <p className={errorMessageClass}>{headersError}</p>}
-        {create.error && <p className={errorMessageClass}>{create.error.message}</p>}
+        {headersError && (
+          <Alert variant="destructive">
+            <AlertDescription>{headersError}</AlertDescription>
+          </Alert>
+        )}
+        {create.error && (
+          <Alert variant="destructive">
+            <AlertDescription>{create.error.message}</AlertDescription>
+          </Alert>
+        )}
       </form>
 
       {list.isPending ? (
         <p className="text-sm italic text-muted-foreground">Loading MCP servers…</p>
       ) : list.data?.length === 0 ? (
-        <p className={emptyStateClass}>
+        <p className="rounded-2xl border border-dashed border-border bg-card p-6 text-center text-sm text-muted-foreground">
           No MCP servers configured. Add one above to expose remote tools to the agent.
         </p>
       ) : (
@@ -157,7 +157,11 @@ export function McpPane({ projectId }: { projectId: string }) {
                     <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
                       {s.transport}
                     </span>
-                    {!s.enabled && <span className={badgeClass}>disabled</span>}
+                    {!s.enabled && (
+                      <Badge variant="secondary" className="uppercase tracking-wide">
+                        disabled
+                      </Badge>
+                    )}
                   </div>
                   <p className="truncate font-mono text-xs text-muted-foreground">{s.url}</p>
                   {headerCount > 0 && (
@@ -169,6 +173,8 @@ export function McpPane({ projectId }: { projectId: string }) {
                 <div className="flex flex-col items-end gap-1">
                   <Button
                     type="button"
+                    variant="outline"
+                    size="xs"
                     disabled={update.isPending}
                     onClick={() =>
                       void update.mutateAsync({
@@ -177,15 +183,15 @@ export function McpPane({ projectId }: { projectId: string }) {
                         enabled: !s.enabled,
                       })
                     }
-                    className={xsBorderButtonClass}
                   >
                     {s.enabled ? "Disable" : "Enable"}
                   </Button>
                   <Button
                     type="button"
+                    variant="destructive"
+                    size="xs"
                     disabled={remove.isPending}
                     onClick={() => void remove.mutateAsync({ projectId, serverId: s.id })}
-                    className={xsDangerButtonClass}
                   >
                     Delete
                   </Button>
@@ -196,8 +202,16 @@ export function McpPane({ projectId }: { projectId: string }) {
         </ul>
       )}
 
-      {update.error && <p className={errorMessageClass}>{update.error.message}</p>}
-      {remove.error && <p className={errorMessageClass}>{remove.error.message}</p>}
+      {update.error && (
+        <Alert variant="destructive">
+          <AlertDescription>{update.error.message}</AlertDescription>
+        </Alert>
+      )}
+      {remove.error && (
+        <Alert variant="destructive">
+          <AlertDescription>{remove.error.message}</AlertDescription>
+        </Alert>
+      )}
     </section>
   );
 }

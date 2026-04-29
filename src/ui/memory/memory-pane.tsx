@@ -1,15 +1,11 @@
 "use client";
 
-import { Button, Input, Textarea } from "@headlessui/react";
 import { useState } from "react";
-import {
-  emptyStateClass,
-  errorMessageClass,
-  fieldClass,
-  xsAccentButtonClass,
-  xsDangerButtonClass,
-} from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
+import { Alert, AlertDescription } from "@/ui/primitives/alert";
+import { Button } from "@/ui/primitives/button";
+import { Input } from "@/ui/primitives/input";
+import { Textarea } from "@/ui/primitives/textarea";
 import { ProposalDialog } from "@/ui/proposals/proposal-dialog";
 
 /**
@@ -66,7 +62,6 @@ export function MemoryPane({ projectId }: { projectId: string }) {
           value={draftTitle}
           onChange={(e) => setDraftTitle(e.target.value)}
           placeholder="Memory title"
-          className={fieldClass}
           maxLength={200}
         />
         <Textarea
@@ -74,26 +69,27 @@ export function MemoryPane({ projectId }: { projectId: string }) {
           onChange={(e) => setDraftBody(e.target.value)}
           placeholder="Body (markdown)"
           rows={3}
-          className={fieldClass}
           maxLength={50_000}
         />
         <div className="flex items-center justify-between">
           <span className="text-xs text-muted-foreground">{list.data?.length ?? 0} entries</span>
-          <Button
-            type="submit"
-            disabled={proposeWrite.isPending || !draftTitle.trim()}
-            className={xsAccentButtonClass}
-          >
+          <Button type="submit" size="xs" disabled={proposeWrite.isPending || !draftTitle.trim()}>
             {proposeWrite.isPending ? "Staging…" : "Propose write"}
           </Button>
         </div>
-        {proposeWrite.error && <p className={errorMessageClass}>{proposeWrite.error.message}</p>}
+        {proposeWrite.error && (
+          <Alert variant="destructive">
+            <AlertDescription>{proposeWrite.error.message}</AlertDescription>
+          </Alert>
+        )}
       </form>
 
       {list.isPending ? (
         <p className="text-sm italic text-muted-foreground">Loading memory…</p>
       ) : list.data?.length === 0 ? (
-        <p className={emptyStateClass}>No memory entries yet. Stage one above.</p>
+        <p className="rounded-2xl border border-dashed border-border bg-card p-6 text-center text-sm text-muted-foreground">
+          No memory entries yet. Stage one above.
+        </p>
       ) : (
         <ul className="flex flex-col gap-2">
           {list.data?.map((m) => (
@@ -116,9 +112,10 @@ export function MemoryPane({ projectId }: { projectId: string }) {
               </div>
               <Button
                 type="button"
+                variant="destructive"
+                size="xs"
                 disabled={proposeDelete.isPending}
                 onClick={() => void submitDelete(m.id)}
-                className={xsDangerButtonClass}
               >
                 Delete
               </Button>
@@ -127,7 +124,11 @@ export function MemoryPane({ projectId }: { projectId: string }) {
         </ul>
       )}
 
-      {proposeDelete.error && <p className={errorMessageClass}>{proposeDelete.error.message}</p>}
+      {proposeDelete.error && (
+        <Alert variant="destructive">
+          <AlertDescription>{proposeDelete.error.message}</AlertDescription>
+        </Alert>
+      )}
 
       <ProposalDialog
         projectId={projectId}

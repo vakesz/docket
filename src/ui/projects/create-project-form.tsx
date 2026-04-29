@@ -1,18 +1,20 @@
 "use client";
-import { Field, Input, Label, Switch } from "@headlessui/react";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useMemo, useState } from "react";
-import {
-  errorMessageClass,
-  fieldClass,
-  primaryButtonClass,
-  settingsPanelClass,
-  switchThumbClass,
-  switchTrackClass,
-} from "@/lib/form-classes";
+import { type FormEvent, useId, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc-client";
 import type { ProviderTypeId } from "@/server/provider-registry";
-import { SelectField } from "@/ui/forms/select-field";
+import { Alert, AlertDescription } from "@/ui/primitives/alert";
+import { Button } from "@/ui/primitives/button";
+import { Input } from "@/ui/primitives/input";
+import { Label } from "@/ui/primitives/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/ui/primitives/select";
+import { Switch } from "@/ui/primitives/switch";
 
 type Props = {
   /**
@@ -75,6 +77,11 @@ export function CreateProjectForm({ defaultMakeDefault = true, onCreated }: Prop
   const [scope, setScope] = useState<Record<string, string>>({});
   const [makeDefault, setMakeDefault] = useState(defaultMakeDefault);
 
+  const nameId = useId();
+  const descriptionId = useId();
+  const providerId = useId();
+  const makeDefaultId = useId();
+
   const activeSpec = useMemo(
     () => specs.find((s) => s.typeId === providerKind) ?? specs[0] ?? null,
     [specs, providerKind],
@@ -112,7 +119,11 @@ export function CreateProjectForm({ defaultMakeDefault = true, onCreated }: Prop
     return <p className="text-sm text-muted-foreground-faint">Loading providers…</p>;
   }
   if (kinds.error) {
-    return <p className={errorMessageClass}>{kinds.error.message}</p>;
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>{kinds.error.message}</AlertDescription>
+      </Alert>
+    );
   }
   if (specs.length === 0) {
     return (
@@ -123,81 +134,122 @@ export function CreateProjectForm({ defaultMakeDefault = true, onCreated }: Prop
   }
 
   return (
-    <form onSubmit={onSubmit} className={`${settingsPanelClass} flex flex-col gap-4 text-sm`}>
+    <form
+      onSubmit={onSubmit}
+      className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-6 text-sm shadow-sm"
+    >
       <h2 className="text-base font-medium text-foreground">Add project</h2>
 
-      <Field className="flex flex-col gap-1">
-        <Label className="text-xs text-muted-foreground">Display name</Label>
+      <div className="flex flex-col gap-1">
+        <Label htmlFor={nameId} className="text-xs text-muted-foreground">
+          Display name
+        </Label>
         <Input
+          id={nameId}
           required
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="acme / web"
-          className={fieldClass}
         />
-      </Field>
-
-      <Field className="flex flex-col gap-1">
-        <Label className="text-xs text-muted-foreground">Description (optional)</Label>
-        <Input
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          className={fieldClass}
-        />
-      </Field>
+      </div>
 
       <div className="flex flex-col gap-1">
-        <span className="text-xs text-muted-foreground">Provider</span>
-        <SelectField
-          aria-label="Provider"
-          value={activeKind}
-          onChange={(e) => setProviderKind(e.target.value)}
-        >
-          {specs.map((s) => (
-            <option key={s.typeId} value={s.typeId}>
-              {s.displayName}
-            </option>
-          ))}
-        </SelectField>
+        <Label htmlFor={descriptionId} className="text-xs text-muted-foreground">
+          Description (optional)
+        </Label>
+        <Input
+          id={descriptionId}
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <Label htmlFor={providerId} className="text-xs text-muted-foreground">
+          Provider
+        </Label>
+        <Select value={activeKind} onValueChange={setProviderKind}>
+          <SelectTrigger id={providerId} aria-label="Provider" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {specs.map((s) => (
+              <SelectItem key={s.typeId} value={s.typeId}>
+                {s.displayName}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {activeSpec ? (
         <div className="flex flex-col gap-1">
           <div className="flex flex-wrap gap-3">
             {activeSpec.setupFields.map((f) => (
-              <Field key={f.key} className="flex flex-1 flex-col gap-1 min-w-[12rem]">
-                <Label className="text-xs text-muted-foreground">{f.label}</Label>
-                <Input
-                  required={f.required}
-                  type={f.kind === "secret" ? "password" : f.kind === "url" ? "url" : "text"}
-                  value={scope[f.key] ?? ""}
-                  onChange={(e) => setScopeField(f.key, e.target.value)}
-                  placeholder={f.placeholder}
-                  className={fieldClass}
-                />
-                {f.help ? <p className="text-xs text-muted-foreground">{f.help}</p> : null}
-              </Field>
+              <ScopeField
+                key={f.key}
+                field={f}
+                value={scope[f.key] ?? ""}
+                onChange={(value) => setScopeField(f.key, value)}
+              />
             ))}
           </div>
         </div>
       ) : null}
 
-      <Field className="inline-flex items-center gap-2 text-sm text-foreground">
-        <Switch checked={makeDefault} onChange={setMakeDefault} className={switchTrackClass}>
-          <span aria-hidden className={switchThumbClass} />
-        </Switch>
-        <Label>Set as my default project</Label>
-      </Field>
+      <div className="inline-flex items-center gap-2 text-sm text-foreground">
+        <Switch id={makeDefaultId} checked={makeDefault} onCheckedChange={setMakeDefault} />
+        <Label htmlFor={makeDefaultId}>Set as my default project</Label>
+      </div>
 
-      {create.error ? <p className={errorMessageClass}>{create.error.message}</p> : null}
+      {create.error ? (
+        <Alert variant="destructive">
+          <AlertDescription>{create.error.message}</AlertDescription>
+        </Alert>
+      ) : null}
 
-      <button
+      <Button
         type="submit"
         disabled={create.isPending || setDefault.isPending || !activeSpec}
-        className={`${primaryButtonClass} self-start`}
+        className="self-start"
       >
         {create.isPending ? "Creating…" : "Create project"}
-      </button>
+      </Button>
     </form>
+  );
+}
+
+function ScopeField({
+  field,
+  value,
+  onChange,
+}: {
+  field: {
+    key: string;
+    label: string;
+    placeholder?: string;
+    help?: string;
+    required?: boolean;
+    kind?: string;
+  };
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const id = useId();
+  return (
+    <div className="flex min-w-[12rem] flex-1 flex-col gap-1">
+      <Label htmlFor={id} className="text-xs text-muted-foreground">
+        {field.label}
+      </Label>
+      <Input
+        id={id}
+        required={field.required}
+        type={field.kind === "secret" ? "password" : field.kind === "url" ? "url" : "text"}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={field.placeholder}
+      />
+      {field.help ? <p className="text-xs text-muted-foreground">{field.help}</p> : null}
+    </div>
   );
 }
