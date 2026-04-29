@@ -1,6 +1,5 @@
 "use client";
 
-import { Input } from "@headlessui/react";
 import {
   type ComponentPropsWithoutRef,
   type KeyboardEvent,
@@ -8,8 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { fieldClass } from "@/lib/form-classes";
-import { cn } from "@/lib/utils";
+import { Input } from "@/ui/primitives/input";
 
 type Props = Omit<ComponentPropsWithoutRef<"input">, "value" | "onChange" | "type"> & {
   /** Last committed numeric value. The displayed buffer follows this only
@@ -92,7 +90,7 @@ export function NumberField({
         }
         onKeyDown?.(e);
       }}
-      className={cn(fieldClass, className)}
+      className={className}
     />
   );
 }
