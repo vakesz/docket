@@ -1,3 +1,4 @@
+import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { resolveEffectiveStaleThreshold } from "@/lib/staleness";
 import { auth } from "@/server/auth";
@@ -17,14 +18,20 @@ export default async function ItemsLayout({
   params,
 }: {
   children: ReactNode;
-  params: Promise<{ projectId: string }>;
+  params: Promise<{ projectSlug: string }>;
 }) {
-  const { projectId } = await params;
+  const { projectSlug } = await params;
   const session = await auth();
   const userId = session?.user?.id ?? null;
 
+  const project = await db.project.findUnique({
+    where: { slug: projectSlug },
+    select: { id: true },
+  });
+  if (!project) notFound();
+
   const [projectStale, userStale] = await Promise.all([
-    loadProjectSetting(db, projectId, "items.stale-after-days"),
+    loadProjectSetting(db, project.id, "items.stale-after-days"),
     userId
       ? loadUserSetting(db, userId, "items.stale-after-days.user")
       : Promise.resolve(-1 as number),
@@ -32,7 +39,7 @@ export default async function ItemsLayout({
   const staleThresholdDays = resolveEffectiveStaleThreshold(userStale, projectStale);
 
   return (
-    <ItemsShell projectId={projectId} staleThresholdDays={staleThresholdDays}>
+    <ItemsShell projectSlug={projectSlug} staleThresholdDays={staleThresholdDays}>
       {children}
     </ItemsShell>
   );

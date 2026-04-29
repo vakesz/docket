@@ -6,7 +6,7 @@ import { Alert, AlertDescription } from "@/ui/primitives/alert";
 import { Button } from "@/ui/primitives/button";
 
 type Props = {
-  projectId: string;
+  projectSlug: string;
 };
 
 /**
@@ -15,7 +15,7 @@ type Props = {
  * client-side download — nothing is persisted server-side and no third
  * party sees the payload.
  */
-export function ExportPanel({ projectId }: Props) {
+export function ExportPanel({ projectSlug }: Props) {
   const utils = trpc.useUtils();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +29,7 @@ export function ExportPanel({ projectId }: Props) {
     setLast(null);
     setBusy(true);
     try {
-      const data = await utils.projects.export.fetch({ projectId });
+      const data = await utils.projects.export.fetch({ projectSlug });
       const json = JSON.stringify(data, null, 2);
       const blob = new Blob([json], { type: "application/json" });
       const url = URL.createObjectURL(blob);

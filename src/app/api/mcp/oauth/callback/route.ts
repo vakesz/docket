@@ -18,10 +18,13 @@ import { completeMcpOauth } from "@/server/mcp/oauth/router";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function settingsRedirect(projectId: string | null, params: Record<string, string>): NextResponse {
+function settingsRedirect(
+  projectSlug: string | null,
+  params: Record<string, string>,
+): NextResponse {
   const search = new URLSearchParams(params);
-  const target = projectId
-    ? `/projects/${projectId}/settings/mcp?${search.toString()}`
+  const target = projectSlug
+    ? `/settings?project=${encodeURIComponent(projectSlug)}&group=mcp&${search.toString()}`
     : `/?${search.toString()}`;
   return NextResponse.redirect(new URL(target, process.env.AUTH_URL || "http://localhost:3000"));
 }
@@ -53,13 +56,13 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   try {
-    const { projectId, mcpServerId } = await completeMcpOauth({
+    const { projectSlug, mcpServerId } = await completeMcpOauth({
       db,
       sessionUserId: userId,
       nonce: state,
       code,
     });
-    return settingsRedirect(projectId, {
+    return settingsRedirect(projectSlug, {
       mcpOauth: "ok",
       serverId: mcpServerId,
     });

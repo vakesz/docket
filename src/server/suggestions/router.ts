@@ -20,15 +20,34 @@
 
 import "server-only";
 import { z } from "zod";
+import type { db as Db } from "@/server/db";
 import {
-  projectIdSchema,
   projectScopedMutationProcedure,
   projectScopedProcedure,
+  projectSlugSchema,
   protectedProcedure,
   router,
 } from "@/server/trpc";
 
-const ListInput = projectIdSchema.extend({
+/**
+ * Resolve a `projectSlug` to its surrogate CUID for FK queries when the
+ * caller doesn't go through `projectScopedProcedure`. Returns `null` when
+ * the slug doesn't match a project the user can access — caller decides
+ * whether to throw or silently degrade.
+ */
+async function resolveSlug(db: typeof Db, slug: string, userId: string): Promise<string | null> {
+  const row = await db.project.findFirst({
+    where: {
+      slug,
+      archivedAt: null,
+      OR: [{ ownerUserId: userId }, { memberships: { some: { userId } } }],
+    },
+    select: { id: true },
+  });
+  return row?.id ?? null;
+}
+
+const ListInput = projectSlugSchema.extend({
   /// Filter by suggestion kind. Empty omits the filter.
   kind: z.string().min(1).max(64).optional(),
   /// When true, also returns dismissed rows. Default hides them.
@@ -36,18 +55,18 @@ const ListInput = projectIdSchema.extend({
   limit: z.number().int().min(1).max(100).default(20),
 });
 
-const DismissInput = projectIdSchema.extend({ suggestionId: z.string().min(1) });
+const DismissInput = projectSlugSchema.extend({ suggestionId: z.string().min(1) });
 
 const RecentsInput = z.object({
   /// Optional project filter — when set, only commands used in that
-  /// project (or globally with `projectId: null` on write) are returned.
-  projectId: z.string().min(1).optional(),
+  /// project (or globally with `projectSlug: null` on write) are returned.
+  projectSlug: z.string().min(1).optional(),
   limit: z.number().int().min(1).max(50).default(10),
 });
 
 const BumpInput = z.object({
   commandId: z.string().min(1).max(120),
-  projectId: z.string().min(1).optional(),
+  projectSlug: z.string().min(1).optional(),
 });
 
 export const suggestionsRouter = router({
@@ -85,10 +104,13 @@ export const suggestionsRouter = router({
    */
   recents: protectedProcedure.input(RecentsInput).query(async ({ ctx, input }) => {
     const userId = ctx.userId;
+    const projectId = input.projectSlug
+      ? await resolveSlug(ctx.db, input.projectSlug, userId)
+      : undefined;
     return ctx.db.commandUsage.findMany({
       where: {
         userId,
-        ...(input.projectId !== undefined ? { projectId: input.projectId } : {}),
+        ...(projectId !== undefined ? { projectId } : {}),
       },
       orderBy: [{ lastUsedAt: "desc" }],
       take: input.limit,
@@ -98,12 +120,14 @@ export const suggestionsRouter = router({
   /**
    * Record one usage of `commandId`. Idempotent per (user, project,
    * commandId) — increments the counter and bumps `lastUsedAt`. Pass
-   * `projectId` when the command is project-scoped; omit for global
+   * `projectSlug` when the command is project-scoped; omit for global
    * commands (the unique key treats `projectId == null` as its own slot).
    */
   bump: protectedProcedure.input(BumpInput).mutation(async ({ ctx, input }) => {
     const userId = ctx.userId;
-    const projectId = input.projectId ?? null;
+    const projectId = input.projectSlug
+      ? ((await resolveSlug(ctx.db, input.projectSlug, userId)) ?? null)
+      : null;
     // Compound unique includes a nullable column, so Postgres won't enforce
     // uniqueness on null-projectId rows. Find-then-update/create like the
     // settings router; the (user, project, command) tuple is application-

@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import type { BacklogBucket, ItemKind } from "@/core/types";
-import { useRecentItemIds } from "@/lib/recent-items";
+import { useRecentItemNumbers } from "@/lib/recent-items";
 import { trpc } from "@/lib/trpc-client";
 import { ASSIGNEE_UNASSIGNED, FilterBar } from "@/ui/items/filter-bar";
 import { EmptyMessage, ItemRow, type ListItem, PinnedRow } from "@/ui/items/item-row";
@@ -29,10 +29,10 @@ const PINNED_QUERY_LIMIT = 50;
  *   which already-fetched rows render.
  */
 export function BacklogPane({
-  projectId,
+  projectSlug,
   staleThresholdDays,
 }: {
-  projectId: string;
+  projectSlug: string;
   staleThresholdDays: number | null;
 }) {
   const [bucket, setBucket] = useState<BacklogBucket>("open");
@@ -49,11 +49,11 @@ export function BacklogPane({
   const [assigneesExpanded, setAssigneesExpanded] = useState(false);
 
   const items = trpc.items.list.useQuery(
-    { projectId, bucket, limit: ITEMS_QUERY_LIMIT },
+    { projectSlug, bucket, limit: ITEMS_QUERY_LIMIT },
     { staleTime: 30_000 },
   );
   const pinned = trpc.watchlist.list.useQuery(
-    { projectId, limit: PINNED_QUERY_LIMIT },
+    { projectSlug, limit: PINNED_QUERY_LIMIT },
     { staleTime: 30_000 },
   );
   const settings = trpc.settings.list.useQuery(undefined, { staleTime: 60_000 });
@@ -80,7 +80,7 @@ export function BacklogPane({
     settingsByKey.get("items.assignee-selector-style") === "dropdown" ? "dropdown" : "chips";
   const showAvatars = boolSetting("items.show-assignee-avatars", true);
   const showArchivedBucket = boolSetting("items.show-archived-bucket", true);
-  const project = trpc.projects.get.useQuery({ projectId }, { staleTime: 5 * 60_000 });
+  const project = trpc.projects.get.useQuery({ projectSlug }, { staleTime: 5 * 60_000 });
   const providerKind = project.data?.providerKind ?? "";
   const providerHasAvatars = project.data?.hasAvatarFetcher ?? false;
 
@@ -91,7 +91,7 @@ export function BacklogPane({
   }, [showArchivedBucket, bucket]);
 
   const pathname = usePathname();
-  const selectedId = useMemo(() => {
+  const selectedNumber = useMemo(() => {
     const m = pathname?.match(/\/items\/([^/?#]+)/);
     return m?.[1];
   }, [pathname]);
@@ -101,21 +101,21 @@ export function BacklogPane({
     [pinned.data],
   );
 
-  const recentIds = useRecentItemIds(projectId);
+  const recentNumbers = useRecentItemNumbers(projectSlug);
 
   const data = items.data ?? [];
 
   const recentItems = useMemo(() => {
-    if (recentIds.length === 0) return [];
-    const byId = new Map(data.map((it) => [it.id, it]));
+    if (recentNumbers.length === 0) return [];
+    const byNumber = new Map(data.map((it) => [it.itemNumber, it]));
     const out: ListItem[] = [];
-    for (const id of recentIds) {
-      if (id === selectedId) continue;
-      const it = byId.get(id);
+    for (const num of recentNumbers) {
+      if (num === selectedNumber) continue;
+      const it = byNumber.get(num);
       if (it) out.push(it);
     }
     return out;
-  }, [recentIds, data, selectedId]);
+  }, [recentNumbers, data, selectedNumber]);
 
   // One pass over `data` produces all three facet aggregates. Keeping the
   // counts in a single memo (vs the previous four) avoids two redundant
@@ -192,7 +192,7 @@ export function BacklogPane({
   return (
     <div className="flex h-full flex-col bg-background">
       <FilterBar
-        projectId={projectId}
+        projectSlug={projectSlug}
         state={{
           bucket,
           kind,
@@ -233,9 +233,9 @@ export function BacklogPane({
           {recentItems.map((it) => (
             <PinnedRow
               key={`recent-${it.id}`}
-              projectId={projectId}
+              projectSlug={projectSlug}
               item={it}
-              selected={selectedId === it.id}
+              selected={selectedNumber === it.itemNumber}
             />
           ))}
         </div>
@@ -251,9 +251,9 @@ export function BacklogPane({
           {pinned.data.map(({ item: it }) => (
             <PinnedRow
               key={`pinned-${it.id}`}
-              projectId={projectId}
+              projectSlug={projectSlug}
               item={it}
-              selected={selectedId === it.id}
+              selected={selectedNumber === it.itemNumber}
             />
           ))}
         </div>
@@ -270,10 +270,10 @@ export function BacklogPane({
           filtered.map((it) => (
             <ItemRow
               key={it.id}
-              projectId={projectId}
+              projectSlug={projectSlug}
               item={it}
               pinned={pinnedIds.has(it.id)}
-              selected={selectedId === it.id}
+              selected={selectedNumber === it.itemNumber}
               staleThresholdDays={staleThresholdDays}
               maxVisibleTags={maxVisibleTags}
             />

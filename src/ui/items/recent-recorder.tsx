@@ -7,9 +7,15 @@ import { recordRecentItem } from "@/lib/recent-items";
  * Mount inside the item detail pane so visiting an item records it as
  * recent for the surrounding backlog. Renders nothing.
  */
-export function RecentRecorder({ projectId, itemId }: { projectId: string; itemId: string }) {
+export function RecentRecorder({
+  projectSlug,
+  itemNumber,
+}: {
+  projectSlug: string;
+  itemNumber: string;
+}) {
   useEffect(() => {
-    recordRecentItem(projectId, itemId);
-  }, [projectId, itemId]);
+    recordRecentItem(projectSlug, itemNumber);
+  }, [projectSlug, itemNumber]);
   return null;
 }

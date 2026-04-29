@@ -29,12 +29,12 @@ const USER_STALE_OVERRIDE_KEY = "items.stale-after-days.user";
  * here because the freshness tint shows up on the backlog list, not on the
  * detail page header).
  */
-export function ItemsListPanel({ projectId }: { projectId: string | null }) {
+export function ItemsListPanel({ projectSlug }: { projectSlug: string | null }) {
   const utils = trpc.useUtils();
   const list = trpc.settings.list.useQuery();
   const projectList = trpc.settings.projectList.useQuery(
-    { projectId: projectId ?? "" },
-    { enabled: projectId !== null },
+    { projectSlug: projectSlug ?? "" },
+    { enabled: projectSlug !== null },
   );
   const update = trpc.settings.update.useMutation({
     onSuccess: async () => {

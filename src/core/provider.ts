@@ -352,6 +352,25 @@ export type ScopeAxis = {
  * capabilities map, not from `if (providerKind === 'github')` scattered
  * through views.
  */
+/**
+ * Translate between the URL-friendly item number the user sees in the address
+ * bar and the provider-native id stored in `Item.providerItemId`.
+ *
+ * - GitHub stores `"acme/web#42"` but the project's `providerScope` already
+ *   pins `{owner, repo}`, so the URL only carries `42`.
+ * - Azure DevOps stores `"1234"`; the URL carries the same string.
+ *
+ * `parseItemNumber` rejects shapes the provider doesn't recognise (returns
+ * null) so the items router can surface a 404 instead of forwarding garbage
+ * into a `findFirst`. `formatItemNumber` is the inverse — it turns a stored
+ * `providerItemId` back into the URL slot, so links generated from cached
+ * rows agree with what the route expects.
+ */
+export type ProviderItemNumberCodec = {
+  parseItemNumber: (scope: Record<string, unknown>, urlNumber: string) => string | null;
+  formatItemNumber: (providerItemId: string) => string;
+};
+
 export type ProviderCapabilities = {
   /**
    * Reaction kinds the provider supports on items and comments. Empty array
@@ -384,6 +403,11 @@ export type ProviderSpec = {
   scopeAxes: readonly ScopeAxis[];
   axisMatcher: AxisMatcher | null;
   axisExtract: AxisExtractor | null;
+  /**
+   * URL ↔ providerItemId codec. Required on every spec — items are routed
+   * by their URL number, so there's nowhere to fall back to.
+   */
+  itemNumberCodec: ProviderItemNumberCodec;
   capabilities: ProviderCapabilities;
   /**
    * OAuth sign-in metadata. `null` for providers that don't support OAuth

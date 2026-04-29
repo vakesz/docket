@@ -39,7 +39,10 @@ export function DefaultProjectPicker() {
     );
   }
 
-  const current = me.data?.defaultProjectId ?? "";
+  const currentId = me.data?.defaultProjectId ?? null;
+  const currentSlug = currentId
+    ? (projects.data.find((p) => p.id === currentId)?.slug ?? null)
+    : null;
 
   return (
     <div className="flex flex-col gap-2">
@@ -51,11 +54,11 @@ export function DefaultProjectPicker() {
         visit. Falls back to your most-recently-touched project when unset.
       </p>
       <Select
-        value={current === "" ? NONE : current}
+        value={currentSlug ?? NONE}
         disabled={setDefault.isPending}
         onValueChange={(value) => {
           const next = value === NONE ? null : value;
-          setDefault.mutate({ projectId: next });
+          setDefault.mutate({ projectSlug: next });
         }}
       >
         <SelectTrigger id={fieldId} className="w-full max-w-md">
@@ -64,7 +67,7 @@ export function DefaultProjectPicker() {
         <SelectContent>
           <SelectItem value={NONE}>(none — auto-pick most recent)</SelectItem>
           {projects.data.map((p) => (
-            <SelectItem key={p.id} value={p.id}>
+            <SelectItem key={p.id} value={p.slug}>
               {p.name}
             </SelectItem>
           ))}

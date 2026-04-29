@@ -18,9 +18,9 @@ import { Textarea } from "@/ui/primitives/textarea";
  *     any public (non-SSRF) host is reachable.
  *   - `web-fetch.max-bytes` — body cap before truncation.
  */
-export function WebFetchPanel({ projectId }: { projectId: string }) {
+export function WebFetchPanel({ projectSlug }: { projectSlug: string }) {
   const utils = trpc.useUtils();
-  const projectSettings = trpc.settings.projectList.useQuery({ projectId });
+  const projectSettings = trpc.settings.projectList.useQuery({ projectSlug });
 
   const [enabled, setEnabled] = useState(true);
   const [hostsText, setHostsText] = useState("");
@@ -37,7 +37,7 @@ export function WebFetchPanel({ projectId }: { projectId: string }) {
   // settings instead of keeping the previous project's state.
   const seededForRef = useRef<string | null>(null);
   useEffect(() => {
-    if (seededForRef.current === projectId) return;
+    if (seededForRef.current === projectSlug) return;
     if (!projectSettings.data) return;
     const lookup = new Map(projectSettings.data.map((row) => [row.key, row.value]));
     const e = lookup.get("web-fetch.enabled");
@@ -46,12 +46,12 @@ export function WebFetchPanel({ projectId }: { projectId: string }) {
     setEnabled(typeof e === "boolean" ? e : true);
     setHostsText(Array.isArray(hosts) ? hosts.join("\n") : "");
     setMaxBytes(typeof m === "number" ? String(m) : "1000000");
-    seededForRef.current = projectId;
-  }, [projectSettings.data, projectId]);
+    seededForRef.current = projectSlug;
+  }, [projectSettings.data, projectSlug]);
 
   const save = trpc.settings.projectUpdate.useMutation({
     onSuccess: async () => {
-      await utils.settings.projectList.invalidate({ projectId });
+      await utils.settings.projectList.invalidate({ projectSlug });
     },
   });
 
@@ -64,9 +64,9 @@ export function WebFetchPanel({ projectId }: { projectId: string }) {
     const maxBytesNum = Number.parseInt(maxBytes, 10);
     if (!Number.isFinite(maxBytesNum) || maxBytesNum < 64_000 || maxBytesNum > 8_000_000) return;
     await Promise.all([
-      save.mutateAsync({ projectId, key: "web-fetch.enabled", value: enabled }),
-      save.mutateAsync({ projectId, key: "web-fetch.allowed-hosts", value: hosts }),
-      save.mutateAsync({ projectId, key: "web-fetch.max-bytes", value: maxBytesNum }),
+      save.mutateAsync({ projectSlug, key: "web-fetch.enabled", value: enabled }),
+      save.mutateAsync({ projectSlug, key: "web-fetch.allowed-hosts", value: hosts }),
+      save.mutateAsync({ projectSlug, key: "web-fetch.max-bytes", value: maxBytesNum }),
     ]);
   };
 

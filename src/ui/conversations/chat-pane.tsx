@@ -36,7 +36,7 @@ const META_LABEL_FAINT = "text-xs uppercase tracking-wide text-muted-foreground-
  * the bottom of the scroll area — the user reviews them without leaving
  * the chat (no modal) and can keep typing while multiple cards stack.
  */
-export function ChatPane({ projectId, itemId }: { projectId: string; itemId: string }) {
+export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; itemNumber: string }) {
   const utils = trpc.useUtils();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -54,22 +54,30 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
   const [toolDisplayMode] = useToolDisplayMode();
   const { pendingSeed, claimSeed } = useChatPaneController();
 
+  // The conversations router keys threads by the cached `Item.id` (CUID),
+  // but the URL only carries the provider-native item number — resolve it
+  // here so callers don't have to know the difference.
+  const itemQuery = trpc.items.get.useQuery({ projectSlug, itemNumber }, { staleTime: 30_000 });
+  const itemId = itemQuery.data?.id ?? null;
+
   const list = trpc.conversations.list.useQuery(
-    { projectId, itemId, limit: 20, archived: false },
-    { staleTime: 5_000 },
+    { projectSlug, itemId: itemId ?? "", limit: 20, archived: false },
+    { enabled: itemId !== null, staleTime: 5_000 },
   );
   const fallbackId = useMemo(() => list.data?.[0]?.id ?? null, [list.data]);
   const conversationId = activeId ?? fallbackId;
 
   const detail = trpc.conversations.get.useQuery(
-    { projectId, conversationId: conversationId ?? "" },
+    { projectSlug, conversationId: conversationId ?? "" },
     { enabled: conversationId !== null, staleTime: 5_000 },
   );
 
   const create = trpc.conversations.create.useMutation();
   const archive = trpc.conversations.archive.useMutation({
     onSuccess: async () => {
-      await utils.conversations.list.invalidate({ projectId, itemId });
+      if (itemId !== null) {
+        await utils.conversations.list.invalidate({ projectSlug, itemId });
+      }
       setActiveId(null);
       resetStream();
     },
@@ -107,14 +115,14 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
   }, [streaming.pendingUserMessage, messages]);
 
   // Reset stream + draft on item switch — closures inside the hook are bound
-  // to (projectId, itemId, conversationId) for one turn, so a stale stream
+  // to (projectSlug, itemId, conversationId) for one turn, so a stale stream
   // can't bleed across items.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: itemId is the trigger; resetStream is stable.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: itemNumber is the trigger; resetStream is stable.
   useEffect(() => {
     resetStream();
     setActiveId(null);
     setDraft("");
-  }, [itemId]);
+  }, [itemNumber]);
 
   // Stick-to-bottom scroll: flip the ref to false the moment the user
   // scrolls up, and back to true once they're within 64px of the bottom.
@@ -164,15 +172,15 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
 
   const submit = async (raw?: string) => {
     const body = (raw ?? draft).trim();
-    if (!body || inFlight) return;
+    if (!body || inFlight || itemId === null) return;
     let id = conversationId;
     if (!id) {
-      const conv = await create.mutateAsync({ projectId, itemId });
+      const conv = await create.mutateAsync({ projectSlug, itemId });
       id = conv.id;
       setActiveId(conv.id);
     }
     setDraft("");
-    await drainStream({ projectId, itemId, conversationId: id, content: body });
+    await drainStream({ projectSlug, itemId, conversationId: id, content: body });
   };
 
   // Consume a queued "Suggest next action" seed: open a fresh thread and
@@ -188,23 +196,25 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
   useEffect(() => {
     if (!pendingSeed) return;
     if (inFlight) return;
+    if (itemId === null) return;
     const seed = claimSeed();
     if (seed === null) return;
     void (async () => {
-      const conv = await create.mutateAsync({ projectId, itemId });
+      const conv = await create.mutateAsync({ projectSlug, itemId });
       setActiveId(conv.id);
       resetStream();
       await drainStream({
-        projectId,
+        projectSlug,
         itemId,
         conversationId: conv.id,
         content: seed,
       });
     })();
-  }, [pendingSeed, inFlight]);
+  }, [pendingSeed, inFlight, itemId]);
 
   const startNewThread = async () => {
     if (startingThreadRef.current) return;
+    if (itemId === null) return;
     startingThreadRef.current = true;
     try {
       // Snapshot whether we were streaming BEFORE we touch any state. The
@@ -226,13 +236,13 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
       // prior thread shows what it managed to produce.
       if (wasInFlight && priorConvId) {
         await Promise.all([
-          utils.conversations.list.invalidate({ projectId, itemId }),
-          utils.conversations.get.invalidate({ projectId, conversationId: priorConvId }),
+          utils.conversations.list.invalidate({ projectSlug, itemId }),
+          utils.conversations.get.invalidate({ projectSlug, conversationId: priorConvId }),
         ]);
       }
-      const conv = await create.mutateAsync({ projectId, itemId });
+      const conv = await create.mutateAsync({ projectSlug, itemId });
       setActiveId(conv.id);
-      await utils.conversations.list.invalidate({ projectId, itemId });
+      await utils.conversations.list.invalidate({ projectSlug, itemId });
       promptRef.current?.focus();
     } finally {
       startingThreadRef.current = false;
@@ -267,7 +277,7 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
           {conversationId && (
             <button
               type="button"
-              onClick={() => archive.mutate({ projectId, conversationId })}
+              onClick={() => archive.mutate({ projectSlug, conversationId })}
               disabled={archive.isPending || inFlight}
               className={cn(MICRO_CAPS_BUTTON, "disabled:opacity-50")}
               title="Archive this conversation"
@@ -358,7 +368,7 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
                   proposalIds.map((id) => (
                     <ProposalCard
                       key={id}
-                      projectId={projectId}
+                      projectSlug={projectSlug}
                       proposalId={id}
                       onDismiss={() => dismissProposal(id)}
                     />
@@ -414,7 +424,7 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
         />
         <div className={cn("mt-1 flex items-center justify-between gap-2", META_LABEL_FAINT)}>
           <LlmSwitcher
-            projectId={projectId}
+            projectSlug={projectSlug}
             conversationId={conversationId}
             currentOverrideId={detail.data?.llmProviderIdOverride ?? null}
           />
@@ -424,8 +434,8 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
               <button
                 type="button"
                 onClick={() => {
-                  if (!conversationId) return;
-                  void stopStream({ projectId, itemId, conversationId });
+                  if (!conversationId || itemId === null) return;
+                  void stopStream({ projectSlug, itemId, conversationId });
                 }}
                 className={cn(
                   MICRO_CAPS_BUTTON,

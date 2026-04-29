@@ -24,13 +24,13 @@ const PROVIDER_NONE = "__none";
  * conversation-compaction knobs. Conversation overrides (set inside the
  * chat-pane LLM switcher) still win at runtime.
  */
-export function ProjectLlmPanel({ projectId }: { projectId: string }) {
+export function ProjectLlmPanel({ projectSlug }: { projectSlug: string }) {
   const utils = trpc.useUtils();
   const projectsList = trpc.projects.list.useQuery();
   const providers = trpc.llmProviders.list.useQuery();
-  const projectSettings = trpc.settings.projectList.useQuery({ projectId });
+  const projectSettings = trpc.settings.projectList.useQuery({ projectSlug });
 
-  const project = projectsList.data?.find((p) => p.id === projectId) ?? null;
+  const project = projectsList.data?.find((p) => p.slug === projectSlug) ?? null;
 
   const [providerId, setProviderId] = useState<string | "">("");
   const [temperature, setTemperature] = useState<string>("");
@@ -54,7 +54,7 @@ export function ProjectLlmPanel({ projectId }: { projectId: string }) {
   // settings instead of keeping the previous project's state.
   const seededProjectFor = useRef<string | null>(null);
   useEffect(() => {
-    if (seededProjectFor.current === projectId) return;
+    if (seededProjectFor.current === projectSlug) return;
     if (!project) return;
     setProviderId(project.defaultLlmProviderId ?? "");
     setTemperature(
@@ -62,12 +62,12 @@ export function ProjectLlmPanel({ projectId }: { projectId: string }) {
         ? String(project.defaultTemperature)
         : "",
     );
-    seededProjectFor.current = projectId;
-  }, [project, projectId]);
+    seededProjectFor.current = projectSlug;
+  }, [project, projectSlug]);
 
   const seededSettingsFor = useRef<string | null>(null);
   useEffect(() => {
-    if (seededSettingsFor.current === projectId) return;
+    if (seededSettingsFor.current === projectSlug) return;
     if (!projectSettings.data) return;
     const lookup = new Map(projectSettings.data.map((row) => [row.key, row.value]));
     const enabled = lookup.get("llm.compaction.enabled");
@@ -78,8 +78,8 @@ export function ProjectLlmPanel({ projectId }: { projectId: string }) {
     setCompactThreshold(typeof threshold === "number" ? String(threshold) : "60000");
     setCompactKeep(typeof keep === "number" ? String(keep) : "8");
     setCompactStrategy(strategy === "drop-tools" ? "drop-tools" : "summary");
-    seededSettingsFor.current = projectId;
-  }, [projectSettings.data, projectId]);
+    seededSettingsFor.current = projectSlug;
+  }, [projectSettings.data, projectSlug]);
 
   const saveLlm = trpc.projects.setLlmDefaults.useMutation({
     onSuccess: async () => {
@@ -89,7 +89,7 @@ export function ProjectLlmPanel({ projectId }: { projectId: string }) {
 
   const saveSetting = trpc.settings.projectUpdate.useMutation({
     onSuccess: async () => {
-      await utils.settings.projectList.invalidate({ projectId });
+      await utils.settings.projectList.invalidate({ projectSlug });
     },
   });
 
@@ -100,7 +100,7 @@ export function ProjectLlmPanel({ projectId }: { projectId: string }) {
       return;
     }
     saveLlm.mutate({
-      projectId,
+      projectSlug,
       llmProviderId: providerId === "" ? null : providerId,
       defaultTemperature: tempNum,
     });
@@ -114,22 +114,22 @@ export function ProjectLlmPanel({ projectId }: { projectId: string }) {
     if (!Number.isFinite(keepNum) || keepNum < 2 || keepNum > 50) return;
     await Promise.all([
       saveSetting.mutateAsync({
-        projectId,
+        projectSlug,
         key: "llm.compaction.enabled",
         value: compactEnabled,
       }),
       saveSetting.mutateAsync({
-        projectId,
+        projectSlug,
         key: "llm.compaction.token-threshold",
         value: thresholdNum,
       }),
       saveSetting.mutateAsync({
-        projectId,
+        projectSlug,
         key: "llm.compaction.keep-recent-turns",
         value: keepNum,
       }),
       saveSetting.mutateAsync({
-        projectId,
+        projectSlug,
         key: "llm.compaction.strategy",
         value: compactStrategy,
       }),

@@ -17,6 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/ui/primitives/popover
 
 type ProjectOption = {
   id: string;
+  slug: string;
   name: string;
   providerKind: string;
 };
@@ -27,10 +28,10 @@ const SEARCH_THRESHOLD = 5;
  * Single source of truth for switching projects across the chrome. Lives
  * in the topbar; identical behavior on items and settings.
  *
- * On `/settings` the trigger reflects `?project=<id>` (the page's active
+ * On `/settings` the trigger reflects `?project=<slug>` (the page's active
  * project) rather than the user's pinned default, and switching just
  * rebinds the query so the user keeps the same settings section. Anywhere
- * else, switching navigates to `/projects/<id>/items`.
+ * else, switching navigates to `/projects/<slug>/items`.
  *
  * The popover footer carries the "Add project" deep-link so it stays a
  * real button (not a sentinel item) — keyboard + screen-reader users get
@@ -38,10 +39,10 @@ const SEARCH_THRESHOLD = 5;
  */
 export function ProjectSwitcher({
   projects,
-  currentProjectId,
+  currentProjectSlug,
 }: {
   projects: ProjectOption[];
-  currentProjectId: string;
+  currentProjectSlug: string;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -50,15 +51,15 @@ export function ProjectSwitcher({
 
   const urlProject = onSettings ? searchParams.get("project") : null;
   const effective =
-    urlProject && projects.some((p) => p.id === urlProject) ? urlProject : currentProjectId;
+    urlProject && projects.some((p) => p.slug === urlProject) ? urlProject : currentProjectSlug;
 
-  const current = projects.find((p) => p.id === effective) ?? null;
+  const current = projects.find((p) => p.slug === effective) ?? null;
   const [open, setOpen] = useState(false);
 
-  const navigate = (id: string) => {
+  const navigate = (slug: string) => {
     setOpen(false);
-    if (id === effective) return;
-    router.push(onSettings ? `/settings?project=${id}` : `/projects/${id}/items`);
+    if (slug === effective) return;
+    router.push(onSettings ? `/settings?project=${slug}` : `/projects/${slug}/items`);
   };
 
   return (
@@ -100,8 +101,8 @@ export function ProjectSwitcher({
                 <CommandItem
                   key={p.id}
                   value={`${p.name} ${p.providerKind}`}
-                  data-checked={p.id === effective}
-                  onSelect={() => navigate(p.id)}
+                  data-checked={p.slug === effective}
+                  onSelect={() => navigate(p.slug)}
                 >
                   <Badge variant="outline" className="shrink-0">
                     {p.providerKind.replace("_", " ")}

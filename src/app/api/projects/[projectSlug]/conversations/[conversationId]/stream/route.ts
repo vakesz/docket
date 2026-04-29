@@ -1,7 +1,7 @@
 /**
  * SSE chat-streaming endpoint.
  *
- * POST /api/projects/{projectId}/conversations/{conversationId}/stream
+ * POST /api/projects/{projectSlug}/conversations/{conversationId}/stream
  *   body: { content: string }
  *
  * Drives one round of the agent loop and streams `LoopEvent`s back as
@@ -41,7 +41,7 @@ export const dynamic = "force-dynamic";
 const MAX_BODY_BYTES = 100 * 1024;
 
 type RouteContext = {
-  params: Promise<{ projectId: string; conversationId: string }>;
+  params: Promise<{ projectSlug: string; conversationId: string }>;
 };
 
 export async function POST(req: Request, context: RouteContext): Promise<Response> {
@@ -58,15 +58,16 @@ export async function POST(req: Request, context: RouteContext): Promise<Respons
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const userId = session.user.id;
-  const { projectId, conversationId } = await context.params;
+  const { projectSlug, conversationId } = await context.params;
 
   // Project membership: shares `projectForUser` with the tRPC
   // `enforceProjectMembership` middleware so both surfaces use the same
   // access check.
-  const project = await projectForUser(db, projectId, userId);
+  const project = await projectForUser(db, projectSlug, userId);
   if (!project) {
     return NextResponse.json({ error: "no access to this project" }, { status: 403 });
   }
+  const projectId = project.id;
 
   if (!(await ownsConversation(db, conversationId, projectId, userId))) {
     return NextResponse.json({ error: "conversation not found" }, { status: 404 });

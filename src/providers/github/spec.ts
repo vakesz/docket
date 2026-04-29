@@ -12,11 +12,30 @@
  * into the config). `baseUrl` defaults to https://api.github.com.
  */
 
-import type { LabelTemplate, ProviderSpec } from "@/core/provider";
+import type { LabelTemplate, ProviderItemNumberCodec, ProviderSpec } from "@/core/provider";
 import { githubAvatarFetcher } from "@/providers/github/avatar";
 import { githubProfileUrl } from "@/providers/github/profile";
 import { GitHubProvider } from "@/providers/github/provider";
 import { GITHUB_REACTION_KINDS } from "@/providers/github/reactions";
+
+/**
+ * GitHub providerItemId is `${owner}/${repo}#${number}`. The `(owner, repo)`
+ * tuple is constant within a project (it's the providerScope), so the URL
+ * only carries the issue/PR number.
+ */
+const itemNumberCodec: ProviderItemNumberCodec = {
+  parseItemNumber: (scope, urlNumber) => {
+    if (!/^\d+$/.test(urlNumber)) return null;
+    const owner = typeof scope.owner === "string" ? scope.owner.trim() : "";
+    const repo = typeof scope.repo === "string" ? scope.repo.trim() : "";
+    if (!owner || !repo) return null;
+    return `${owner}/${repo}#${urlNumber}`;
+  },
+  formatItemNumber: (providerItemId) => {
+    const hash = providerItemId.lastIndexOf("#");
+    return hash === -1 ? providerItemId : providerItemId.slice(hash + 1);
+  },
+};
 
 const labelTemplate: LabelTemplate = (config) => {
   const owner = typeof config.owner === "string" ? config.owner.trim() : "";
@@ -66,6 +85,7 @@ export const githubSpec = {
   scopeAxes: [],
   axisMatcher: null,
   axisExtract: null,
+  itemNumberCodec,
   capabilities: {
     supportedReactions: GITHUB_REACTION_KINDS,
     ciStatus: true,

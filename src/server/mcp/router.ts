@@ -21,19 +21,19 @@ import { decodeHeaders, encodeHeaders } from "@/server/mcp/headers-codec";
 import { mcpOauthRouter } from "@/server/mcp/oauth/router";
 import {
   assertFound,
-  projectIdSchema,
   projectScopedMutationProcedure,
   projectScopedProcedure,
+  projectSlugSchema,
   router,
 } from "@/server/trpc";
 
-const ServerRef = projectIdSchema.extend({
+const ServerRef = projectSlugSchema.extend({
   serverId: z.string().min(1),
 });
 
 const HeadersJson = z.record(z.string(), z.string()).default({});
 
-const CreateInput = projectIdSchema.extend({
+const CreateInput = projectSlugSchema.extend({
   name: z
     .string()
     .min(1)
@@ -81,7 +81,7 @@ function shapeRow(row: ConfigRow) {
 }
 
 export const mcpRouter = router({
-  list: projectScopedProcedure.input(projectIdSchema).query(async ({ ctx }) => {
+  list: projectScopedProcedure.input(projectSlugSchema).query(async ({ ctx }) => {
     const rows = await ctx.db.mcpServerConfig.findMany({
       where: { projectId: ctx.projectId },
       orderBy: [{ name: "asc" }],

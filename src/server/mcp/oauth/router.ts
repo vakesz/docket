@@ -31,14 +31,14 @@ import { registerOauthClient } from "@/server/mcp/oauth/register";
 import { decryptSecret, encryptSecret } from "@/server/secrets/encryption";
 import {
   assertFound,
-  projectIdSchema,
   projectScopedMutationProcedure,
+  projectSlugSchema,
   router,
 } from "@/server/trpc";
 
 const STATE_TTL_MS = 10 * 60 * 1000;
 
-const StartInput = projectIdSchema.extend({
+const StartInput = projectSlugSchema.extend({
   serverId: z.string().min(1),
   /// Optional pre-registered client credentials. Used when DCR is
   /// disabled at the IdP and the operator has registered an OAuth client
@@ -131,7 +131,7 @@ export const mcpOauthRouter = router({
    * fields are cleared and the row is disabled.
    */
   disconnect: projectScopedMutationProcedure
-    .input(projectIdSchema.extend({ serverId: z.string().min(1) }))
+    .input(projectSlugSchema.extend({ serverId: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.userId;
       const row = assertFound(
@@ -178,7 +178,7 @@ export async function completeMcpOauth(args: {
   sessionUserId: string;
   nonce: string;
   code: string;
-}): Promise<{ projectId: string; mcpServerId: string }> {
+}): Promise<{ projectId: string; projectSlug: string; mcpServerId: string }> {
   const parsed = CompleteInput.parse({ nonce: args.nonce, code: args.code });
   const state = await args.db.mcpOauthState.findUnique({ where: { nonce: parsed.nonce } });
   if (!state) {
@@ -239,5 +239,13 @@ export async function completeMcpOauth(args: {
     scopes,
   });
 
-  return { projectId: state.projectId, mcpServerId: row.id };
+  const project = await args.db.project.findUnique({
+    where: { id: state.projectId },
+    select: { slug: true },
+  });
+  if (!project) {
+    throw new Error("oauth callback: project no longer exists");
+  }
+
+  return { projectId: state.projectId, projectSlug: project.slug, mcpServerId: row.id };
 }

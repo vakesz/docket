@@ -45,21 +45,21 @@ export default async function Home() {
     me?.defaultProjectId
       ? db.project.findFirst({
           where: { id: me.defaultProjectId, archivedAt: null, OR: accessOr },
-          select: { id: true },
+          select: { slug: true },
         })
       : Promise.resolve(null),
     db.project.findFirst({
       where: { archivedAt: null, OR: accessOr },
       orderBy: [{ updatedAt: "desc" }],
-      select: { id: true },
+      select: { slug: true },
     }),
   ]);
 
-  if (defaultProject?.id) {
-    redirect(`/projects/${defaultProject.id}/items`);
+  if (defaultProject?.slug) {
+    redirect(`/projects/${defaultProject.slug}/items`);
   }
   if (fallback) {
-    redirect(`/projects/${fallback.id}/items`);
+    redirect(`/projects/${fallback.slug}/items`);
   }
 
   return (

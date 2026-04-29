@@ -16,11 +16,11 @@ import { cn } from "@/lib/utils";
  * explanatory title.
  */
 export function SyncButton({
-  projectId,
+  projectSlug,
   readOnly = false,
   variant,
 }: {
-  projectId: string | null;
+  projectSlug: string | null;
   readOnly?: boolean;
   variant: "topbar" | "footer";
 }) {
@@ -30,7 +30,7 @@ export function SyncButton({
     onSuccess: async () => {
       await Promise.all([
         utils.items.list.invalidate(),
-        projectId ? utils.items.syncStatus.invalidate({ projectId }) : Promise.resolve(),
+        projectSlug ? utils.items.syncStatus.invalidate({ projectSlug }) : Promise.resolve(),
       ]);
       router.refresh();
     },
@@ -41,13 +41,13 @@ export function SyncButton({
   // versa) because each `useMutation` keeps its own pending flag.
   const inflightCount = useIsMutating({ mutationKey: getMutationKey(trpc.items.runSync) });
   const inflight = inflightCount > 0 || sync.isPending;
-  const canSync = Boolean(projectId) && !readOnly;
+  const canSync = Boolean(projectSlug) && !readOnly;
   const disabled = !canSync || inflight;
   const title = readOnly ? "Read-only mode — sync disabled" : inflight ? "Syncing…" : "Sync now";
 
   const onClick = () => {
-    if (!projectId || inflight) return;
-    sync.mutate({ projectId, mode: "incremental" });
+    if (!projectSlug || inflight) return;
+    sync.mutate({ projectSlug, mode: "incremental" });
   };
 
   if (variant === "topbar") {

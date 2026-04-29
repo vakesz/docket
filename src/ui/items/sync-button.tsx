@@ -4,10 +4,10 @@ import { trpc } from "@/lib/trpc-client";
 import { Button } from "@/ui/primitives/button";
 
 export function SyncButton({
-  projectId,
+  projectSlug,
   mode = "incremental",
 }: {
-  projectId: string;
+  projectSlug: string;
   mode?: "incremental" | "full";
 }) {
   const router = useRouter();
@@ -26,7 +26,7 @@ export function SyncButton({
         variant="outline"
         size="xs"
         disabled={sync.isPending}
-        onClick={() => sync.mutate({ projectId, mode })}
+        onClick={() => sync.mutate({ projectSlug, mode })}
       >
         {sync.isPending ? `${label}…` : label}
       </Button>

@@ -5,7 +5,7 @@ import { LogoLink } from "@/ui/shell/logo-link";
 import { ProjectSwitcher } from "@/ui/shell/project-switcher";
 import { SyncButton } from "@/ui/shell/sync-button";
 
-type ProjectOption = { id: string; name: string; providerKind: string };
+type ProjectOption = { id: string; slug: string; name: string; providerKind: string };
 
 /**
  * Header used inside the workspace shell. Top-left is just the Docket
@@ -15,13 +15,13 @@ type ProjectOption = { id: string; name: string; providerKind: string };
  */
 export function TopBar({
   projects,
-  currentProjectId,
+  currentProjectSlug,
   userLabel,
   userImage,
   readOnly = false,
 }: {
   projects: ProjectOption[];
-  currentProjectId: string | null;
+  currentProjectSlug: string | null;
   userLabel: string;
   userImage: string | null;
   readOnly?: boolean;
@@ -34,19 +34,19 @@ export function TopBar({
   return (
     <header className="flex items-center border-b border-border bg-card px-2 py-2 sm:px-4">
       <BacklogDrawerTrigger />
-      <LogoLink currentProjectId={currentProjectId} />
+      <LogoLink currentProjectSlug={currentProjectSlug} />
       <div className="ml-auto flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
-        {currentProjectId && projects.length > 0 ? (
+        {currentProjectSlug && projects.length > 0 ? (
           <>
-            <SyncButton projectId={currentProjectId} readOnly={readOnly} variant="topbar" />
-            <ProjectSwitcher projects={projects} currentProjectId={currentProjectId} />
+            <SyncButton projectSlug={currentProjectSlug} readOnly={readOnly} variant="topbar" />
+            <ProjectSwitcher projects={projects} currentProjectSlug={currentProjectSlug} />
           </>
         ) : null}
         <AccountMenu
           userLabel={userLabel}
           userImage={userImage}
           signOutAction={handleSignOut}
-          currentProjectId={currentProjectId}
+          currentProjectSlug={currentProjectSlug}
         />
       </div>
     </header>

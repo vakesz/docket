@@ -46,11 +46,11 @@ const INTENT_LABEL: Record<TransitionIntent, string> = {
  * `state_change` proposal and pops the confirm dialog.
  */
 export function TransitionActions({
-  projectId,
+  projectSlug,
   providerItemId,
   state,
 }: {
-  projectId: string;
+  projectSlug: string;
   providerItemId: string;
   state: ItemState;
 }) {
@@ -73,14 +73,14 @@ export function TransitionActions({
           variant="outline"
           size="xs"
           disabled={proposeTransition.isPending}
-          onClick={() => proposeTransition.mutate({ projectId, providerItemId, intent })}
+          onClick={() => proposeTransition.mutate({ projectSlug, providerItemId, intent })}
         >
           {INTENT_LABEL[intent]}
         </Button>
       ))}
       {error ? <span className="text-xs text-destructive">{error}</span> : null}
       <ProposalDialog
-        projectId={projectId}
+        projectSlug={projectSlug}
         proposalId={pendingProposalId}
         onClose={() => setPendingProposalId(null)}
       />

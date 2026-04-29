@@ -15,7 +15,7 @@ import {
 } from "@/ui/primitives/select";
 
 type Props = {
-  projectId: string;
+  projectSlug: string;
 };
 
 const ROLES = ["viewer", "member", "approver"] as const;
@@ -26,22 +26,22 @@ type Role = (typeof ROLES)[number];
  * the roster. Owner row sits up top, immutable. Adding by email looks
  * the user up — they have to have signed in at least once.
  */
-export function MembersPanel({ projectId }: Props) {
+export function MembersPanel({ projectSlug }: Props) {
   const utils = trpc.useUtils();
-  const list = trpc.projects.members.useQuery({ projectId });
+  const list = trpc.projects.members.useQuery({ projectSlug });
 
   const add = trpc.projects.addMember.useMutation({
     onSuccess: async () => {
       setEmail("");
       setRole("member");
-      await utils.projects.members.invalidate({ projectId });
+      await utils.projects.members.invalidate({ projectSlug });
     },
   });
   const updateRole = trpc.projects.updateMemberRole.useMutation({
-    onSuccess: async () => utils.projects.members.invalidate({ projectId }),
+    onSuccess: async () => utils.projects.members.invalidate({ projectSlug }),
   });
   const remove = trpc.projects.removeMember.useMutation({
-    onSuccess: async () => utils.projects.members.invalidate({ projectId }),
+    onSuccess: async () => utils.projects.members.invalidate({ projectSlug }),
   });
 
   const [email, setEmail] = useState("");
@@ -54,7 +54,7 @@ export function MembersPanel({ projectId }: Props) {
 
   const onAdd = () => {
     if (!email.trim()) return;
-    add.mutate({ projectId, email: email.trim(), role });
+    add.mutate({ projectSlug, email: email.trim(), role });
   };
 
   return (
@@ -150,7 +150,7 @@ export function MembersPanel({ projectId }: Props) {
                           disabled={updateRole.isPending}
                           onValueChange={(value) =>
                             updateRole.mutate({
-                              projectId,
+                              projectSlug,
                               membershipId: m.membershipId,
                               role: value as Role,
                             })
@@ -176,7 +176,7 @@ export function MembersPanel({ projectId }: Props) {
                           size="xs"
                           onClick={() => {
                             if (!confirm(`Remove ${m.email ?? m.name ?? "this member"}?`)) return;
-                            remove.mutate({ projectId, membershipId: m.membershipId });
+                            remove.mutate({ projectSlug, membershipId: m.membershipId });
                           }}
                           disabled={remove.isPending}
                         >

@@ -35,11 +35,11 @@ const KIND_LABELS: Record<string, string> = {
  * agent did without an extra tap.
  */
 export function ProposalCard({
-  projectId,
+  projectSlug,
   proposalId,
   onDismiss,
 }: {
-  projectId: string;
+  projectSlug: string;
   proposalId: string;
   onDismiss: () => void;
 }) {
@@ -47,7 +47,7 @@ export function ProposalCard({
   const utils = trpc.useUtils();
 
   const query = trpc.proposals.get.useQuery(
-    { projectId, proposalId },
+    { projectSlug, proposalId },
     { staleTime: 0, refetchOnWindowFocus: false },
   );
 
@@ -68,7 +68,7 @@ export function ProposalCard({
         utils.items.list.invalidate(),
         utils.items.get.invalidate(),
         utils.proposals.list.invalidate(),
-        utils.proposals.get.invalidate({ projectId, proposalId }),
+        utils.proposals.get.invalidate({ projectSlug, proposalId }),
       ]);
     },
   });
@@ -77,7 +77,7 @@ export function ProposalCard({
     onSuccess: async () => {
       await Promise.all([
         utils.proposals.list.invalidate(),
-        utils.proposals.get.invalidate({ projectId, proposalId }),
+        utils.proposals.get.invalidate({ projectSlug, proposalId }),
       ]);
     },
   });
@@ -169,14 +169,14 @@ export function ProposalCard({
               variant="outline"
               size="xs"
               disabled={busy}
-              onClick={() => reject.mutate({ projectId, proposalId })}
+              onClick={() => reject.mutate({ projectSlug, proposalId })}
             >
               {reject.isPending ? "Rejecting…" : "Reject"}
             </Button>
             <Button
               size="xs"
               disabled={busy}
-              onClick={() => confirm.mutate({ projectId, proposalId })}
+              onClick={() => confirm.mutate({ projectSlug, proposalId })}
             >
               {confirm.isPending ? "Confirming…" : "Confirm"}
             </Button>

@@ -27,15 +27,15 @@ import { useEffect, useRef } from "react";
 import { trpc } from "@/lib/trpc-client";
 import { useAutoRefreshIntervalMs } from "@/lib/use-auto-refresh";
 
-export function useBackgroundSync(projectId: string | null, readOnly: boolean): void {
+export function useBackgroundSync(projectSlug: string | null, readOnly: boolean): void {
   const intervalMs = useAutoRefreshIntervalMs();
   const utils = trpc.useUtils();
   const sync = trpc.items.runSync.useMutation({
     onSuccess: async () => {
-      if (!projectId) return;
+      if (!projectSlug) return;
       await Promise.all([
         utils.items.list.invalidate(),
-        utils.items.syncStatus.invalidate({ projectId }),
+        utils.items.syncStatus.invalidate({ projectSlug }),
       ]);
     },
   });
@@ -48,10 +48,10 @@ export function useBackgroundSync(projectId: string | null, readOnly: boolean): 
   syncRef.current = sync;
 
   useEffect(() => {
-    if (!projectId || intervalMs === false || readOnly) return;
+    if (!projectSlug || intervalMs === false || readOnly) return;
 
     const isStale = (): boolean => {
-      const cached = utils.items.syncStatus.getData({ projectId });
+      const cached = utils.items.syncStatus.getData({ projectSlug });
       const ts = cached?.lastSyncAt ? new Date(cached.lastSyncAt).getTime() : 0;
       return !ts || Date.now() - ts > intervalMs;
     };
@@ -59,7 +59,7 @@ export function useBackgroundSync(projectId: string | null, readOnly: boolean): 
       if (document.visibilityState === "hidden") return;
       const m = syncRef.current;
       if (m.isPending) return;
-      m.mutate({ projectId, mode: "incremental" });
+      m.mutate({ projectSlug, mode: "incremental" });
     };
 
     // Catch-up on mount: if the cached cursor is older than one interval,
@@ -78,5 +78,5 @@ export function useBackgroundSync(projectId: string | null, readOnly: boolean): 
       clearInterval(id);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [projectId, intervalMs, readOnly, utils.items.syncStatus.getData]);
+  }, [projectSlug, intervalMs, readOnly, utils.items.syncStatus.getData]);
 }

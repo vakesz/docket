@@ -10,14 +10,14 @@ import {
 } from "@/ui/conversations/chat-stream";
 
 type DrainArgs = {
-  projectId: string;
+  projectSlug: string;
   itemId: string;
   conversationId: string;
   content: string;
 };
 
 type StopArgs = {
-  projectId: string;
+  projectSlug: string;
   itemId: string;
   conversationId: string;
 };
@@ -50,7 +50,7 @@ type UseChatStream = {
  * persisted transcript via tRPC `invalidate` once the turn closes so the
  * streamed bubble collapses into the official message list.
  *
- * The hook holds no projectId/itemId itself — those are passed per-call
+ * The hook holds no projectSlug/itemId itself — those are passed per-call
  * from the chat panel so this stays trivially testable.
  */
 export function useChatStream(): UseChatStream {
@@ -75,12 +75,12 @@ export function useChatStream(): UseChatStream {
   }, []);
 
   const stopStream = useCallback(
-    async ({ projectId, itemId, conversationId }: StopArgs) => {
+    async ({ projectSlug, itemId, conversationId }: StopArgs) => {
       abortRef.current?.abort();
       abortRef.current = null;
       await Promise.all([
-        utils.conversations.list.invalidate({ projectId, itemId }),
-        utils.conversations.get.invalidate({ projectId, conversationId }),
+        utils.conversations.list.invalidate({ projectSlug, itemId }),
+        utils.conversations.get.invalidate({ projectSlug, conversationId }),
       ]);
       setStreaming(EMPTY_STREAM);
     },
@@ -88,7 +88,7 @@ export function useChatStream(): UseChatStream {
   );
 
   const drainStream = useCallback(
-    async ({ projectId, itemId, conversationId, content }: DrainArgs) => {
+    async ({ projectSlug, itemId, conversationId, content }: DrainArgs) => {
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
@@ -103,7 +103,7 @@ export function useChatStream(): UseChatStream {
         done: false,
       });
 
-      const url = `/api/projects/${projectId}/conversations/${conversationId}/stream`;
+      const url = `/api/projects/${projectSlug}/conversations/${conversationId}/stream`;
       let response: Response;
       try {
         response = await fetch(url, {
@@ -179,8 +179,8 @@ export function useChatStream(): UseChatStream {
       // one frame with the streaming UI gone but the persisted version
       // not yet in place — a visible blink at end-of-stream.
       await Promise.all([
-        utils.conversations.list.invalidate({ projectId, itemId }),
-        utils.conversations.get.invalidate({ projectId, conversationId }),
+        utils.conversations.list.invalidate({ projectSlug, itemId }),
+        utils.conversations.get.invalidate({ projectSlug, conversationId }),
       ]);
       // If the controller was aborted while we awaited above, a newer
       // call (resetStream, stopStream, or another drainStream) already

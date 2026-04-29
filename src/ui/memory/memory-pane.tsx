@@ -18,9 +18,9 @@ import { ProposalDialog } from "@/ui/proposals/proposal-dialog";
  * than at submit time — that way the new entry only shows up after the
  * confirm actually executes.
  */
-export function MemoryPane({ projectId }: { projectId: string }) {
+export function MemoryPane({ projectSlug }: { projectSlug: string }) {
   const utils = trpc.useUtils();
-  const list = trpc.memory.list.useQuery({ projectId, limit: 50 }, { staleTime: 0 });
+  const list = trpc.memory.list.useQuery({ projectSlug, limit: 50 }, { staleTime: 0 });
   const proposeWrite = trpc.memory.proposeWrite.useMutation();
   const proposeDelete = trpc.memory.proposeDelete.useMutation();
 
@@ -32,7 +32,7 @@ export function MemoryPane({ projectId }: { projectId: string }) {
     const title = draftTitle.trim();
     if (!title) return;
     const result = await proposeWrite.mutateAsync({
-      projectId,
+      projectSlug,
       memoryId: null,
       title,
       bodyMd: draftBody,
@@ -44,7 +44,7 @@ export function MemoryPane({ projectId }: { projectId: string }) {
   };
 
   const submitDelete = async (memoryId: string) => {
-    const result = await proposeDelete.mutateAsync({ projectId, memoryId });
+    const result = await proposeDelete.mutateAsync({ projectSlug, memoryId });
     setPendingProposalId(result.proposalId);
   };
 
@@ -131,11 +131,11 @@ export function MemoryPane({ projectId }: { projectId: string }) {
       )}
 
       <ProposalDialog
-        projectId={projectId}
+        projectSlug={projectSlug}
         proposalId={pendingProposalId}
         onClose={() => {
           setPendingProposalId(null);
-          void utils.memory.list.invalidate({ projectId });
+          void utils.memory.list.invalidate({ projectSlug });
         }}
       />
     </section>

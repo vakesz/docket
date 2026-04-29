@@ -56,9 +56,9 @@ const KIND_OPTIONS: { value: GuardrailKind; label: string; hint: string }[] = [
  * from a model fallback in composite, and the layer is meant to be a
  * defense-in-depth feature, not a regex toy.
  */
-export function GuardrailPanel({ projectId }: { projectId: string }) {
+export function GuardrailPanel({ projectSlug }: { projectSlug: string }) {
   const utils = trpc.useUtils();
-  const projectSettings = trpc.settings.projectList.useQuery({ projectId });
+  const projectSettings = trpc.settings.projectList.useQuery({ projectSlug });
   const providers = trpc.llmProviders.list.useQuery();
 
   const [enabled, setEnabled] = useState(true);
@@ -82,7 +82,7 @@ export function GuardrailPanel({ projectId }: { projectId: string }) {
   // settings instead of keeping the previous project's state.
   const seededForRef = useRef<string | null>(null);
   useEffect(() => {
-    if (seededForRef.current === projectId) return;
+    if (seededForRef.current === projectSlug) return;
     if (!projectSettings.data) return;
     const lookup = new Map(projectSettings.data.map((row) => [row.key, row.value]));
     const e = lookup.get("guardrail.enabled");
@@ -99,12 +99,12 @@ export function GuardrailPanel({ projectId }: { projectId: string }) {
     setBlockOffTopic(typeof bot === "boolean" ? bot : true);
     setScopeCheckEnabled(typeof sce === "boolean" ? sce : true);
     setOutputCheckEnabled(typeof oce === "boolean" ? oce : false);
-    seededForRef.current = projectId;
-  }, [projectSettings.data, projectId]);
+    seededForRef.current = projectSlug;
+  }, [projectSettings.data, projectSlug]);
 
   const save = trpc.settings.projectUpdate.useMutation({
     onSuccess: async () => {
-      await utils.settings.projectList.invalidate({ projectId });
+      await utils.settings.projectList.invalidate({ projectSlug });
     },
   });
 
@@ -118,21 +118,21 @@ export function GuardrailPanel({ projectId }: { projectId: string }) {
     // Defense in depth: never persist enabled=true without a guardrail row.
     const safeEnabled = hasGuardrailProvider ? enabled : false;
     await Promise.all([
-      save.mutateAsync({ projectId, key: "guardrail.enabled", value: safeEnabled }),
-      save.mutateAsync({ projectId, key: "guardrail.kind", value: kind }),
+      save.mutateAsync({ projectSlug, key: "guardrail.enabled", value: safeEnabled }),
+      save.mutateAsync({ projectSlug, key: "guardrail.kind", value: kind }),
       save.mutateAsync({
-        projectId,
+        projectSlug,
         key: "guardrail.block-on-injection",
         value: blockOnInjection,
       }),
-      save.mutateAsync({ projectId, key: "guardrail.block-off-topic", value: blockOffTopic }),
+      save.mutateAsync({ projectSlug, key: "guardrail.block-off-topic", value: blockOffTopic }),
       save.mutateAsync({
-        projectId,
+        projectSlug,
         key: "guardrail.scope-check-enabled",
         value: scopeCheckEnabled,
       }),
       save.mutateAsync({
-        projectId,
+        projectSlug,
         key: "guardrail.output-check-enabled",
         value: outputCheckEnabled,
       }),

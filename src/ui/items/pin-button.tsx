@@ -10,21 +10,24 @@ import { Button } from "@/ui/primitives/button";
  * that want the label (backlog rows, etc.).
  */
 export function PinButton({
-  projectId,
+  projectSlug,
   providerItemId,
   compact = false,
 }: {
-  projectId: string;
+  projectSlug: string;
   providerItemId: string;
   compact?: boolean;
 }) {
   const utils = trpc.useUtils();
-  const status = trpc.watchlist.isPinned.useQuery({ projectId, providerItemId }, { staleTime: 0 });
+  const status = trpc.watchlist.isPinned.useQuery(
+    { projectSlug, providerItemId },
+    { staleTime: 0 },
+  );
 
   const onSuccess = async () => {
     await Promise.all([
-      utils.watchlist.isPinned.invalidate({ projectId, providerItemId }),
-      utils.watchlist.list.invalidate({ projectId }),
+      utils.watchlist.isPinned.invalidate({ projectSlug, providerItemId }),
+      utils.watchlist.list.invalidate({ projectSlug }),
     ]);
   };
   const pin = trpc.watchlist.pin.useMutation({ onSuccess });
@@ -37,9 +40,9 @@ export function PinButton({
 
   const onClick = () => {
     if (pinned) {
-      unpin.mutate({ projectId, providerItemId });
+      unpin.mutate({ projectSlug, providerItemId });
     } else {
-      pin.mutate({ projectId, providerItemId });
+      pin.mutate({ projectSlug, providerItemId });
     }
   };
 

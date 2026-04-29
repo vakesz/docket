@@ -16,15 +16,20 @@
 import "server-only";
 import { z } from "zod";
 import { aggregateGlobalDaily, aggregateProjectDaily } from "@/server/analytics/aggregate";
-import { projectIdSchema, projectScopedProcedure, protectedProcedure, router } from "@/server/trpc";
+import {
+  projectScopedProcedure,
+  projectSlugSchema,
+  protectedProcedure,
+  router,
+} from "@/server/trpc";
 
 const DaysInput = z.object({ days: z.number().int().min(1).max(365).default(14) });
 
 export const analyticsRouter = router({
   projectDaily: projectScopedProcedure
-    .input(DaysInput.merge(projectIdSchema))
+    .input(DaysInput.merge(projectSlugSchema))
     .query(async ({ ctx, input }) => {
-      return aggregateProjectDaily(ctx.db, input.projectId, input.days);
+      return aggregateProjectDaily(ctx.db, ctx.projectId, input.days);
     }),
 
   globalDaily: protectedProcedure.input(DaysInput).query(async ({ ctx, input }) => {

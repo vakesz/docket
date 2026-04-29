@@ -16,10 +16,10 @@ import { ProposalDialog } from "@/ui/proposals/proposal-dialog";
  * opens when the project has opted out of auto-accept for comments.
  */
 export function CommentComposer({
-  projectId,
+  projectSlug,
   providerItemId,
 }: {
-  projectId: string;
+  projectSlug: string;
   providerItemId: string;
 }) {
   const router = useRouter();
@@ -49,7 +49,7 @@ export function CommentComposer({
         e.preventDefault();
         const trimmed = body.trim();
         if (!trimmed) return;
-        propose.mutate({ projectId, providerItemId, bodyMd: trimmed });
+        propose.mutate({ projectSlug, providerItemId, bodyMd: trimmed });
       }}
     >
       <Label
@@ -73,7 +73,7 @@ export function CommentComposer({
         {error ? <span className="text-xs text-destructive">{error}</span> : null}
       </div>
       <ProposalDialog
-        projectId={projectId}
+        projectSlug={projectSlug}
         proposalId={pendingProposalId}
         onClose={() => setPendingProposalId(null)}
       />

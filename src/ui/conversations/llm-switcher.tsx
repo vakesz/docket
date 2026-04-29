@@ -33,11 +33,11 @@ const DEFAULT_VALUE = "default";
  * resolves to"; the option list shows that as a synthetic top entry.
  */
 export function LlmSwitcher({
-  projectId,
+  projectSlug,
   conversationId,
   currentOverrideId,
 }: {
-  projectId: string;
+  projectSlug: string;
   conversationId: string | null;
   currentOverrideId: string | null;
 }) {
@@ -46,7 +46,7 @@ export function LlmSwitcher({
   const setOverride = trpc.conversations.setLlmOverride.useMutation({
     onSuccess: async () => {
       if (conversationId) {
-        await utils.conversations.get.invalidate({ projectId, conversationId });
+        await utils.conversations.get.invalidate({ projectSlug, conversationId });
       }
     },
   });
@@ -69,7 +69,7 @@ export function LlmSwitcher({
         onValueChange={(next) => {
           if (!conversationId) return;
           const resolved = next === DEFAULT_VALUE ? null : next;
-          setOverride.mutate({ projectId, conversationId, llmProviderId: resolved });
+          setOverride.mutate({ projectSlug, conversationId, llmProviderId: resolved });
         }}
       >
         <SelectTrigger size="sm" className="h-6 py-0.5 text-[11px] normal-case tracking-normal">

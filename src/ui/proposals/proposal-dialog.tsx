@@ -24,11 +24,11 @@ import { ProposalDiffView } from "@/ui/proposals/proposal-diff-view";
  * dialog" without lifting any extra state.
  */
 export function ProposalDialog({
-  projectId,
+  projectSlug,
   proposalId,
   onClose,
 }: {
-  projectId: string;
+  projectSlug: string;
   proposalId: string | null;
   onClose: () => void;
 }) {
@@ -37,7 +37,7 @@ export function ProposalDialog({
   const utils = trpc.useUtils();
 
   const query = trpc.proposals.get.useQuery(
-    { projectId, proposalId: proposalId ?? "" },
+    { projectSlug, proposalId: proposalId ?? "" },
     { enabled: open, staleTime: 0 },
   );
 
@@ -81,8 +81,8 @@ export function ProposalDialog({
     if (!query.data?.isEmpty) return;
     if (autoRejectedRef.current === proposalId) return;
     autoRejectedRef.current = proposalId;
-    reject.mutate({ projectId, proposalId });
-  }, [proposalId, projectId, query.data?.isEmpty]);
+    reject.mutate({ projectSlug, proposalId });
+  }, [proposalId, projectSlug, query.data?.isEmpty]);
 
   const busy = confirm.isPending || reject.isPending;
   const errorMessage =
@@ -134,7 +134,7 @@ export function ProposalDialog({
             disabled={busy || !proposalId}
             onClick={() => {
               if (!proposalId) return;
-              reject.mutate({ projectId, proposalId });
+              reject.mutate({ projectSlug, proposalId });
             }}
           >
             {reject.isPending ? "Rejecting…" : "Reject"}
@@ -143,7 +143,7 @@ export function ProposalDialog({
             disabled={busy || !proposalId || !query.data}
             onClick={() => {
               if (!proposalId) return;
-              confirm.mutate({ projectId, proposalId });
+              confirm.mutate({ projectSlug, proposalId });
             }}
           >
             {confirm.isPending ? "Confirming…" : "Confirm"}

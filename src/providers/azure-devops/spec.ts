@@ -21,11 +21,26 @@
  * not knowing what those keys mean.
  */
 
-import type { AxisExtractor, AxisMatcher, LabelTemplate, ProviderSpec } from "@/core/provider";
+import type {
+  AxisExtractor,
+  AxisMatcher,
+  LabelTemplate,
+  ProviderItemNumberCodec,
+  ProviderSpec,
+} from "@/core/provider";
 import type { Item } from "@/core/types";
 import { asPlainObject } from "@/lib/json";
 import { azureDevOpsAvatarFetcher } from "@/providers/azure-devops/avatar";
 import { AzureDevOpsProvider } from "@/providers/azure-devops/provider";
+
+/**
+ * Azure DevOps work item ids are bare integers, scoped per organization. The
+ * URL slot carries the same digits the provider stores in `providerItemId`.
+ */
+const itemNumberCodec: ProviderItemNumberCodec = {
+  parseItemNumber: (_scope, urlNumber) => (/^\d+$/.test(urlNumber) ? urlNumber : null),
+  formatItemNumber: (providerItemId) => providerItemId,
+};
 
 const labelTemplate: LabelTemplate = (config) => {
   const orgUrl = typeof config.orgUrl === "string" ? config.orgUrl.trim() : "";
@@ -135,6 +150,7 @@ export const azureDevOpsSpec = {
   ],
   axisMatcher,
   axisExtract,
+  itemNumberCodec,
   capabilities: {
     supportedReactions: [],
     ciStatus: false,

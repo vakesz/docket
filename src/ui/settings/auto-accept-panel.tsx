@@ -35,9 +35,9 @@ const KINDS: readonly AutoAcceptKind[] = [
   },
 ];
 
-export function AutoAcceptPanel({ projectId }: { projectId: string }) {
+export function AutoAcceptPanel({ projectSlug }: { projectSlug: string }) {
   const utils = trpc.useUtils();
-  const projectSettings = trpc.settings.projectList.useQuery({ projectId });
+  const projectSettings = trpc.settings.projectList.useQuery({ projectSlug });
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -47,16 +47,16 @@ export function AutoAcceptPanel({ projectId }: { projectId: string }) {
   // project's settings instead of keeping the previous project's state.
   const seededForRef = useRef<string | null>(null);
   useEffect(() => {
-    if (seededForRef.current === projectId) return;
+    if (seededForRef.current === projectSlug) return;
     if (!projectSettings.data) return;
     const row = projectSettings.data.find((r) => r.key === "proposals.auto-accept-kinds");
     setSelected(Array.isArray(row?.value) ? new Set(row.value as string[]) : new Set<string>());
-    seededForRef.current = projectId;
-  }, [projectSettings.data, projectId]);
+    seededForRef.current = projectSlug;
+  }, [projectSettings.data, projectSlug]);
 
   const save = trpc.settings.projectUpdate.useMutation({
     onSuccess: async () => {
-      await utils.settings.projectList.invalidate({ projectId });
+      await utils.settings.projectList.invalidate({ projectSlug });
     },
   });
 
@@ -79,7 +79,7 @@ export function AutoAcceptPanel({ projectId }: { projectId: string }) {
 
   const onSave = async () => {
     await save.mutateAsync({
-      projectId,
+      projectSlug,
       key: "proposals.auto-accept-kinds",
       value: Array.from(selected),
     });

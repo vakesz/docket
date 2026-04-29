@@ -61,40 +61,35 @@ export default async function SettingsPage({
     select: { defaultProjectId: true },
   });
 
-  const candidate =
-    requested ??
-    me?.defaultProjectId ??
-    (
-      await db.project.findFirst({
-        where: {
-          archivedAt: null,
-          OR: [{ ownerUserId: userId }, { memberships: { some: { userId } } }],
-        },
-        orderBy: [{ updatedAt: "desc" }],
-        select: { id: true },
-      })
-    )?.id ??
-    null;
+  const accessOr = [{ ownerUserId: userId }, { memberships: { some: { userId } } }];
 
-  // Validate access — a stale ?project= query param should fall back to
-  // the default rather than blow up the page.
-  const project = candidate
-    ? await db.project.findFirst({
-        where: {
-          id: candidate,
-          archivedAt: null,
-          OR: [{ ownerUserId: userId }, { memberships: { some: { userId } } }],
-        },
-        select: { id: true, name: true },
-      })
-    : null;
+  // ?project=<slug> wins; fall back to the user's pinned default (id), then
+  // to the most-recently-touched membership.
+  const project =
+    (requested
+      ? await db.project.findFirst({
+          where: { slug: requested, archivedAt: null, OR: accessOr },
+          select: { id: true, slug: true, name: true },
+        })
+      : null) ??
+    (me?.defaultProjectId
+      ? await db.project.findFirst({
+          where: { id: me.defaultProjectId, archivedAt: null, OR: accessOr },
+          select: { id: true, slug: true, name: true },
+        })
+      : null) ??
+    (await db.project.findFirst({
+      where: { archivedAt: null, OR: accessOr },
+      orderBy: [{ updatedAt: "desc" }],
+      select: { id: true, slug: true, name: true },
+    }));
 
   const publicBase = publicBaseUrl();
 
   return (
     <SettingsShell
       publicBase={publicBase}
-      project={project ? { id: project.id, name: project.name } : null}
+      project={project ? { id: project.id, slug: project.slug, name: project.name } : null}
       {...(requestedSection !== undefined ? { initialSection: requestedSection } : {})}
     />
   );

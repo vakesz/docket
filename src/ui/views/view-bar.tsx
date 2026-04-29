@@ -16,7 +16,7 @@ import {
 } from "@/ui/primitives/select";
 
 type Props = {
-  projectId: string;
+  projectSlug: string;
 };
 
 const BUCKETS: readonly StateBucket[] = ["open", "closed", "all"];
@@ -35,7 +35,7 @@ const NO_VIEW = "__none";
  * minimal save-as-view form. Per-axis chips with top-N popovers are a
  * follow-up — the underlying router + view filter already support them.
  */
-export function ViewBar({ projectId }: Props) {
+export function ViewBar({ projectSlug }: Props) {
   const router = useRouter();
   const params = useSearchParams();
   const utils = trpc.useUtils();
@@ -46,10 +46,10 @@ export function ViewBar({ projectId }: Props) {
     ? (bucketParam as StateBucket)
     : "open";
 
-  const views = trpc.views.list.useQuery({ projectId });
+  const views = trpc.views.list.useQuery({ projectSlug });
   const create = trpc.views.create.useMutation({
     onSuccess: async (created) => {
-      await utils.views.list.invalidate({ projectId });
+      await utils.views.list.invalidate({ projectSlug });
       navigateWith({ viewId: created.id });
       setShowForm(false);
       setNewName("");
@@ -57,13 +57,13 @@ export function ViewBar({ projectId }: Props) {
   });
   const remove = trpc.views.delete.useMutation({
     onSuccess: async (_data, vars) => {
-      await utils.views.list.invalidate({ projectId });
+      await utils.views.list.invalidate({ projectSlug });
       if (vars.viewId === activeViewId) navigateWith({ viewId: undefined });
     },
   });
   const setDefault = trpc.views.setDefault.useMutation({
     onSuccess: async () => {
-      await utils.views.list.invalidate({ projectId });
+      await utils.views.list.invalidate({ projectSlug });
     },
   });
 
@@ -88,14 +88,14 @@ export function ViewBar({ projectId }: Props) {
       next.set("bucket", patch.bucket);
     }
     const qs = next.toString();
-    router.replace(`/projects/${projectId}/items${qs ? `?${qs}` : ""}`);
+    router.replace(`/projects/${projectSlug}/items${qs ? `?${qs}` : ""}`);
   }
 
   function onCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!newName.trim()) return;
     create.mutate({
-      projectId,
+      projectSlug,
       name: newName.trim(),
       // Snapshot whatever the URL currently encodes — bucket today; later,
       // assignees/axes too.
@@ -162,7 +162,7 @@ export function ViewBar({ projectId }: Props) {
                 variant="ghost"
                 size="xs"
                 disabled={setDefault.isPending || activeView.isDefault}
-                onClick={() => setDefault.mutate({ projectId, viewId: activeView.id })}
+                onClick={() => setDefault.mutate({ projectSlug, viewId: activeView.id })}
               >
                 {activeView.isDefault ? "Default ★" : "Make default"}
               </Button>
@@ -173,7 +173,7 @@ export function ViewBar({ projectId }: Props) {
                 disabled={remove.isPending}
                 onClick={() => {
                   if (confirm(`Delete view “${activeView.name}”?`)) {
-                    remove.mutate({ projectId, viewId: activeView.id });
+                    remove.mutate({ projectSlug, viewId: activeView.id });
                   }
                 }}
               >

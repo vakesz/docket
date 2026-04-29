@@ -15,12 +15,12 @@ const STALE_KEY = "items.stale-after-days";
  * threshold. Each member sees this value unless they set their own
  * override under Profile → Item detail.
  */
-export function ProjectItemsPanel({ projectId }: { projectId: string }) {
+export function ProjectItemsPanel({ projectSlug }: { projectSlug: string }) {
   const utils = trpc.useUtils();
-  const list = trpc.settings.projectList.useQuery({ projectId });
+  const list = trpc.settings.projectList.useQuery({ projectSlug });
   const update = trpc.settings.projectUpdate.useMutation({
     onSuccess: async () => {
-      await utils.settings.projectList.invalidate({ projectId });
+      await utils.settings.projectList.invalidate({ projectSlug });
     },
   });
 
@@ -36,7 +36,7 @@ export function ProjectItemsPanel({ projectId }: { projectId: string }) {
 
   const onToggleIndicator = (next: boolean) => {
     update.mutate({
-      projectId,
+      projectSlug,
       key: STALE_KEY as never,
       value: next ? lastPositive : 0,
     });
@@ -46,7 +46,7 @@ export function ProjectItemsPanel({ projectId }: { projectId: string }) {
     if (!Number.isFinite(next) || next < 1) return;
     const clamped = Math.min(Math.trunc(next), 3650);
     setLastPositive(clamped);
-    update.mutate({ projectId, key: STALE_KEY as never, value: clamped });
+    update.mutate({ projectSlug, key: STALE_KEY as never, value: clamped });
   };
 
   return (

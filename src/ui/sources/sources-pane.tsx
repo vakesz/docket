@@ -19,14 +19,14 @@ import { Textarea } from "@/ui/primitives/textarea";
  * Writes hit `sources.create` / `sources.delete` directly — no proposal
  * pipeline, since there is no agent to confirm against.
  */
-export function SourcesPane({ projectId }: { projectId: string }) {
+export function SourcesPane({ projectSlug }: { projectSlug: string }) {
   const utils = trpc.useUtils();
-  const list = trpc.sources.list.useQuery({ projectId, limit: 100 }, { staleTime: 0 });
+  const list = trpc.sources.list.useQuery({ projectSlug, limit: 100 }, { staleTime: 0 });
   const create = trpc.sources.create.useMutation({
-    onSuccess: () => utils.sources.list.invalidate({ projectId }),
+    onSuccess: () => utils.sources.list.invalidate({ projectSlug }),
   });
   const remove = trpc.sources.delete.useMutation({
-    onSuccess: () => utils.sources.list.invalidate({ projectId }),
+    onSuccess: () => utils.sources.list.invalidate({ projectSlug }),
   });
 
   const [draftTitle, setDraftTitle] = useState("");
@@ -38,7 +38,7 @@ export function SourcesPane({ projectId }: { projectId: string }) {
     const title = draftTitle.trim();
     if (!title) return;
     await create.mutateAsync({
-      projectId,
+      projectSlug,
       title,
       kind: draftKind.trim(),
       bodyMd: draftBody,
@@ -146,7 +146,7 @@ export function SourcesPane({ projectId }: { projectId: string }) {
                 variant="destructive"
                 size="xs"
                 disabled={remove.isPending}
-                onClick={() => void remove.mutateAsync({ projectId, sourceId: s.id })}
+                onClick={() => void remove.mutateAsync({ projectSlug, sourceId: s.id })}
               >
                 Delete
               </Button>

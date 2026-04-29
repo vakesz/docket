@@ -52,7 +52,7 @@ export function CreateProjectForm({ defaultMakeDefault = true, onCreated }: Prop
       await utils.projects.list.invalidate();
       if (makeDefault) {
         try {
-          await setDefault.mutateAsync({ projectId: project.id });
+          await setDefault.mutateAsync({ projectSlug: project.slug });
         } catch {
           // The project was created; pinning is best-effort. Surface the
           // error elsewhere later if it actually matters.
@@ -65,7 +65,7 @@ export function CreateProjectForm({ defaultMakeDefault = true, onCreated }: Prop
         onCreated({ id: project.id, name: project.name });
         return;
       }
-      router.push(`/projects/${project.id}/items`);
+      router.push(`/projects/${project.slug}/items`);
       router.refresh();
     },
   });

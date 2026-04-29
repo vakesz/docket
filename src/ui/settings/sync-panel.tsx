@@ -17,15 +17,15 @@ function formatTimestamp(value: Date | string | null): string {
  * sync is the only way to archive items the provider no longer returns,
  * so it lives here next to the cursor it resets.
  */
-export function SyncPanel({ projectId }: { projectId: string }) {
+export function SyncPanel({ projectSlug }: { projectSlug: string }) {
   const router = useRouter();
   const utils = trpc.useUtils();
-  const status = trpc.items.syncStatus.useQuery({ projectId });
+  const status = trpc.items.syncStatus.useQuery({ projectSlug });
   const sync = trpc.items.runSync.useMutation({
     onSuccess: async () => {
       await Promise.all([
         utils.items.list.invalidate(),
-        utils.items.syncStatus.invalidate({ projectId }),
+        utils.items.syncStatus.invalidate({ projectSlug }),
       ]);
       router.refresh();
     },
@@ -64,7 +64,7 @@ export function SyncPanel({ projectId }: { projectId: string }) {
             type="button"
             variant="secondary"
             disabled={pending}
-            onClick={() => sync.mutate({ projectId, mode: "incremental" })}
+            onClick={() => sync.mutate({ projectSlug, mode: "incremental" })}
           >
             {pending && sync.variables?.mode !== "full" ? "Refreshing…" : "Refresh"}
           </Button>
@@ -77,7 +77,7 @@ export function SyncPanel({ projectId }: { projectId: string }) {
                   "Run a full sync? Walks every item the provider returns and archives any cached row no longer visible. Slower than Refresh.",
                 )
               ) {
-                sync.mutate({ projectId, mode: "full" });
+                sync.mutate({ projectSlug, mode: "full" });
               }
             }}
           >

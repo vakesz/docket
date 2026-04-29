@@ -4,17 +4,17 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { DocketLogo } from "@/ui/setup/docket-logo";
 
 /**
- * On `/settings` the active project is carried in `?project=<id>` (the
+ * On `/settings` the active project is carried in `?project=<slug>` (the
  * ProjectSwitcher rewrites that query on switch), so the logo has to read
  * the URL client-side to stay aligned with the switcher. Anywhere else,
- * the server-resolved `currentProjectId` is authoritative.
+ * the server-resolved `currentProjectSlug` is authoritative.
  */
-export function LogoLink({ currentProjectId }: { currentProjectId: string | null }) {
+export function LogoLink({ currentProjectSlug }: { currentProjectSlug: string | null }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const onSettings = pathname?.startsWith("/settings") ?? false;
   const urlProject = onSettings ? searchParams.get("project") : null;
-  const effective = urlProject ?? currentProjectId;
+  const effective = urlProject ?? currentProjectSlug;
   const href = effective ? `/projects/${effective}/items` : "/";
 
   return (

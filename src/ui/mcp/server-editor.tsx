@@ -32,24 +32,24 @@ export type EditorRow = {
  * headers on a template row.
  */
 export function McpServerEditor({
-  projectId,
+  projectSlug,
   row,
   onClose,
 }: {
-  projectId: string;
+  projectSlug: string;
   row: EditorRow;
   onClose: () => void;
 }) {
   const utils = trpc.useUtils();
   const update = trpc.mcp.update.useMutation({
     onSuccess: () => {
-      utils.mcp.list.invalidate({ projectId });
+      utils.mcp.list.invalidate({ projectSlug });
       onClose();
     },
   });
   const startOauth = trpc.mcp.oauth.start.useMutation();
   const disconnectOauth = trpc.mcp.oauth.disconnect.useMutation({
-    onSuccess: () => utils.mcp.list.invalidate({ projectId }),
+    onSuccess: () => utils.mcp.list.invalidate({ projectSlug }),
   });
 
   const initialTemplate = findTemplateByUrl(row.url);
@@ -107,7 +107,7 @@ export function McpServerEditor({
       }
     }
     await update.mutateAsync({
-      projectId,
+      projectSlug,
       serverId: row.id,
       url,
       headersJson,
@@ -118,7 +118,7 @@ export function McpServerEditor({
   const onConnectOauth = async () => {
     setError(null);
     try {
-      const res = await startOauth.mutateAsync({ projectId, serverId: row.id });
+      const res = await startOauth.mutateAsync({ projectSlug, serverId: row.id });
       window.open(res.authorizationUrl, "_blank", "noopener,noreferrer");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -128,7 +128,7 @@ export function McpServerEditor({
   const onDisconnectOauth = async () => {
     setError(null);
     try {
-      await disconnectOauth.mutateAsync({ projectId, serverId: row.id });
+      await disconnectOauth.mutateAsync({ projectSlug, serverId: row.id });
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));

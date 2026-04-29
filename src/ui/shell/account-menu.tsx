@@ -24,12 +24,12 @@ type Props = {
   userImage?: string | null;
   signOutAction: () => Promise<void>;
   /**
-   * Carried into the `/settings` link as `?project=<id>` so the unified
+   * Carried into the `/settings` link as `?project=<slug>` so the unified
    * settings page knows which project's per-project sections (memory,
    * sources, MCP) to populate. Null when the user is on a route without
    * an active project.
    */
-  currentProjectId?: string | null;
+  currentProjectSlug?: string | null;
 };
 
 /**
@@ -40,12 +40,12 @@ export function AccountMenu({
   userLabel,
   userImage = null,
   signOutAction,
-  currentProjectId = null,
+  currentProjectSlug = null,
 }: Props) {
   const [imageBroken, setImageBroken] = useState(false);
   const initial = userLabel.trim().charAt(0).toUpperCase() || "?";
   const showImage = !!userImage && !imageBroken;
-  const settingsHref = currentProjectId ? `/settings?project=${currentProjectId}` : "/settings";
+  const settingsHref = currentProjectSlug ? `/settings?project=${currentProjectSlug}` : "/settings";
 
   return (
     <DropdownMenu>

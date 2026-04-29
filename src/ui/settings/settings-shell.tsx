@@ -36,10 +36,11 @@ type Props = {
   publicBase: string;
   /**
    * Active project for project-scoped sections. Resolved server-side from
-   * `?project=<id>` → user's default → most recent. Null when the user
-   * has no projects at all.
+   * `?project=<slug>` → user's default → most recent. Null when the user
+   * has no projects at all. The CUID is kept for legacy resolution but
+   * panels are addressed by slug.
    */
-  project: { id: string; name: string } | null;
+  project: { id: string; slug: string; name: string } | null;
   /**
    * Initial section to land on, set from the `?section=<key>` query param.
    * Lets external entry points (e.g. the topbar "+ Add project" button)
@@ -55,10 +56,10 @@ type Props = {
  * vocabulary. Active section persists in localStorage.
  */
 export function SettingsShell({ publicBase, project, initialSection }: Props) {
-  const projectId = project?.id ?? null;
+  const projectSlug = project?.slug ?? null;
 
   const [active, setActive] = useState<SectionKey>(
-    initialSection ?? (projectId ? "memory" : "profile"),
+    initialSection ?? (projectSlug ? "memory" : "profile"),
   );
   useRegisterSidebarMount();
   const { open: mobileNavOpen, setOpen: setMobileNavOpen } = useSidebarDrawer();
@@ -66,7 +67,7 @@ export function SettingsShell({ publicBase, project, initialSection }: Props) {
   useEffect(() => {
     if (initialSection) {
       const meta = SECTIONS.find((s) => s.key === initialSection);
-      if (meta && (!meta.needsProject || projectId)) {
+      if (meta && (!meta.needsProject || projectSlug)) {
         setActive(initialSection);
         return;
       }
@@ -74,13 +75,13 @@ export function SettingsShell({ publicBase, project, initialSection }: Props) {
     const persisted = readPersistedSection();
     if (persisted) {
       const meta = SECTIONS.find((s) => s.key === persisted);
-      if (meta && (!meta.needsProject || projectId)) {
+      if (meta && (!meta.needsProject || projectSlug)) {
         setActive(persisted);
         return;
       }
     }
-    setActive(projectId ? "memory" : "profile");
-  }, [projectId, initialSection]);
+    setActive(projectSlug ? "memory" : "profile");
+  }, [projectSlug, initialSection]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -95,7 +96,7 @@ export function SettingsShell({ publicBase, project, initialSection }: Props) {
   if (!activeMeta) {
     throw new Error("settings shell rendered with empty SECTIONS list");
   }
-  const blockedByMissingProject = Boolean(activeMeta.needsProject) && !projectId;
+  const blockedByMissingProject = Boolean(activeMeta.needsProject) && !projectSlug;
 
   const handleSelect = (key: SectionKey) => {
     setActive(key);
@@ -105,7 +106,7 @@ export function SettingsShell({ publicBase, project, initialSection }: Props) {
   return (
     <div className="grid min-h-0 w-full flex-1 grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)]">
       <aside className="hidden min-h-0 overflow-auto border-border bg-card/80 px-3 py-4 lg:block lg:border-r">
-        <SettingsSidebar active={active} onSelect={handleSelect} projectId={projectId} />
+        <SettingsSidebar active={active} onSelect={handleSelect} projectSlug={projectSlug} />
       </aside>
 
       <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
@@ -116,7 +117,7 @@ export function SettingsShell({ publicBase, project, initialSection }: Props) {
             </SheetTitle>
           </SheetHeader>
           <div className="flex-1 overflow-auto px-3 pb-4">
-            <SettingsSidebar active={active} onSelect={handleSelect} projectId={projectId} />
+            <SettingsSidebar active={active} onSelect={handleSelect} projectSlug={projectSlug} />
           </div>
         </SheetContent>
       </Sheet>
@@ -145,7 +146,7 @@ export function SettingsShell({ publicBase, project, initialSection }: Props) {
               Pick a project from the sidebar to manage its {activeMeta.label.toLowerCase()}.
             </p>
           ) : (
-            <SectionContent active={active} projectId={projectId} publicBase={publicBase} />
+            <SectionContent active={active} projectSlug={projectSlug} publicBase={publicBase} />
           )}
         </div>
       </section>
@@ -155,38 +156,38 @@ export function SettingsShell({ publicBase, project, initialSection }: Props) {
 
 function SectionContent({
   active,
-  projectId,
+  projectSlug,
   publicBase,
 }: {
   active: SectionKey;
-  projectId: string | null;
+  projectSlug: string | null;
   publicBase: string;
 }) {
   switch (active) {
     case "memory":
-      return projectId ? <MemoryPane projectId={projectId} /> : null;
+      return projectSlug ? <MemoryPane projectSlug={projectSlug} /> : null;
     case "sources":
-      return projectId ? <SourcesPane projectId={projectId} /> : null;
+      return projectSlug ? <SourcesPane projectSlug={projectSlug} /> : null;
     case "mcp":
-      return projectId ? <McpPane projectId={projectId} /> : null;
+      return projectSlug ? <McpPane projectSlug={projectSlug} /> : null;
     case "project-llm":
-      return projectId ? <ProjectLlmPanel projectId={projectId} /> : null;
+      return projectSlug ? <ProjectLlmPanel projectSlug={projectSlug} /> : null;
     case "project-web-fetch":
-      return projectId ? <WebFetchPanel projectId={projectId} /> : null;
+      return projectSlug ? <WebFetchPanel projectSlug={projectSlug} /> : null;
     case "project-guardrail":
-      return projectId ? <GuardrailPanel projectId={projectId} /> : null;
+      return projectSlug ? <GuardrailPanel projectSlug={projectSlug} /> : null;
     case "project-auto-accept":
-      return projectId ? <AutoAcceptPanel projectId={projectId} /> : null;
+      return projectSlug ? <AutoAcceptPanel projectSlug={projectSlug} /> : null;
     case "project-sync":
-      return projectId ? <SyncPanel projectId={projectId} /> : null;
+      return projectSlug ? <SyncPanel projectSlug={projectSlug} /> : null;
     case "project-analytics":
-      return projectId ? <AnalyticsPanel scope="project" projectId={projectId} /> : null;
+      return projectSlug ? <AnalyticsPanel scope="project" projectSlug={projectSlug} /> : null;
     case "project-members":
-      return projectId ? <MembersPanel projectId={projectId} /> : null;
+      return projectSlug ? <MembersPanel projectSlug={projectSlug} /> : null;
     case "project-export":
-      return projectId ? <ExportPanel projectId={projectId} /> : null;
+      return projectSlug ? <ExportPanel projectSlug={projectSlug} /> : null;
     case "project-items":
-      return projectId ? <ProjectItemsPanel projectId={projectId} /> : null;
+      return projectSlug ? <ProjectItemsPanel projectSlug={projectSlug} /> : null;
     case "projects":
       return <ProjectsPanel />;
     case "profile":
@@ -194,7 +195,7 @@ function SectionContent({
     case "chat":
       return <ChatDisplayPanel />;
     case "items-list":
-      return <ItemsListPanel projectId={projectId} />;
+      return <ItemsListPanel projectSlug={projectSlug} />;
     case "item-detail":
       return <ItemDetailPanel />;
     case "budget-audit":

@@ -1,4 +1,5 @@
 import "server-only";
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import type { BacklogBucket, Item, ItemKind, ItemState, StateBucket } from "@/core/types";
 import { BACKLOG_BUCKETS } from "@/core/types";
@@ -10,11 +11,40 @@ import { injectExternalChange, materialDiff } from "@/server/inbound-changes/inj
 import { getProviderSpec } from "@/server/provider-registry";
 import { buildProviderForUser } from "@/server/providers/build";
 import { reconcileComments, runFullSync, runIncrementalSync, toItemRow } from "@/server/sync";
-import { assertFound, projectIdSchema, projectScopedProcedure, router } from "@/server/trpc";
+import { assertFound, projectScopedProcedure, projectSlugSchema, router } from "@/server/trpc";
+
+/**
+ * Translate the URL-facing `itemNumber` into the provider's stored
+ * `providerItemId` for `(projectId, providerItemId)` lookups. Throws
+ * `BAD_REQUEST` when the number doesn't match the provider's expected shape
+ * (e.g. non-numeric slug for GitHub/AzDO) — items live behind the route's
+ * dynamic segment, so a malformed slot is a 400 rather than a 500.
+ */
+function resolveProviderItemId(
+  providerKind: string,
+  providerScope: unknown,
+  itemNumber: string,
+): string {
+  const spec = getProviderSpec(providerKind);
+  if (!spec) {
+    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "unknown provider kind" });
+  }
+  const providerItemId = spec.itemNumberCodec.parseItemNumber(
+    asPlainObject(providerScope),
+    itemNumber,
+  );
+  if (!providerItemId) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: `invalid item identifier "${itemNumber}" for this project`,
+    });
+  }
+  return providerItemId;
+}
 
 const BacklogBucketEnum = z.enum(BACKLOG_BUCKETS);
 
-const ListInput = projectIdSchema.extend({
+const ListInput = projectSlugSchema.extend({
   kind: z.string().optional(),
   state: z.string().optional(),
   bucket: BacklogBucketEnum.default("open"),
@@ -33,9 +63,9 @@ const ListInput = projectIdSchema.extend({
   limit: z.number().int().min(1).max(200).default(100),
 });
 
-const ItemRef = projectIdSchema.extend({ itemId: z.string().min(1) });
+const ItemRef = projectSlugSchema.extend({ itemNumber: z.string().min(1) });
 
-const SyncInput = projectIdSchema.extend({
+const SyncInput = projectSlugSchema.extend({
   mode: z.enum(["incremental", "full"]).default("incremental"),
 });
 
@@ -269,9 +299,13 @@ export const itemsRouter = router({
       ? filterRowsByAxes(rows as PrismaItem[], view, ctx.project.providerKind).slice(0, input.limit)
       : rows;
 
+    const spec = getProviderSpec(ctx.project.providerKind);
+    const formatItemNumber = spec?.itemNumberCodec.formatItemNumber ?? ((id: string) => id);
+
     return filteredRows.map((row) => ({
       id: row.id,
       providerItemId: row.providerItemId,
+      itemNumber: formatItemNumber(row.providerItemId),
       kind: row.kind,
       title: row.title,
       state: row.state,
@@ -285,11 +319,20 @@ export const itemsRouter = router({
   }),
 
   get: projectScopedProcedure.input(ItemRef).query(async ({ ctx, input }) => {
+    const spec = getProviderSpec(ctx.project.providerKind);
+    if (!spec) {
+      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "unknown provider kind" });
+    }
+    const providerItemId = resolveProviderItemId(
+      ctx.project.providerKind,
+      ctx.project.providerScope,
+      input.itemNumber,
+    );
     // Explicit select keeps the `providerRaw` JSON blob (often kilobytes of
     // unfiltered provider response) off the wire — nothing in the UI reads it.
-    return assertFound(
+    const row = assertFound(
       await ctx.db.item.findFirst({
-        where: { id: input.itemId, projectId: ctx.projectId },
+        where: { providerItemId, projectId: ctx.projectId },
         select: {
           id: true,
           projectId: true,
@@ -322,17 +365,23 @@ export const itemsRouter = router({
       }),
       "item not found in this project",
     );
+    const formatItemNumber = spec.itemNumberCodec.formatItemNumber;
+    return {
+      ...row,
+      itemNumber: formatItemNumber(row.providerItemId),
+      parentNumber: row.parentId ? formatItemNumber(row.parentId) : null,
+    };
   }),
 
   search: projectScopedProcedure
     .input(
-      projectIdSchema.extend({
+      projectSlugSchema.extend({
         q: z.string().min(1).max(200),
         limit: z.number().int().min(1).max(50).default(20),
       }),
     )
     .query(async ({ ctx, input }) => {
-      return ctx.db.item.findMany({
+      const rows = await ctx.db.item.findMany({
         where: {
           projectId: ctx.projectId,
           archived: false,
@@ -352,6 +401,12 @@ export const itemsRouter = router({
           url: true,
         },
       });
+      const spec = getProviderSpec(ctx.project.providerKind);
+      const formatItemNumber = spec?.itemNumberCodec.formatItemNumber ?? ((id: string) => id);
+      return rows.map((row) => ({
+        ...row,
+        itemNumber: formatItemNumber(row.providerItemId),
+      }));
     }),
 
   /**
@@ -374,7 +429,7 @@ export const itemsRouter = router({
    * the cursor's three timestamps — `updatedAt` covers syncs that ran but
    * didn't bump either payload column.
    */
-  syncStatus: projectScopedProcedure.input(projectIdSchema).query(async ({ ctx }) => {
+  syncStatus: projectScopedProcedure.input(projectSlugSchema).query(async ({ ctx }) => {
     const cursor = await ctx.db.syncCursor.findUnique({
       where: { projectId: ctx.projectId },
       select: { watermark: true, lastFullSyncAt: true, updatedAt: true },
@@ -397,9 +452,14 @@ export const itemsRouter = router({
    */
   refreshItem: projectScopedProcedure.input(ItemRef).mutation(async ({ ctx, input }) => {
     const userId = ctx.userId;
+    const providerItemId = resolveProviderItemId(
+      ctx.project.providerKind,
+      ctx.project.providerScope,
+      input.itemNumber,
+    );
     const cached = assertFound(
       await ctx.db.item.findFirst({
-        where: { id: input.itemId, projectId: ctx.projectId },
+        where: { providerItemId, projectId: ctx.projectId },
         select: {
           id: true,
           projectId: true,

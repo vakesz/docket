@@ -17,7 +17,7 @@ export default async function ProjectLayout({
   params,
 }: {
   children: ReactNode;
-  params: Promise<{ projectId: string }>;
+  params: Promise<{ projectSlug: string }>;
 }) {
   await requireSetupComplete();
   const session = await auth();
@@ -25,7 +25,7 @@ export default async function ProjectLayout({
     redirect("/");
   }
 
-  const { projectId } = await params;
+  const { projectSlug } = await params;
   const trpc = await createCaller();
 
   // All four fetches are independent of each other, so they fan out at
@@ -38,10 +38,10 @@ export default async function ProjectLayout({
   let pendingProposalsCount: number;
   try {
     [project, projects, readOnly, pendingProposalsCount] = await Promise.all([
-      trpc.projects.get({ projectId }),
+      trpc.projects.get({ projectSlug }),
       trpc.projects.list(),
       loadGlobalSetting(db, "app.read-only"),
-      trpc.proposals.count({ projectId, status: "pending" }),
+      trpc.proposals.count({ projectSlug, status: "pending" }),
     ]);
   } catch (err) {
     if (err instanceof TRPCError && (err.code === "FORBIDDEN" || err.code === "NOT_FOUND")) {
@@ -54,6 +54,7 @@ export default async function ProjectLayout({
 
   const projectOptions = projects.map((p) => ({
     id: p.id,
+    slug: p.slug,
     name: p.name,
     providerKind: p.providerKind,
   }));
@@ -63,18 +64,18 @@ export default async function ProjectLayout({
       <WorkspaceProviders>
         <TopBar
           projects={projectOptions}
-          currentProjectId={project.id}
+          currentProjectSlug={project.slug}
           userLabel={userLabel}
           userImage={userImage}
           readOnly={readOnly}
         />
         <main className="flex flex-1 flex-col overflow-hidden">{children}</main>
         <StatusFooter
-          projectId={project.id}
+          projectSlug={project.slug}
           pendingProposals={pendingProposalsCount}
           readOnly={readOnly}
         />
-        <CommandPalette projectId={project.id} projects={projectOptions} />
+        <CommandPalette projectSlug={project.slug} projects={projectOptions} />
         <ShortcutHelp />
       </WorkspaceProviders>
     </div>

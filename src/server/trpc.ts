@@ -70,10 +70,13 @@ export const publicProcedure = t.procedure;
 
 /**
  * Shared zod fragment for project-scoped procedure inputs. Compose via
- * `.extend({ ... })` so every router uses the same id rule and rename
- * stays single-source.
+ * `.extend({ ... })` so every router uses the same identifier rule and
+ * rename stays single-source.
+ *
+ * The wire field is `projectSlug` — that's the URL-facing identifier. The
+ * resolved CUID is exposed downstream as `ctx.projectId` for FK queries.
  */
-export const projectIdSchema = z.object({ projectId: z.string().min(1) });
+export const projectSlugSchema = z.object({ projectSlug: z.string().min(1) });
 
 const requireSession = t.middleware(({ ctx, next }) => {
   const userId = ctx.session?.user?.id;
@@ -118,12 +121,13 @@ const enforceReadWrite = t.middleware(async ({ ctx, next }) => {
 export const mutationProcedure = protectedProcedure.use(enforceReadWrite);
 
 /**
- * Project-scoped procedure: requires `projectId` in the input and verifies
+ * Project-scoped procedure: requires `projectSlug` in the input and verifies
  * the session user owns the project or has a membership on it. Injects
- * `project` and `projectId` into ctx for downstream use.
+ * `project` and `projectId` (the resolved CUID, used for FK queries) into
+ * ctx for downstream use.
  *
  * Procedures that compose this MUST .input() a Zod schema that includes
- * `projectId: z.string()` — the middleware reads it via getRawInput().
+ * `projectSlug: z.string()` — the middleware reads it via getRawInput().
  */
 const enforceProjectMembership = t.middleware(async ({ ctx, getRawInput, next }) => {
   // `requireSession` runs upstream and narrows ctx.userId to a non-empty string.
@@ -134,15 +138,15 @@ const enforceProjectMembership = t.middleware(async ({ ctx, getRawInput, next })
   }
 
   const raw = await getRawInput();
-  const parsed = z.object({ projectId: z.string().min(1) }).safeParse(raw);
+  const parsed = z.object({ projectSlug: z.string().min(1) }).safeParse(raw);
   if (!parsed.success) {
     throw new TRPCError({
       code: "BAD_REQUEST",
-      message: "projectId is required for project-scoped procedures",
+      message: "projectSlug is required for project-scoped procedures",
     });
   }
 
-  const project = await projectForUser(ctx.db, parsed.data.projectId, userId);
+  const project = await projectForUser(ctx.db, parsed.data.projectSlug, userId);
   if (!project) {
     throw new TRPCError({
       code: "FORBIDDEN",

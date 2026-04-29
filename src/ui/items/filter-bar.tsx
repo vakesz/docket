@@ -104,7 +104,7 @@ function CountBadge({ n, selected }: { n: number; selected: boolean }) {
 }
 
 export function FilterBar({
-  projectId,
+  projectSlug,
   state,
   handlers,
   visibleKinds,
@@ -119,7 +119,7 @@ export function FilterBar({
   providerHasAvatars,
   showAvatars,
 }: {
-  projectId: string;
+  projectSlug: string;
   state: FilterState;
   handlers: FilterHandlers;
   visibleKinds: Array<ItemKind | "all">;
@@ -161,7 +161,7 @@ export function FilterBar({
           onChange={(e) => handlers.setQuery(e.target.value)}
           className="min-w-0 flex-1 text-xs"
         />
-        <CreateItemForm projectId={projectId} />
+        <CreateItemForm projectSlug={projectSlug} />
       </div>
 
       <FilterRow label="State">

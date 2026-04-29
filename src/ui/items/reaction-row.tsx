@@ -70,14 +70,14 @@ function asReactions(value: unknown, supported: readonly string[]): Reactions {
  * `targetId` (the provider's own id), not the cached row's surrogate.
  */
 export function ReactionRow({
-  projectId,
+  projectSlug,
   providerItemId,
   targetKind,
   targetId,
   reactions,
   supportedReactions,
 }: {
-  projectId: string;
+  projectSlug: string;
   providerItemId: string;
   targetKind: "item" | "comment";
   targetId: string;
@@ -122,7 +122,7 @@ export function ReactionRow({
             title={`React with ${labelFor(kind)}`}
             onClick={() => {
               propose.mutate({
-                projectId,
+                projectSlug,
                 providerItemId,
                 targetKind,
                 targetId,
@@ -151,7 +151,7 @@ export function ReactionRow({
       })}
       {error ? <span className="text-xs text-destructive">{error}</span> : null}
       <ProposalDialog
-        projectId={projectId}
+        projectSlug={projectSlug}
         proposalId={pendingProposalId}
         onClose={() => setPendingProposalId(null)}
       />

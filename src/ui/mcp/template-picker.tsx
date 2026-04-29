@@ -19,15 +19,15 @@ const FEATURED_IDS = new Set(["github", "notion", "atlassian", "linear"]);
  * toggle so the panel doesn't sprawl.
  */
 export function McpTemplatePicker({
-  projectId,
+  projectSlug,
   existingNames,
 }: {
-  projectId: string;
+  projectSlug: string;
   existingNames: Set<string>;
 }) {
   const utils = trpc.useUtils();
   const create = trpc.mcp.create.useMutation({
-    onSuccess: () => utils.mcp.list.invalidate({ projectId }),
+    onSuccess: () => utils.mcp.list.invalidate({ projectSlug }),
   });
   const [error, setError] = useState<string | null>(null);
   const [showMore, setShowMore] = useState(false);
@@ -40,7 +40,7 @@ export function McpTemplatePicker({
     try {
       const name = uniqueName(template.defaultName, existingNames);
       await create.mutateAsync({
-        projectId,
+        projectSlug,
         name,
         url: template.url,
         headersJson: {},

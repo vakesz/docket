@@ -35,14 +35,14 @@ const PRESETS: { days: number; label: string }[] = [
  * theme tokens than any third-party defaults would.
  */
 export function AnalyticsPanel(
-  props: { scope: "global" } | { scope: "project"; projectId: string },
+  props: { scope: "global" } | { scope: "project"; projectSlug: string },
 ) {
   const [days, setDays] = useState(14);
   const customDaysId = useId();
 
   const projectQuery = trpc.analytics.projectDaily.useQuery(
     {
-      projectId: props.scope === "project" ? props.projectId : "",
+      projectSlug: props.scope === "project" ? props.projectSlug : "",
       days,
     },
     { enabled: props.scope === "project" },

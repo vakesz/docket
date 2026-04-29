@@ -1,10 +1,11 @@
 "use client";
 
 /**
- * Per-project recently-viewed item ids, kept in localStorage. Stored as
- * an MRU list keyed by projectId so each project surfaces its own recent
- * trail without bleeding across switches. The list holds canonical item
- * ids (not provider ids) since that's what /items/[id] navigation uses.
+ * Per-project recently-viewed item numbers, kept in localStorage. Stored
+ * as an MRU list keyed by projectSlug so each project surfaces its own
+ * recent trail without bleeding across switches. The list holds the
+ * URL-facing `itemNumber` (the same string the route segment carries)
+ * since that's what `/items/[itemNumber]` navigation uses.
  *
  * The display limit is a browser-local preference (`useRecentLimit` in
  * `lib/ui-prefs.ts`). `0` disables the Recent section entirely. The store
@@ -50,31 +51,34 @@ function writeStore(store: Store): void {
   }
 }
 
-export function recordRecentItem(projectId: string, itemId: string): void {
-  if (!projectId || !itemId) return;
+export function recordRecentItem(projectSlug: string, itemNumber: string): void {
+  if (!projectSlug || !itemNumber) return;
   if (!readRecentEnabled()) return;
   if (readRecentLimit() === 0) return;
   const store = readStore();
-  const prev = store[projectId] ?? [];
-  store[projectId] = [itemId, ...prev.filter((x) => x !== itemId)].slice(0, RECENT_LIMIT_MAX);
+  const prev = store[projectSlug] ?? [];
+  store[projectSlug] = [itemNumber, ...prev.filter((x) => x !== itemNumber)].slice(
+    0,
+    RECENT_LIMIT_MAX,
+  );
   writeStore(store);
 }
 
-export function useRecentItemIds(projectId: string): string[] {
-  const [ids, setIds] = useState<string[]>([]);
+export function useRecentItemNumbers(projectSlug: string): string[] {
+  const [numbers, setNumbers] = useState<string[]>([]);
 
   useEffect(() => {
     const sync = () => {
       if (!readRecentEnabled()) {
-        setIds([]);
+        setNumbers([]);
         return;
       }
       const limit = readRecentLimit();
       if (limit === 0) {
-        setIds([]);
+        setNumbers([]);
         return;
       }
-      setIds((readStore()[projectId] ?? []).slice(0, limit));
+      setNumbers((readStore()[projectSlug] ?? []).slice(0, limit));
     };
     sync();
     window.addEventListener("storage", sync);
@@ -85,7 +89,7 @@ export function useRecentItemIds(projectId: string): string[] {
       window.removeEventListener(RECENT_EVENT, sync);
       window.removeEventListener(PREF_EVENT, sync);
     };
-  }, [projectId]);
+  }, [projectSlug]);
 
-  return ids;
+  return numbers;
 }

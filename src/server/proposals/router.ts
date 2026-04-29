@@ -14,10 +14,10 @@ import { diffOf, isEmptyDiff } from "@/server/proposals/diff";
 import { confirmProposal, maybeAutoAccept, rejectProposal } from "@/server/proposals/executor";
 import {
   assertFound,
-  projectIdSchema,
   projectScopedApproverProcedure,
   projectScopedMutationProcedure,
   projectScopedProcedure,
+  projectSlugSchema,
   router,
 } from "@/server/trpc";
 
@@ -31,18 +31,18 @@ const ReactionOpEnum = z.enum(["add", "remove"]);
 // every real-world reaction shortcode.
 const ReactionKindSchema = z.string().min(1).max(64);
 
-const ListInput = projectIdSchema.extend({
+const ListInput = projectSlugSchema.extend({
   status: z.enum(["pending", "confirmed", "rejected", "all"]).default("pending"),
   limit: z.number().int().min(1).max(100).default(50),
 });
 
-const CountInput = projectIdSchema.extend({
+const CountInput = projectSlugSchema.extend({
   status: z.enum(["pending", "confirmed", "rejected", "all"]).default("pending"),
 });
 
-const ProposalIdInput = projectIdSchema.extend({ proposalId: z.string().min(1) });
+const ProposalIdInput = projectSlugSchema.extend({ proposalId: z.string().min(1) });
 
-const AuditListInput = projectIdSchema.extend({
+const AuditListInput = projectSlugSchema.extend({
   /// When set, returns only audit rows for one proposal.
   proposalId: z.string().min(1).optional(),
   /// When set, filters to one action kind (e.g. `proposal.confirm.failed`).
@@ -50,27 +50,27 @@ const AuditListInput = projectIdSchema.extend({
   limit: z.number().int().min(1).max(200).default(50),
 });
 
-const ProposeTransitionInput = projectIdSchema.extend({
+const ProposeTransitionInput = projectSlugSchema.extend({
   providerItemId: z.string().min(1),
   intent: TransitionIntentEnum,
 });
 
-const ProposeDescriptionPatchInput = projectIdSchema.extend({
+const ProposeDescriptionPatchInput = projectSlugSchema.extend({
   providerItemId: z.string().min(1),
   newMd: z.string().max(50_000),
 });
 
-const ProposeCommentInput = projectIdSchema.extend({
+const ProposeCommentInput = projectSlugSchema.extend({
   providerItemId: z.string().min(1),
   bodyMd: z.string().min(1).max(50_000),
 });
 
-const ProposeTagsChangeInput = projectIdSchema.extend({
+const ProposeTagsChangeInput = projectSlugSchema.extend({
   providerItemId: z.string().min(1),
   nextTags: z.array(z.string().min(1).max(80)).max(50),
 });
 
-const ProposeReactionToggleInput = projectIdSchema.extend({
+const ProposeReactionToggleInput = projectSlugSchema.extend({
   providerItemId: z.string().min(1),
   targetKind: ReactionTargetKindEnum,
   targetId: z.string().min(1),
@@ -78,7 +78,7 @@ const ProposeReactionToggleInput = projectIdSchema.extend({
   op: ReactionOpEnum,
 });
 
-const ProposeNewItemInput = projectIdSchema.extend({
+const ProposeNewItemInput = projectSlugSchema.extend({
   itemKind: ItemKindEnum,
   fields: z.object({
     title: z.string().min(1).max(500),

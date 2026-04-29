@@ -185,7 +185,7 @@ export const llmProvidersRouter = router({
   setProjectDefault: projectScopedMutationProcedure
     .input(
       z.object({
-        projectId: z.string().min(1),
+        projectSlug: z.string().min(1),
         role: LLM_ROLE,
         /** Null clears the project default for the supplied role. */
         id: z.string().min(1).nullable(),
@@ -217,7 +217,7 @@ export const llmProvidersRouter = router({
         input.role === "chat"
           ? { defaultLlmProviderId: input.id }
           : { defaultGuardrailProviderId: input.id };
-      await ctx.db.project.update({ where: { id: input.projectId }, data });
+      await ctx.db.project.update({ where: { id: ctx.projectId }, data });
       return { ok: true } as const;
     }),
 

@@ -1,6 +1,7 @@
 import "server-only";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { slugify } from "@/core/slug";
 import type { Prisma } from "@/db/generated/client";
 import { asPlainObject } from "@/lib/json";
 import { buildProjectExport } from "@/server/projects/export";
@@ -8,10 +9,10 @@ import { getProviderSpec, listProviderSpecs, PROVIDER_TYPE_IDS } from "@/server/
 import {
   assertFound,
   mutationProcedure,
-  projectIdSchema,
   projectScopedApproverProcedure,
   projectScopedMutationProcedure,
   projectScopedProcedure,
+  projectSlugSchema,
   protectedProcedure,
   router,
 } from "@/server/trpc";
@@ -26,6 +27,33 @@ const CreateProjectInput = z.object({
   providerKind: PROVIDER_KIND,
   providerScope: z.record(z.string(), z.unknown()),
 });
+
+/**
+ * Derive a project's URL slug from its display name. Returns the slug or
+ * throws a `BAD_REQUEST` if the name has no slug-worthy characters (e.g.
+ * "///" alone). The unique constraint on `Project.slug` is the second line
+ * of defense — collisions surface as `CONFLICT` from the create/rename
+ * mutations.
+ */
+function nameToSlug(name: string): string {
+  const slug = slugify(name);
+  if (!slug) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "project name must contain at least one letter or digit",
+    });
+  }
+  return slug;
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code: string }).code === "P2002"
+  );
+}
 
 export const projectsRouter = router({
   /**
@@ -62,6 +90,7 @@ export const projectsRouter = router({
       orderBy: [{ createdAt: "desc" }],
       select: {
         id: true,
+        slug: true,
         name: true,
         description: true,
         providerKind: true,
@@ -90,7 +119,7 @@ export const projectsRouter = router({
    * registry. `hasAvatarFetcher` lets the filter bar decide whether to
    * even attempt the avatar route for assignee chips.
    */
-  get: projectScopedProcedure.input(projectIdSchema).query(({ ctx }) => {
+  get: projectScopedProcedure.input(projectSlugSchema).query(({ ctx }) => {
     const spec = getProviderSpec(ctx.project.providerKind);
     return {
       ...ctx.project,
@@ -128,45 +157,81 @@ export const projectsRouter = router({
         message: err instanceof Error ? err.message : "invalid provider scope",
       });
     }
-    return ctx.db.project.create({
-      data: {
-        name: input.name,
-        description: input.description,
-        providerKind: input.providerKind,
-        providerScope: normalizedScope as Prisma.InputJsonValue,
-        ownerUserId: userId,
-        memberships: {
-          create: {
-            userId,
-            role: "approver",
+    const slug = nameToSlug(input.name);
+    try {
+      return await ctx.db.project.create({
+        data: {
+          name: input.name,
+          slug,
+          description: input.description,
+          providerKind: input.providerKind,
+          providerScope: normalizedScope as Prisma.InputJsonValue,
+          ownerUserId: userId,
+          memberships: {
+            create: {
+              userId,
+              role: "approver",
+            },
           },
         },
-      },
-    });
+      });
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `a project with the slug "${slug}" already exists — pick a different name`,
+        });
+      }
+      throw err;
+    }
   }),
+
+  /**
+   * Rename a project. Owner only — renaming changes the slug, which changes
+   * the URL, so other members shouldn't be able to do it. The new slug is
+   * derived from the new name; collisions surface as `CONFLICT`.
+   */
+  rename: projectScopedMutationProcedure
+    .input(projectSlugSchema.extend({ name: z.string().min(1).max(120) }))
+    .mutation(async ({ ctx, input }) => {
+      if (ctx.project.ownerUserId !== ctx.userId) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "only the project owner can rename",
+        });
+      }
+      const slug = nameToSlug(input.name);
+      try {
+        return await ctx.db.project.update({
+          where: { id: ctx.projectId },
+          data: { name: input.name, slug },
+          select: { id: true, slug: true, name: true },
+        });
+      } catch (err) {
+        if (isUniqueViolation(err)) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: `a project with the slug "${slug}" already exists — pick a different name`,
+          });
+        }
+        throw err;
+      }
+    }),
 
   /**
    * Archive — owner only. Items / conversations / proposals / etc. stay in
    * place but the project disappears from list queries. A future restore
    * procedure can flip archivedAt back to null.
    */
-  archive: mutationProcedure.input(projectIdSchema).mutation(async ({ ctx, input }) => {
-    const userId = ctx.userId;
-    const project = assertFound(
-      await ctx.db.project.findUnique({
-        where: { id: input.projectId },
-        select: { ownerUserId: true },
-      }),
-      "project not found",
-    );
-    if (project.ownerUserId !== userId) {
+  archive: projectScopedMutationProcedure.input(projectSlugSchema).mutation(async ({ ctx }) => {
+    if (ctx.project.ownerUserId !== ctx.userId) {
       throw new TRPCError({
         code: "FORBIDDEN",
         message: "only the project owner can archive",
       });
     }
     return ctx.db.project.update({
-      where: { id: input.projectId },
+      where: { id: ctx.projectId },
       data: { archivedAt: new Date() },
     });
   }),
@@ -177,14 +242,15 @@ export const projectsRouter = router({
    * before persisting so a stale id doesn't get pinned.
    */
   setDefault: mutationProcedure
-    .input(z.object({ projectId: z.string().min(1).nullable() }))
+    .input(z.object({ projectSlug: z.string().min(1).nullable() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.userId;
-      if (input.projectId) {
-        assertFound(
+      let resolvedId: string | null = null;
+      if (input.projectSlug) {
+        const project = assertFound(
           await ctx.db.project.findFirst({
             where: {
-              id: input.projectId,
+              slug: input.projectSlug,
               archivedAt: null,
               OR: [{ ownerUserId: userId }, { memberships: { some: { userId } } }],
             },
@@ -192,12 +258,13 @@ export const projectsRouter = router({
           }),
           "project not found or you no longer have access",
         );
+        resolvedId = project.id;
       }
       await ctx.db.user.update({
         where: { id: userId },
-        data: { defaultProjectId: input.projectId },
+        data: { defaultProjectId: resolvedId },
       });
-      return { defaultProjectId: input.projectId };
+      return { defaultProjectId: resolvedId };
     }),
 
   /**
@@ -208,7 +275,7 @@ export const projectsRouter = router({
    */
   setLlmDefaults: projectScopedMutationProcedure
     .input(
-      projectIdSchema.extend({
+      projectSlugSchema.extend({
         llmProviderId: z.string().min(1).nullable(),
         defaultTemperature: z.number().min(0).max(2).nullable(),
       }),
@@ -230,13 +297,14 @@ export const projectsRouter = router({
         }
       }
       return ctx.db.project.update({
-        where: { id: input.projectId },
+        where: { id: ctx.projectId },
         data: {
           defaultLlmProviderId: input.llmProviderId,
           defaultTemperature: input.defaultTemperature,
         },
         select: {
           id: true,
+          slug: true,
           defaultLlmProviderId: true,
           defaultTemperature: true,
         },
@@ -248,7 +316,7 @@ export const projectsRouter = router({
    * JSON blob. Read-only; runs through `projectScopedProcedure` so any
    * member can pull their own archive.
    */
-  export: projectScopedProcedure.input(projectIdSchema).query(async ({ ctx }) => {
+  export: projectScopedProcedure.input(projectSlugSchema).query(async ({ ctx }) => {
     const userId = ctx.userId;
     return buildProjectExport(ctx.db, ctx.projectId, userId);
   }),
@@ -259,9 +327,9 @@ export const projectsRouter = router({
    * tag in proposals. Owner is rendered separately so the UI can show
    * "owner" as a non-editable, non-removable row.
    */
-  members: projectScopedProcedure.input(projectIdSchema).query(async ({ ctx, input }) => {
+  members: projectScopedProcedure.input(projectSlugSchema).query(async ({ ctx }) => {
     const project = await ctx.db.project.findUniqueOrThrow({
-      where: { id: input.projectId },
+      where: { id: ctx.projectId },
       select: {
         ownerUserId: true,
         owner: { select: { id: true, name: true, email: true, image: true } },
@@ -300,7 +368,7 @@ export const projectsRouter = router({
    */
   addMember: projectScopedApproverProcedure
     .input(
-      projectIdSchema.extend({
+      projectSlugSchema.extend({
         email: z.string().email(),
         role: MEMBER_ROLE.default("member"),
       }),
@@ -313,11 +381,7 @@ export const projectsRouter = router({
         }),
         "no user with that email has signed in yet",
       );
-      const project = await ctx.db.project.findUniqueOrThrow({
-        where: { id: input.projectId },
-        select: { ownerUserId: true },
-      });
-      if (project.ownerUserId === user.id) {
+      if (ctx.project.ownerUserId === user.id) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: "user is already the project owner",
@@ -326,19 +390,14 @@ export const projectsRouter = router({
       try {
         return await ctx.db.projectMembership.create({
           data: {
-            projectId: input.projectId,
+            projectId: ctx.projectId,
             userId: user.id,
             role: input.role,
           },
           select: { id: true, userId: true, role: true, createdAt: true },
         });
       } catch (err) {
-        if (
-          typeof err === "object" &&
-          err !== null &&
-          "code" in err &&
-          (err as { code: string }).code === "P2002"
-        ) {
+        if (isUniqueViolation(err)) {
           throw new TRPCError({
             code: "CONFLICT",
             message: "user is already a member",
@@ -351,7 +410,7 @@ export const projectsRouter = router({
   /** Change a member's role. Approver-only; viewer/member/approver. */
   updateMemberRole: projectScopedApproverProcedure
     .input(
-      projectIdSchema.extend({
+      projectSlugSchema.extend({
         membershipId: z.string().min(1),
         role: MEMBER_ROLE,
       }),
@@ -359,7 +418,7 @@ export const projectsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const membership = assertFound(
         await ctx.db.projectMembership.findFirst({
-          where: { id: input.membershipId, projectId: input.projectId },
+          where: { id: input.membershipId, projectId: ctx.projectId },
           select: { id: true },
         }),
         "membership not found",
@@ -378,14 +437,14 @@ export const projectsRouter = router({
    */
   removeMember: projectScopedApproverProcedure
     .input(
-      projectIdSchema.extend({
+      projectSlugSchema.extend({
         membershipId: z.string().min(1),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const membership = assertFound(
         await ctx.db.projectMembership.findFirst({
-          where: { id: input.membershipId, projectId: input.projectId },
+          where: { id: input.membershipId, projectId: ctx.projectId },
           select: { id: true, userId: true },
         }),
         "membership not found",

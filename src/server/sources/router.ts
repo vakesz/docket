@@ -18,24 +18,24 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
   assertFound,
-  projectIdSchema,
   projectScopedMutationProcedure,
   projectScopedProcedure,
+  projectSlugSchema,
   router,
 } from "@/server/trpc";
 
-const ListInput = projectIdSchema.extend({
+const ListInput = projectSlugSchema.extend({
   kind: z.string().max(64).optional(),
   tag: z.string().max(64).optional(),
   search: z.string().max(200).optional(),
   limit: z.number().int().min(1).max(200).default(100),
 });
 
-const GetInput = projectIdSchema.extend({
+const GetInput = projectSlugSchema.extend({
   sourceId: z.string().min(1),
 });
 
-const CreateInput = projectIdSchema.extend({
+const CreateInput = projectSlugSchema.extend({
   title: z.string().min(1).max(200),
   kind: z.string().max(64).default(""),
   uri: z.string().max(500).default(""),

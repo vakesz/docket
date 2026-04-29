@@ -185,6 +185,10 @@ model Project {
   id                   String    @id @default(cuid())
   /// Display name for the project ("ACME / web", "Contoso Platform").
   name                 String
+  /// URL slug derived from `name` via `slugify` (`src/core/slug.ts`).
+  /// Globally unique — two projects can't share a slug regardless of owner.
+  /// Recomputed on rename, so updating `name` changes the project's URL.
+  slug                 String    @unique
   description          String    @default("")
   /// Provider kind this project targets — 'github' | 'azure_devops' | ...
   /// Same vocabulary as OauthProviderConfig.kind.

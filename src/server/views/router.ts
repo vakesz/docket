@@ -23,9 +23,9 @@ import { z } from "zod";
 import { STATE_BUCKETS } from "@/core/types";
 import {
   assertFound,
-  projectIdSchema,
   projectScopedMutationProcedure,
   projectScopedProcedure,
+  projectSlugSchema,
   router,
 } from "@/server/trpc";
 
@@ -34,9 +34,9 @@ const StateBucketEnum = z.enum(STATE_BUCKETS);
 const AssigneeList = z.array(z.string().min(0).max(200)).max(50).default([]);
 const AxesMap = z.record(z.string().min(1).max(64), z.string().max(500)).default({});
 
-const ViewIdInput = projectIdSchema.extend({ viewId: z.string().min(1) });
+const ViewIdInput = projectSlugSchema.extend({ viewId: z.string().min(1) });
 
-const CreateInput = projectIdSchema.extend({
+const CreateInput = projectSlugSchema.extend({
   name: z.string().min(1).max(80),
   stateBucket: StateBucketEnum.default("open"),
   assignees: AssigneeList,
@@ -44,7 +44,7 @@ const CreateInput = projectIdSchema.extend({
   isDefault: z.boolean().default(false),
 });
 
-const UpdateInput = projectIdSchema.extend({
+const UpdateInput = projectSlugSchema.extend({
   viewId: z.string().min(1),
   name: z.string().min(1).max(80).optional(),
   stateBucket: StateBucketEnum.optional(),
@@ -53,7 +53,7 @@ const UpdateInput = projectIdSchema.extend({
 });
 
 export const viewsRouter = router({
-  list: projectScopedProcedure.input(projectIdSchema).query(async ({ ctx }) => {
+  list: projectScopedProcedure.input(projectSlugSchema).query(async ({ ctx }) => {
     const userId = ctx.userId;
     return ctx.db.savedView.findMany({
       where: { userId, projectId: ctx.projectId },

@@ -12,14 +12,14 @@ import { DetailPane } from "@/ui/items/detail-pane";
 // React's `cache()` dedupes on argument equality within one server request,
 // so `generateMetadata` and the page component share a single tRPC fetch
 // instead of doubling DB round-trips on every detail-page load.
-const loadItem = cache(async (projectId: string, itemId: string) => {
+const loadItem = cache(async (projectSlug: string, itemNumber: string) => {
   const trpc = await createCaller();
-  return trpc.items.get({ projectId, itemId });
+  return trpc.items.get({ projectSlug, itemNumber });
 });
 
-const loadProject = cache(async (projectId: string) => {
+const loadProject = cache(async (projectSlug: string) => {
   const trpc = await createCaller();
-  return trpc.projects.get({ projectId });
+  return trpc.projects.get({ projectSlug });
 });
 
 /** Strip the noisiest markdown so the meta description reads as plain prose. */
@@ -39,11 +39,11 @@ function stripMarkdown(md: string): string {
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ projectId: string; itemId: string }>;
+  params: Promise<{ projectSlug: string; itemNumber: string }>;
 }): Promise<Metadata> {
-  const { projectId, itemId } = await params;
+  const { projectSlug, itemNumber } = await params;
   try {
-    const item = await loadItem(projectId, itemId);
+    const item = await loadItem(projectSlug, itemNumber);
     const title = `${item.providerItemId} · ${item.title}`;
     const description = item.descriptionMd
       ? stripMarkdown(item.descriptionMd).slice(0, 160) || undefined
@@ -59,14 +59,17 @@ export async function generateMetadata({
 export default async function ItemDetailPage({
   params,
 }: {
-  params: Promise<{ projectId: string; itemId: string }>;
+  params: Promise<{ projectSlug: string; itemNumber: string }>;
 }) {
-  const { projectId, itemId } = await params;
+  const { projectSlug, itemNumber } = await params;
 
   let item: Awaited<ReturnType<typeof loadItem>>;
   let project: Awaited<ReturnType<typeof loadProject>>;
   try {
-    [item, project] = await Promise.all([loadItem(projectId, itemId), loadProject(projectId)]);
+    [item, project] = await Promise.all([
+      loadItem(projectSlug, itemNumber),
+      loadProject(projectSlug),
+    ]);
   } catch (err) {
     if (err instanceof TRPCError && (err.code === "FORBIDDEN" || err.code === "NOT_FOUND")) {
       notFound();
@@ -77,7 +80,7 @@ export default async function ItemDetailPage({
   const session = await auth();
   const userId = session?.user?.id ?? null;
   const [projectStale, userStale, showHeaderReactions, showCommentReactions] = await Promise.all([
-    loadProjectSetting(db, projectId, "items.stale-after-days"),
+    loadProjectSetting(db, project.id, "items.stale-after-days"),
     userId
       ? loadUserSetting(db, userId, "items.stale-after-days.user")
       : Promise.resolve(-1 as number),
@@ -88,7 +91,7 @@ export default async function ItemDetailPage({
 
   return (
     <DetailPane
-      projectId={projectId}
+      projectSlug={projectSlug}
       providerKind={project.providerKind}
       capabilities={project.capabilities}
       providerHasAvatars={project.hasAvatarFetcher}

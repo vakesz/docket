@@ -3,7 +3,7 @@
  *
  * The stream encoding follows server-sent-events (one `event:` line + one
  * `data:` JSON blob per record, blank-line delimited). Both halves of the
- * pipeline — server (`/api/projects/[projectId]/conversations/[id]/stream`)
+ * pipeline — server (`/api/projects/[projectSlug]/conversations/[id]/stream`)
  * and the `useChatStream` hook — share these types so a payload-shape
  * change shows up as a TS error on both sides.
  */

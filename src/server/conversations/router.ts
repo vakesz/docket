@@ -28,21 +28,21 @@ import {
 import { logger } from "@/server/logger";
 import {
   assertFound,
-  projectIdSchema,
   projectScopedMutationProcedure,
   projectScopedProcedure,
+  projectSlugSchema,
   router,
 } from "@/server/trpc";
 
-const ConversationRef = projectIdSchema.extend({ conversationId: z.string().min(1) });
+const ConversationRef = projectSlugSchema.extend({ conversationId: z.string().min(1) });
 
-const ListInput = projectIdSchema.extend({
+const ListInput = projectSlugSchema.extend({
   itemId: z.string().nullable().default(null),
   limit: z.number().int().min(1).max(100).default(50),
   archived: z.boolean().default(false),
 });
 
-const CreateInput = projectIdSchema.extend({
+const CreateInput = projectSlugSchema.extend({
   itemId: z.string().nullable().default(null),
 });
 

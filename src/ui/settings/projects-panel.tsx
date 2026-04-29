@@ -8,6 +8,7 @@ import { CreateProjectForm } from "@/ui/projects/create-project-form";
 
 type ProjectRow = {
   id: string;
+  slug: string;
   name: string;
   description: string;
   providerKind: string;
@@ -97,7 +98,7 @@ export function ProjectsPanel() {
                         variant="outline"
                         size="xs"
                         disabled={setDefault.isPending}
-                        onClick={() => setDefault.mutate({ projectId: p.id })}
+                        onClick={() => setDefault.mutate({ projectSlug: p.slug })}
                       >
                         Set default
                       </Button>
@@ -113,7 +114,7 @@ export function ProjectsPanel() {
                             `Archive "${p.name}"? It will disappear from project lists. The data stays in the database.`,
                           )
                         ) {
-                          archive.mutate({ projectId: p.id });
+                          archive.mutate({ projectSlug: p.slug });
                         }
                       }}
                     >

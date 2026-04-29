@@ -27,9 +27,9 @@ import {
 import { loadGlobalSetting } from "@/server/settings/effective";
 import {
   mutationProcedure,
-  projectIdSchema,
   projectScopedMutationProcedure,
   projectScopedProcedure,
+  projectSlugSchema,
   protectedProcedure,
   router,
 } from "@/server/trpc";
@@ -69,7 +69,7 @@ const GlobalUpdateInput = z.discriminatedUnion(
   scopedUpdateOptions("global") as unknown as UpdateOptions,
 );
 
-const ProjectUpdateInput = projectIdSchema.and(
+const ProjectUpdateInput = projectSlugSchema.and(
   z.discriminatedUnion("key", scopedUpdateOptions("project") as unknown as UpdateOptions),
 );
 
@@ -83,7 +83,7 @@ const ProjectKeyEnum = z.enum(scopedKeys("project") as [SettingKey, ...SettingKe
 
 const UserResetInput = z.object({ key: UserKeyEnum });
 const GlobalResetInput = z.object({ key: GlobalKeyEnum });
-const ProjectResetInput = projectIdSchema.extend({ key: ProjectKeyEnum });
+const ProjectResetInput = projectSlugSchema.extend({ key: ProjectKeyEnum });
 
 export const settingsRouter = router({
   /**
@@ -205,11 +205,11 @@ export const settingsRouter = router({
    * every project-scoped catalog key (catalog default substituted when the
    * row is missing or invalid).
    */
-  projectList: projectScopedProcedure.input(projectIdSchema).query(async ({ ctx, input }) => {
+  projectList: projectScopedProcedure.input(projectSlugSchema).query(async ({ ctx }) => {
     const projectKeys = SETTING_KEYS.filter((k) => SETTINGS_CATALOG[k].scope === "project");
     const rows = await ctx.db.setting.findMany({
       where: {
-        projectId: input.projectId,
+        projectId: ctx.projectId,
         scope: "project",
         key: { in: projectKeys },
       },
@@ -227,7 +227,7 @@ export const settingsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const encoded = JSON.stringify(input.value);
       const existing = await ctx.db.setting.findFirst({
-        where: { key: input.key, projectId: input.projectId, scope: "project", userId: null },
+        where: { key: input.key, projectId: ctx.projectId, scope: "project", userId: null },
         select: { id: true },
       });
       if (existing) {
@@ -238,7 +238,7 @@ export const settingsRouter = router({
           key: input.key,
           value: encoded,
           scope: "project",
-          projectId: input.projectId,
+          projectId: ctx.projectId,
         },
       });
     }),
@@ -248,7 +248,7 @@ export const settingsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const def = getSettingDef(input.key);
       await ctx.db.setting.deleteMany({
-        where: { key: input.key, projectId: input.projectId, scope: "project" },
+        where: { key: input.key, projectId: ctx.projectId, scope: "project" },
       });
       return { ok: true, value: def.default };
     }),

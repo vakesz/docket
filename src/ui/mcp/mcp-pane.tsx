@@ -24,17 +24,17 @@ import { findTemplateByUrl, templateHeadersComplete } from "./templates";
  * reads this table at registry build time, so the next conversation turn
  * picks up changes without a server restart.
  */
-export function McpPane({ projectId }: { projectId: string }) {
+export function McpPane({ projectSlug }: { projectSlug: string }) {
   const utils = trpc.useUtils();
-  const list = trpc.mcp.list.useQuery({ projectId }, { staleTime: 0 });
+  const list = trpc.mcp.list.useQuery({ projectSlug }, { staleTime: 0 });
   const create = trpc.mcp.create.useMutation({
-    onSuccess: () => utils.mcp.list.invalidate({ projectId }),
+    onSuccess: () => utils.mcp.list.invalidate({ projectSlug }),
   });
   const update = trpc.mcp.update.useMutation({
-    onSuccess: () => utils.mcp.list.invalidate({ projectId }),
+    onSuccess: () => utils.mcp.list.invalidate({ projectSlug }),
   });
   const remove = trpc.mcp.delete.useMutation({
-    onSuccess: () => utils.mcp.list.invalidate({ projectId }),
+    onSuccess: () => utils.mcp.list.invalidate({ projectSlug }),
   });
 
   const [draftName, setDraftName] = useState("");
@@ -69,7 +69,7 @@ export function McpPane({ projectId }: { projectId: string }) {
       }
     }
     setHeadersError(null);
-    await create.mutateAsync({ projectId, name, url, headersJson, enabled: true });
+    await create.mutateAsync({ projectSlug, name, url, headersJson, enabled: true });
     setDraftName("");
     setDraftUrl("");
     setDraftHeaders("");
@@ -77,7 +77,7 @@ export function McpPane({ projectId }: { projectId: string }) {
 
   return (
     <section className="flex flex-col gap-4">
-      <McpTemplatePicker projectId={projectId} existingNames={existingNames} />
+      <McpTemplatePicker projectSlug={projectSlug} existingNames={existingNames} />
 
       <form
         className="flex flex-col gap-2 rounded-2xl border border-dashed border-border bg-muted/40 p-4"
@@ -209,7 +209,7 @@ export function McpPane({ projectId }: { projectId: string }) {
                       disabled={update.isPending || (needsConfig && !s.enabled)}
                       onClick={() =>
                         void update.mutateAsync({
-                          projectId,
+                          projectSlug,
                           serverId: s.id,
                           enabled: !s.enabled,
                         })
@@ -222,7 +222,7 @@ export function McpPane({ projectId }: { projectId: string }) {
                       variant="destructive"
                       size="xs"
                       disabled={remove.isPending}
-                      onClick={() => void remove.mutateAsync({ projectId, serverId: s.id })}
+                      onClick={() => void remove.mutateAsync({ projectSlug, serverId: s.id })}
                     >
                       Delete
                     </Button>
@@ -230,7 +230,7 @@ export function McpPane({ projectId }: { projectId: string }) {
                 </div>
                 {isEditing && (
                   <McpServerEditor
-                    projectId={projectId}
+                    projectSlug={projectSlug}
                     row={{
                       id: s.id,
                       name: s.name,

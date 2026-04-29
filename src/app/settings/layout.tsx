@@ -50,6 +50,7 @@ export default async function SettingsLayout({
 
   const projectOptions = projects.map((p) => ({
     id: p.id,
+    slug: p.slug,
     name: p.name,
     providerKind: p.providerKind,
   }));
@@ -57,16 +58,17 @@ export default async function SettingsLayout({
   // Topbar's project switcher: prefer the user's pinned default, fall back
   // to the most-recent membership. Switching projects from the topbar
   // takes the user out of /settings into that project's items shell.
-  const currentProjectId =
-    (me?.defaultProjectId && projectOptions.find((p) => p.id === me.defaultProjectId)?.id) ??
-    projectOptions[0]?.id ??
+  const currentProject =
+    (me?.defaultProjectId ? projectOptions.find((p) => p.id === me.defaultProjectId) : undefined) ??
+    projectOptions[0] ??
     null;
+  const currentProjectSlug = currentProject?.slug ?? null;
 
   // Mirror the project layout's pending-proposal signal so the user keeps
   // the same footer state while navigating into /settings. The footer
   // pulls its own sync timestamp client-side via items.syncStatus.
-  const pendingProposalsCount = currentProjectId
-    ? await trpc.proposals.count({ projectId: currentProjectId, status: "pending" })
+  const pendingProposalsCount = currentProjectSlug
+    ? await trpc.proposals.count({ projectSlug: currentProjectSlug, status: "pending" })
     : 0;
 
   const userLabel = session.user.email ?? session.user.name ?? "you";
@@ -77,19 +79,19 @@ export default async function SettingsLayout({
       <WorkspaceProviders>
         <TopBar
           projects={projectOptions}
-          currentProjectId={currentProjectId}
+          currentProjectSlug={currentProjectSlug}
           userLabel={userLabel}
           userImage={userImage}
           readOnly={readOnly}
         />
         <main className="flex flex-1 flex-col overflow-hidden">{children}</main>
         <StatusFooter
-          projectId={currentProjectId}
+          projectSlug={currentProjectSlug}
           pendingProposals={pendingProposalsCount}
           readOnly={readOnly}
         />
-        {currentProjectId ? (
-          <CommandPalette projectId={currentProjectId} projects={projectOptions} />
+        {currentProjectSlug ? (
+          <CommandPalette projectSlug={currentProjectSlug} projects={projectOptions} />
         ) : null}
         <ShortcutHelp />
       </WorkspaceProviders>

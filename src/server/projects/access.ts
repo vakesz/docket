@@ -18,15 +18,19 @@ type Database = typeof Db;
  * for it, otherwise `null`. Mirrors the `OR` clause inside
  * `enforceProjectMembership` in `src/server/trpc.ts` so both surfaces
  * share the same access semantics.
+ *
+ * Lookup is by `slug` (the URL-facing identifier) rather than the surrogate
+ * CUID — every caller sources its identifier from the route params or wire
+ * input.
  */
 export async function projectForUser(
   db: Database,
-  projectId: string,
+  projectSlug: string,
   userId: string,
 ): Promise<Project | null> {
   return db.project.findFirst({
     where: {
-      id: projectId,
+      slug: projectSlug,
       archivedAt: null,
       OR: [{ ownerUserId: userId }, { memberships: { some: { userId } } }],
     },

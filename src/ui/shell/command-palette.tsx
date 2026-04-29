@@ -22,11 +22,12 @@ import {
   DialogTitle,
 } from "@/ui/primitives/dialog";
 
-type ProjectOption = { id: string; name: string };
+type ProjectOption = { id: string; slug: string; name: string };
 
 type ItemSummary = {
   id: string;
   providerItemId: string;
+  itemNumber: string;
   kind: string;
   title: string;
   state: string;
@@ -70,9 +71,9 @@ function pushRecent(prev: string[], id: string): string[] {
   return [id, ...prev.filter((x) => x !== id)].slice(0, RECENTS_LIMIT);
 }
 
-function extractItemId(pathname: string | null, projectId: string): string | undefined {
+function extractItemNumber(pathname: string | null, projectSlug: string): string | undefined {
   if (!pathname) return undefined;
-  const prefix = `/projects/${projectId}/items/`;
+  const prefix = `/projects/${projectSlug}/items/`;
   if (!pathname.startsWith(prefix)) return undefined;
   const tail = pathname.slice(prefix.length).split("/")[0]?.trim();
   return tail || undefined;
@@ -85,10 +86,10 @@ function extractItemId(pathname: string | null, projectId: string): string | und
  * the top across reloads.
  */
 export function CommandPalette({
-  projectId,
+  projectSlug,
   projects,
 }: {
-  projectId: string;
+  projectSlug: string;
   projects: ProjectOption[];
 }) {
   const [open, setOpen] = useState(false);
@@ -96,23 +97,23 @@ export function CommandPalette({
 
   const router = useRouter();
   const pathname = usePathname();
-  const itemId = extractItemId(pathname, projectId);
+  const itemNumber = extractItemNumber(pathname, projectSlug);
 
   const utils = trpc.useUtils();
 
-  const items = trpc.items.list.useQuery({ projectId, limit: 100 }, { enabled: open });
-  const pinned = trpc.watchlist.list.useQuery({ projectId, limit: 50 }, { enabled: open });
+  const items = trpc.items.list.useQuery({ projectSlug, limit: 100 }, { enabled: open });
+  const pinned = trpc.watchlist.list.useQuery({ projectSlug, limit: 50 }, { enabled: open });
   const pendingProposals = trpc.proposals.list.useQuery(
-    { projectId, status: "pending", limit: 100 },
+    { projectSlug, status: "pending", limit: 100 },
     { enabled: open },
   );
-  const isPinned = trpc.watchlist.isPinned.useQuery(
-    { projectId, providerItemId: itemId ?? "" },
-    { enabled: open && Boolean(itemId) },
-  );
   const currentItem = trpc.items.get.useQuery(
-    { projectId, itemId: itemId ?? "" },
-    { enabled: open && Boolean(itemId) },
+    { projectSlug, itemNumber: itemNumber ?? "" },
+    { enabled: open && Boolean(itemNumber) },
+  );
+  const isPinned = trpc.watchlist.isPinned.useQuery(
+    { projectSlug, providerItemId: currentItem.data?.providerItemId ?? "" },
+    { enabled: open && Boolean(currentItem.data?.providerItemId) },
   );
 
   const sync = trpc.items.runSync.useMutation({
@@ -133,7 +134,7 @@ export function CommandPalette({
   });
   const rejectProposal = trpc.proposals.reject.useMutation({
     onSuccess: async () => {
-      await utils.proposals.list.invalidate({ projectId });
+      await utils.proposals.list.invalidate({ projectSlug });
     },
   });
 
@@ -170,7 +171,7 @@ export function CommandPalette({
 
   const itemCommands = useMemo<PaletteCommand[]>(() => {
     const list: PaletteCommand[] = [];
-    if (!itemId) return list;
+    if (!itemNumber) return list;
     const it = currentItem.data;
     if (it?.url) {
       list.push({
@@ -194,14 +195,14 @@ export function CommandPalette({
           : "Pin this item so it survives view and sync changes.",
         keywords: it.providerItemId,
         run: () => {
-          if (pinnedNow) unpin.mutate({ projectId, providerItemId: it.providerItemId });
-          else pin.mutate({ projectId, providerItemId: it.providerItemId });
+          if (pinnedNow) unpin.mutate({ projectSlug, providerItemId: it.providerItemId });
+          else pin.mutate({ projectSlug, providerItemId: it.providerItemId });
           close();
         },
       });
     }
     return list;
-  }, [close, currentItem.data, isPinned.data?.pinned, itemId, pin, projectId, unpin]);
+  }, [close, currentItem.data, isPinned.data?.pinned, itemNumber, pin, projectSlug, unpin]);
 
   const navigateCommands = useMemo<PaletteCommand[]>(
     () => [
@@ -209,7 +210,7 @@ export function CommandPalette({
         id: "nav-items",
         label: "All items",
         description: "Open the items list for this project.",
-        run: () => go(`/projects/${projectId}/items`),
+        run: () => go(`/projects/${projectSlug}/items`),
       },
       {
         id: "nav-settings",
@@ -221,7 +222,7 @@ export function CommandPalette({
         run: () => go("/settings"),
       },
     ],
-    [go, projectId],
+    [go, projectSlug],
   );
 
   const actionCommands = useMemo<PaletteCommand[]>(() => {
@@ -232,7 +233,7 @@ export function CommandPalette({
         description: "Pull the latest items from the project's provider (incremental).",
         keywords: "refresh pull",
         run: () => {
-          sync.mutate({ projectId, mode: "incremental" });
+          sync.mutate({ projectSlug, mode: "incremental" });
           close();
         },
       },
@@ -242,7 +243,7 @@ export function CommandPalette({
         description: "Reset the watermark and re-pull everything the provider exposes.",
         keywords: "refresh reset rebuild",
         run: () => {
-          sync.mutate({ projectId, mode: "full" });
+          sync.mutate({ projectSlug, mode: "full" });
           close();
         },
       },
@@ -259,7 +260,7 @@ export function CommandPalette({
         run: () => {
           const ids = pendingProposals.data?.map((p) => p.id) ?? [];
           for (const id of ids) {
-            rejectProposal.mutate({ projectId, proposalId: id });
+            rejectProposal.mutate({ projectSlug, proposalId: id });
           }
           close();
         },
@@ -267,18 +268,18 @@ export function CommandPalette({
     }
 
     for (const p of projects) {
-      if (p.id === projectId) continue;
+      if (p.slug === projectSlug) continue;
       list.push({
         id: `switch-project-${p.id}`,
         label: `Switch project → ${p.name}`,
         description: `Open the '${p.name}' project's items.`,
         keywords: p.name,
-        run: () => go(`/projects/${p.id}/items`),
+        run: () => go(`/projects/${p.slug}/items`),
       });
     }
 
     return list;
-  }, [close, go, pendingProposals.data, projectId, projects, rejectProposal, sync]);
+  }, [close, go, pendingProposals.data, projectSlug, projects, rejectProposal, sync]);
 
   const allCommands = useMemo(
     () => [...itemCommands, ...navigateCommands, ...actionCommands],
@@ -302,6 +303,7 @@ export function CommandPalette({
       (pinned.data ?? []).map((row) => ({
         id: row.item.id,
         providerItemId: row.item.providerItemId,
+        itemNumber: row.item.itemNumber,
         kind: row.item.kind,
         title: row.item.title,
         state: row.item.state,
@@ -315,6 +317,7 @@ export function CommandPalette({
       (items.data ?? []).slice(0, 80).map((row) => ({
         id: row.id,
         providerItemId: row.providerItemId,
+        itemNumber: row.itemNumber,
         kind: row.kind,
         title: row.title,
         state: row.state,
@@ -396,7 +399,7 @@ export function CommandPalette({
                   <ItemRow
                     key={`pinned-${it.id}`}
                     item={it}
-                    onSelect={() => go(`/projects/${projectId}/items/${it.id}`)}
+                    onSelect={() => go(`/projects/${projectSlug}/items/${it.itemNumber}`)}
                   />
                 ))}
               </CommandGroup>
@@ -408,7 +411,7 @@ export function CommandPalette({
                   <ItemRow
                     key={it.id}
                     item={it}
-                    onSelect={() => go(`/projects/${projectId}/items/${it.id}`)}
+                    onSelect={() => go(`/projects/${projectSlug}/items/${it.itemNumber}`)}
                   />
                 ))}
               </CommandGroup>
@@ -455,7 +458,7 @@ function ItemRow({ item, onSelect }: { item: ItemSummary; onSelect: () => void }
       </span>
       <span className="ml-2 truncate">{item.title}</span>
       <span className="ml-auto font-mono text-[10px] text-muted-foreground-faint">
-        #{item.providerItemId}
+        #{item.itemNumber}
       </span>
     </CommandItem>
   );

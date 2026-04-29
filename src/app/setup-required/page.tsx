@@ -12,7 +12,7 @@ import { SetupWizardForm } from "@/ui/setup/wizard-form";
  *
  * Notably this page does NOT call `requireSetupComplete()` itself; that
  * would bounce the redirect against itself. Every other top-level route
- * (`/`, `/settings/*`, `/projects/[projectId]/*`) calls the guard, so
+ * (`/`, `/settings/*`, `/projects/[projectSlug]/*`) calls the guard, so
  * the user can't navigate around the wizard via direct URL.
  */
 

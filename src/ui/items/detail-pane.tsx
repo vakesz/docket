@@ -28,12 +28,14 @@ type Comment = {
 type DetailItem = {
   id: string;
   providerItemId: string;
+  itemNumber: string;
   kind: string;
   title: string;
   state: string;
   assignee: string | null;
   author: string | null;
   parentId: string | null;
+  parentNumber: string | null;
   tags: string[];
   url: string | null;
   descriptionMd: string | null;
@@ -53,7 +55,7 @@ type DetailItem = {
  * proposals) are tiny client islands.
  */
 export function DetailPane({
-  projectId,
+  projectSlug,
   providerKind,
   capabilities,
   providerHasAvatars,
@@ -62,7 +64,7 @@ export function DetailPane({
   showHeaderReactions,
   showCommentReactions,
 }: {
-  projectId: string;
+  projectSlug: string;
   providerKind: string | null;
   capabilities: { supportedReactions: readonly string[] };
   providerHasAvatars: boolean;
@@ -75,7 +77,7 @@ export function DetailPane({
   const assigneeProfileUrl = providerProfileUrl(providerKind, item.assignee);
   return (
     <div className="flex h-full flex-col overflow-auto bg-background">
-      <RecentRecorder projectId={projectId} itemId={item.id} />
+      <RecentRecorder projectSlug={projectSlug} itemNumber={item.itemNumber} />
       <header className="flex flex-col gap-3 border-b border-border p-4">
         {/* Row 1: chips left, utility cluster + primary CTAs right */}
         <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -89,8 +91,8 @@ export function DetailPane({
             <FreshnessStamp updatedAt={item.updatedAt} thresholdDays={staleThresholdDays} />
           </span>
           <div className="flex items-center gap-1">
-            <PinButton projectId={projectId} providerItemId={item.providerItemId} compact />
-            <RefreshItemButton projectId={projectId} itemId={item.id} compact />
+            <PinButton projectSlug={projectSlug} providerItemId={item.providerItemId} compact />
+            <RefreshItemButton projectSlug={projectSlug} itemNumber={item.itemNumber} compact />
           </div>
           <div className="flex items-center gap-2">
             <SuggestActionButton
@@ -165,15 +167,15 @@ export function DetailPane({
                 </>
               )}
             </li>
-            {item.parentId ? (
+            {item.parentNumber ? (
               <li className="inline-flex items-center gap-1">
                 <GitBranch aria-hidden="true" className="size-3" />
                 <span className="sr-only">Parent</span>
                 <Link
-                  href={`/projects/${projectId}/items/${item.parentId}`}
+                  href={`/projects/${projectSlug}/items/${item.parentNumber}`}
                   className="text-primary hover:underline"
                 >
-                  {item.parentId}
+                  #{item.parentNumber}
                 </Link>
               </li>
             ) : null}
@@ -223,7 +225,7 @@ export function DetailPane({
               </span>
             </div>
             <TransitionActions
-              projectId={projectId}
+              projectSlug={projectSlug}
               providerItemId={item.providerItemId}
               state={item.state as ItemState}
             />
@@ -234,7 +236,7 @@ export function DetailPane({
                 Reactions
               </h3>
               <ReactionRow
-                projectId={projectId}
+                projectSlug={projectSlug}
                 providerItemId={item.providerItemId}
                 targetKind="item"
                 targetId={item.providerItemId}
@@ -310,7 +312,7 @@ export function DetailPane({
                         Reactions
                       </h3>
                       <ReactionRow
-                        projectId={projectId}
+                        projectSlug={projectSlug}
                         providerItemId={item.providerItemId}
                         targetKind="comment"
                         targetId={c.providerCommentId}
@@ -327,7 +329,7 @@ export function DetailPane({
       </section>
 
       <section className="border-t border-border p-4">
-        <CommentComposer projectId={projectId} providerItemId={item.providerItemId} />
+        <CommentComposer projectSlug={projectSlug} providerItemId={item.providerItemId} />
       </section>
     </div>
   );

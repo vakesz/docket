@@ -18,30 +18,30 @@ import { proposeMemoryDelete, proposeMemoryWrite } from "@/server/proposals/buil
 import { maybeAutoAccept } from "@/server/proposals/executor";
 import {
   assertFound,
-  projectIdSchema,
   projectScopedMutationProcedure,
   projectScopedProcedure,
+  projectSlugSchema,
   router,
 } from "@/server/trpc";
 
-const ListInput = projectIdSchema.extend({
+const ListInput = projectSlugSchema.extend({
   search: z.string().max(200).optional(),
   tag: z.string().max(64).optional(),
   limit: z.number().int().min(1).max(200).default(100),
 });
 
-const GetInput = projectIdSchema.extend({
+const GetInput = projectSlugSchema.extend({
   memoryId: z.string().min(1),
 });
 
-const ProposeWriteInput = projectIdSchema.extend({
+const ProposeWriteInput = projectSlugSchema.extend({
   memoryId: z.string().min(1).nullable().default(null),
   title: z.string().min(1).max(200),
   bodyMd: z.string().max(50_000).default(""),
   tags: z.array(z.string().min(1).max(64)).max(32).default([]),
 });
 
-const ProposeDeleteInput = projectIdSchema.extend({
+const ProposeDeleteInput = projectSlugSchema.extend({
   memoryId: z.string().min(1),
 });
 

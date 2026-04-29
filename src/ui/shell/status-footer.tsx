@@ -25,11 +25,11 @@ import { SyncButton } from "@/ui/shell/sync-button";
  * chrome, both layouts mount one footer, no separate wrapper needed.
  */
 export function StatusFooter({
-  projectId,
+  projectSlug,
   pendingProposals = 0,
   readOnly = false,
 }: {
-  projectId: string | null;
+  projectSlug: string | null;
   pendingProposals?: number;
   readOnly?: boolean;
 }) {
@@ -38,16 +38,16 @@ export function StatusFooter({
 
   const refetchInterval = useAutoRefreshIntervalMs();
   const syncStatus = trpc.items.syncStatus.useQuery(
-    { projectId: projectId ?? "" },
+    { projectSlug: projectSlug ?? "" },
     {
-      enabled: !!projectId,
+      enabled: !!projectSlug,
       refetchInterval: refetchInterval === false ? false : refetchInterval,
       staleTime: 0,
     },
   );
   const lastSyncAt = syncStatus.data?.lastSyncAt ?? null;
 
-  useBackgroundSync(projectId, readOnly);
+  useBackgroundSync(projectSlug, readOnly);
 
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
@@ -71,17 +71,17 @@ export function StatusFooter({
         />
         <span className="uppercase tracking-wide">{online ? "online" : "offline"}</span>
       </span>
-      {projectId ? (
+      {projectSlug ? (
         <>
           <span className="text-muted-foreground-faint">·</span>
           <span className="inline-flex items-center gap-1">
             <span>{lastSyncAt ? `synced ${formatRelative(lastSyncAt)}` : "never synced"}</span>
-            <SyncButton projectId={projectId} readOnly={readOnly} variant="footer" />
+            <SyncButton projectSlug={projectSlug} readOnly={readOnly} variant="footer" />
           </span>
         </>
       ) : null}
-      {projectId ? (
-        <PendingProposalsButton projectId={projectId} initialCount={pendingProposals} />
+      {projectSlug ? (
+        <PendingProposalsButton projectSlug={projectSlug} initialCount={pendingProposals} />
       ) : null}
       {readOnly ? (
         <>
@@ -109,17 +109,17 @@ export function StatusFooter({
  * we want the fresh count.
  */
 function PendingProposalsButton({
-  projectId,
+  projectSlug,
   initialCount,
 }: {
-  projectId: string;
+  projectSlug: string;
   initialCount: number;
 }) {
   const utils = trpc.useUtils();
   const [activeProposalId, setActiveProposalId] = useState<string | null>(null);
 
   const list = trpc.proposals.list.useQuery(
-    { projectId, status: "pending", limit: 100 },
+    { projectSlug, status: "pending", limit: 100 },
     { staleTime: 0 },
   );
 
@@ -159,14 +159,14 @@ function PendingProposalsButton({
         {count} pending
       </button>
       <ProposalDialog
-        projectId={projectId}
+        projectSlug={projectSlug}
         proposalId={activeProposalId}
         onClose={() => {
           setActiveProposalId(null);
           // Force a fresh count: the dialog only invalidates on confirm,
           // not on backdrop-dismiss, so a manual invalidate here keeps the
           // footer count honest if the user closed without acting.
-          utils.proposals.list.invalidate({ projectId });
+          utils.proposals.list.invalidate({ projectSlug });
         }}
       />
     </>

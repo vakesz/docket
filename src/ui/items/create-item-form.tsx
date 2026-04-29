@@ -38,7 +38,7 @@ import { ProposalDialog } from "@/ui/proposals/proposal-dialog";
  * form stays a single line. Empty assignee / description are normalized to
  * `null` / `""` to match the router's input shape.
  */
-export function CreateItemForm({ projectId }: { projectId: string }) {
+export function CreateItemForm({ projectSlug }: { projectSlug: string }) {
   const [open, setOpen] = useState(false);
   const [pendingProposalId, setPendingProposalId] = useState<string | null>(null);
   const formId = useId();
@@ -110,7 +110,7 @@ export function CreateItemForm({ projectId }: { projectId: string }) {
                 .map((t) => t.trim())
                 .filter((t) => t.length > 0);
               propose.mutate({
-                projectId,
+                projectSlug,
                 itemKind,
                 fields: {
                   title: trimmedTitle,
@@ -217,7 +217,7 @@ export function CreateItemForm({ projectId }: { projectId: string }) {
       </Dialog>
 
       <ProposalDialog
-        projectId={projectId}
+        projectSlug={projectSlug}
         proposalId={pendingProposalId}
         onClose={() => setPendingProposalId(null)}
       />

@@ -13,18 +13,19 @@
 
 import "server-only";
 import { z } from "zod";
+import { getProviderSpec } from "@/server/provider-registry";
 import {
-  projectIdSchema,
   projectScopedMutationProcedure,
   projectScopedProcedure,
+  projectSlugSchema,
   router,
 } from "@/server/trpc";
 
-const ListInput = projectIdSchema.extend({
+const ListInput = projectSlugSchema.extend({
   limit: z.number().int().min(1).max(200).default(100),
 });
 
-const PinInput = projectIdSchema.extend({
+const PinInput = projectSlugSchema.extend({
   providerItemId: z.string().min(1),
 });
 
@@ -57,6 +58,8 @@ export const watchlistRouter = router({
         url: true,
       },
     });
+    const spec = getProviderSpec(ctx.project.providerKind);
+    const formatItemNumber = spec?.itemNumberCodec.formatItemNumber ?? ((id: string) => id);
     const byProviderId = new Map(items.map((i) => [i.providerItemId, i]));
     return pins.flatMap((pin) => {
       const item = byProviderId.get(pin.providerItemId);
@@ -65,7 +68,7 @@ export const watchlistRouter = router({
         {
           pinId: pin.id,
           pinnedAt: pin.pinnedAt,
-          item,
+          item: { ...item, itemNumber: formatItemNumber(item.providerItemId) },
         },
       ];
     });

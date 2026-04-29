@@ -13,11 +13,11 @@ const IS_DEV = process.env.NODE_ENV !== "production";
 export function SettingsSidebar({
   active,
   onSelect,
-  projectId,
+  projectSlug,
 }: {
   active: SectionKey;
   onSelect: (key: SectionKey) => void;
-  projectId: string | null;
+  projectSlug: string | null;
 }) {
   const grouped = useMemo(
     () =>
@@ -38,7 +38,7 @@ export function SettingsSidebar({
           {group.sections.map((section) => {
             const Icon = section.icon;
             const isActive = section.key === active;
-            const disabled = Boolean(section.needsProject) && !projectId;
+            const disabled = Boolean(section.needsProject) && !projectSlug;
             return (
               <button
                 key={section.key}
