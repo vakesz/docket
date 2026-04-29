@@ -1,6 +1,6 @@
 /**
- * Architecture guard: `Audit` rows may only be written from
- * `src/server/proposals/executor.ts`.
+ * Architecture guard: `Audit` rows may only be written from a small,
+ * explicit set of modules.
  *
  * The Audit log is the trail the project owner reads to answer "who did
  * what when." Sprinkling `audit.create(...)` calls across routers / tools
@@ -10,16 +10,19 @@
  *      exactly one audit row. If callers write their own, some forget;
  *      others double-write.
  *   2. *Trust* — the trail is only as honest as the narrowest write
- *      surface. A central writer in `executor.ts` is auditable on review;
- *      a hundred call sites aren't.
+ *      surface. A central writer module is auditable on review; a
+ *      hundred call sites aren't.
  *
- * If you genuinely need to record a non-proposal action (e.g. project
- * archival), extend `recordAudit` in `executor.ts` and call the helper —
+ * `proposals/executor.ts` covers proposal-driven writes. Non-proposal
+ * audit-worthy events (e.g. an MCP OAuth connection completing) flow
+ * through `server/audit/log.ts`, which exports purpose-built helpers
+ * for each event kind. To add a new audit event, extend that module —
  * don't add a new write site.
  *
  * Allowed callers of `db.audit.create(` / `prisma.audit.create(` /
  * `ctx.db.audit.create(`:
  *   - `src/server/proposals/executor.ts`
+ *   - `src/server/audit/log.ts`
  *   - this test itself
  */
 
@@ -29,7 +32,10 @@ import { describe, expect, it } from "vitest";
 
 const PROJECT_ROOT = process.cwd();
 const SRC_ROOT = join(PROJECT_ROOT, "src");
-const ALLOWED_FILE = join("src", "server", "proposals", "executor.ts");
+const ALLOWED_FILES = new Set([
+  join("src", "server", "proposals", "executor.ts"),
+  join("src", "server", "audit", "log.ts"),
+]);
 const SKIP_DIRS = new Set(["node_modules", "generated", "__arch__"]);
 
 const AUDIT_WRITE = /\baudit\.(create|createMany|update|updateMany|delete|deleteMany|upsert)\s*\(/;
@@ -48,13 +54,13 @@ async function* walk(dir: string): AsyncGenerator<string> {
 }
 
 describe("arch: audit write boundary", () => {
-  it("no file outside the executor writes Audit rows", async () => {
+  it("no file outside the allowlist writes Audit rows", async () => {
     expect((await stat(SRC_ROOT)).isDirectory()).toBe(true);
 
     const offenders: { file: string; line: number; text: string }[] = [];
     for await (const file of walk(SRC_ROOT)) {
       const rel = relative(PROJECT_ROOT, file);
-      if (rel === ALLOWED_FILE) continue;
+      if (ALLOWED_FILES.has(rel)) continue;
 
       const text = await readFile(file, "utf8");
       const lines = text.split("\n");
@@ -66,9 +72,10 @@ describe("arch: audit write boundary", () => {
       }
     }
 
+    const allowed = [...ALLOWED_FILES].join(", ");
     expect(
       offenders,
-      `Forbidden Audit write outside src/server/proposals/executor.ts:\n  ${offenders
+      `Forbidden Audit write outside { ${allowed} }:\n  ${offenders
         .map((o) => `${o.file}:${o.line} ${o.text}`)
         .join("\n  ")}`,
     ).toEqual([]);

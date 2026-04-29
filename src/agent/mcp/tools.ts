@@ -18,6 +18,8 @@ import "server-only";
 import { callMcpTool, listMcpTools, type McpServer } from "@/agent/mcp/client";
 import type { AgentTool, ToolContext } from "@/agent/tools/types";
 import { fail, ok } from "@/agent/tools/types";
+import { decodeHeaders } from "@/server/mcp/headers-codec";
+import { ensureFreshAccessToken } from "@/server/mcp/oauth/refresh";
 
 const SEPARATOR = "__";
 
@@ -26,15 +28,21 @@ async function loadServers(ctx: ToolContext): Promise<McpServer[]> {
     where: { projectId: ctx.projectId, enabled: true },
     orderBy: [{ name: "asc" }],
   });
-  return rows.map((row) => ({
-    id: row.id,
-    name: row.name,
-    url: row.url,
-    headers:
-      row.headersJson && typeof row.headersJson === "object" && !Array.isArray(row.headersJson)
-        ? (row.headersJson as Record<string, string>)
-        : {},
-  }));
+  const servers: McpServer[] = [];
+  for (const row of rows) {
+    // OAuth-backed rows refresh their access token in-place before we
+    // connect — keeps the agent loop from carrying a transparently-expired
+    // bearer into a remote MCP request.
+    const refreshed = await ensureFreshAccessToken(ctx.db, row);
+    const headersRow = refreshed ?? row;
+    servers.push({
+      id: headersRow.id,
+      name: headersRow.name,
+      url: headersRow.url,
+      headers: decodeHeaders(headersRow.headersJson),
+    });
+  }
+  return servers;
 }
 
 function adaptTool(

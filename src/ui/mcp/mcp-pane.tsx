@@ -1,27 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc-client";
 import { Alert, AlertDescription } from "@/ui/primitives/alert";
 import { Badge } from "@/ui/primitives/badge";
 import { Button } from "@/ui/primitives/button";
 import { Input } from "@/ui/primitives/input";
 import { Textarea } from "@/ui/primitives/textarea";
+import { McpServerEditor } from "./server-editor";
+import { McpTemplatePicker } from "./template-picker";
+import { findTemplateByUrl, templateHeadersComplete } from "./templates";
 
 /**
  * MCP servers pane on the project detail page.
  *
  * MCP fleet is per-project: list configured HTTP servers, add a new one
- * (name + URL + optional headers JSON), toggle enabled, or delete. Edits
- * land in `McpServerConfig` via direct `mcp.create` / `mcp.update` /
- * `mcp.delete` mutations — no proposal pipeline because there is no
- * provider write at stake. The agent loop reads this table at registry
- * build time (`src/agent/mcp/tools.ts`), so the next conversation turn
- * picks up changes without a server restart.
+ * (template chip or free-form name + URL + headers), edit any row's URL
+ * and headers, toggle enabled, or delete. Templates land disabled with
+ * empty headers — the user opens the row's editor to fill in credentials
+ * (or kick off the OAuth flow) before enabling.
  *
- * Headers are entered as JSON text so the form stays one widget per
- * server. Invalid JSON blocks submit with an inline error rather than
- * throwing at the API.
+ * Headers are encrypted at rest via `headers-codec.ts`; the agent loop
+ * reads this table at registry build time, so the next conversation turn
+ * picks up changes without a server restart.
  */
 export function McpPane({ projectId }: { projectId: string }) {
   const utils = trpc.useUtils();
@@ -40,6 +41,9 @@ export function McpPane({ projectId }: { projectId: string }) {
   const [draftUrl, setDraftUrl] = useState("");
   const [draftHeaders, setDraftHeaders] = useState("");
   const [headersError, setHeadersError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const existingNames = useMemo(() => new Set((list.data ?? []).map((s) => s.name)), [list.data]);
 
   const submitNew = async () => {
     const name = draftName.trim();
@@ -73,6 +77,8 @@ export function McpPane({ projectId }: { projectId: string }) {
 
   return (
     <section className="flex flex-col gap-4">
+      <McpTemplatePicker projectId={projectId} existingNames={existingNames} />
+
       <form
         className="flex flex-col gap-2 rounded-2xl border border-dashed border-border bg-muted/40 p-4"
         onSubmit={(e) => {
@@ -109,9 +115,9 @@ export function McpPane({ projectId }: { projectId: string }) {
           className="font-mono text-xs"
         />
         <p className="text-xs text-muted-foreground">
-          Exposes a remote MCP server's tools to the agent. The name is the tool prefix the agent
-          sees; URL must speak SSE or streamable-HTTP MCP. Headers JSON (optional, string → string)
-          is sent on every request — typical use is a bearer token or API key.
+          Add a custom MCP server. The name is the tool prefix the agent sees; URL must speak SSE or
+          streamable-HTTP MCP. Headers JSON (optional, string → string) is sent on every request and
+          is encrypted at rest.
         </p>
         <div className="flex items-center justify-between">
           <span className="text-xs text-muted-foreground">{list.data?.length ?? 0} configured</span>
@@ -139,63 +145,103 @@ export function McpPane({ projectId }: { projectId: string }) {
         <p className="text-sm italic text-muted-foreground">Loading MCP servers…</p>
       ) : list.data?.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-border bg-card p-6 text-center text-sm text-muted-foreground">
-          No MCP servers configured. Add one above to expose remote tools to the agent.
+          No MCP servers configured. Pick a template above or add a custom server.
         </p>
       ) : (
         <ul className="flex flex-col gap-2">
           {list.data?.map((s) => {
-            const headers = (s.headersJson ?? {}) as Record<string, unknown>;
+            const headers = s.headersJson;
             const headerCount = Object.keys(headers).length;
+            const template = findTemplateByUrl(s.url);
+            const needsConfig = template ? !templateHeadersComplete(template, headers) : false;
+            const isEditing = editingId === s.id;
             return (
               <li
                 key={s.id}
-                className="flex items-start justify-between gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm"
+                className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm"
               >
-                <div className="flex min-w-0 flex-col gap-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-foreground">{s.name}</span>
-                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                      {s.transport}
-                    </span>
-                    {!s.enabled && (
-                      <Badge variant="secondary" className="uppercase tracking-wide">
-                        disabled
-                      </Badge>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 flex-col gap-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-medium text-foreground">{s.name}</span>
+                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                        {s.transport}
+                      </span>
+                      {!s.enabled && (
+                        <Badge variant="secondary" className="uppercase tracking-wide">
+                          disabled
+                        </Badge>
+                      )}
+                      {s.hasOauth && (
+                        <Badge variant="secondary" className="uppercase tracking-wide">
+                          oauth
+                        </Badge>
+                      )}
+                      {needsConfig && (
+                        <Badge
+                          variant="secondary"
+                          className="border-amber-500/40 bg-amber-500/15 uppercase tracking-wide text-amber-700 dark:text-amber-300"
+                        >
+                          needs config
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="truncate font-mono text-xs text-muted-foreground">{s.url}</p>
+                    {headerCount > 0 && (
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                        {headerCount} header{headerCount === 1 ? "" : "s"}
+                      </p>
                     )}
                   </div>
-                  <p className="truncate font-mono text-xs text-muted-foreground">{s.url}</p>
-                  {headerCount > 0 && (
-                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                      {headerCount} header{headerCount === 1 ? "" : "s"}
-                    </p>
-                  )}
+                  <div className="flex flex-col items-end gap-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="xs"
+                      onClick={() => setEditingId(isEditing ? null : s.id)}
+                    >
+                      {isEditing ? "Close" : "Edit"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="xs"
+                      disabled={update.isPending || (needsConfig && !s.enabled)}
+                      onClick={() =>
+                        void update.mutateAsync({
+                          projectId,
+                          serverId: s.id,
+                          enabled: !s.enabled,
+                        })
+                      }
+                    >
+                      {s.enabled ? "Disable" : "Enable"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="xs"
+                      disabled={remove.isPending}
+                      onClick={() => void remove.mutateAsync({ projectId, serverId: s.id })}
+                    >
+                      Delete
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex flex-col items-end gap-1">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="xs"
-                    disabled={update.isPending}
-                    onClick={() =>
-                      void update.mutateAsync({
-                        projectId,
-                        serverId: s.id,
-                        enabled: !s.enabled,
-                      })
-                    }
-                  >
-                    {s.enabled ? "Disable" : "Enable"}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="xs"
-                    disabled={remove.isPending}
-                    onClick={() => void remove.mutateAsync({ projectId, serverId: s.id })}
-                  >
-                    Delete
-                  </Button>
-                </div>
+                {isEditing && (
+                  <McpServerEditor
+                    projectId={projectId}
+                    row={{
+                      id: s.id,
+                      name: s.name,
+                      url: s.url,
+                      headersJson: headers,
+                      enabled: s.enabled,
+                      hasOauth: s.hasOauth,
+                    }}
+                    onClose={() => setEditingId(null)}
+                  />
+                )}
               </li>
             );
           })}

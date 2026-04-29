@@ -602,18 +602,75 @@ model McpServerConfig {
   /// that decision ever gets revisited.
   transport   String   @default("http")
   url         String
-  /// Optional headers (auth tokens, etc). Plaintext at rest today; the
-  /// SECRETS_KEY encryption helper from `src/server/secrets/encryption.ts`
-  /// can be wired here when these start carrying real bearer tokens.
+  /// Optional headers (auth tokens, etc). Encrypted at rest via the
+  /// `_enc` blob shape produced by `src/server/mcp/headers-codec.ts`,
+  /// keyed by `SECRETS_KEY`. Legacy plaintext rows decode unchanged.
   headersJson Json     @default("{}")
   enabled     Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+
+  /// OAuth state (when this server was connected via the OAuth flow).
+  /// `oauthIssuer` doubles as the discovery base URL — a present value
+  /// means the row is OAuth-backed and `Authorization` in `headersJson`
+  /// was minted by `confirmOauth`.
+  oauthIssuer          String?
+  /// `enc:v1:` ciphertext. Issued by dynamic client registration (RFC 7591)
+  /// or pasted by an admin for static-client deployments.
+  oauthClientId        String?
+  /// `enc:v1:` ciphertext when issued (DCR-confidential or pre-registered).
+  oauthClientSecret    String?
+  /// Space-separated scopes from the original consent. Re-requested on
+  /// refresh so the access token doesn't silently lose privileges.
+  oauthScopes          String?
+  /// `enc:v1:` ciphertext of the refresh token. Null when the IdP didn't
+  /// issue one — the row degrades to "needs reconnect" once the access
+  /// token expires.
+  oauthRefreshToken    String?
+  /// Wall-clock expiry of the access token currently in `headersJson`.
+  /// Refresh fires when `now() >= expiresAt - 60s`.
+  oauthAccessExpiresAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, name])
   @@index([projectId, enabled])
+}
+
+/// Short-lived OAuth handshake state for MCP servers. Holds the PKCE
+/// verifier between the authorization-redirect and the callback so the
+/// token exchange can run without trusting the URL fragment. Rows are
+/// reaped on TTL by the next handshake.
+model McpOauthState {
+  id          String   @id @default(cuid())
+  /// Random nonce embedded in the `state` query param. Indexed so the
+  /// callback handler can look the row up in one query.
+  nonce       String   @unique
+  projectId   String
+  userId      String
+  mcpServerId String
+  /// PKCE code-verifier (RFC 7636), base64url. The challenge is derived
+  /// from this and sent on the authorization request.
+  codeVerifier String
+  /// Issuer base URL — re-used at exchange time to look up the token
+  /// endpoint without re-running discovery.
+  issuer       String
+  /// Token endpoint cached at start time; saves one round-trip on
+  /// callback. May be re-discovered if the IdP rotates endpoints.
+  tokenEndpoint String
+  /// Client id captured at handshake start (DCR result or pre-registered).
+  clientId     String
+  /// `enc:v1:` ciphertext of the client secret if one was issued.
+  clientSecret String?
+  /// Scopes requested at consent time, space-separated.
+  scopes       String
+  /// Redirect URI we sent to the IdP — must match exactly on exchange.
+  redirectUri  String
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  @@index([expiresAt])
 }
 
 // ----------------------------------------------------------------------------
