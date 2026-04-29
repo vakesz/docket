@@ -41,7 +41,7 @@ export function StatusFooter({
     { projectId: projectId ?? "" },
     {
       enabled: !!projectId,
-      refetchInterval: refetchInterval === false ? undefined : refetchInterval,
+      refetchInterval: refetchInterval === false ? false : refetchInterval,
       staleTime: 0,
     },
   );

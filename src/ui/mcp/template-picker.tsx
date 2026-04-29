@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc-client";
 import { Alert, AlertDescription } from "@/ui/primitives/alert";
@@ -123,17 +124,38 @@ function TemplateIcon({ template }: { template: McpTemplate }) {
   if (template.iconDark) {
     return (
       <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center">
-        <img src={template.icon} alt="" className="h-7 w-7 dark:hidden" aria-hidden="true" />
-        <img
+        <Image
+          src={template.icon}
+          alt=""
+          width={28}
+          height={28}
+          className="h-7 w-7 dark:hidden"
+          aria-hidden="true"
+          unoptimized
+        />
+        <Image
           src={template.iconDark}
           alt=""
+          width={28}
+          height={28}
           className="hidden h-7 w-7 dark:block"
           aria-hidden="true"
+          unoptimized
         />
       </span>
     );
   }
-  return <img src={template.icon} alt="" className="h-7 w-7 shrink-0" aria-hidden="true" />;
+  return (
+    <Image
+      src={template.icon}
+      alt=""
+      width={28}
+      height={28}
+      className="h-7 w-7 shrink-0"
+      aria-hidden="true"
+      unoptimized
+    />
+  );
 }
 
 function authBadge(t: McpTemplate): string {

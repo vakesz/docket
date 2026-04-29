@@ -89,11 +89,7 @@ const ProposeNewItemInput = projectIdSchema.extend({
   }),
 });
 
-function ctxFor(ctx: {
-  db: typeof import("@/server/db").db;
-  projectId: string;
-  userId: string;
-}) {
+function ctxFor(ctx: { db: typeof import("@/server/db").db; projectId: string; userId: string }) {
   return { db: ctx.db, projectId: ctx.projectId, userId: ctx.userId, origin: "ui" as const };
 }
 

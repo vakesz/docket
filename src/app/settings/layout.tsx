@@ -32,7 +32,7 @@ export default async function SettingsLayout({
 }) {
   await requireSetupComplete();
   const session = await auth();
-  if (!session?.user) {
+  if (!session?.user?.id) {
     redirect("/");
   }
 

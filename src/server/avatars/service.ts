@@ -209,7 +209,7 @@ export async function warmAvatars(
           const single = {
             providerKind: opts.providerKind,
             identifier,
-            accessToken: opts.accessToken,
+            ...(opts.accessToken !== undefined ? { accessToken: opts.accessToken } : {}),
             isSelf: opts.selfIdentifier !== null && identifier === opts.selfIdentifier,
           };
           const fetched = await tryFetch(single);
@@ -229,8 +229,8 @@ async function tryFetch(opts: {
 }): Promise<{ bytes: Uint8Array | null; contentType: string | null; etag: string | null } | null> {
   try {
     const result = await fetchAvatarFromProvider(opts.providerKind, opts.identifier, {
-      accessToken: opts.accessToken,
-      isSelf: opts.isSelf,
+      ...(opts.accessToken !== undefined ? { accessToken: opts.accessToken } : {}),
+      ...(opts.isSelf !== undefined ? { isSelf: opts.isSelf } : {}),
     });
     if (result === null) {
       return { bytes: null, contentType: null, etag: null };

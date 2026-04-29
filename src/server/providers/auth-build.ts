@@ -81,8 +81,8 @@ export function buildAuthProvider(row: OauthProviderConfig): Provider {
       return azureDevOpsProvider({
         clientId: row.clientId,
         clientSecret,
-        tenant: row.baseUrl || undefined,
-        extraScope: row.scopes || undefined,
+        ...(row.baseUrl ? { tenant: row.baseUrl } : {}),
+        ...(row.scopes ? { extraScope: row.scopes } : {}),
       });
     default:
       throw new UnknownOauthKindError(row.kind);

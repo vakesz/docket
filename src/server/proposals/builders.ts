@@ -16,7 +16,6 @@
 
 import "server-only";
 import { TRPCError } from "@trpc/server";
-import { assertFound } from "@/server/trpc";
 import type {
   CommentAddProposal,
   DescriptionPatchProposal,
@@ -32,6 +31,7 @@ import type {
 import type { CreateFields, ItemKind, TransitionIntent } from "@/core/types";
 import type { Prisma, Proposal as ProposalRow } from "@/db/generated/client";
 import type { db as Db } from "@/server/db";
+import { assertFound } from "@/server/errors";
 import { snapshotFromRow } from "@/server/proposals/item-snapshot";
 
 /**

@@ -195,11 +195,12 @@ export class OpenAiAdapter implements LlmAdapter {
           if (usage) {
             const tokensIn = usage.input_tokens ?? 0;
             const tokensOut = usage.output_tokens ?? 0;
+            const costCents = this.estimateCostCents(tokensIn, tokensOut);
             yield {
               kind: "usage",
               tokensIn,
               tokensOut,
-              costCents: this.estimateCostCents(tokensIn, tokensOut),
+              ...(costCents !== undefined ? { costCents } : {}),
             };
           }
           yield { kind: "done" };

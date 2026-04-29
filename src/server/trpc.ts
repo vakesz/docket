@@ -5,10 +5,13 @@ import superjson from "superjson";
 import { ZodError, z } from "zod";
 import { auth } from "@/server/auth";
 import { db } from "@/server/db";
+import { assertFound } from "@/server/errors";
 import { logger } from "@/server/logger";
 import { projectForUser } from "@/server/projects/access";
 import type { SettingKey, SettingValue } from "@/server/settings/catalog";
 import { loadGlobalSetting } from "@/server/settings/effective";
+
+export { assertFound };
 
 export type Context = {
   session: Session | null;
@@ -71,18 +74,6 @@ export const publicProcedure = t.procedure;
  * stays single-source.
  */
 export const projectIdSchema = z.object({ projectId: z.string().min(1) });
-
-/**
- * Generic NOT_FOUND assertion for router handlers. Use whenever a Prisma
- * lookup may return null and the router should surface a 404 to the client
- * rather than letting `undefined` leak into a downstream call.
- */
-export function assertFound<T>(value: T | null | undefined, message: string): T {
-  if (value === null || value === undefined) {
-    throw new TRPCError({ code: "NOT_FOUND", message });
-  }
-  return value;
-}
 
 const requireSession = t.middleware(({ ctx, next }) => {
   const userId = ctx.session?.user?.id;

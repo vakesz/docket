@@ -307,7 +307,7 @@ export function SetupWizardForm({
             {llms.map((draft, i) => (
               <StepOpenai
                 key={draft.uid}
-                index={llms.length > 1 ? i + 1 : undefined}
+                {...(llms.length > 1 ? { index: i + 1 } : {})}
                 state={draft}
                 handlers={{
                   setEnabled: (next) => updateLlm(i, { enabled: next }),
@@ -320,7 +320,7 @@ export function SetupWizardForm({
                   setOutputPrice: (next) => updateLlm(i, { outputPrice: next }),
                 }}
                 alreadyConfigured={isAlreadyConfiguredFor(draft.role)}
-                onRemove={llms.length > 1 ? () => removeLlm(i) : undefined}
+                {...(llms.length > 1 ? { onRemove: () => removeLlm(i) } : {})}
               />
             ))}
 

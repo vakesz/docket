@@ -72,9 +72,11 @@ export function buildAdapter(
       return new OpenAiAdapter({
         apiKey,
         label: row.label,
-        model: row.model || undefined,
-        baseUrl: row.baseUrl || undefined,
-        defaultTemperature: opts.defaultTemperature ?? undefined,
+        ...(row.model ? { model: row.model } : {}),
+        ...(row.baseUrl ? { baseUrl: row.baseUrl } : {}),
+        ...(opts.defaultTemperature !== undefined && opts.defaultTemperature !== null
+          ? { defaultTemperature: opts.defaultTemperature }
+          : {}),
         inputPriceCentsPerMtok: row.inputPriceCentsPerMtok?.toNumber() ?? null,
         outputPriceCentsPerMtok: row.outputPriceCentsPerMtok?.toNumber() ?? null,
       });

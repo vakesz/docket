@@ -91,12 +91,13 @@ type AppendArgs = {
 };
 
 export async function appendMessage(db: Database, args: AppendArgs): Promise<Message> {
+  const toolCallsJson = args.toolCallsJson ?? undefined;
   return db.message.create({
     data: {
       conversationId: args.conversationId,
       role: args.role,
       content: args.content,
-      toolCallsJson: args.toolCallsJson ?? undefined,
+      ...(toolCallsJson !== undefined ? { toolCallsJson } : {}),
       toolCallId: args.toolCallId ?? null,
       toolName: args.toolName ?? null,
       pending: args.pending ?? false,

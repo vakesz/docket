@@ -19,11 +19,12 @@ export function ProviderLogo({
   kind: string;
   className?: string;
 }): JSX.Element | null {
+  const logoProps = className !== undefined ? { className } : {};
   switch (kind) {
     case "github":
-      return <GitHubLogo className={className} />;
+      return <GitHubLogo {...logoProps} />;
     case "azure_devops":
-      return <AzureDevOpsLogo className={className} />;
+      return <AzureDevOpsLogo {...logoProps} />;
     default:
       return null;
   }

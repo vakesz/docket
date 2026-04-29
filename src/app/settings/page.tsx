@@ -44,7 +44,7 @@ export default async function SettingsPage({
 }) {
   await requireSetupComplete();
   const session = await auth();
-  if (!session?.user) {
+  if (!session?.user?.id) {
     redirect("/");
   }
 
@@ -95,7 +95,7 @@ export default async function SettingsPage({
     <SettingsShell
       publicBase={publicBase}
       project={project ? { id: project.id, name: project.name } : null}
-      initialSection={requestedSection}
+      {...(requestedSection !== undefined ? { initialSection: requestedSection } : {})}
     />
   );
 }

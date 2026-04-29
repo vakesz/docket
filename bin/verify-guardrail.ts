@@ -56,7 +56,7 @@ async function main() {
   );
 
   const convo = await db.conversation.findUnique({
-    where: { id: "cmoj6f5o" + (await findConvoSuffix()) },
+    where: { id: `cmoj6f5o${await findConvoSuffix()}` },
     select: {
       id: true,
       projectId: true,

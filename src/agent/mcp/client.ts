@@ -16,6 +16,7 @@
 import "server-only";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 
 export type McpServer = {
   id: string;
@@ -39,11 +40,12 @@ export async function withMcpClient<T>(
   server: McpServer,
   fn: (client: Client) => Promise<T>,
 ): Promise<T> {
-  const transport = new StreamableHTTPClientTransport(new URL(server.url), {
-    requestInit: Object.keys(server.headers).length > 0 ? { headers: server.headers } : undefined,
-  });
+  const transport = new StreamableHTTPClientTransport(
+    new URL(server.url),
+    Object.keys(server.headers).length > 0 ? { requestInit: { headers: server.headers } } : {},
+  );
   const client = new Client({ name: "docket", version: "0.1.0" }, { capabilities: {} });
-  await client.connect(transport);
+  await client.connect(transport as unknown as Transport);
   try {
     return await fn(client);
   } finally {

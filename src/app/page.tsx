@@ -28,6 +28,9 @@ export default async function Home() {
   // archived/deleted — User.defaultProjectId is SetNull on delete, so a
   // stale id presents as null).
   const userId = session.user.id;
+  if (!userId) {
+    redirect("/api/auth/signin");
+  }
   const me = await db.user.findUnique({
     where: { id: userId },
     select: { defaultProjectId: true },

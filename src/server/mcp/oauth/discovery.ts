@@ -44,12 +44,13 @@ export async function discoverOauthEndpoints(serverUrl: string): Promise<Discove
   const scopesSupported = Array.isArray(body.scopes_supported)
     ? body.scopes_supported.filter((s): s is string => typeof s === "string")
     : undefined;
+  const registrationEndpoint =
+    typeof body.registration_endpoint === "string" ? body.registration_endpoint : undefined;
   return {
     issuer: typeof body.issuer === "string" ? body.issuer : origin,
     authorizationEndpoint,
     tokenEndpoint,
-    registrationEndpoint:
-      typeof body.registration_endpoint === "string" ? body.registration_endpoint : undefined,
-    scopesSupported,
+    ...(registrationEndpoint !== undefined ? { registrationEndpoint } : {}),
+    ...(scopesSupported !== undefined ? { scopesSupported } : {}),
   };
 }

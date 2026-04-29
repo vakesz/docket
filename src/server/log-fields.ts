@@ -6,6 +6,8 @@ import "server-only";
  * worker — both surface failures as structured log entries.
  */
 export function errFields(err: unknown): { err: string; stack?: string } {
-  if (err instanceof Error) return { err: err.message, stack: err.stack };
+  if (err instanceof Error) {
+    return { err: err.message, ...(err.stack !== undefined ? { stack: err.stack } : {}) };
+  }
   return { err: String(err) };
 }

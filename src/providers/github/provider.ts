@@ -68,7 +68,7 @@ function readConfig(raw: Record<string, unknown>): Config {
       "GitHub provider config is missing 'accessToken'; sign in with GitHub first.",
     );
   }
-  return { owner, repo, accessToken, baseUrl };
+  return { owner, repo, accessToken, ...(baseUrl !== undefined ? { baseUrl } : {}) };
 }
 
 function makeProviderItemId(owner: string, repo: string, number: number): string {
@@ -377,7 +377,7 @@ export class GitHubProvider implements WorkItemProvider {
         repo,
         issue_number: number,
         state: plan.state,
-        state_reason: plan.stateReason ?? undefined,
+        ...(plan.stateReason ? { state_reason: plan.stateReason } : {}),
         ...(labels ? { labels } : {}),
       });
       return this.toCanonicalItem(res.data as unknown as IssueLikePayload);
@@ -582,8 +582,8 @@ export class GitHubProvider implements WorkItemProvider {
         repo: this.config.repo,
         title: fields.title,
         body: fields.descriptionMd,
-        labels: fields.tags.length > 0 ? [...fields.tags] : undefined,
-        assignees: fields.assignee ? [fields.assignee] : undefined,
+        ...(fields.tags.length > 0 ? { labels: [...fields.tags] } : {}),
+        ...(fields.assignee ? { assignees: [fields.assignee] } : {}),
       });
       return this.toCanonicalItem(res.data as unknown as IssueLikePayload);
     } catch (err) {

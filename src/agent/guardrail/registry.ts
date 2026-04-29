@@ -97,7 +97,7 @@ async function tryBuildLlmJudge(
     apiKey,
     label: row.label,
     model: row.model,
-    baseUrl: row.baseUrl || undefined,
+    ...(row.baseUrl ? { baseUrl: row.baseUrl } : {}),
     scopeCheckEnabled: ctx.settings.scopeCheckEnabled,
     outputCheckEnabled: ctx.settings.outputCheckEnabled,
     blockOffTopic: ctx.settings.blockOffTopic,
