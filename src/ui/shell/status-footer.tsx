@@ -47,17 +47,17 @@ export function StatusFooter({
   }, []);
 
   return (
-    <footer className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border bg-surface px-3 py-1.5 text-[11px] text-fg-muted">
+    <footer className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border bg-card px-3 py-1.5 text-[11px] text-muted-foreground">
       <span className="flex items-center gap-1.5">
         <span
-          className={cn("h-1.5 w-1.5 rounded-full", online ? "bg-success" : "bg-danger")}
+          className={cn("h-1.5 w-1.5 rounded-full", online ? "bg-success" : "bg-destructive")}
           aria-hidden="true"
         />
         <span className="uppercase tracking-wide">{online ? "online" : "offline"}</span>
       </span>
       {projectId ? (
         <>
-          <span className="text-fg-faint">·</span>
+          <span className="text-muted-foreground-faint">·</span>
           <span className="inline-flex items-center gap-1">
             <span>{lastSyncAt ? `synced ${formatRelative(lastSyncAt)}` : "never synced"}</span>
             <SyncButton projectId={projectId} readOnly={readOnly} variant="footer" />
@@ -69,8 +69,8 @@ export function StatusFooter({
       ) : null}
       {readOnly ? (
         <>
-          <span className="text-fg-faint">·</span>
-          <span className="rounded-full border border-danger/40 bg-danger-bg px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-danger-fg">
+          <span className="text-muted-foreground-faint">·</span>
+          <span className="rounded-full border border-destructive/40 bg-destructive/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-destructive">
             Read-only
           </span>
         </>
@@ -129,15 +129,15 @@ function PendingProposalsButton({
 
   return (
     <>
-      <span className="text-fg-faint">·</span>
+      <span className="text-muted-foreground-faint">·</span>
       <button
         type="button"
         onClick={openNext}
         aria-haspopup="dialog"
         aria-label={`Review next of ${count} pending proposal${count === 1 ? "" : "s"}`}
         className={cn(
-          "cursor-pointer rounded px-1 text-warning hover:bg-surface-alt",
-          "focus:outline-none focus:ring-1 focus:ring-accent",
+          "cursor-pointer rounded px-1 text-warning hover:bg-muted",
+          "focus:outline-none focus:ring-1 focus:ring-ring",
         )}
       >
         {count} pending

@@ -7,7 +7,7 @@ import { metaLabelFaintClass } from "@/lib/form-classes";
  */
 export default function ItemsLandingPage() {
   return (
-    <div className="flex h-full items-center justify-center p-4 text-center text-sm text-fg-muted">
+    <div className="flex h-full items-center justify-center p-4 text-center text-sm text-muted-foreground">
       <div>
         <div className={metaLabelFaintClass}>No item selected</div>
         <div className="mt-1">Pick one from the list to see its details.</div>

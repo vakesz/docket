@@ -52,12 +52,12 @@ export function StepAzdo({
             entra.microsoft.com
           </a>
           . Add a Web redirect URI:{" "}
-          <code className="rounded bg-surface-alt px-1 py-0.5 font-mono">{callbackUrl}</code>
+          <code className="rounded bg-muted px-1 py-0.5 font-mono">{callbackUrl}</code>
         </>
       }
     >
       <Field className="flex flex-col gap-1">
-        <Label className="text-xs text-fg-muted">Display label</Label>
+        <Label className="text-xs text-muted-foreground">Display label</Label>
         <Input
           value={state.label}
           onChange={(e) => handlers.setLabel(e.target.value)}
@@ -70,7 +70,7 @@ export function StepAzdo({
 
       <div className="flex gap-3">
         <Field className="flex flex-1 flex-col gap-1">
-          <Label className="text-xs text-fg-muted">Application (client) ID</Label>
+          <Label className="text-xs text-muted-foreground">Application (client) ID</Label>
           <Input
             value={state.clientId}
             onChange={(e) => handlers.setClientId(e.target.value)}
@@ -79,10 +79,12 @@ export function StepAzdo({
             autoComplete="off"
             required={state.enabled}
           />
-          <p className="text-xs text-fg-faint">UUID shown on the app's Overview page.</p>
+          <p className="text-xs text-muted-foreground-faint">
+            UUID shown on the app's Overview page.
+          </p>
         </Field>
         <Field className="flex flex-1 flex-col gap-1">
-          <Label className="text-xs text-fg-muted">Client secret value</Label>
+          <Label className="text-xs text-muted-foreground">Client secret value</Label>
           <Input
             type="password"
             value={state.clientSecret}
@@ -92,7 +94,7 @@ export function StepAzdo({
             autoComplete="off"
             required={state.enabled}
           />
-          <p className="text-xs text-fg-faint">
+          <p className="text-xs text-muted-foreground-faint">
             Use the <em>value</em>, not the secret id. ~40 chars, may include{" "}
             <code className="font-mono">~</code>, <code className="font-mono">-</code>,{" "}
             <code className="font-mono">.</code>.
@@ -101,7 +103,7 @@ export function StepAzdo({
       </div>
 
       <Field className="flex flex-col gap-1">
-        <Label className="text-xs text-fg-muted">Directory (tenant) ID</Label>
+        <Label className="text-xs text-muted-foreground">Directory (tenant) ID</Label>
         <Input
           value={state.tenantId}
           onChange={(e) => handlers.setTenantId(e.target.value)}
@@ -110,26 +112,26 @@ export function StepAzdo({
           autoComplete="off"
           required={state.enabled}
         />
-        <p className="text-xs text-fg-faint">
+        <p className="text-xs text-muted-foreground-faint">
           UUID. Found on the Entra tenant overview page; required so the OAuth endpoints resolve
           correctly.
         </p>
       </Field>
 
       <details className="flex flex-col gap-3">
-        <summary className="cursor-pointer select-none text-xs font-medium text-fg-muted hover:text-fg">
+        <summary className="cursor-pointer select-none text-xs font-medium text-muted-foreground hover:text-foreground">
           Advanced
         </summary>
         <div className="mt-3 flex flex-col gap-3">
           <Field className="flex flex-col gap-1">
-            <Label className="text-xs text-fg-muted">Scopes (space-separated)</Label>
+            <Label className="text-xs text-muted-foreground">Scopes (space-separated)</Label>
             <Input
               value={state.scopes}
               onChange={(e) => handlers.setScopes(e.target.value)}
               className={fieldMonoClass}
               autoComplete="off"
             />
-            <p className="text-xs text-fg-faint">
+            <p className="text-xs text-muted-foreground-faint">
               Default is the AzDO v6 work-items scope plus offline access for refresh tokens.
             </p>
           </Field>

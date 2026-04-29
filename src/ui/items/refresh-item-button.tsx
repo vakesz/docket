@@ -7,7 +7,7 @@ import { xsBorderButtonClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
 
 const ghostClass =
-  "inline-flex h-7 w-7 items-center justify-center rounded-md text-fg-muted hover:bg-surface-alt hover:text-fg disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60";
 
 /**
  * Header button that re-syncs the open item from its provider — fresh body,

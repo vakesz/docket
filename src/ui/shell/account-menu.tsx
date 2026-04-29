@@ -44,8 +44,8 @@ export function AccountMenu({
     <Menu as="div" className="relative inline-block shrink-0 leading-none">
       <MenuButton
         className={cn(
-          "inline-flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border border-border bg-surface text-xs font-semibold text-fg",
-          "hover:bg-surface-alt focus:outline-none focus:ring-2 focus:ring-accent",
+          "inline-flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border border-border bg-card text-xs font-semibold text-foreground",
+          "hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring",
         )}
         title={userLabel}
       >
@@ -66,20 +66,20 @@ export function AccountMenu({
         anchor="bottom end"
         transition
         className={cn(
-          "z-30 w-56 origin-top-right overflow-hidden rounded-xl border border-border bg-surface shadow-lg [--anchor-gap:0.5rem] focus:outline-none",
+          "z-30 w-56 origin-top-right overflow-hidden rounded-xl border border-border bg-card shadow-lg [--anchor-gap:0.5rem] focus:outline-none",
           "transition data-closed:scale-95 data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in",
         )}
       >
-        <div className="border-b border-border px-3 py-2 text-xs text-fg-muted">
+        <div className="border-b border-border px-3 py-2 text-xs text-muted-foreground">
           <div className={metaLabelFaintClass}>Signed in as</div>
-          <div className="truncate text-sm text-fg">{userLabel}</div>
+          <div className="truncate text-sm text-foreground">{userLabel}</div>
         </div>
         <MenuItem>
           <Link
             href={currentProjectId ? `/settings?project=${currentProjectId}` : "/settings"}
-            className="flex items-center gap-2 px-3 py-2 text-sm text-fg data-focus:bg-surface-alt"
+            className="flex items-center gap-2 px-3 py-2 text-sm text-foreground data-focus:bg-muted"
           >
-            <Settings aria-hidden="true" className="h-4 w-4 shrink-0 text-fg-muted" />
+            <Settings aria-hidden="true" className="h-4 w-4 shrink-0 text-muted-foreground" />
             Settings
           </Link>
         </MenuItem>
@@ -87,9 +87,9 @@ export function AccountMenu({
           <MenuItem>
             <button
               type="submit"
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-fg data-focus:bg-surface-alt"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground data-focus:bg-muted"
             >
-              <LogOut aria-hidden="true" className="h-4 w-4 shrink-0 text-fg-muted" />
+              <LogOut aria-hidden="true" className="h-4 w-4 shrink-0 text-muted-foreground" />
               Sign out
             </button>
           </MenuItem>

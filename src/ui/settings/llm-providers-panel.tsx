@@ -37,10 +37,10 @@ export function LlmProvidersPanel() {
   const [editingId, setEditingId] = useState<string | null>(null);
 
   if (list.isPending) {
-    return <p className="text-sm text-fg-faint">Loading providers…</p>;
+    return <p className="text-sm text-muted-foreground-faint">Loading providers…</p>;
   }
   if (list.error) {
-    return <p className="text-sm text-danger-fg">{list.error.message}</p>;
+    return <p className="text-sm text-destructive">{list.error.message}</p>;
   }
 
   const rows = list.data as Row[];
@@ -56,18 +56,18 @@ export function LlmProvidersPanel() {
     <div className="flex flex-col gap-6">
       <aside
         role="note"
-        className="rounded-2xl border border-warning/40 bg-warning-bg/40 p-4 text-xs text-warning-fg"
+        className="rounded-2xl border border-warning/40 bg-warning/10 p-4 text-xs text-warning"
       >
         <p className="mb-1 font-medium">Adding an Azure AI Foundry model</p>
         <p>
           Use the project&rsquo;s OpenAI v1 endpoint as the Base URL — the path must end with{" "}
-          <code className="rounded bg-surface px-1 py-0.5 font-mono text-fg">/openai/v1/</code>. Set{" "}
-          <span className="font-medium">Model</span> to the deployment name shown in Foundry &rarr;
-          Model deployments (for example <code className="font-mono">gpt-5</code>).
+          <code className="rounded bg-card px-1 py-0.5 font-mono text-foreground">/openai/v1/</code>
+          . Set <span className="font-medium">Model</span> to the deployment name shown in Foundry
+          &rarr; Model deployments (for example <code className="font-mono">gpt-5</code>).
         </p>
         <p className="mt-2">
           Template:{" "}
-          <code className="rounded bg-surface px-1 py-0.5 font-mono text-fg">
+          <code className="rounded bg-card px-1 py-0.5 font-mono text-foreground">
             https://&lt;resource&gt;.services.ai.azure.com/api/projects/&lt;project&gt;/openai/v1/
           </code>
         </p>
@@ -112,8 +112,8 @@ function Section({
   return (
     <section className="flex flex-col gap-3">
       <header className="flex flex-col gap-1">
-        <h2 className="text-base font-medium text-fg">{title}</h2>
-        <p className="text-xs text-fg-muted">{description}</p>
+        <h2 className="text-base font-medium text-foreground">{title}</h2>
+        <p className="text-xs text-muted-foreground">{description}</p>
       </header>
       {rows.length === 0 ? (
         <p className={emptyStateClass}>None configured yet.</p>
@@ -122,7 +122,7 @@ function Section({
           {rows.map((row) => (
             <li
               key={row.id}
-              className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4 shadow-sm"
+              className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-4 shadow-sm"
             >
               {editingId === row.id ? (
                 <LlmProviderForm
@@ -143,8 +143,8 @@ function Section({
                 <div className="flex items-baseline justify-between gap-3">
                   <div className="flex flex-col gap-1">
                     <div className="flex items-baseline gap-2">
-                      <span className="font-medium text-fg">{row.label}</span>
-                      <span className="text-xs uppercase tracking-wide text-fg-muted">
+                      <span className="font-medium text-foreground">{row.label}</span>
+                      <span className="text-xs uppercase tracking-wide text-muted-foreground">
                         {row.kind}
                       </span>
                       {!row.enabled ? <span className={badgeClass}>disabled</span> : null}
@@ -153,12 +153,12 @@ function Section({
                         <span className={badgeClass}>no price</span>
                       ) : null}
                     </div>
-                    <p className="text-xs text-fg-muted">
+                    <p className="text-xs text-muted-foreground">
                       {row.model || "(default model)"}
                       {row.baseUrl ? ` · ${row.baseUrl}` : ""}
                     </p>
                     {row.inputPriceCentsPerMtok !== null && row.outputPriceCentsPerMtok !== null ? (
-                      <p className="text-xs text-fg-muted">
+                      <p className="text-xs text-muted-foreground">
                         ${(row.inputPriceCentsPerMtok / 100).toFixed(2)} in · $
                         {(row.outputPriceCentsPerMtok / 100).toFixed(2)} out per Mtok
                       </p>

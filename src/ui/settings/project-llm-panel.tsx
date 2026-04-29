@@ -125,10 +125,10 @@ export function ProjectLlmPanel({ projectId }: { projectId: string }) {
   };
 
   if (projectsList.isPending || providers.isPending || projectSettings.isPending) {
-    return <p className="text-sm text-fg-faint">Loading…</p>;
+    return <p className="text-sm text-muted-foreground-faint">Loading…</p>;
   }
   if (!project) {
-    return <p className="text-sm text-fg-faint">Project not found.</p>;
+    return <p className="text-sm text-muted-foreground-faint">Project not found.</p>;
   }
 
   const enabled = providers.data?.filter((p) => p.enabled && p.role === "chat") ?? [];
@@ -138,10 +138,10 @@ export function ProjectLlmPanel({ projectId }: { projectId: string }) {
     <div className="flex flex-col gap-8">
       <form onSubmit={onSubmitLlm} className="flex flex-col gap-6">
         <div className="flex flex-col gap-2">
-          <label htmlFor="project-llm-provider" className="text-sm font-medium text-fg">
+          <label htmlFor="project-llm-provider" className="text-sm font-medium text-foreground">
             Default provider
           </label>
-          <p className="text-xs text-fg-muted">
+          <p className="text-xs text-muted-foreground">
             Picks the LLM row used by every conversation in this project. Empty falls back to the
             global default
             {globalDefault ? ` (currently ${globalDefault.label})` : " (none configured)"}. A
@@ -165,10 +165,10 @@ export function ProjectLlmPanel({ projectId }: { projectId: string }) {
         </div>
 
         <div className="flex flex-col gap-2 border-t border-border pt-6">
-          <label htmlFor="project-llm-temperature" className="text-sm font-medium text-fg">
+          <label htmlFor="project-llm-temperature" className="text-sm font-medium text-foreground">
             Sampling temperature
           </label>
-          <p className="text-xs text-fg-muted">
+          <p className="text-xs text-muted-foreground">
             0–2. Lower is more deterministic, higher is more creative. Empty falls back to the
             adapter default. Per-request overrides (e.g. tool-mode turns) still win.
           </p>
@@ -192,9 +192,9 @@ export function ProjectLlmPanel({ projectId }: { projectId: string }) {
             {saveLlm.isPending ? "Saving…" : "Save LLM defaults"}
           </button>
           {saveLlm.error ? (
-            <span className="text-xs text-danger-fg">{saveLlm.error.message}</span>
+            <span className="text-xs text-destructive">{saveLlm.error.message}</span>
           ) : null}
-          {saveLlm.isSuccess ? <span className="text-xs text-fg-muted">Saved.</span> : null}
+          {saveLlm.isSuccess ? <span className="text-xs text-muted-foreground">Saved.</span> : null}
         </div>
       </form>
 
@@ -203,15 +203,15 @@ export function ProjectLlmPanel({ projectId }: { projectId: string }) {
         className="flex flex-col gap-4 border-t border-border pt-6"
       >
         <div>
-          <h3 className="text-sm font-medium text-fg">Conversation compaction</h3>
-          <p className="text-xs text-fg-muted">
+          <h3 className="text-sm font-medium text-foreground">Conversation compaction</h3>
+          <p className="text-xs text-muted-foreground">
             Long threads can exceed the model's context window. When auto-compaction is on, older
             turns are folded into a summary as soon as the transcript crosses the token threshold.
             Manual compaction is always available from the chat pane.
           </p>
         </div>
 
-        <Field className="flex items-center gap-2 text-sm text-fg">
+        <Field className="flex items-center gap-2 text-sm text-foreground">
           <Switch
             checked={compactEnabled}
             disabled={saveSetting.isPending}
@@ -224,10 +224,10 @@ export function ProjectLlmPanel({ projectId }: { projectId: string }) {
         </Field>
 
         <div className="flex flex-col gap-2">
-          <label htmlFor="compact-threshold" className="text-sm font-medium text-fg">
+          <label htmlFor="compact-threshold" className="text-sm font-medium text-foreground">
             Token threshold
           </label>
-          <p className="text-xs text-fg-muted">
+          <p className="text-xs text-muted-foreground">
             Trigger compaction once the live transcript reaches this many estimated tokens (4 chars
             ≈ 1 token). Default 60 000.
           </p>
@@ -246,10 +246,10 @@ export function ProjectLlmPanel({ projectId }: { projectId: string }) {
         </div>
 
         <div className="flex flex-col gap-2">
-          <label htmlFor="compact-keep" className="text-sm font-medium text-fg">
+          <label htmlFor="compact-keep" className="text-sm font-medium text-foreground">
             Recent turns to keep verbatim
           </label>
-          <p className="text-xs text-fg-muted">
+          <p className="text-xs text-muted-foreground">
             How many of the most-recent message turns survive compaction unchanged. 2–50.
           </p>
           <Input
@@ -267,10 +267,10 @@ export function ProjectLlmPanel({ projectId }: { projectId: string }) {
         </div>
 
         <div className="flex flex-col gap-2">
-          <label htmlFor="compact-strategy" className="text-sm font-medium text-fg">
+          <label htmlFor="compact-strategy" className="text-sm font-medium text-foreground">
             Strategy
           </label>
-          <p className="text-xs text-fg-muted">
+          <p className="text-xs text-muted-foreground">
             <strong>summary</strong> replaces older turns with a synthetic system summary.
             <strong> drop-tools</strong> only sheds stale tool-call/result rows and keeps the prose
             — cheaper but less aggressive.
@@ -292,9 +292,11 @@ export function ProjectLlmPanel({ projectId }: { projectId: string }) {
             {saveSetting.isPending ? "Saving…" : "Save compaction settings"}
           </button>
           {saveSetting.error ? (
-            <span className="text-xs text-danger-fg">{saveSetting.error.message}</span>
+            <span className="text-xs text-destructive">{saveSetting.error.message}</span>
           ) : null}
-          {saveSetting.isSuccess ? <span className="text-xs text-fg-muted">Saved.</span> : null}
+          {saveSetting.isSuccess ? (
+            <span className="text-xs text-muted-foreground">Saved.</span>
+          ) : null}
         </div>
       </form>
     </div>

@@ -38,8 +38,8 @@ export function ProfilePanel() {
       <DefaultProjectPicker />
 
       <Field className="flex flex-col gap-1 border-t border-border pt-6">
-        <Label className="text-sm font-medium text-fg">Theme</Label>
-        <p className="text-xs text-fg-muted">
+        <Label className="text-sm font-medium text-foreground">Theme</Label>
+        <p className="text-xs text-muted-foreground">
           Color scheme for this browser. Adaptive variants follow your OS&rsquo;s light/dark
           preference; a fixed theme overrides it.
         </p>
@@ -47,8 +47,8 @@ export function ProfilePanel() {
       </Field>
 
       <Field className="flex flex-col gap-1 border-t border-border pt-6">
-        <Label className="text-sm font-medium text-fg">Display time zone</Label>
-        <p className="text-xs text-fg-muted">
+        <Label className="text-sm font-medium text-foreground">Display time zone</Label>
+        <p className="text-xs text-muted-foreground">
           Used for relative dates and the staleness tint window. Pick &ldquo;Browser local&rdquo; to
           follow whatever zone the browser reports.
         </p>
@@ -57,12 +57,14 @@ export function ProfilePanel() {
           disabled={disabled}
           onChange={(next) => update.mutate({ key: "display.timezone" as never, value: next })}
         />
-        {update.error ? <p className="text-xs text-danger-fg">{update.error.message}</p> : null}
+        {update.error ? <p className="text-xs text-destructive">{update.error.message}</p> : null}
       </Field>
 
       <Field className="flex flex-col gap-1 border-t border-border pt-6">
-        <Label className="text-sm font-medium text-fg">Auto-refresh interval (minutes)</Label>
-        <p className="text-xs text-fg-muted">
+        <Label className="text-sm font-medium text-foreground">
+          Auto-refresh interval (minutes)
+        </Label>
+        <p className="text-xs text-muted-foreground">
           How often dashboard list views (LLM providers, OAuth providers, and similar) silently
           re-fetch in the background. 0 disables auto-refresh; manual refetches still work. Maximum
           60 (one hour).
@@ -78,7 +80,7 @@ export function ProfilePanel() {
           }
           className="max-w-[8rem]"
         />
-        {update.error ? <p className="text-xs text-danger-fg">{update.error.message}</p> : null}
+        {update.error ? <p className="text-xs text-destructive">{update.error.message}</p> : null}
       </Field>
     </div>
   );

@@ -78,10 +78,10 @@ export const Markdown = memo(function Markdown({
   className?: string;
 }) {
   if (!source?.trim()) {
-    return <p className="text-sm italic text-fg-faint">(no content)</p>;
+    return <p className="text-sm italic text-muted-foreground-faint">(no content)</p>;
   }
   return (
-    <div className={cn("docket-md break-words text-sm text-fg", className)}>
+    <div className={cn("docket-md break-words text-sm text-foreground", className)}>
       <ReactMarkdown
         remarkPlugins={REMARK_PLUGINS}
         rehypePlugins={REHYPE_PLUGINS}
@@ -101,7 +101,7 @@ function AnchorRenderer({ href, children, ...rest }: ComponentProps<"a">) {
       href={href}
       target={isExternal ? "_blank" : rest.target}
       rel={isExternal ? "noopener noreferrer" : rest.rel}
-      className="text-accent hover:underline"
+      className="text-primary hover:underline"
     >
       {children}
     </a>
@@ -120,7 +120,10 @@ function CodeRenderer({ className, children, ...rest }: ComponentProps<"code">) 
   return (
     <code
       {...rest}
-      className={cn("rounded bg-surface-alt px-1 py-0.5 font-mono text-[0.9em] text-fg", className)}
+      className={cn(
+        "rounded bg-muted px-1 py-0.5 font-mono text-[0.9em] text-foreground",
+        className,
+      )}
     >
       {children}
     </code>
@@ -131,10 +134,7 @@ function PreRenderer({ className, children, ...rest }: ComponentProps<"pre">) {
   return (
     <pre
       {...rest}
-      className={cn(
-        "my-2 overflow-x-auto rounded border border-border bg-surface-alt p-3",
-        className,
-      )}
+      className={cn("my-2 overflow-x-auto rounded border border-border bg-muted p-3", className)}
     >
       {children}
     </pre>

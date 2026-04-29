@@ -56,31 +56,31 @@ export function ItemRow({
         href={`/projects/${projectId}/items/${item.id}`}
         className={cn(
           "flex w-full flex-col gap-1 px-3 py-2 text-left transition-colors",
-          "hover:bg-surface-alt",
-          selected && "bg-surface-alt",
-          tone === "warning" && "bg-warning-bg/40 hover:bg-warning-bg/70",
-          tone === "stale" && "bg-danger-bg/40 hover:bg-danger-bg/70",
+          "hover:bg-muted",
+          selected && "bg-muted",
+          tone === "warning" && "bg-warning/10 hover:bg-warning/10/70",
+          tone === "stale" && "bg-destructive/10 hover:bg-destructive/10/70",
         )}
       >
         <div className="flex items-center gap-2 text-xs">
           <span className={metaLabelFaintClass}>{formatKind(item.kind)}</span>
           <StatePill state={item.state} />
           {pinned && (
-            <span className="font-mono text-[10px] text-accent" title="Pinned">
+            <span className="font-mono text-[10px] text-primary" title="Pinned">
               ●
             </span>
           )}
-          <span className="ml-auto flex items-center gap-2 font-mono text-[10px] text-fg-faint">
+          <span className="ml-auto flex items-center gap-2 font-mono text-[10px] text-muted-foreground-faint">
             <FreshnessStamp updatedAt={item.updatedAt} thresholdDays={staleThresholdDays} />
             <span>{item.providerItemId}</span>
           </span>
         </div>
-        <div className="line-clamp-2 text-sm text-fg">{item.title}</div>
+        <div className="line-clamp-2 text-sm text-foreground">{item.title}</div>
         {hasMeta && (
-          <div className="flex flex-wrap items-center gap-1.5 font-mono text-[10px] text-fg-faint">
+          <div className="flex flex-wrap items-center gap-1.5 font-mono text-[10px] text-muted-foreground-faint">
             {item.assignee && <span className="truncate">{item.assignee}</span>}
             {item.assignee && tags.length > 0 && (
-              <span aria-hidden className="text-fg-faint">
+              <span aria-hidden className="text-muted-foreground-faint">
                 ·
               </span>
             )}
@@ -88,12 +88,12 @@ export function ItemRow({
               <span
                 key={t}
                 title={t}
-                className="rounded bg-surface-alt px-1.5 py-0.5 text-fg-muted"
+                className="rounded bg-muted px-1.5 py-0.5 text-muted-foreground"
               >
                 {displayTag(t)}
               </span>
             ))}
-            {extraTags > 0 && <span className="text-fg-faint">+{extraTags}</span>}
+            {extraTags > 0 && <span className="text-muted-foreground-faint">+{extraTags}</span>}
           </div>
         )}
       </Link>
@@ -105,7 +105,7 @@ export function ItemRow({
           onClick={(e) => e.stopPropagation()}
           title="Open in provider (new tab)"
           aria-label={`Open ${item.providerItemId} in a new tab`}
-          className="absolute right-1.5 top-1.5 rounded bg-surface p-1 text-fg-faint opacity-0 transition-opacity hover:text-fg focus-visible:opacity-100 group-hover/row:opacity-100"
+          className="absolute right-1.5 top-1.5 rounded bg-card p-1 text-muted-foreground-faint opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover/row:opacity-100"
         >
           <ExternalLink aria-hidden="true" className="h-3 w-3" />
         </a>
@@ -128,14 +128,16 @@ export function PinnedRow({
       href={`/projects/${projectId}/items/${item.id}`}
       className={cn(
         "flex items-center gap-2 border-b border-border px-3 py-1.5 text-xs transition-colors",
-        "hover:bg-surface-alt",
-        selected && "bg-surface-alt",
+        "hover:bg-muted",
+        selected && "bg-muted",
       )}
     >
       <span className={metaLabelFaintClass}>{formatKind(item.kind)}</span>
       <StatePill state={item.state} />
-      <span className="flex-1 truncate text-fg">{item.title}</span>
-      <span className="font-mono text-[10px] text-fg-faint">{item.providerItemId}</span>
+      <span className="flex-1 truncate text-foreground">{item.title}</span>
+      <span className="font-mono text-[10px] text-muted-foreground-faint">
+        {item.providerItemId}
+      </span>
     </Link>
   );
 }
@@ -145,7 +147,7 @@ export function EmptyMessage({ text, tone }: { text: string; tone?: "error" }) {
     <div
       className={cn(
         "flex h-full items-center justify-center p-6 text-center text-sm",
-        tone === "error" ? "text-danger" : "text-fg-faint",
+        tone === "error" ? "text-destructive" : "text-muted-foreground-faint",
       )}
     >
       {text}

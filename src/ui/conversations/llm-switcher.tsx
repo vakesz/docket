@@ -53,7 +53,7 @@ export function LlmSwitcher({
   const value = currentOverrideId ?? "default";
 
   return (
-    <span className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-fg-faint">
+    <span className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground-faint">
       <span>LLM</span>
       <SelectField
         className="rounded-md py-0.5 pl-2 pr-7 text-[11px] normal-case tracking-normal"

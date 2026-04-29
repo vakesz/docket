@@ -36,7 +36,7 @@ export function CopyIdButton({ value, className }: { value: string; className?: 
       title={copied ? "Copied" : `Copy ${value}`}
       aria-label={copied ? "Copied" : `Copy ${value} to clipboard`}
       className={cn(
-        "inline-flex items-center gap-1 rounded font-mono text-[10px] text-fg-faint transition-colors hover:bg-surface-alt hover:text-fg",
+        "inline-flex items-center gap-1 rounded font-mono text-[10px] text-muted-foreground-faint transition-colors hover:bg-muted hover:text-foreground",
         "px-1 py-0.5",
         className,
       )}

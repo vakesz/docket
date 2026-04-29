@@ -190,7 +190,7 @@ export function BacklogPane({
   }, [data, kind, activeTags, activeAssignees, deferredQuery]);
 
   return (
-    <div className="flex h-full flex-col bg-bg">
+    <div className="flex h-full flex-col bg-background">
       <FilterBar
         projectId={projectId}
         state={{
@@ -225,10 +225,10 @@ export function BacklogPane({
       />
 
       {recentItems.length > 0 && (
-        <div className="border-b border-border bg-surface">
+        <div className="border-b border-border bg-card">
           <div className={cn("flex items-center gap-2 px-3 pt-2 pb-1", metaLabelFaintClass)}>
             <span>Recent</span>
-            <span className="text-fg-faint">{recentItems.length}</span>
+            <span className="text-muted-foreground-faint">{recentItems.length}</span>
           </div>
           {recentItems.map((it) => (
             <PinnedRow
@@ -242,11 +242,11 @@ export function BacklogPane({
       )}
 
       {pinned.data && pinned.data.length > 0 && (
-        <div className="border-b border-border bg-surface">
+        <div className="border-b border-border bg-card">
           <div className={cn("flex items-center gap-2 px-3 pt-2 pb-1", metaLabelFaintClass)}>
-            <span className="text-accent">●</span>
+            <span className="text-primary">●</span>
             <span>Pinned</span>
-            <span className="text-fg-faint">{pinned.data.length}</span>
+            <span className="text-muted-foreground-faint">{pinned.data.length}</span>
           </div>
           {pinned.data.map(({ item: it }) => (
             <PinnedRow

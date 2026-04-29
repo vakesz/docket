@@ -77,7 +77,7 @@ export function TransitionActions({
           {INTENT_LABEL[intent]}
         </Button>
       ))}
-      {error ? <span className="text-xs text-danger-fg">{error}</span> : null}
+      {error ? <span className="text-xs text-destructive">{error}</span> : null}
       <ProposalDialog
         projectId={projectId}
         proposalId={pendingProposalId}

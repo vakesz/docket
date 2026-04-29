@@ -50,8 +50,10 @@ export function ProjectItemsPanel({ projectId }: { projectId: string }) {
     <div className="flex flex-col gap-6">
       <section className="flex flex-col gap-3">
         <header className="flex flex-col gap-1">
-          <h3 className="text-sm font-medium text-fg">Staleness threshold (project default)</h3>
-          <p className="text-xs text-fg-muted">
+          <h3 className="text-sm font-medium text-foreground">
+            Staleness threshold (project default)
+          </h3>
+          <p className="text-xs text-muted-foreground">
             Backlog rows tint amber once an item has been untouched for this many days, and red at
             2x. Each project member sees this value by default; they can override it under Profile →
             Item detail.
@@ -59,12 +61,12 @@ export function ProjectItemsPanel({ projectId }: { projectId: string }) {
         </header>
 
         <Field className="flex flex-col gap-1">
-          <Label className="text-sm font-medium text-fg">Show staleness indicator</Label>
-          <p className="text-xs text-fg-muted">
+          <Label className="text-sm font-medium text-foreground">Show staleness indicator</Label>
+          <p className="text-xs text-muted-foreground">
             When off, the freshness tint and detail-page age badge are hidden for everyone viewing
             this project (members with their own override still see their value).
           </p>
-          <Field className="flex items-center gap-2 text-sm text-fg">
+          <Field className="flex items-center gap-2 text-sm text-foreground">
             <Switch
               checked={indicatorOn}
               disabled={disabled}
@@ -79,8 +81,8 @@ export function ProjectItemsPanel({ projectId }: { projectId: string }) {
 
         {indicatorOn ? (
           <Field className="flex flex-col gap-1">
-            <Label className="text-sm font-medium text-fg">Threshold (days)</Label>
-            <p className="text-xs text-fg-muted">
+            <Label className="text-sm font-medium text-foreground">Threshold (days)</Label>
+            <p className="text-xs text-muted-foreground">
               Days an item can sit untouched before it tints amber. Range: 1 to 3650.
             </p>
             <NumberField
@@ -96,7 +98,7 @@ export function ProjectItemsPanel({ projectId }: { projectId: string }) {
         ) : null}
       </section>
 
-      {update.error ? <p className="text-xs text-danger-fg">{update.error.message}</p> : null}
+      {update.error ? <p className="text-xs text-destructive">{update.error.message}</p> : null}
     </div>
   );
 }

@@ -67,7 +67,7 @@ export function AnalyticsPanel(
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs text-fg-muted">Window:</span>
+        <span className="text-xs text-muted-foreground">Window:</span>
         {PRESETS.map((p) => (
           <button
             key={p.days}
@@ -76,15 +76,15 @@ export function AnalyticsPanel(
             className={cn(
               "rounded-full border px-3 py-1 text-xs",
               days === p.days
-                ? "border-accent bg-accent text-accent-fg"
-                : "border-border bg-surface text-fg hover:bg-surface-alt",
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-card text-foreground hover:bg-muted",
             )}
           >
             {p.label}
           </button>
         ))}
         <div className="ml-auto flex items-center gap-2">
-          <label htmlFor="analytics-custom-days" className="text-xs text-fg-muted">
+          <label htmlFor="analytics-custom-days" className="text-xs text-muted-foreground">
             Custom (days):
           </label>
           <NumberField
@@ -99,8 +99,8 @@ export function AnalyticsPanel(
         </div>
       </div>
 
-      {isPending ? <p className="text-sm text-fg-faint">Loading…</p> : null}
-      {error ? <p className="text-xs text-danger-fg">{error.message}</p> : null}
+      {isPending ? <p className="text-sm text-muted-foreground-faint">Loading…</p> : null}
+      {error ? <p className="text-xs text-destructive">{error.message}</p> : null}
 
       {data ? (
         <>
@@ -152,15 +152,19 @@ function TotalsStrip({
   ];
   return (
     <div className="flex flex-col gap-2">
-      <div className="text-xs text-fg-muted">
+      <div className="text-xs text-muted-foreground">
         {data.from} → {data.to} (UTC)
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {stats.map((s) => (
-          <div key={s.label} className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-            <div className="text-[10px] uppercase tracking-wide text-fg-muted">{s.label}</div>
-            <div className="mt-1 font-mono text-lg text-fg">{s.value}</div>
-            {s.sub ? <div className="mt-0.5 text-[10px] text-fg-faint">{s.sub}</div> : null}
+          <div key={s.label} className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              {s.label}
+            </div>
+            <div className="mt-1 font-mono text-lg text-foreground">{s.value}</div>
+            {s.sub ? (
+              <div className="mt-0.5 text-[10px] text-muted-foreground-faint">{s.sub}</div>
+            ) : null}
           </div>
         ))}
       </div>
@@ -259,15 +263,15 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
   const hoveredAvg = hover !== null ? trend.movingAverage[hover] : null;
 
   return (
-    <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
-        <h4 className="text-sm font-medium text-fg">Trends</h4>
-        <div className="flex flex-wrap items-center gap-3 font-mono text-[10px] uppercase tracking-wide text-fg-muted">
-          <LegendDot color="bg-accent" label="Chat spend" />
+        <h4 className="text-sm font-medium text-foreground">Trends</h4>
+        <div className="flex flex-wrap items-center gap-3 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+          <LegendDot color="bg-primary" label="Chat spend" />
           <LegendDot color="bg-warning" label="Guardrail spend" />
-          <LegendDot color="bg-accent/50" label="7-day avg" dashed />
-          <LegendDot color="bg-fg-muted" label="Tokens in" />
-          <LegendDot color="bg-fg-faint" label="Tokens out" />
+          <LegendDot color="bg-primary/50" label="7-day avg" dashed />
+          <LegendDot color="bg-muted-foreground" label="Tokens in" />
+          <LegendDot color="bg-muted-foreground-faint" label="Tokens out" />
         </div>
       </div>
       <svg
@@ -297,7 +301,7 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
             <text
               x={padLeft - 6}
               y={g.y}
-              className="fill-fg-muted font-mono text-[9px]"
+              className="fill-muted-foreground font-mono text-[9px]"
               textAnchor="end"
               dominantBaseline="middle"
             >
@@ -306,7 +310,7 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
             <text
               x={padLeft + innerW + 6}
               y={g.y}
-              className="fill-fg-muted font-mono text-[9px]"
+              className="fill-muted-foreground font-mono text-[9px]"
               textAnchor="start"
               dominantBaseline="middle"
             >
@@ -343,14 +347,14 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
         {/* tokens */}
         <polyline
           points={tokensInLine}
-          className="fill-none stroke-fg-muted"
+          className="fill-none stroke-muted-foreground"
           strokeWidth={1.25}
           strokeLinejoin="round"
           strokeLinecap="round"
         />
         <polyline
           points={tokensOutLine}
-          className="fill-none stroke-fg-faint"
+          className="fill-none stroke-muted-foreground-faint"
           strokeWidth={1.25}
           strokeDasharray="2 3"
           strokeLinejoin="round"
@@ -362,7 +366,7 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
             key={b.date}
             x={xAt(i)}
             y={padTop + innerH + 14}
-            className="fill-fg-faint font-mono text-[9px]"
+            className="fill-muted-foreground-faint font-mono text-[9px]"
             textAnchor="middle"
           >
             {shortDate(b.date)}
@@ -376,7 +380,7 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
               x2={xAt(hover)}
               y1={padTop}
               y2={padTop + innerH}
-              className="stroke-fg-faint"
+              className="stroke-muted-foreground-faint"
               strokeWidth={1}
               strokeDasharray="2 2"
             />
@@ -391,21 +395,21 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
               cx={xAt(hover)}
               cy={yTokens(hovered.tokensIn)}
               r={2.5}
-              className="fill-fg-muted"
+              className="fill-muted-foreground"
             />
             <circle
               cx={xAt(hover)}
               cy={yTokens(hovered.tokensOut)}
               r={2.5}
-              className="fill-fg-faint"
+              className="fill-muted-foreground-faint"
             />
           </g>
         ) : null}
       </svg>
-      <div className="mt-2 flex flex-wrap items-center gap-3 font-mono text-[10px] text-fg-muted">
+      <div className="mt-2 flex flex-wrap items-center gap-3 font-mono text-[10px] text-muted-foreground">
         {hovered ? (
           <>
-            <span className="text-fg">{hovered.date}</span>
+            <span className="text-foreground">{hovered.date}</span>
             <span>chat ${(hovered.costCents / 100).toFixed(3)}</span>
             <span>guardrail ${(hovered.guardrailCostCents / 100).toFixed(3)}</span>
             <span>
@@ -514,11 +518,11 @@ function BarChart({ buckets, peakCost }: { buckets: Bucket[]; peakCost: number }
   if (buckets.length === 0) return null;
   const peak = peakCost > 0 ? peakCost : 1;
   return (
-    <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
       <div className="mb-2 flex items-baseline justify-between">
-        <h4 className="text-sm font-medium text-fg">Daily spend</h4>
-        <div className="flex items-center gap-3 text-[10px] uppercase tracking-wide text-fg-muted">
-          <LegendDot color="bg-accent/70" label="Chat" />
+        <h4 className="text-sm font-medium text-foreground">Daily spend</h4>
+        <div className="flex items-center gap-3 text-[10px] uppercase tracking-wide text-muted-foreground">
+          <LegendDot color="bg-primary/70" label="Chat" />
           <LegendDot color="bg-warning/80" label="Guardrail" />
           <span>peak ${(peak / 100).toFixed(2)}</span>
         </div>
@@ -540,14 +544,14 @@ function BarChart({ buckets, peakCost }: { buckets: Bucket[]; peakCost: number }
                 style={{ height: `${guardShare}%` }}
               />
               <div
-                className="w-full rounded-t bg-accent/70 transition-colors group-hover:bg-accent"
+                className="w-full rounded-t bg-primary/70 transition-colors group-hover:bg-primary"
                 style={{ height: `${Math.max(chatShare, total > 0 && b.costCents > 0 ? 2 : 0)}%` }}
               />
             </div>
           );
         })}
       </div>
-      <div className="mt-2 flex justify-between font-mono text-[10px] text-fg-faint">
+      <div className="mt-2 flex justify-between font-mono text-[10px] text-muted-foreground-faint">
         <span>{buckets[0]?.date}</span>
         <span>{buckets[buckets.length - 1]?.date}</span>
       </div>
@@ -557,12 +561,14 @@ function BarChart({ buckets, peakCost }: { buckets: Bucket[]; peakCost: number }
 
 function DataTable({ buckets }: { buckets: Bucket[] }) {
   return (
-    <details className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-      <summary className="cursor-pointer select-none text-sm text-fg">By day (table)</summary>
+    <details className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+      <summary className="cursor-pointer select-none text-sm text-foreground">
+        By day (table)
+      </summary>
       <div className="mt-3 max-h-72 overflow-auto">
         <table className="w-full text-xs">
           <thead>
-            <tr className="text-left font-mono text-[10px] uppercase tracking-wide text-fg-muted">
+            <tr className="text-left font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
               <th className="pb-2">Date</th>
               <th className="pb-2 text-right">Conv</th>
               <th className="pb-2 text-right">Tokens in</th>
@@ -579,15 +585,21 @@ function DataTable({ buckets }: { buckets: Bucket[] }) {
               const totalCost = b.costCents + b.guardrailCostCents;
               return (
                 <tr key={b.date} className="border-t border-border">
-                  <td className="py-1 font-mono text-fg">{b.date}</td>
-                  <td className="py-1 text-right text-fg-muted">{b.conversations}</td>
-                  <td className="py-1 text-right text-fg-muted">{totalIn.toLocaleString()}</td>
-                  <td className="py-1 text-right text-fg-muted">{totalOut.toLocaleString()}</td>
-                  <td className="py-1 text-right text-fg">${(b.costCents / 100).toFixed(3)}</td>
-                  <td className="py-1 text-right text-warning-fg">
+                  <td className="py-1 font-mono text-foreground">{b.date}</td>
+                  <td className="py-1 text-right text-muted-foreground">{b.conversations}</td>
+                  <td className="py-1 text-right text-muted-foreground">
+                    {totalIn.toLocaleString()}
+                  </td>
+                  <td className="py-1 text-right text-muted-foreground">
+                    {totalOut.toLocaleString()}
+                  </td>
+                  <td className="py-1 text-right text-foreground">
+                    ${(b.costCents / 100).toFixed(3)}
+                  </td>
+                  <td className="py-1 text-right text-warning">
                     ${(b.guardrailCostCents / 100).toFixed(3)}
                   </td>
-                  <td className="py-1 text-right font-medium text-fg">
+                  <td className="py-1 text-right font-medium text-foreground">
                     ${(totalCost / 100).toFixed(3)}
                   </td>
                 </tr>

@@ -25,7 +25,7 @@ export async function SignInButtons({ redirectTo = "/" }: { redirectTo?: string 
 
   if (rows.length === 0) {
     return (
-      <p className="text-sm text-fg-muted">
+      <p className="text-sm text-muted-foreground">
         No sign-in providers configured. Ask an admin to add one in settings.
       </p>
     );

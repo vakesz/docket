@@ -74,8 +74,8 @@ export function ProjectSwitcher({
     <Popover className="relative">
       <PopoverButton
         className={cn(
-          "inline-flex max-w-[14rem] items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1 text-xs text-fg",
-          "hover:bg-surface-alt focus:outline-none focus:ring-2 focus:ring-accent",
+          "inline-flex max-w-[14rem] items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-xs text-foreground",
+          "hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring",
         )}
         aria-label="Switch project"
       >
@@ -89,15 +89,15 @@ export function ProjectSwitcher({
             </span>
           </>
         ) : (
-          <span className="truncate text-fg-muted">Pick a project</span>
+          <span className="truncate text-muted-foreground">Pick a project</span>
         )}
-        <ChevronDown aria-hidden="true" className="h-3 w-3 shrink-0 text-fg-muted" />
+        <ChevronDown aria-hidden="true" className="h-3 w-3 shrink-0 text-muted-foreground" />
       </PopoverButton>
       <PopoverPanel
         anchor={{ to: "bottom end", gap: 8 }}
         transition
         className={cn(
-          "z-30 w-[20rem] max-w-[calc(100vw-2rem)] origin-top-right overflow-hidden rounded-xl border border-border bg-surface text-fg shadow-lg",
+          "z-30 w-[20rem] max-w-[calc(100vw-2rem)] origin-top-right overflow-hidden rounded-xl border border-border bg-card text-foreground shadow-lg",
           "transition data-closed:scale-95 data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in",
           "focus:outline-none",
         )}
@@ -117,7 +117,7 @@ export function ProjectSwitcher({
               {projects.length > SEARCH_THRESHOLD ? (
                 <ComboboxInput
                   placeholder="Search projects…"
-                  className="w-full border-b border-border bg-transparent px-3 py-2 text-sm text-fg outline-none"
+                  className="w-full border-b border-border bg-transparent px-3 py-2 text-sm text-foreground outline-none"
                   autoFocus
                   autoComplete="off"
                   spellCheck={false}
@@ -135,7 +135,7 @@ export function ProjectSwitcher({
                     <ComboboxOption
                       key={p.id}
                       value={p}
-                      className="flex cursor-pointer items-center gap-2 rounded px-3 py-2 text-sm data-focus:bg-surface-alt"
+                      className="flex cursor-pointer items-center gap-2 rounded px-3 py-2 text-sm data-focus:bg-muted"
                     >
                       <span className={cn(badgeClass, "shrink-0")}>
                         {p.providerKind.replace("_", " ")}
@@ -144,7 +144,7 @@ export function ProjectSwitcher({
                         {p.name}
                       </span>
                       {p.id === effective ? (
-                        <Check aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-accent" />
+                        <Check aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-primary" />
                       ) : null}
                     </ComboboxOption>
                   ))
@@ -158,9 +158,9 @@ export function ProjectSwitcher({
                 setQuery("");
                 router.push("/settings?section=projects");
               }}
-              className="flex w-full items-center gap-2 border-t border-border bg-surface-alt/40 px-3 py-2 text-left text-sm text-fg hover:bg-surface-alt"
+              className="flex w-full items-center gap-2 border-t border-border bg-muted/40 px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
             >
-              <FolderPlus aria-hidden="true" className="h-4 w-4 shrink-0 text-fg-muted" />
+              <FolderPlus aria-hidden="true" className="h-4 w-4 shrink-0 text-muted-foreground" />
               Add or manage projects
             </CloseButton>
           </>

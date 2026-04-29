@@ -20,12 +20,12 @@ export function LogoLink({ currentProjectId }: { currentProjectId: string | null
   return (
     <Link
       href={href}
-      className="flex shrink-0 items-center gap-2 text-fg hover:text-accent"
+      className="flex shrink-0 items-center gap-2 text-foreground hover:text-primary"
       aria-label="Docket"
     >
       <DocketLogo size={20} className="shrink-0" />
       <span className="text-[13px] font-semibold uppercase tracking-[0.18em]">DOCKET</span>
-      <span className="ml-1 hidden text-[12px] font-light italic tracking-wide text-fg-muted sm:inline">
+      <span className="ml-1 hidden text-[12px] font-light italic tracking-wide text-muted-foreground sm:inline">
         build something cool together
       </span>
     </Link>

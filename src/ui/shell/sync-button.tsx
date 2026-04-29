@@ -56,9 +56,9 @@ export function SyncButton({
         aria-label="Sync now"
         title={title}
         className={cn(
-          "shrink-0 cursor-pointer text-fg-muted transition-colors",
-          "hover:text-fg focus:outline-none focus:ring-1 focus:ring-accent",
-          "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-fg-muted",
+          "shrink-0 cursor-pointer text-muted-foreground transition-colors",
+          "hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring",
+          "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-muted-foreground",
         )}
       >
         <RefreshCw aria-hidden="true" className={cn("h-3 w-3", inflight && "animate-spin")} />
@@ -75,16 +75,16 @@ export function SyncButton({
         aria-label="Sync now"
         title={title}
         className={cn(
-          "inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded-md border border-transparent text-fg-muted transition-colors",
-          "hover:border-border hover:bg-surface-alt hover:text-fg",
-          "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-transparent disabled:hover:bg-transparent disabled:hover:text-fg-muted",
-          "focus:outline-none focus:ring-1 focus:ring-accent",
+          "inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors",
+          "hover:border-border hover:bg-muted hover:text-foreground",
+          "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-transparent disabled:hover:bg-transparent disabled:hover:text-muted-foreground",
+          "focus:outline-none focus:ring-1 focus:ring-ring",
         )}
       >
         <RefreshCw aria-hidden="true" className={cn("h-3 w-3", inflight && "animate-spin")} />
       </button>
       {sync.error ? (
-        <span className="text-danger-fg" title={sync.error.message}>
+        <span className="text-destructive" title={sync.error.message}>
           · sync failed
         </span>
       ) : null}

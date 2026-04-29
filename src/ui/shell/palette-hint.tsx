@@ -19,7 +19,7 @@ export function PaletteHint({ className }: { className?: string }) {
 
   return (
     <span
-      className={cn("hidden text-[10px] text-fg-faint sm:inline", className)}
+      className={cn("hidden text-[10px] text-muted-foreground-faint sm:inline", className)}
       aria-hidden="true"
       title="Open command palette"
     >

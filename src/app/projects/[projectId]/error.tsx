@@ -21,11 +21,11 @@ export default function ProjectError({
 
   return (
     <div className="flex min-h-[60vh] items-center justify-center p-6">
-      <div className="flex w-full max-w-md flex-col gap-4 rounded-2xl border border-border bg-surface p-6 text-fg shadow-sm">
+      <div className="flex w-full max-w-md flex-col gap-4 rounded-2xl border border-border bg-card p-6 text-foreground shadow-sm">
         <h1 className="text-lg font-semibold">Project page failed to load</h1>
-        <p className="text-sm text-fg-muted">{error.message || "Something went wrong."}</p>
+        <p className="text-sm text-muted-foreground">{error.message || "Something went wrong."}</p>
         {error.digest ? (
-          <p className="text-xs text-fg-faint">
+          <p className="text-xs text-muted-foreground-faint">
             Error ref: <code className="font-mono">{error.digest}</code>
           </p>
         ) : null}

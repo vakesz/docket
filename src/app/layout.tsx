@@ -45,7 +45,7 @@ export default function RootLayout({
       <head>
         <ThemeBootScript />
       </head>
-      <body className="min-h-full flex flex-col bg-bg text-fg">
+      <body className="min-h-full flex flex-col bg-background text-foreground">
         <AppProviders>{children}</AppProviders>
       </body>
     </html>

@@ -109,14 +109,14 @@ export function CreateProjectForm({ defaultMakeDefault = true, onCreated }: Prop
   }
 
   if (kinds.isPending) {
-    return <p className="text-sm text-fg-faint">Loading providers…</p>;
+    return <p className="text-sm text-muted-foreground-faint">Loading providers…</p>;
   }
   if (kinds.error) {
     return <p className={errorMessageClass}>{kinds.error.message}</p>;
   }
   if (specs.length === 0) {
     return (
-      <p className="text-sm text-fg-muted">
+      <p className="text-sm text-muted-foreground">
         No providers registered. Configure one under Settings → OAuth providers first.
       </p>
     );
@@ -124,10 +124,10 @@ export function CreateProjectForm({ defaultMakeDefault = true, onCreated }: Prop
 
   return (
     <form onSubmit={onSubmit} className={`${settingsPanelClass} flex flex-col gap-4 text-sm`}>
-      <h2 className="text-base font-medium text-fg">Add project</h2>
+      <h2 className="text-base font-medium text-foreground">Add project</h2>
 
       <Field className="flex flex-col gap-1">
-        <Label className="text-xs text-fg-muted">Display name</Label>
+        <Label className="text-xs text-muted-foreground">Display name</Label>
         <Input
           required
           value={name}
@@ -138,7 +138,7 @@ export function CreateProjectForm({ defaultMakeDefault = true, onCreated }: Prop
       </Field>
 
       <Field className="flex flex-col gap-1">
-        <Label className="text-xs text-fg-muted">Description (optional)</Label>
+        <Label className="text-xs text-muted-foreground">Description (optional)</Label>
         <Input
           value={description}
           onChange={(e) => setDescription(e.target.value)}
@@ -147,7 +147,7 @@ export function CreateProjectForm({ defaultMakeDefault = true, onCreated }: Prop
       </Field>
 
       <div className="flex flex-col gap-1">
-        <span className="text-xs text-fg-muted">Provider</span>
+        <span className="text-xs text-muted-foreground">Provider</span>
         <SelectField
           aria-label="Provider"
           value={activeKind}
@@ -166,7 +166,7 @@ export function CreateProjectForm({ defaultMakeDefault = true, onCreated }: Prop
           <div className="flex flex-wrap gap-3">
             {activeSpec.setupFields.map((f) => (
               <Field key={f.key} className="flex flex-1 flex-col gap-1 min-w-[12rem]">
-                <Label className="text-xs text-fg-muted">{f.label}</Label>
+                <Label className="text-xs text-muted-foreground">{f.label}</Label>
                 <Input
                   required={f.required}
                   type={f.kind === "secret" ? "password" : f.kind === "url" ? "url" : "text"}
@@ -175,14 +175,14 @@ export function CreateProjectForm({ defaultMakeDefault = true, onCreated }: Prop
                   placeholder={f.placeholder}
                   className={fieldClass}
                 />
-                {f.help ? <p className="text-xs text-fg-muted">{f.help}</p> : null}
+                {f.help ? <p className="text-xs text-muted-foreground">{f.help}</p> : null}
               </Field>
             ))}
           </div>
         </div>
       ) : null}
 
-      <Field className="inline-flex items-center gap-2 text-sm text-fg">
+      <Field className="inline-flex items-center gap-2 text-sm text-foreground">
         <Switch checked={makeDefault} onChange={setMakeDefault} className={switchTrackClass}>
           <span aria-hidden className={switchThumbClass} />
         </Switch>

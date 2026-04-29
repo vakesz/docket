@@ -131,11 +131,11 @@ export function LlmProviderForm(props: Props) {
 
   return (
     <form onSubmit={onSubmit} className={formClass}>
-      {!isEdit ? <h2 className="text-base font-medium text-fg">Add LLM provider</h2> : null}
+      {!isEdit ? <h2 className="text-base font-medium text-foreground">Add LLM provider</h2> : null}
 
       <div className="flex gap-3">
         <div className="flex w-40 flex-col gap-1">
-          <label htmlFor={kindId} className="text-xs text-fg-muted">
+          <label htmlFor={kindId} className="text-xs text-muted-foreground">
             Kind
           </label>
           <SelectField id={kindId} value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
@@ -147,7 +147,7 @@ export function LlmProviderForm(props: Props) {
           </SelectField>
         </div>
         <div className="flex w-40 flex-col gap-1">
-          <label htmlFor={roleId} className="text-xs text-fg-muted">
+          <label htmlFor={roleId} className="text-xs text-muted-foreground">
             Role
           </label>
           <SelectField
@@ -167,7 +167,7 @@ export function LlmProviderForm(props: Props) {
           </SelectField>
         </div>
         <Field className="flex flex-1 flex-col gap-1">
-          <Label className="text-xs text-fg-muted">Label</Label>
+          <Label className="text-xs text-muted-foreground">Label</Label>
           <Input
             required
             value={label}
@@ -178,7 +178,7 @@ export function LlmProviderForm(props: Props) {
         </Field>
       </div>
       {!isEdit ? (
-        <p className="-mt-2 text-xs text-fg-muted">
+        <p className="-mt-2 text-xs text-muted-foreground">
           {role === "chat"
             ? "Chat rows feed the agent loop. The conversation LLM picker only sees chat rows."
             : "Guardrail rows feed the prompt-injection / topic-scope / output-safety classifier. They run alongside chat — never as the chat model. A small / cheap model is recommended (e.g. gpt-5-nano)."}
@@ -186,7 +186,7 @@ export function LlmProviderForm(props: Props) {
       ) : null}
 
       <Field className="flex flex-col gap-1">
-        <Label className="text-xs text-fg-muted">
+        <Label className="text-xs text-muted-foreground">
           {isEdit ? "API key (leave blank to keep current)" : "API key"}
         </Label>
         <Input
@@ -198,14 +198,14 @@ export function LlmProviderForm(props: Props) {
           placeholder="sk-..."
           className={fieldMonoClass}
         />
-        <p className="text-xs text-fg-muted">
+        <p className="text-xs text-muted-foreground">
           {isEdit ? (
             "Stored encrypted at rest. Only fill this in to rotate the key."
           ) : (
             <>
               Stored encrypted at rest. Format depends on the vendor (OpenAI starts with{" "}
-              <code className="rounded bg-surface-alt px-1 py-0.5 font-mono">sk-</code>, Anthropic
-              with <code className="rounded bg-surface-alt px-1 py-0.5 font-mono">sk-ant-</code>).
+              <code className="rounded bg-muted px-1 py-0.5 font-mono">sk-</code>, Anthropic with{" "}
+              <code className="rounded bg-muted px-1 py-0.5 font-mono">sk-ant-</code>).
             </>
           )}
         </p>
@@ -213,30 +213,30 @@ export function LlmProviderForm(props: Props) {
 
       <div className="flex gap-3">
         <Field className="flex flex-1 flex-col gap-1">
-          <Label className="text-xs text-fg-muted">{isEdit ? "Model" : "Model (optional)"}</Label>
+          <Label className="text-xs text-muted-foreground">
+            {isEdit ? "Model" : "Model (optional)"}
+          </Label>
           <Input
             value={model}
             onChange={(e) => setModel(e.target.value)}
             placeholder="gpt-5"
             className={fieldClass}
           />
-          <p className="text-xs text-fg-muted">
+          <p className="text-xs text-muted-foreground">
             {isEdit ? (
               "Optional override. Empty lets the adapter pick its default."
             ) : (
               <>
                 Optional override (e.g.{" "}
-                <code className="rounded bg-surface-alt px-1 py-0.5 font-mono">gpt-5</code>,{" "}
-                <code className="rounded bg-surface-alt px-1 py-0.5 font-mono">
-                  claude-sonnet-4-6
-                </code>
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">gpt-5</code>,{" "}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">claude-sonnet-4-6</code>
                 ). Empty lets the adapter pick its default.
               </>
             )}
           </p>
         </Field>
         <Field className="flex flex-1 flex-col gap-1">
-          <Label className="text-xs text-fg-muted">
+          <Label className="text-xs text-muted-foreground">
             {isEdit ? "Base URL" : "Base URL (optional)"}
           </Label>
           <Input
@@ -245,7 +245,7 @@ export function LlmProviderForm(props: Props) {
             placeholder="https://api.openai.com/v1"
             className={fieldClass}
           />
-          <p className="text-xs text-fg-muted">
+          <p className="text-xs text-muted-foreground">
             Only set for non-vanilla endpoints — Azure OpenAI, an internal proxy, or a self-hosted
             Ollama. Blank uses the vendor's public endpoint.
           </p>
@@ -254,7 +254,7 @@ export function LlmProviderForm(props: Props) {
 
       <div className="flex gap-3">
         <Field className="flex flex-1 flex-col gap-1">
-          <Label className="text-xs text-fg-muted">Input price ($ / Mtok)</Label>
+          <Label className="text-xs text-muted-foreground">Input price ($ / Mtok)</Label>
           <Input
             type="text"
             inputMode="decimal"
@@ -265,7 +265,7 @@ export function LlmProviderForm(props: Props) {
           />
         </Field>
         <Field className="flex flex-1 flex-col gap-1">
-          <Label className="text-xs text-fg-muted">Output price ($ / Mtok)</Label>
+          <Label className="text-xs text-muted-foreground">Output price ($ / Mtok)</Label>
           <Input
             type="text"
             inputMode="decimal"
@@ -276,7 +276,7 @@ export function LlmProviderForm(props: Props) {
           />
         </Field>
       </div>
-      <p className="-mt-2 text-xs text-fg-muted">
+      <p className="-mt-2 text-xs text-muted-foreground">
         USD per million tokens — paste the vendor's published rate as-is
         {isEdit
           ? ". Leave blank if unknown — turns will then be logged with no cost and budget tracking will undercount."
@@ -292,13 +292,13 @@ export function LlmProviderForm(props: Props) {
 
       {!isEdit ? (
         <div className="flex flex-col gap-1">
-          <Field className="inline-flex items-center gap-2 text-xs text-fg-muted">
+          <Field className="inline-flex items-center gap-2 text-xs text-muted-foreground">
             <Switch checked={isDefault} onChange={setIsDefault} className={switchTrackClass}>
               <span aria-hidden className={switchThumbClass} />
             </Switch>
             <Label>Make this the {role === "guardrail" ? "guardrail" : "chat"} default</Label>
           </Field>
-          <p className="text-xs text-fg-muted">
+          <p className="text-xs text-muted-foreground">
             {role === "guardrail"
               ? "Becomes the fallback used by any project that hasn't pinned its own guardrail row. The pattern guardrail still runs first regardless."
               : "Becomes the fallback used by any project that hasn't picked its own chat LLM. Per-conversation overrides still win."}

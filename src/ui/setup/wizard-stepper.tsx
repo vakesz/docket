@@ -33,13 +33,15 @@ export function WizardStepper({
               aria-hidden
               className={`relative h-3 w-3 rounded-full ${
                 state === "done"
-                  ? "bg-fg"
+                  ? "bg-foreground"
                   : state === "active"
-                    ? "bg-fg ring-2 ring-fg ring-offset-2 ring-offset-bg"
-                    : "border border-border bg-bg"
+                    ? "bg-foreground ring-2 ring-foreground ring-offset-2 ring-offset-background"
+                    : "border border-border bg-background"
               }`}
             />
-            <span className={`mt-3 text-xs ${state === "pending" ? "text-fg-faint" : "text-fg"}`}>
+            <span
+              className={`mt-3 text-xs ${state === "pending" ? "text-muted-foreground-faint" : "text-foreground"}`}
+            >
               {step.title}
             </span>
           </li>

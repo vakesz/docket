@@ -85,19 +85,19 @@ export function ProposalCard({
 
   if (query.isPending) {
     return (
-      <section className="rounded border border-border bg-surface px-3 py-2 text-xs text-fg-muted">
+      <section className="rounded border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
         Loading proposal…
       </section>
     );
   }
   if (query.error) {
     return (
-      <section className="flex items-center gap-2 rounded border border-danger/40 bg-danger-bg/40 px-3 py-2 text-xs text-danger-fg">
+      <section className="flex items-center gap-2 rounded border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
         <span className="flex-1">Failed to load proposal: {query.error.message}</span>
         <button
           type="button"
           onClick={onDismiss}
-          className="rounded p-1 hover:bg-danger-bg/60"
+          className="rounded p-1 hover:bg-destructive/15"
           aria-label="Dismiss"
         >
           <X className="h-3 w-3" />
@@ -129,8 +129,8 @@ export function ProposalCard({
   return (
     <section
       className={cn(
-        "rounded border bg-surface text-sm text-fg",
-        isPending ? "border-accent" : "border-border",
+        "rounded border bg-card text-sm text-foreground",
+        isPending ? "border-primary" : "border-border",
       )}
     >
       <header className="flex items-center gap-2 px-3 py-2">
@@ -143,12 +143,12 @@ export function ProposalCard({
           <ChevronDown
             className={cn("h-3 w-3 shrink-0 transition-transform", open ? "" : "-rotate-90")}
           />
-          <span className="rounded bg-accent px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-accent-fg">
+          <span className="rounded bg-primary px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-primary-foreground">
             propose
           </span>
           <span className="truncate font-medium">{kindLabel}</span>
           {row.providerItemId ? (
-            <span className="truncate font-mono text-[11px] text-fg-faint">
+            <span className="truncate font-mono text-[11px] text-muted-foreground-faint">
               {row.providerItemId}
             </span>
           ) : null}
@@ -162,7 +162,7 @@ export function ProposalCard({
               type="button"
               disabled={busy}
               onClick={() => reject.mutate({ projectId, proposalId })}
-              className="rounded border border-border bg-bg px-2 py-1 text-xs text-fg hover:bg-surface-alt disabled:opacity-60"
+              className="rounded border border-border bg-background px-2 py-1 text-xs text-foreground hover:bg-muted disabled:opacity-60"
             >
               {reject.isPending ? "Rejecting…" : "Reject"}
             </button>
@@ -170,7 +170,7 @@ export function ProposalCard({
               type="button"
               disabled={busy}
               onClick={() => confirm.mutate({ projectId, proposalId })}
-              className="rounded bg-accent px-2 py-1 text-xs font-semibold text-accent-fg hover:opacity-90 disabled:opacity-60"
+              className="rounded bg-primary px-2 py-1 text-xs font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-60"
             >
               {confirm.isPending ? "Confirming…" : "Confirm"}
             </button>
@@ -179,7 +179,7 @@ export function ProposalCard({
           <button
             type="button"
             onClick={onDismiss}
-            className="rounded p-1 text-fg-faint hover:bg-surface-alt hover:text-fg"
+            className="rounded p-1 text-muted-foreground-faint hover:bg-muted hover:text-foreground"
             aria-label="Dismiss"
           >
             <X className="h-3 w-3" />
@@ -190,7 +190,7 @@ export function ProposalCard({
       {open ? (
         <div className="border-t border-border px-3 py-2">
           {row.advisory ? (
-            <p className="mb-3 rounded-md border border-warning/40 bg-warning-bg/40 p-2 text-xs text-warning-fg">
+            <p className="mb-3 rounded-md border border-warning/40 bg-warning/10 p-2 text-xs text-warning">
               Heads up: {row.advisory}
             </p>
           ) : null}
@@ -201,7 +201,7 @@ export function ProposalCard({
       {isFailed && row.errorMessage ? (
         <div className="border-t border-border px-3 py-2">
           <p className={cn("mb-1", metaLabelClass)}>Provider error</p>
-          <p className="rounded-md border border-danger/40 bg-danger-bg/40 px-2 py-1 text-xs text-danger-fg">
+          <p className="rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1 text-xs text-destructive">
             {row.errorMessage}
           </p>
         </div>
@@ -209,7 +209,7 @@ export function ProposalCard({
 
       {mutationError ? (
         <div className="border-t border-border px-3 py-2">
-          <p className="rounded-md border border-danger/40 bg-danger-bg/40 px-2 py-1 text-xs text-danger-fg">
+          <p className="rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1 text-xs text-destructive">
             {mutationError}
           </p>
         </div>
@@ -227,10 +227,10 @@ function StatusPill({
 }) {
   const cls =
     tone === "success"
-      ? "border-success/40 bg-success-bg/40 text-success-fg"
+      ? "border-success/40 bg-success/10 text-success"
       : tone === "danger"
-        ? "border-danger/40 bg-danger-bg/40 text-danger-fg"
-        : "border-border bg-surface-alt text-fg-muted";
+        ? "border-destructive/40 bg-destructive/10 text-destructive"
+        : "border-border bg-muted text-muted-foreground";
   return (
     <span
       className={cn(

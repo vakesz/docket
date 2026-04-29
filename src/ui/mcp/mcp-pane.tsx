@@ -80,7 +80,7 @@ export function McpPane({ projectId }: { projectId: string }) {
   return (
     <section className="flex flex-col gap-4">
       <form
-        className="flex flex-col gap-2 rounded-2xl border border-dashed border-border bg-surface-alt/40 p-4"
+        className="flex flex-col gap-2 rounded-2xl border border-dashed border-border bg-muted/40 p-4"
         onSubmit={(e) => {
           e.preventDefault();
           void submitNew();
@@ -116,13 +116,13 @@ export function McpPane({ projectId }: { projectId: string }) {
           rows={2}
           className={`${fieldMonoClass} text-xs`}
         />
-        <p className="text-xs text-fg-muted">
+        <p className="text-xs text-muted-foreground">
           Exposes a remote MCP server's tools to the agent. The name is the tool prefix the agent
           sees; URL must speak SSE or streamable-HTTP MCP. Headers JSON (optional, string → string)
           is sent on every request — typical use is a bearer token or API key.
         </p>
         <div className="flex items-center justify-between">
-          <span className="text-xs text-fg-muted">{list.data?.length ?? 0} configured</span>
+          <span className="text-xs text-muted-foreground">{list.data?.length ?? 0} configured</span>
           <Button
             type="submit"
             disabled={create.isPending || !draftName.trim() || !draftUrl.trim()}
@@ -136,7 +136,7 @@ export function McpPane({ projectId }: { projectId: string }) {
       </form>
 
       {list.isPending ? (
-        <p className="text-sm italic text-fg-muted">Loading MCP servers…</p>
+        <p className="text-sm italic text-muted-foreground">Loading MCP servers…</p>
       ) : list.data?.length === 0 ? (
         <p className={emptyStateClass}>
           No MCP servers configured. Add one above to expose remote tools to the agent.
@@ -149,19 +149,19 @@ export function McpPane({ projectId }: { projectId: string }) {
             return (
               <li
                 key={s.id}
-                className="flex items-start justify-between gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm"
+                className="flex items-start justify-between gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm"
               >
                 <div className="flex min-w-0 flex-col gap-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-fg">{s.name}</span>
-                    <span className="text-[10px] uppercase tracking-wide text-fg-muted">
+                    <span className="text-sm font-medium text-foreground">{s.name}</span>
+                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
                       {s.transport}
                     </span>
                     {!s.enabled && <span className={badgeClass}>disabled</span>}
                   </div>
-                  <p className="truncate font-mono text-xs text-fg-muted">{s.url}</p>
+                  <p className="truncate font-mono text-xs text-muted-foreground">{s.url}</p>
                   {headerCount > 0 && (
-                    <p className="text-[10px] uppercase tracking-wide text-fg-muted">
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
                       {headerCount} header{headerCount === 1 ? "" : "s"}
                     </p>
                   )}

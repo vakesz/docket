@@ -120,13 +120,13 @@ export function OauthProviderForm(props: Props) {
 
   return (
     <form onSubmit={onSubmit} className={`${settingsPanelClass} flex flex-col gap-4 text-sm`}>
-      <h2 className="text-base font-medium text-fg">
+      <h2 className="text-base font-medium text-foreground">
         {mode === "edit" ? "Edit OAuth provider" : "Add OAuth provider"}
       </h2>
 
       <div className="flex gap-3">
         <div className="flex w-40 flex-col gap-1">
-          <label htmlFor={kindId} className="text-xs text-fg-muted">
+          <label htmlFor={kindId} className="text-xs text-muted-foreground">
             Kind
           </label>
           {mode === "edit" ? (
@@ -147,7 +147,7 @@ export function OauthProviderForm(props: Props) {
           )}
         </div>
         <Field className="flex flex-1 flex-col gap-1">
-          <Label className="text-xs text-fg-muted">Label</Label>
+          <Label className="text-xs text-muted-foreground">Label</Label>
           <Input
             required
             value={label}
@@ -159,7 +159,7 @@ export function OauthProviderForm(props: Props) {
 
       <div className="flex gap-3">
         <Field className="flex flex-1 flex-col gap-1">
-          <Label className="text-xs text-fg-muted">Client ID</Label>
+          <Label className="text-xs text-muted-foreground">Client ID</Label>
           <Input
             required
             value={clientId}
@@ -168,10 +168,12 @@ export function OauthProviderForm(props: Props) {
           />
         </Field>
         <Field className="flex flex-1 flex-col gap-1">
-          <Label className="text-xs text-fg-muted">
+          <Label className="text-xs text-muted-foreground">
             Client secret
             {mode === "edit" ? (
-              <span className="ml-1 font-normal text-fg-faint">(leave blank to keep current)</span>
+              <span className="ml-1 font-normal text-muted-foreground-faint">
+                (leave blank to keep current)
+              </span>
             ) : null}
           </Label>
           <Input
@@ -187,33 +189,31 @@ export function OauthProviderForm(props: Props) {
       </div>
 
       <Field className="flex flex-col gap-1">
-        <Label className="text-xs text-fg-muted">Scopes (space-separated)</Label>
+        <Label className="text-xs text-muted-foreground">Scopes (space-separated)</Label>
         <Input
           value={scopes}
           onChange={(e) => setScopes(e.target.value)}
           className={fieldMonoClass}
         />
-        <p className="text-xs text-fg-muted">
+        <p className="text-xs text-muted-foreground">
           Pre-filled per kind. Only edit if you need extra capability beyond the defaults.
         </p>
       </Field>
 
       <Field className="flex flex-col gap-1">
-        <Label className="text-xs text-fg-muted">Base URL / tenant (optional)</Label>
+        <Label className="text-xs text-muted-foreground">Base URL / tenant (optional)</Label>
         <Input
           value={baseUrl}
           onChange={(e) => setBaseUrl(e.target.value)}
           placeholder={baseUrlHint}
           className={fieldClass}
         />
-        <p className="text-xs text-fg-muted">
+        <p className="text-xs text-muted-foreground">
           GitHub Enterprise base URL (e.g.{" "}
-          <code className="rounded bg-surface-alt px-1 py-0.5 font-mono">
-            https://github.example.com
-          </code>
+          <code className="rounded bg-muted px-1 py-0.5 font-mono">https://github.example.com</code>
           ), or the Entra tenant id for Azure DevOps. Blank ={" "}
-          <code className="rounded bg-surface-alt px-1 py-0.5 font-mono">github.com</code> /
-          multi-tenant <code className="rounded bg-surface-alt px-1 py-0.5 font-mono">common</code>.
+          <code className="rounded bg-muted px-1 py-0.5 font-mono">github.com</code> / multi-tenant{" "}
+          <code className="rounded bg-muted px-1 py-0.5 font-mono">common</code>.
         </p>
       </Field>
 

@@ -15,12 +15,12 @@ export function Bubble({
   text: string;
   seedKind?: SeedKind | null;
 }) {
-  const tone = messageRole === "user" ? "bg-surface-alt text-fg" : "bg-surface text-fg";
+  const tone = messageRole === "user" ? "bg-muted text-foreground" : "bg-card text-foreground";
   if (seedKind) {
     return (
       <div className={cn("mb-3 rounded px-3 py-2 text-sm", tone)}>
         <div className={cn("mb-1", metaLabelClass)}>{messageRole}</div>
-        <div className="inline-flex items-center gap-1.5 text-fg">
+        <div className="inline-flex items-center gap-1.5 text-foreground">
           <Sparkles aria-hidden="true" className="size-3.5" />
           <span>{SEED_LABELS[seedKind]}</span>
         </div>
@@ -30,7 +30,7 @@ export function Bubble({
   return (
     <div className={cn("mb-3 rounded px-3 py-2 text-sm", tone)}>
       <div className={cn("mb-1", metaLabelClass)}>{messageRole}</div>
-      {text ? <MarkdownLazy source={text} className="text-fg" /> : null}
+      {text ? <MarkdownLazy source={text} className="text-foreground" /> : null}
     </div>
   );
 }

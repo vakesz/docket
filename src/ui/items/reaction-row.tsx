@@ -134,7 +134,9 @@ export function ReactionRow({
               "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[11px] leading-none",
               "transition-transform duration-100 hover:[transform:scale(1.25)]",
               "disabled:cursor-not-allowed disabled:opacity-60",
-              active ? "bg-accent/10 text-fg" : "text-fg-muted opacity-70 hover:opacity-100",
+              active
+                ? "bg-primary/10 text-foreground"
+                : "text-muted-foreground opacity-70 hover:opacity-100",
               busy === kind && "opacity-60",
             )}
           >
@@ -147,7 +149,7 @@ export function ReactionRow({
           </Button>
         );
       })}
-      {error ? <span className="text-xs text-danger-fg">{error}</span> : null}
+      {error ? <span className="text-xs text-destructive">{error}</span> : null}
       <ProposalDialog
         projectId={projectId}
         proposalId={pendingProposalId}

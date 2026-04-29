@@ -30,9 +30,9 @@ export function SyncButton({
         {sync.isPending ? `${label}…` : label}
       </button>
       {sync.error ? (
-        <span className="text-xs text-danger-fg">{sync.error.message}</span>
+        <span className="text-xs text-destructive">{sync.error.message}</span>
       ) : sync.data ? (
-        <span className="text-xs text-fg-faint">
+        <span className="text-xs text-muted-foreground-faint">
           +{sync.data.upserted} upserted, {sync.data.archived} archived
         </span>
       ) : null}

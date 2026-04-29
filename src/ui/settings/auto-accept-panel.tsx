@@ -90,12 +90,12 @@ export function AutoAcceptPanel({ projectId }: { projectId: string }) {
   };
 
   if (projectSettings.isPending) {
-    return <p className="text-sm text-fg-faint">Loading…</p>;
+    return <p className="text-sm text-muted-foreground-faint">Loading…</p>;
   }
 
   return (
     <div className="flex flex-col gap-6">
-      <p className="text-xs text-fg-muted">
+      <p className="text-xs text-muted-foreground">
         Off by default. Each toggle skips the confirm step for proposals of that kind on this
         project. Only memory writes/deletes are eligible — anything that touches the provider (state
         changes, descriptions, comments, labels/tags, assignee changes, new items) always requires
@@ -107,7 +107,7 @@ export function AutoAcceptPanel({ projectId }: { projectId: string }) {
           const checked = selected.has(k.key);
           return (
             <li key={k.key} className="flex flex-col gap-1">
-              <Field className="flex items-center gap-2 text-sm text-fg">
+              <Field className="flex items-center gap-2 text-sm text-foreground">
                 <Switch
                   checked={checked}
                   disabled={save.isPending}
@@ -118,7 +118,7 @@ export function AutoAcceptPanel({ projectId }: { projectId: string }) {
                 </Switch>
                 <Label>{k.label}</Label>
               </Field>
-              <p className="ml-6 text-xs text-fg-muted">{k.hint}</p>
+              <p className="ml-6 text-xs text-muted-foreground">{k.hint}</p>
             </li>
           );
         })}
@@ -141,8 +141,10 @@ export function AutoAcceptPanel({ projectId }: { projectId: string }) {
         >
           Disable all
         </button>
-        {save.error ? <span className="text-xs text-danger-fg">{save.error.message}</span> : null}
-        {save.isSuccess && !isDirty ? <span className="text-xs text-fg-muted">Saved.</span> : null}
+        {save.error ? <span className="text-xs text-destructive">{save.error.message}</span> : null}
+        {save.isSuccess && !isDirty ? (
+          <span className="text-xs text-muted-foreground">Saved.</span>
+        ) : null}
       </div>
     </div>
   );

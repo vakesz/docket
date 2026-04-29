@@ -25,14 +25,14 @@ export function ReadOnlyModePanel() {
   return (
     <div className="flex flex-col gap-3">
       <Field className="flex flex-col gap-1">
-        <Label className="text-sm font-medium text-fg">
+        <Label className="text-sm font-medium text-foreground">
           {row?.label ?? "System read-only mode"}
         </Label>
-        <p className="text-xs text-fg-muted">
+        <p className="text-xs text-muted-foreground">
           {row?.description ??
             "When on, every mutation route — including proposal confirms — is blocked. Reads stay open. Flip on for maintenance windows."}
         </p>
-        <Field className="flex items-center gap-2 text-sm text-fg">
+        <Field className="flex items-center gap-2 text-sm text-foreground">
           <Switch
             checked={enabled}
             disabled={disabled}
@@ -44,8 +44,8 @@ export function ReadOnlyModePanel() {
           <Label>{enabled ? "Enabled — all writes blocked" : "Disabled"}</Label>
         </Field>
       </Field>
-      {update.error ? <p className="text-xs text-danger-fg">{update.error.message}</p> : null}
-      {list.error ? <p className="text-xs text-danger-fg">{list.error.message}</p> : null}
+      {update.error ? <p className="text-xs text-destructive">{update.error.message}</p> : null}
+      {list.error ? <p className="text-xs text-destructive">{list.error.message}</p> : null}
     </div>
   );
 }

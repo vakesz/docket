@@ -130,7 +130,7 @@ export function GuardrailPanel({ projectId }: { projectId: string }) {
   };
 
   if (projectSettings.isPending || providers.isPending) {
-    return <p className="text-sm text-fg-faint">Loading…</p>;
+    return <p className="text-sm text-muted-foreground-faint">Loading…</p>;
   }
 
   const knobsDisabled = !enabled || !hasGuardrailProvider || save.isPending;
@@ -144,16 +144,16 @@ export function GuardrailPanel({ projectId }: { projectId: string }) {
       {!hasGuardrailProvider ? (
         <aside
           role="note"
-          className="rounded-2xl border border-warning/40 bg-warning-bg/40 p-4 text-xs text-warning-fg"
+          className="rounded-2xl border border-warning/40 bg-warning/10 p-4 text-xs text-warning"
         >
           <p className="mb-1 font-medium">No guardrail model configured</p>
           <p>
             Chat guardrails need a dedicated LLM provider (role:{" "}
-            <code className="rounded bg-surface px-1 py-0.5 font-mono text-fg">guardrail</code>)
-            before they can be enabled.{" "}
+            <code className="rounded bg-card px-1 py-0.5 font-mono text-foreground">guardrail</code>
+            ) before they can be enabled.{" "}
             <Link
               href="/settings?section=llm-providers"
-              className="underline underline-offset-2 hover:text-fg"
+              className="underline underline-offset-2 hover:text-foreground"
             >
               Add one in Deployment &rarr; LLM providers
             </Link>
@@ -163,7 +163,7 @@ export function GuardrailPanel({ projectId }: { projectId: string }) {
       ) : null}
 
       <div className="flex flex-col gap-2">
-        <Field className="flex items-center gap-2 text-sm text-fg">
+        <Field className="flex items-center gap-2 text-sm text-foreground">
           <Switch
             checked={hasGuardrailProvider && enabled}
             disabled={!hasGuardrailProvider || save.isPending}
@@ -174,14 +174,14 @@ export function GuardrailPanel({ projectId }: { projectId: string }) {
           </Switch>
           <Label>Enable chat guardrails</Label>
         </Field>
-        <p className="text-xs text-fg-muted">
+        <p className="text-xs text-muted-foreground">
           When on, every user message, tool result, and final assistant reply runs through the
           guardrail layer. Calls go to the project&rsquo;s configured guardrail model
           {defaultGuardrailProvider ? (
             <>
               {" "}
               (currently{" "}
-              <span className="font-medium text-fg">{defaultGuardrailProvider.label}</span>)
+              <span className="font-medium text-foreground">{defaultGuardrailProvider.label}</span>)
             </>
           ) : null}{" "}
           — never an external endpoint.
@@ -189,10 +189,10 @@ export function GuardrailPanel({ projectId }: { projectId: string }) {
       </div>
 
       <div className="flex flex-col gap-2 border-t border-border pt-6">
-        <label htmlFor="guardrail-kind" className="text-sm font-medium text-fg">
+        <label htmlFor="guardrail-kind" className="text-sm font-medium text-foreground">
           Strategy
         </label>
-        <p className="text-xs text-fg-muted">
+        <p className="text-xs text-muted-foreground">
           Composite is the default — pattern is fast and free, and the model only runs when the
           regex layer is uncertain.
         </p>
@@ -209,15 +209,15 @@ export function GuardrailPanel({ projectId }: { projectId: string }) {
             </option>
           ))}
         </SelectField>
-        <p className="text-[11px] text-fg-faint">
+        <p className="text-[11px] text-muted-foreground-faint">
           {KIND_OPTIONS.find((opt) => opt.value === kind)?.hint}
         </p>
       </div>
 
       <div className="flex flex-col gap-3 border-t border-border pt-6">
-        <h3 className="text-sm font-medium text-fg">Behavior</h3>
+        <h3 className="text-sm font-medium text-foreground">Behavior</h3>
 
-        <Field className="flex items-start gap-2 text-sm text-fg">
+        <Field className="flex items-start gap-2 text-sm text-foreground">
           <Switch
             checked={blockOnInjection}
             disabled={knobsDisabled}
@@ -228,14 +228,14 @@ export function GuardrailPanel({ projectId }: { projectId: string }) {
           </Switch>
           <div className="flex flex-col gap-0.5">
             <Label>Block prompt-injection attempts</Label>
-            <p className="text-xs text-fg-muted">
+            <p className="text-xs text-muted-foreground">
               Tool results flagged as injection are replaced with a refusal stub before re-entering
               the prompt. Off keeps the original payload and only annotates the row.
             </p>
           </div>
         </Field>
 
-        <Field className="flex items-start gap-2 text-sm text-fg">
+        <Field className="flex items-start gap-2 text-sm text-foreground">
           <Switch
             checked={blockOffTopic}
             disabled={knobsDisabled}
@@ -246,7 +246,7 @@ export function GuardrailPanel({ projectId }: { projectId: string }) {
           </Switch>
           <div className="flex flex-col gap-0.5">
             <Label>Block off-topic chat</Label>
-            <p className="text-xs text-fg-muted">
+            <p className="text-xs text-muted-foreground">
               User messages classified as outside the software / work-item scope (cooking, shopping,
               medical advice) are refused before the agent sees them. Off downgrades to a banner.
             </p>
@@ -255,13 +255,13 @@ export function GuardrailPanel({ projectId }: { projectId: string }) {
       </div>
 
       <div className="flex flex-col gap-3 border-t border-border pt-6">
-        <h3 className="text-sm font-medium text-fg">LLM-judge round-trips</h3>
-        <p className="text-xs text-fg-muted">
+        <h3 className="text-sm font-medium text-foreground">LLM-judge round-trips</h3>
+        <p className="text-xs text-muted-foreground">
           These add a one-token classifier call on the guardrail model. They only run when the
           strategy is <em>composite</em> or <em>llm-judge</em>; pattern-only and off ignore them.
         </p>
 
-        <Field className="flex items-start gap-2 text-sm text-fg">
+        <Field className="flex items-start gap-2 text-sm text-foreground">
           <Switch
             checked={scopeCheckEnabled}
             disabled={subKnobsDisabled}
@@ -272,14 +272,14 @@ export function GuardrailPanel({ projectId }: { projectId: string }) {
           </Switch>
           <div className="flex flex-col gap-0.5">
             <Label>Scope-check user input</Label>
-            <p className="text-xs text-fg-muted">
+            <p className="text-xs text-muted-foreground">
               Classify each user message as on-topic / off-topic. Turn off if your projects extend
               beyond software work-items.
             </p>
           </div>
         </Field>
 
-        <Field className="flex items-start gap-2 text-sm text-fg">
+        <Field className="flex items-start gap-2 text-sm text-foreground">
           <Switch
             checked={outputCheckEnabled}
             disabled={subKnobsDisabled}
@@ -290,7 +290,7 @@ export function GuardrailPanel({ projectId }: { projectId: string }) {
           </Switch>
           <div className="flex flex-col gap-0.5">
             <Label>Output safety check</Label>
-            <p className="text-xs text-fg-muted">
+            <p className="text-xs text-muted-foreground">
               Run the assistant&rsquo;s final reply through a harmful-content classifier. Output is
               never blocked mid-stream — flagged messages get a banner. Costs one extra round-trip
               per turn.
@@ -322,8 +322,8 @@ export function GuardrailPanel({ projectId }: { projectId: string }) {
         >
           Reset to defaults
         </button>
-        {save.error ? <span className="text-xs text-danger-fg">{save.error.message}</span> : null}
-        {save.isSuccess ? <span className="text-xs text-fg-muted">Saved.</span> : null}
+        {save.error ? <span className="text-xs text-destructive">{save.error.message}</span> : null}
+        {save.isSuccess ? <span className="text-xs text-muted-foreground">Saved.</span> : null}
       </div>
     </form>
   );

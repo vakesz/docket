@@ -166,23 +166,23 @@ function MobileDrawer({
 }) {
   return (
     <Dialog open={open} onClose={onClose} className="relative z-40 lg:hidden">
-      <DialogBackdrop className="fixed inset-0 bg-fg/30 backdrop-blur-sm" />
+      <DialogBackdrop className="fixed inset-0 bg-foreground/30 backdrop-blur-sm" />
       <div className="fixed inset-0 flex">
         <DialogPanel
           className={cn(
-            "absolute inset-y-0 flex w-[88vw] max-w-[420px] flex-col overflow-hidden border-border bg-bg shadow-xl",
+            "absolute inset-y-0 flex w-[88vw] max-w-[420px] flex-col overflow-hidden border-border bg-background shadow-xl",
             side === "left" ? "left-0 border-r" : "right-0 border-l",
           )}
         >
-          <div className="flex items-center justify-between border-b border-border bg-surface px-3 py-2">
-            <DialogTitle className="font-mono text-[11px] uppercase tracking-[0.18em] text-fg-muted">
+          <div className="flex items-center justify-between border-b border-border bg-card px-3 py-2">
+            <DialogTitle className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
               {label}
             </DialogTitle>
             <button
               type="button"
               onClick={onClose}
               aria-label={`Close ${label.toLowerCase()}`}
-              className="rounded-md p-1 text-fg-muted hover:bg-surface-alt hover:text-fg"
+              className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
             >
               <X className="h-4 w-4" />
             </button>

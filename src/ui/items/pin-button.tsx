@@ -7,11 +7,11 @@ import { cn } from "@/lib/utils";
 
 const baseClass =
   "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-60";
-const inactiveClass = "border-border bg-surface text-fg hover:bg-surface-alt";
-const activeClass = "border-border bg-surface-alt text-fg hover:bg-surface";
+const inactiveClass = "border-border bg-card text-foreground hover:bg-muted";
+const activeClass = "border-border bg-muted text-foreground hover:bg-card";
 
 const ghostClass =
-  "inline-flex h-7 w-7 items-center justify-center rounded-md text-fg-muted hover:bg-surface-alt hover:text-fg disabled:cursor-not-allowed disabled:opacity-60 aria-pressed:bg-surface-alt aria-pressed:text-fg";
+  "inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60 aria-pressed:bg-muted aria-pressed:text-foreground";
 
 /**
  * Pin/unpin toggle. `compact` collapses to a borderless icon-only button

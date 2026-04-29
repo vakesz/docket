@@ -52,7 +52,7 @@ export function CommentComposer({
     >
       <label
         htmlFor="comment-body"
-        className="font-mono text-[11px] uppercase tracking-wider text-fg-muted"
+        className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground"
       >
         Add comment
       </label>
@@ -62,7 +62,7 @@ export function CommentComposer({
         onChange={(e) => setBody(e.target.value)}
         rows={3}
         placeholder="Write a comment…"
-        className="rounded-md border border-border bg-surface p-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+        className="rounded-md border border-border bg-card p-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
         disabled={propose.isPending}
       />
       <div className="flex items-center gap-2">
@@ -73,7 +73,7 @@ export function CommentComposer({
         >
           {propose.isPending ? "Posting…" : "Post comment"}
         </Button>
-        {error ? <span className="text-xs text-danger-fg">{error}</span> : null}
+        {error ? <span className="text-xs text-destructive">{error}</span> : null}
       </div>
       <ProposalDialog
         projectId={projectId}

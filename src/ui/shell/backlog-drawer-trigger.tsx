@@ -17,7 +17,7 @@ export function BacklogDrawerTrigger() {
       type="button"
       onClick={toggle}
       aria-label="Open menu"
-      className="-ml-1 mr-1 rounded-md p-2 text-fg hover:bg-surface-alt lg:hidden"
+      className="-ml-1 mr-1 rounded-md p-2 text-foreground hover:bg-muted lg:hidden"
     >
       <Menu className="h-5 w-5" />
     </button>

@@ -105,14 +105,14 @@ export function ItemsListPanel({ projectId }: { projectId: string | null }) {
     <div className="flex flex-col gap-6">
       <section className="flex flex-col gap-4">
         <header className="flex flex-col gap-1">
-          <h3 className="text-sm font-medium text-fg">Recently viewed</h3>
-          <p className="text-xs text-fg-muted">
+          <h3 className="text-sm font-medium text-foreground">Recently viewed</h3>
+          <p className="text-xs text-muted-foreground">
             Pin recently-opened items to the top of the backlog so you can hop back without
             scrolling. Stored per-device — your other browsers won't see the same list.
           </p>
         </header>
 
-        <Field className="flex items-center gap-2 text-sm text-fg">
+        <Field className="flex items-center gap-2 text-sm text-foreground">
           <Switch checked={recentEnabled} onChange={setRecentEnabled} className={switchTrackClass}>
             <span aria-hidden className={switchThumbClass} />
           </Switch>
@@ -120,8 +120,8 @@ export function ItemsListPanel({ projectId }: { projectId: string | null }) {
         </Field>
 
         <Field className="flex flex-col gap-1">
-          <Label className="text-sm font-medium text-fg">Maximum recents to show</Label>
-          <p className="text-xs text-fg-muted">
+          <Label className="text-sm font-medium text-foreground">Maximum recents to show</Label>
+          <p className="text-xs text-muted-foreground">
             How many rows the Recent strip shows above the backlog. Maximum {RECENT_LIMIT_MAX}; set
             to 0 to hide the strip entirely.
           </p>
@@ -139,15 +139,15 @@ export function ItemsListPanel({ projectId }: { projectId: string | null }) {
 
       <section className="flex flex-col gap-4 border-t border-border pt-6">
         <header className="flex flex-col gap-1">
-          <h3 className="text-sm font-medium text-fg">Filter bar defaults</h3>
-          <p className="text-xs text-fg-muted">
+          <h3 className="text-sm font-medium text-foreground">Filter bar defaults</h3>
+          <p className="text-xs text-muted-foreground">
             Initial sort, state bucket, and assignee/tag chip behavior on the backlog filter bar.
           </p>
         </header>
 
         <Field className="flex flex-col gap-1">
-          <Label className="text-sm font-medium text-fg">Default sort</Label>
-          <p className="text-xs text-fg-muted">
+          <Label className="text-sm font-medium text-foreground">Default sort</Label>
+          <p className="text-xs text-muted-foreground">
             Sort order applied when a project's backlog opens. Changing the sort on a saved view
             still wins for that view.
           </p>
@@ -167,8 +167,8 @@ export function ItemsListPanel({ projectId }: { projectId: string | null }) {
         </Field>
 
         <Field className="flex flex-col gap-1">
-          <Label className="text-sm font-medium text-fg">Default state filter</Label>
-          <p className="text-xs text-fg-muted">
+          <Label className="text-sm font-medium text-foreground">Default state filter</Label>
+          <p className="text-xs text-muted-foreground">
             Initial state bucket applied when the backlog opens.
           </p>
           <SelectField
@@ -190,12 +190,12 @@ export function ItemsListPanel({ projectId }: { projectId: string | null }) {
         </Field>
 
         <Field className="flex flex-col gap-1">
-          <Label className="text-sm font-medium text-fg">Show Archived bucket</Label>
-          <p className="text-xs text-fg-muted">
+          <Label className="text-sm font-medium text-foreground">Show Archived bucket</Label>
+          <p className="text-xs text-muted-foreground">
             When on, the filter bar offers an Archived bucket alongside Open / Closed / All.
             Archived rows remain reachable via the All-states bucket either way.
           </p>
-          <Field className="flex items-center gap-2 text-sm text-fg">
+          <Field className="flex items-center gap-2 text-sm text-foreground">
             <Switch
               checked={showArchivedBucket}
               disabled={disabled}
@@ -211,8 +211,8 @@ export function ItemsListPanel({ projectId }: { projectId: string | null }) {
         </Field>
 
         <Field className="flex flex-col gap-1">
-          <Label className="text-sm font-medium text-fg">Assignee selector style</Label>
-          <p className="text-xs text-fg-muted">
+          <Label className="text-sm font-medium text-foreground">Assignee selector style</Label>
+          <p className="text-xs text-muted-foreground">
             Chips show each assignee as a toggleable pill — good for small teams. Dropdown is a
             multi-select list — switch when the project has many people and chips would overflow.
           </p>
@@ -233,13 +233,13 @@ export function ItemsListPanel({ projectId }: { projectId: string | null }) {
         </Field>
 
         <Field className="flex flex-col gap-1">
-          <Label className="text-sm font-medium text-fg">Show assignee avatars</Label>
-          <p className="text-xs text-fg-muted">
+          <Label className="text-sm font-medium text-foreground">Show assignee avatars</Label>
+          <p className="text-xs text-muted-foreground">
             When on, assignee chips render with the user's profile picture pulled from the provider.
             Currently GitHub-only — a deterministic CDN URL, no extra API calls. Other providers
             fall back to a colored initial circle. Turn off to show only the username.
           </p>
-          <Field className="flex items-center gap-2 text-sm text-fg">
+          <Field className="flex items-center gap-2 text-sm text-foreground">
             <Switch
               checked={showAvatars}
               disabled={disabled}
@@ -255,8 +255,8 @@ export function ItemsListPanel({ projectId }: { projectId: string | null }) {
         </Field>
 
         <Field className="flex flex-col gap-1">
-          <Label className="text-sm font-medium text-fg">Max tag chips shown</Label>
-          <p className="text-xs text-fg-muted">
+          <Label className="text-sm font-medium text-foreground">Max tag chips shown</Label>
+          <p className="text-xs text-muted-foreground">
             How many tag chips render inline (on each backlog row, and in the tag-filter bar at the
             top of the backlog) before the rest collapse into a +N badge. Set to 0 to always
             collapse.
@@ -275,8 +275,8 @@ export function ItemsListPanel({ projectId }: { projectId: string | null }) {
         </Field>
 
         <Field className="flex flex-col gap-1">
-          <Label className="text-sm font-medium text-fg">Max assignee chips shown</Label>
-          <p className="text-xs text-fg-muted">
+          <Label className="text-sm font-medium text-foreground">Max assignee chips shown</Label>
+          <p className="text-xs text-muted-foreground">
             How many assignee chips render in the filter row before the rest collapse into a +N
             badge. Only applies when the assignee selector style is set to chips. Set to 0 to always
             collapse.
@@ -297,13 +297,15 @@ export function ItemsListPanel({ projectId }: { projectId: string | null }) {
 
       <section className="flex flex-col gap-4 border-t border-border pt-6">
         <header className="flex flex-col gap-1">
-          <h3 className="text-sm font-medium text-fg">Row appearance</h3>
-          <p className="text-xs text-fg-muted">How tightly packed each backlog row renders.</p>
+          <h3 className="text-sm font-medium text-foreground">Row appearance</h3>
+          <p className="text-xs text-muted-foreground">
+            How tightly packed each backlog row renders.
+          </p>
         </header>
 
         <Field className="flex flex-col gap-1">
-          <Label className="text-sm font-medium text-fg">Row density</Label>
-          <p className="text-xs text-fg-muted">
+          <Label className="text-sm font-medium text-foreground">Row density</Label>
+          <p className="text-xs text-muted-foreground">
             Compact packs more rows on screen with smaller padding; cozy is the default
             touch-friendly height.
           </p>
@@ -323,16 +325,16 @@ export function ItemsListPanel({ projectId }: { projectId: string | null }) {
 
       <section className="flex flex-col gap-3 border-t border-border pt-6">
         <header className="flex flex-col gap-1">
-          <h3 className="text-sm font-medium text-fg">Staleness indicator</h3>
-          <p className="text-xs text-fg-muted">
+          <h3 className="text-sm font-medium text-foreground">Staleness indicator</h3>
+          <p className="text-xs text-muted-foreground">
             Backlog rows tint amber once an item has been untouched past the threshold, and red at
             2x. The detail-page header shows the same age stamp. Project default:{" "}
-            <span className="font-medium text-fg">{projectThresholdLabel}</span>.
+            <span className="font-medium text-foreground">{projectThresholdLabel}</span>.
           </p>
         </header>
 
         <Field className="flex flex-col gap-1">
-          <Field className="flex items-center gap-2 text-sm text-fg">
+          <Field className="flex items-center gap-2 text-sm text-foreground">
             <Switch
               checked={overrideOn}
               disabled={disabled}
@@ -344,7 +346,7 @@ export function ItemsListPanel({ projectId }: { projectId: string | null }) {
             <Label>{overrideOn ? "Using my own threshold" : "Inheriting project default"}</Label>
           </Field>
           {overrideOn ? (
-            <p className="inline-flex items-start gap-1.5 text-xs text-warning-fg">
+            <p className="inline-flex items-start gap-1.5 text-xs text-warning">
               <AlertTriangle aria-hidden className="mt-0.5 size-3 shrink-0" />
               <span>
                 Not recommended — your override replaces the project default for every project you
@@ -352,7 +354,7 @@ export function ItemsListPanel({ projectId }: { projectId: string | null }) {
               </span>
             </p>
           ) : (
-            <p className="text-xs text-fg-muted">
+            <p className="text-xs text-muted-foreground">
               Off by default. Turn on only if you want a different freshness window than your
               projects use.
             </p>
@@ -361,12 +363,14 @@ export function ItemsListPanel({ projectId }: { projectId: string | null }) {
 
         {overrideOn ? (
           <Field className="flex flex-col gap-1">
-            <Label className="text-sm font-medium text-fg">Show staleness indicator (mine)</Label>
-            <p className="text-xs text-fg-muted">
+            <Label className="text-sm font-medium text-foreground">
+              Show staleness indicator (mine)
+            </Label>
+            <p className="text-xs text-muted-foreground">
               When off, the freshness tint and detail-page age badge are hidden for me on every
               project — even if a project's own default is positive.
             </p>
-            <Field className="flex items-center gap-2 text-sm text-fg">
+            <Field className="flex items-center gap-2 text-sm text-foreground">
               <Switch
                 checked={indicatorOn}
                 disabled={disabled}
@@ -382,8 +386,8 @@ export function ItemsListPanel({ projectId }: { projectId: string | null }) {
 
         {overrideOn && indicatorOn ? (
           <Field className="flex flex-col gap-1">
-            <Label className="text-sm font-medium text-fg">My threshold (days)</Label>
-            <p className="text-xs text-fg-muted">
+            <Label className="text-sm font-medium text-foreground">My threshold (days)</Label>
+            <p className="text-xs text-muted-foreground">
               Days an item can sit untouched before it tints amber. Range: 1 to 3650.
             </p>
             <NumberField
@@ -399,7 +403,7 @@ export function ItemsListPanel({ projectId }: { projectId: string | null }) {
         ) : null}
       </section>
 
-      {update.error ? <p className="text-xs text-danger-fg">{update.error.message}</p> : null}
+      {update.error ? <p className="text-xs text-destructive">{update.error.message}</p> : null}
     </div>
   );
 }

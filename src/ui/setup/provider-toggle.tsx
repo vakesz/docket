@@ -35,12 +35,12 @@ export function ProviderToggle({
         </Switch>
         <Label as="span" className="flex flex-1 flex-col gap-1">
           <span className="flex items-baseline gap-2">
-            <span className="font-medium text-fg">{label}</span>
+            <span className="font-medium text-foreground">{label}</span>
             {alreadyConfigured ? (
-              <span className="text-xs uppercase tracking-wide text-success-fg">configured</span>
+              <span className="text-xs uppercase tracking-wide text-success">configured</span>
             ) : null}
           </span>
-          {help ? <span className="text-xs text-fg-muted">{help}</span> : null}
+          {help ? <span className="text-xs text-muted-foreground">{help}</span> : null}
         </Label>
       </Field>
       {checked && !disabled ? <div className="flex flex-col gap-3">{children}</div> : null}

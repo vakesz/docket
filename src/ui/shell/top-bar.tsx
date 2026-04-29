@@ -32,10 +32,10 @@ export function TopBar({
   }
 
   return (
-    <header className="flex items-center border-b border-border bg-surface px-2 py-2 sm:px-4">
+    <header className="flex items-center border-b border-border bg-card px-2 py-2 sm:px-4">
       <BacklogDrawerTrigger />
       <LogoLink currentProjectId={currentProjectId} />
-      <div className="ml-auto flex shrink-0 items-center gap-2 text-xs text-fg-muted">
+      <div className="ml-auto flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
         {currentProjectId && projects.length > 0 ? (
           <>
             <SyncButton projectId={currentProjectId} readOnly={readOnly} variant="topbar" />

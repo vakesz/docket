@@ -236,11 +236,13 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
   };
 
   return (
-    <div className="flex h-full flex-col bg-bg">
+    <div className="flex h-full flex-col bg-background">
       <header className="flex items-center gap-2 border-b border-border px-3 py-2">
-        <h2 className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">Chat</h2>
+        <h2 className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+          Chat
+        </h2>
         {conversation && (
-          <span className="font-mono text-[10px] text-fg-faint">
+          <span className="font-mono text-[10px] text-muted-foreground-faint">
             tokens {conversation.tokensIn + conversation.tokensOut} · $
             {(conversation.costCents / 100).toFixed(3)}
           </span>
@@ -274,11 +276,11 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
 
       <div ref={scrollRef} className="relative flex-1 overflow-auto px-3 py-3">
         {!conversationId && messages.length === 0 && !hasStreamingActivity ? (
-          <p className="text-sm italic text-fg-faint">
+          <p className="text-sm italic text-muted-foreground-faint">
             No conversation yet. Send a message to start one.
           </p>
         ) : detail.isPending && messages.length === 0 && !hasStreamingActivity ? (
-          <p className="text-sm italic text-fg-faint">Loading messages…</p>
+          <p className="text-sm italic text-muted-foreground-faint">Loading messages…</p>
         ) : (
           <>
             {renderUnits.map((unit) => {
@@ -331,8 +333,8 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
                     key={`guardrail:${idx}`}
                     className={
                       notice.blocked
-                        ? "rounded border border-danger/40 bg-danger-bg px-3 py-2 text-xs text-danger-fg"
-                        : "rounded border border-warning/40 bg-warning-bg/60 px-3 py-2 text-xs text-warning-fg"
+                        ? "rounded border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+                        : "rounded border border-warning/40 bg-warning/15 px-3 py-2 text-xs text-warning"
                     }
                   >
                     <span className="font-medium uppercase tracking-wide">
@@ -344,12 +346,12 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
               </div>
             )}
             {streaming.error && (
-              <div className="mt-2 rounded border border-danger/40 bg-danger-bg px-3 py-2 text-xs text-danger-fg">
+              <div className="mt-2 rounded border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
                 {streaming.error}
               </div>
             )}
             {((!inFlight && proposalIds.length > 0) || streaming.question) && (
-              <div className="sticky bottom-0 -mx-3 mt-3 flex flex-col gap-2 border-t border-border bg-bg/95 px-3 pb-1 pt-2 backdrop-blur-sm">
+              <div className="sticky bottom-0 -mx-3 mt-3 flex flex-col gap-2 border-t border-border bg-background/95 px-3 pb-1 pt-2 backdrop-blur-sm">
                 {!inFlight &&
                   proposalIds.map((id) => (
                     <ProposalCard
@@ -379,7 +381,7 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
         }}
         className="border-t border-border p-2"
       >
-        <p className="mb-1 text-[10px] text-fg-faint">
+        <p className="mb-1 text-[10px] text-muted-foreground-faint">
           {streaming.question
             ? "Pick from the card above — or type free text and it'll be sent as your answer."
             : "Ask the agent to comment, transition, or rewrite — changes appear as cards to confirm."}
@@ -406,7 +408,7 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
               ? "Ask the agent… (⏎ to send, ⇧⏎ for newline)"
               : "Ask the agent… (⇧⏎ to send, ⏎ for newline)"
           }
-          className="w-full resize-none rounded border border-border bg-bg p-2 text-sm text-fg focus:border-accent focus:outline-none disabled:bg-surface-alt"
+          className="w-full resize-none rounded border border-border bg-background p-2 text-sm text-foreground focus:border-primary focus:outline-none disabled:bg-muted"
         />
         <div className={cn("mt-1 flex items-center justify-between gap-2", metaLabelFaintClass)}>
           <LlmSwitcher
@@ -415,7 +417,7 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
             currentOverrideId={detail.data?.llmProviderIdOverride ?? null}
           />
           <div className="flex items-center gap-2">
-            {create.error && <span className="text-danger-fg">{create.error.message}</span>}
+            {create.error && <span className="text-destructive">{create.error.message}</span>}
             {inFlight ? (
               <button
                 type="button"
@@ -425,7 +427,7 @@ export function ChatPane({ projectId, itemId }: { projectId: string; itemId: str
                 }}
                 className={cn(
                   microCapsButtonClass,
-                  "border border-danger/40 text-danger-fg hover:bg-danger-bg/40 hover:text-danger-fg",
+                  "border border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive",
                 )}
                 title="Stop generation"
               >
@@ -462,15 +464,15 @@ function ThinkingDots() {
   return (
     <output className="mb-3 flex items-center gap-1 px-3 py-2" aria-label="Thinking">
       <span
-        className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-fg-faint"
+        className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground-faint"
         style={{ animationDelay: "0ms" }}
       />
       <span
-        className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-fg-faint"
+        className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground-faint"
         style={{ animationDelay: "150ms" }}
       />
       <span
-        className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-fg-faint"
+        className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground-faint"
         style={{ animationDelay: "300ms" }}
       />
     </output>

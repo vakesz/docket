@@ -85,7 +85,7 @@ export default async function SettingsLayout({
   const userImage = session.user.image ?? null;
 
   return (
-    <div className="flex min-h-screen flex-col bg-bg text-fg">
+    <div className="flex min-h-screen flex-col bg-background text-foreground">
       <WorkspaceProviders>
         <TopBar
           projects={projectOptions}

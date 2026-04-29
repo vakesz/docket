@@ -51,25 +51,25 @@ export function ExportPanel({ projectId }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-fg-muted">
+      <p className="text-sm text-muted-foreground">
         Downloads a single JSON file containing this project's memory, sources, and{" "}
-        <span className="font-medium text-fg">your own</span> conversation history (other members'
-        chats are excluded). Nothing leaves your browser; the file is generated on request and not
-        retained server-side.
+        <span className="font-medium text-foreground">your own</span> conversation history (other
+        members' chats are excluded). Nothing leaves your browser; the file is generated on request
+        and not retained server-side.
       </p>
       <div className="flex items-center gap-3">
         <button type="button" onClick={onExport} disabled={busy} className={primaryButtonClass}>
           {busy ? "Preparing…" : "Download JSON"}
         </button>
         {last ? (
-          <span className="text-xs text-fg-muted">
+          <span className="text-xs text-muted-foreground">
             Exported {last.counts.memory} memory · {last.counts.sources} sources ·{" "}
             {last.counts.conversations} conversations ({last.counts.messages} messages,{" "}
             {(last.sizeBytes / 1024).toFixed(1)} KiB).
           </span>
         ) : null}
       </div>
-      {error ? <p className="text-xs text-danger-fg">{error}</p> : null}
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
     </div>
   );
 }

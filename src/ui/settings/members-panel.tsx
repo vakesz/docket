@@ -56,8 +56,8 @@ export function MembersPanel({ projectId }: Props) {
   return (
     <div className="flex flex-col gap-6">
       <section className="flex flex-col gap-2">
-        <h3 className="text-sm font-medium text-fg">Add member</h3>
-        <p className="text-xs text-fg-muted">
+        <h3 className="text-sm font-medium text-foreground">Add member</h3>
+        <p className="text-xs text-muted-foreground">
           Invite by email. The user must have signed in at least once. Roles:{" "}
           <span className="font-mono">viewer</span> can read,{" "}
           <span className="font-mono">member</span> can stage proposals,{" "}
@@ -96,19 +96,21 @@ export function MembersPanel({ projectId }: Props) {
           </button>
         </div>
         {!canManage ? (
-          <p className="text-xs text-fg-faint">Only the project owner can change membership.</p>
+          <p className="text-xs text-muted-foreground-faint">
+            Only the project owner can change membership.
+          </p>
         ) : null}
-        {add.error ? <p className="text-xs text-danger-fg">{add.error.message}</p> : null}
+        {add.error ? <p className="text-xs text-destructive">{add.error.message}</p> : null}
       </section>
 
       <section className={settingsRowClass}>
-        <h3 className="text-sm font-medium text-fg">Members</h3>
+        <h3 className="text-sm font-medium text-foreground">Members</h3>
         {list.isPending ? (
-          <p className="text-xs text-fg-faint">Loading…</p>
+          <p className="text-xs text-muted-foreground-faint">Loading…</p>
         ) : list.error ? (
-          <p className="text-xs text-danger-fg">{list.error.message}</p>
+          <p className="text-xs text-destructive">{list.error.message}</p>
         ) : list.data ? (
-          <ul className="flex flex-col divide-y divide-border rounded-2xl border border-border bg-surface">
+          <ul className="flex flex-col divide-y divide-border rounded-2xl border border-border bg-card">
             <MemberRow
               name={list.data.owner.name ?? ""}
               email={list.data.owner.email ?? ""}
@@ -116,7 +118,7 @@ export function MembersPanel({ projectId }: Props) {
               roleBadge="owner"
             />
             {list.data.members.length === 0 ? (
-              <li className="px-4 py-3 text-xs text-fg-faint">
+              <li className="px-4 py-3 text-xs text-muted-foreground-faint">
                 No additional members. Invite a teammate above.
               </li>
             ) : (
@@ -172,9 +174,9 @@ export function MembersPanel({ projectId }: Props) {
           </ul>
         ) : null}
         {updateRole.error ? (
-          <p className="text-xs text-danger-fg">{updateRole.error.message}</p>
+          <p className="text-xs text-destructive">{updateRole.error.message}</p>
         ) : null}
-        {remove.error ? <p className="text-xs text-danger-fg">{remove.error.message}</p> : null}
+        {remove.error ? <p className="text-xs text-destructive">{remove.error.message}</p> : null}
       </section>
     </div>
   );
@@ -198,13 +200,15 @@ function MemberRow({
       <div className="flex min-w-0 items-center gap-3">
         <Avatar name={name || email} image={image} />
         <div className="min-w-0">
-          <div className="truncate text-sm text-fg">{name || email || "—"}</div>
-          {name && email ? <div className="truncate text-xs text-fg-muted">{email}</div> : null}
+          <div className="truncate text-sm text-foreground">{name || email || "—"}</div>
+          {name && email ? (
+            <div className="truncate text-xs text-muted-foreground">{email}</div>
+          ) : null}
         </div>
       </div>
       <div className="flex items-center gap-3">
         {controls ?? (
-          <span className="rounded-full border border-border bg-surface-alt px-2 py-0.5 text-[10px] uppercase tracking-wide text-fg-muted">
+          <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
             {roleBadge}
           </span>
         )}
@@ -220,7 +224,7 @@ function Avatar({ name, image }: { name: string; image: string | null }) {
     return (
       <div
         aria-hidden="true"
-        className="h-8 w-8 shrink-0 rounded-full border border-border bg-surface-alt bg-cover bg-center"
+        className="h-8 w-8 shrink-0 rounded-full border border-border bg-muted bg-cover bg-center"
         style={{ backgroundImage: `url(${JSON.stringify(image)})` }}
       />
     );
@@ -232,7 +236,7 @@ function Avatar({ name, image }: { name: string; image: string | null }) {
     .map((s) => s[0]?.toUpperCase())
     .join("");
   return (
-    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-surface-alt font-mono text-[11px] text-fg-muted">
+    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-muted font-mono text-[11px] text-muted-foreground">
       {initials || "?"}
     </div>
   );

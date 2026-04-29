@@ -46,10 +46,10 @@ export function ProjectsPanel() {
   });
 
   if (list.isPending) {
-    return <p className="text-sm text-fg-faint">Loading projects…</p>;
+    return <p className="text-sm text-muted-foreground-faint">Loading projects…</p>;
   }
   if (list.error) {
-    return <p className="text-sm text-danger-fg">{list.error.message}</p>;
+    return <p className="text-sm text-destructive">{list.error.message}</p>;
   }
 
   const defaultId = me.data?.defaultProjectId ?? null;
@@ -58,7 +58,7 @@ export function ProjectsPanel() {
   return (
     <div className="flex flex-col gap-6">
       <section className="flex flex-col gap-3">
-        <h2 className="text-base font-medium text-fg">Your projects</h2>
+        <h2 className="text-base font-medium text-foreground">Your projects</h2>
         {projects.length === 0 ? (
           <p className={emptyStateClass}>
             No projects yet. Add one below — each project tracks one repo (GitHub) or one team
@@ -76,13 +76,15 @@ export function ProjectsPanel() {
                 >
                   <div className="flex flex-col gap-1">
                     <div className="flex flex-wrap items-baseline gap-2">
-                      <span className="font-medium text-fg">{p.name}</span>
+                      <span className="font-medium text-foreground">{p.name}</span>
                       <span className={badgeClass}>{p.providerKind.replace("_", " ")}</span>
                       {isDefault ? <span className={accentBadgeClass}>default</span> : null}
                     </div>
-                    {label ? <p className="font-mono text-xs text-fg-muted">{label}</p> : null}
+                    {label ? (
+                      <p className="font-mono text-xs text-muted-foreground">{label}</p>
+                    ) : null}
                     {p.description ? (
-                      <p className="text-xs text-fg-muted">{p.description}</p>
+                      <p className="text-xs text-muted-foreground">{p.description}</p>
                     ) : null}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -119,9 +121,9 @@ export function ProjectsPanel() {
           </ul>
         )}
         {setDefault.error ? (
-          <p className="text-xs text-danger-fg">{setDefault.error.message}</p>
+          <p className="text-xs text-destructive">{setDefault.error.message}</p>
         ) : null}
-        {archive.error ? <p className="text-xs text-danger-fg">{archive.error.message}</p> : null}
+        {archive.error ? <p className="text-xs text-destructive">{archive.error.message}</p> : null}
       </section>
 
       <div aria-hidden="true" className="my-2 h-px bg-border" />

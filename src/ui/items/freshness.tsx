@@ -24,7 +24,7 @@ export function FreshnessStamp({
   useMinuteTick();
 
   if (!updatedAt) {
-    return <span className={cn("text-fg-faint", className)}>—</span>;
+    return <span className={cn("text-muted-foreground-faint", className)}>—</span>;
   }
 
   const tone = freshnessTone(updatedAt, thresholdDays);
@@ -49,10 +49,10 @@ export function FreshnessStamp({
 function toneClassName(tone: FreshnessTone): string {
   switch (tone) {
     case "warning":
-      return "bg-warning-bg text-warning-fg";
+      return "bg-warning/10 text-warning";
     case "stale":
-      return "bg-danger-bg text-danger-fg";
+      return "bg-destructive/10 text-destructive";
     default:
-      return "text-fg-faint";
+      return "text-muted-foreground-faint";
   }
 }

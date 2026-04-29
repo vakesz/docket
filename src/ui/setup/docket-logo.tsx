@@ -25,21 +25,35 @@ export function DocketLogo({ size, className }: { size?: number; className?: str
       aria-label="Docket"
       className={className}
     >
-      <circle cx="32" cy="32" r="26" className="stroke-fg" strokeWidth="3.5" />
+      <circle cx="32" cy="32" r="26" className="stroke-foreground" strokeWidth="3.5" />
 
-      <line x1="32" y1="10.5" x2="32" y2="16" className="stroke-fg" strokeWidth="1.25" />
-      <line x1="44.64" y1="49.39" x2="41.4" y2="44.94" className="stroke-fg" strokeWidth="1.25" />
-      <line x1="19.36" y1="49.39" x2="22.6" y2="44.94" className="stroke-fg" strokeWidth="1.25" />
+      <line x1="32" y1="10.5" x2="32" y2="16" className="stroke-foreground" strokeWidth="1.25" />
+      <line
+        x1="44.64"
+        y1="49.39"
+        x2="41.4"
+        y2="44.94"
+        className="stroke-foreground"
+        strokeWidth="1.25"
+      />
+      <line
+        x1="19.36"
+        y1="49.39"
+        x2="22.6"
+        y2="44.94"
+        className="stroke-foreground"
+        strokeWidth="1.25"
+      />
 
-      <circle cx="32" cy="6" r="4.5" className="fill-fg" />
-      <circle cx="56.73" cy="23.97" r="4" className="stroke-fg" strokeWidth="1.75" />
-      <circle cx="47.28" cy="53.03" r="4.5" className="fill-fg" />
-      <circle cx="16.72" cy="53.03" r="4" className="stroke-fg" strokeWidth="1.75" />
-      <circle cx="7.27" cy="23.97" r="4.5" className="fill-fg" />
+      <circle cx="32" cy="6" r="4.5" className="fill-foreground" />
+      <circle cx="56.73" cy="23.97" r="4" className="stroke-foreground" strokeWidth="1.75" />
+      <circle cx="47.28" cy="53.03" r="4.5" className="fill-foreground" />
+      <circle cx="16.72" cy="53.03" r="4" className="stroke-foreground" strokeWidth="1.75" />
+      <circle cx="7.27" cy="23.97" r="4.5" className="fill-foreground" />
 
-      <rect x="21" y="25.75" width="22" height="2.5" rx="1.25" className="fill-fg" />
-      <rect x="21" y="31.5" width="22" height="2.5" rx="1.25" className="fill-fg" />
-      <rect x="21" y="37.25" width="14" height="2.5" rx="1.25" className="fill-fg" />
+      <rect x="21" y="25.75" width="22" height="2.5" rx="1.25" className="fill-foreground" />
+      <rect x="21" y="31.5" width="22" height="2.5" rx="1.25" className="fill-foreground" />
+      <rect x="21" y="37.25" width="14" height="2.5" rx="1.25" className="fill-foreground" />
     </svg>
   );
 }

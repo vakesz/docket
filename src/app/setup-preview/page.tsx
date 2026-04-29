@@ -20,8 +20,8 @@ export default function SetupPreviewPage() {
   }
   const baseUrl = publicBaseUrl();
   return (
-    <main className="relative min-h-screen bg-bg text-fg">
-      <p className="fixed top-2 left-1/2 z-10 -translate-x-1/2 rounded-md border border-border bg-surface-alt px-3 py-1.5 text-xs text-fg-muted shadow-sm">
+    <main className="relative min-h-screen bg-background text-foreground">
+      <p className="fixed top-2 left-1/2 z-10 -translate-x-1/2 rounded-md border border-border bg-muted px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
         Preview mode — read-only, navigation only.
       </p>
       <SetupWizardForm

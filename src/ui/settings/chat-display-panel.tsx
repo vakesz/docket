@@ -51,8 +51,8 @@ export function ChatDisplayPanel() {
         aria-label="Tool calls in chat"
         className="flex flex-col gap-3"
       >
-        <Label className="text-sm font-medium text-fg">Tool calls in chat</Label>
-        <p className="text-xs text-fg-muted">
+        <Label className="text-sm font-medium text-foreground">Tool calls in chat</Label>
+        <p className="text-xs text-muted-foreground">
           Controls how the agent's tool invocations appear inside the chat transcript. Stored on
           this device only.
         </p>
@@ -60,17 +60,17 @@ export function ChatDisplayPanel() {
           {OPTIONS.map((opt) => (
             <Field
               key={opt.value}
-              className="flex items-start gap-3 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg hover:bg-surface-alt"
+              className="flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground hover:bg-muted"
             >
               <Radio
                 value={opt.value}
-                className="group mt-1 grid size-4 shrink-0 place-items-center rounded-full border border-border bg-surface data-[checked]:border-accent data-[checked]:bg-accent"
+                className="group mt-1 grid size-4 shrink-0 place-items-center rounded-full border border-border bg-card data-[checked]:border-primary data-[checked]:bg-primary"
               >
-                <span className="size-1.5 rounded-full bg-surface opacity-0 group-data-[checked]:opacity-100" />
+                <span className="size-1.5 rounded-full bg-card opacity-0 group-data-[checked]:opacity-100" />
               </Radio>
               <span className="flex flex-col">
-                <Label className="font-medium text-fg">{opt.label}</Label>
-                <Description className="text-xs text-fg-muted">{opt.helper}</Description>
+                <Label className="font-medium text-foreground">{opt.label}</Label>
+                <Description className="text-xs text-muted-foreground">{opt.helper}</Description>
               </span>
             </Field>
           ))}
@@ -78,12 +78,12 @@ export function ChatDisplayPanel() {
       </RadioGroup>
 
       <Field className="flex flex-col gap-1 border-t border-border pt-6">
-        <Label className="text-sm font-medium text-fg">Send on Enter</Label>
-        <p className="text-xs text-fg-muted">
+        <Label className="text-sm font-medium text-foreground">Send on Enter</Label>
+        <p className="text-xs text-muted-foreground">
           When on, Enter sends a message and Shift+Enter inserts a newline. When off, Enter inserts
           a newline and Cmd/Ctrl+Enter sends.
         </p>
-        <Field className="flex items-center gap-2 text-sm text-fg">
+        <Field className="flex items-center gap-2 text-sm text-foreground">
           <Switch
             checked={sendOnEnter === true}
             disabled={disabled}
@@ -94,7 +94,7 @@ export function ChatDisplayPanel() {
           </Switch>
           <Label>{sendOnEnter === true ? "Enabled" : "Disabled"}</Label>
         </Field>
-        {update.error ? <p className="text-xs text-danger-fg">{update.error.message}</p> : null}
+        {update.error ? <p className="text-xs text-destructive">{update.error.message}</p> : null}
       </Field>
     </div>
   );

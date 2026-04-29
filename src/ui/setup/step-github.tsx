@@ -52,12 +52,12 @@ export function StepGithub({
             github.com/settings/developers
           </a>
           . Set the Authorization callback URL to:{" "}
-          <code className="rounded bg-surface-alt px-1 py-0.5 font-mono">{callbackUrl}</code>
+          <code className="rounded bg-muted px-1 py-0.5 font-mono">{callbackUrl}</code>
         </>
       }
     >
       <Field className="flex flex-col gap-1">
-        <Label className="text-xs text-fg-muted">Display label</Label>
+        <Label className="text-xs text-muted-foreground">Display label</Label>
         <Input
           value={state.label}
           onChange={(e) => handlers.setLabel(e.target.value)}
@@ -66,14 +66,14 @@ export function StepGithub({
           autoComplete="off"
           required={state.enabled}
         />
-        <p className="text-xs text-fg-faint">
+        <p className="text-xs text-muted-foreground-faint">
           Shown on the sign-in button. Useful when running multiple GitHub Enterprise instances.
         </p>
       </Field>
 
       <div className="flex gap-3">
         <Field className="flex flex-1 flex-col gap-1">
-          <Label className="text-xs text-fg-muted">Client ID</Label>
+          <Label className="text-xs text-muted-foreground">Client ID</Label>
           <Input
             value={state.clientId}
             onChange={(e) => handlers.setClientId(e.target.value)}
@@ -82,13 +82,13 @@ export function StepGithub({
             autoComplete="off"
             required={state.enabled}
           />
-          <p className="text-xs text-fg-faint">
+          <p className="text-xs text-muted-foreground-faint">
             20 chars, starts with <code className="font-mono">Iv1.</code> (legacy) or{" "}
             <code className="font-mono">Iv23li</code> (new apps).
           </p>
         </Field>
         <Field className="flex flex-1 flex-col gap-1">
-          <Label className="text-xs text-fg-muted">Client secret</Label>
+          <Label className="text-xs text-muted-foreground">Client secret</Label>
           <Input
             type="password"
             value={state.clientSecret}
@@ -98,31 +98,31 @@ export function StepGithub({
             autoComplete="off"
             required={state.enabled}
           />
-          <p className="text-xs text-fg-faint">
+          <p className="text-xs text-muted-foreground-faint">
             40-char hex string from the OAuth App page. Stored AES-GCM encrypted.
           </p>
         </Field>
       </div>
 
       <details className="flex flex-col gap-3">
-        <summary className="cursor-pointer select-none text-xs font-medium text-fg-muted hover:text-fg">
+        <summary className="cursor-pointer select-none text-xs font-medium text-muted-foreground hover:text-foreground">
           Advanced
         </summary>
         <div className="mt-3 flex flex-col gap-3">
           <Field className="flex flex-col gap-1">
-            <Label className="text-xs text-fg-muted">Scopes (space-separated)</Label>
+            <Label className="text-xs text-muted-foreground">Scopes (space-separated)</Label>
             <Input
               value={state.scopes}
               onChange={(e) => handlers.setScopes(e.target.value)}
               className={fieldMonoClass}
               autoComplete="off"
             />
-            <p className="text-xs text-fg-faint">
+            <p className="text-xs text-muted-foreground-faint">
               Default covers sign-in + repo access. Trim if you only need read access.
             </p>
           </Field>
           <Field className="flex flex-col gap-1">
-            <Label className="text-xs text-fg-muted">Enterprise base URL</Label>
+            <Label className="text-xs text-muted-foreground">Enterprise base URL</Label>
             <Input
               value={state.baseUrl}
               onChange={(e) => handlers.setBaseUrl(e.target.value)}
@@ -130,7 +130,7 @@ export function StepGithub({
               className={fieldClass}
               autoComplete="off"
             />
-            <p className="text-xs text-fg-faint">
+            <p className="text-xs text-muted-foreground-faint">
               Leave blank for github.com. Only fill in for GitHub Enterprise Server.
             </p>
           </Field>

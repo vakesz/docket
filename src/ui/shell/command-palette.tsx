@@ -422,13 +422,13 @@ export function CommandPalette({
       // Disable Headless UI's autofocus so we can hand focus to the input
       // explicitly via ComboboxInput's autoFocus prop.
     >
-      <DialogBackdrop className="fixed inset-0 bg-fg/40" />
+      <DialogBackdrop className="fixed inset-0 bg-foreground/40" />
       <div className="fixed inset-0 flex items-start justify-center pt-[12vh]">
-        <DialogPanel className="w-[560px] max-w-[92vw] overflow-hidden rounded-lg border border-border bg-surface text-fg shadow-2xl">
+        <DialogPanel className="w-[560px] max-w-[92vw] overflow-hidden rounded-lg border border-border bg-card text-foreground shadow-2xl">
           <Combobox<Entry | null> immediate value={null} onChange={onSelect}>
             <ComboboxInput
               placeholder="Jump to item, run command…"
-              className="w-full border-b border-border bg-transparent px-4 py-3 text-sm text-fg outline-none"
+              className="w-full border-b border-border bg-transparent px-4 py-3 text-sm text-foreground outline-none"
               autoFocus
               autoComplete="off"
               autoCorrect="off"
@@ -445,7 +445,9 @@ export function CommandPalette({
             />
             <ComboboxOptions static className="max-h-[56vh] overflow-auto p-1">
               {totalMatches === 0 ? (
-                <div className="px-4 py-6 text-center text-sm text-fg-faint">No matches.</div>
+                <div className="px-4 py-6 text-center text-sm text-muted-foreground-faint">
+                  No matches.
+                </div>
               ) : null}
 
               {sections.recent.length > 0 ? (
@@ -528,16 +530,18 @@ function CommandRow({ entry }: { entry: Extract<Entry, { kind: "command" }> }) {
   return (
     <ComboboxOption
       value={entry}
-      className="flex cursor-pointer items-center gap-3 rounded px-3 py-2 text-sm data-focus:bg-surface-alt"
+      className="flex cursor-pointer items-center gap-3 rounded px-3 py-2 text-sm data-focus:bg-muted"
     >
       <span className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-fg">{command.label}</span>
+        <span className="truncate text-foreground">{command.label}</span>
         {command.description ? (
-          <span className="truncate text-xs text-fg-faint">{command.description}</span>
+          <span className="truncate text-xs text-muted-foreground-faint">
+            {command.description}
+          </span>
         ) : null}
       </span>
       {command.hint ? (
-        <span className="ml-auto rounded border border-border bg-bg px-1.5 py-0.5 font-mono text-[10px] text-fg-muted">
+        <span className="ml-auto rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
           {command.hint}
         </span>
       ) : null}
@@ -550,11 +554,13 @@ function ItemRow({ entry }: { entry: Extract<Entry, { kind: "item" }> }) {
   return (
     <ComboboxOption
       value={entry}
-      className="flex cursor-pointer items-center gap-2 rounded px-3 py-2 text-sm data-focus:bg-surface-alt"
+      className="flex cursor-pointer items-center gap-2 rounded px-3 py-2 text-sm data-focus:bg-muted"
     >
       <span className={metaLabelClass}>{formatKind(item.kind)}</span>
       <span className="ml-2 truncate">{item.title}</span>
-      <span className="ml-auto font-mono text-[10px] text-fg-faint">#{item.providerItemId}</span>
+      <span className="ml-auto font-mono text-[10px] text-muted-foreground-faint">
+        #{item.providerItemId}
+      </span>
     </ComboboxOption>
   );
 }

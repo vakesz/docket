@@ -70,15 +70,15 @@ export function BudgetAuditPanel() {
   return (
     <div className="flex flex-col gap-6">
       <section className="flex flex-col gap-2">
-        <h3 className="text-sm font-medium text-fg">
+        <h3 className="text-sm font-medium text-foreground">
           {cap?.label ?? "LLM monthly cost cap (cents)"}
         </h3>
-        <p className="text-xs text-fg-muted">
+        <p className="text-xs text-muted-foreground">
           {cap?.description ??
             "Hard ceiling on the sum of `Conversation.costCents` accrued in the current calendar month (UTC). 0 disables the cap."}
         </p>
         {budget.data ? (
-          <p className="text-xs text-fg-faint">
+          <p className="text-xs text-muted-foreground-faint">
             This month: ${(budget.data.monthCents / 100).toFixed(2)}
             {budget.data.capCents > 0
               ? ` of $${(budget.data.capCents / 100).toFixed(2)} (${budget.data.capReached ? "cap reached" : `$${(budget.data.remainingCents / 100).toFixed(2)} remaining`})`
@@ -86,7 +86,7 @@ export function BudgetAuditPanel() {
           </p>
         ) : null}
         <div className="flex items-center gap-2">
-          <span className="text-xs text-fg-muted">$</span>
+          <span className="text-xs text-muted-foreground">$</span>
           <Input
             type="number"
             inputMode="decimal"
@@ -107,10 +107,10 @@ export function BudgetAuditPanel() {
           </button>
         </div>
         <div className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-fg">
+          <span className="text-xs font-medium text-foreground">
             {action?.label ?? "When cap is reached"}
           </span>
-          <p className="text-xs text-fg-muted">
+          <p className="text-xs text-muted-foreground">
             {action?.description ??
               "'warn' lets the turn proceed but surfaces a banner; 'block' refuses agent turns until the cap is raised or the calendar month rolls over."}
           </p>
@@ -129,10 +129,10 @@ export function BudgetAuditPanel() {
       </section>
 
       <section className={settingsRowClass}>
-        <h3 className="text-sm font-medium text-fg">
+        <h3 className="text-sm font-medium text-foreground">
           {retention?.label ?? "Audit retention (days)"}
         </h3>
-        <p className="text-xs text-fg-muted">
+        <p className="text-xs text-muted-foreground">
           {retention?.description ??
             "Audit rows older than this are eligible for pruning. 0 disables pruning entirely."}
         </p>
@@ -157,7 +157,7 @@ export function BudgetAuditPanel() {
           </button>
         </div>
         {audit.data ? (
-          <p className="text-xs text-fg-faint">
+          <p className="text-xs text-muted-foreground-faint">
             Total audit rows: {audit.data.total.toLocaleString()}.
             {audit.data.retentionDays > 0
               ? ` ${audit.data.eligible.toLocaleString()} older than ${audit.data.retentionDays} day${audit.data.retentionDays === 1 ? "" : "s"} are eligible for pruning.`
@@ -179,17 +179,17 @@ export function BudgetAuditPanel() {
             {prune.isPending ? "Pruning…" : "Prune eligible rows"}
           </button>
           {prune.data?.ok ? (
-            <span className="text-xs text-fg-muted">
+            <span className="text-xs text-muted-foreground">
               Pruned {prune.data.deleted.toLocaleString()} row{prune.data.deleted === 1 ? "" : "s"}.
             </span>
           ) : null}
           {prune.error ? (
-            <span className="text-xs text-danger-fg">{prune.error.message}</span>
+            <span className="text-xs text-destructive">{prune.error.message}</span>
           ) : null}
         </div>
       </section>
 
-      {update.error ? <p className="text-xs text-danger-fg">{update.error.message}</p> : null}
+      {update.error ? <p className="text-xs text-destructive">{update.error.message}</p> : null}
     </div>
   );
 }

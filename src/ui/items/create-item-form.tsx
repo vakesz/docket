@@ -88,12 +88,12 @@ export function CreateItemForm({ projectId }: { projectId: string }) {
       >
         <DialogBackdrop className="fixed inset-0 bg-black/50" />
         <div className="fixed inset-0 flex w-screen items-center justify-center p-4">
-          <DialogPanel className="grid w-full max-w-2xl gap-4 rounded-lg border border-border bg-surface p-6 text-fg shadow-lg">
+          <DialogPanel className="grid w-full max-w-2xl gap-4 rounded-lg border border-border bg-card p-6 text-foreground shadow-lg">
             <div className="flex flex-col gap-1.5">
               <DialogTitle className="text-lg font-semibold leading-none tracking-tight">
                 New item
               </DialogTitle>
-              <Description className="text-sm text-fg-muted">
+              <Description className="text-sm text-muted-foreground">
                 Stage a new work item for review. Nothing is sent to the provider until you confirm
                 the proposal.
               </Description>
@@ -125,7 +125,7 @@ export function CreateItemForm({ projectId }: { projectId: string }) {
               <div className="grid grid-cols-[8rem_1fr] gap-3">
                 <label
                   htmlFor="create-item-kind"
-                  className="self-center text-xs uppercase tracking-wide text-fg-muted"
+                  className="self-center text-xs uppercase tracking-wide text-muted-foreground"
                 >
                   Kind
                 </label>
@@ -144,7 +144,7 @@ export function CreateItemForm({ projectId }: { projectId: string }) {
 
                 <label
                   htmlFor="create-item-title"
-                  className="self-center text-xs uppercase tracking-wide text-fg-muted"
+                  className="self-center text-xs uppercase tracking-wide text-muted-foreground"
                 >
                   Title
                 </label>
@@ -161,7 +161,7 @@ export function CreateItemForm({ projectId }: { projectId: string }) {
 
                 <label
                   htmlFor="create-item-description"
-                  className="text-xs uppercase tracking-wide text-fg-muted"
+                  className="text-xs uppercase tracking-wide text-muted-foreground"
                 >
                   Description
                 </label>
@@ -177,7 +177,7 @@ export function CreateItemForm({ projectId }: { projectId: string }) {
 
                 <label
                   htmlFor="create-item-assignee"
-                  className="self-center text-xs uppercase tracking-wide text-fg-muted"
+                  className="self-center text-xs uppercase tracking-wide text-muted-foreground"
                 >
                   Assignee
                 </label>
@@ -193,7 +193,7 @@ export function CreateItemForm({ projectId }: { projectId: string }) {
 
                 <label
                   htmlFor="create-item-tags"
-                  className="self-center text-xs uppercase tracking-wide text-fg-muted"
+                  className="self-center text-xs uppercase tracking-wide text-muted-foreground"
                 >
                   Tags
                 </label>
@@ -209,7 +209,7 @@ export function CreateItemForm({ projectId }: { projectId: string }) {
               </div>
 
               {error ? (
-                <p className="rounded-md border border-danger/40 bg-danger-bg/40 p-2 text-xs text-danger-fg">
+                <p className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
                   {error}
                 </p>
               ) : null}

@@ -64,7 +64,7 @@ function summarizeSelection(selected: ReadonlySet<string>, meIdentifier: string 
 function FilterRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-start gap-2">
-      <span className="mt-1 w-14 shrink-0 font-mono text-[10px] uppercase tracking-wider text-fg-faint">
+      <span className="mt-1 w-14 shrink-0 font-mono text-[10px] uppercase tracking-wider text-muted-foreground-faint">
         {label}
       </span>
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">{children}</div>
@@ -77,7 +77,7 @@ function ClearButton({ onClick }: { onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="ml-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-fg-faint transition-colors hover:bg-surface-alt hover:text-fg"
+      className="ml-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground-faint transition-colors hover:bg-muted hover:text-foreground"
       title="Clear selection"
     >
       <X aria-hidden="true" className="size-3" />
@@ -91,7 +91,9 @@ function CountBadge({ n, selected }: { n: number; selected: boolean }) {
     <span
       className={cn(
         "rounded px-1 py-px text-[9px] tabular-nums",
-        selected ? "bg-accent-fg/15 text-accent-fg" : "bg-bg/60 text-fg-faint",
+        selected
+          ? "bg-primary-foreground/15 text-primary-foreground"
+          : "bg-background/60 text-muted-foreground-faint",
       )}
     >
       {n}
@@ -155,7 +157,7 @@ export function FilterBar({
           placeholder="Filter by title, id, tag…"
           value={query}
           onChange={(e) => handlers.setQuery(e.target.value)}
-          className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2 py-1 text-xs text-fg placeholder:text-fg-faint focus:border-accent focus:outline-none"
+          className="min-w-0 flex-1 rounded-md border border-border bg-card px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground-faint focus:border-primary focus:outline-none"
         />
         <CreateItemForm projectId={projectId} />
       </div>
@@ -200,8 +202,8 @@ export function FilterBar({
                 className={cn(
                   "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[10px] lowercase tracking-wide transition-colors",
                   selected
-                    ? "bg-accent text-accent-fg"
-                    : "bg-surface-alt text-fg-muted hover:bg-surface",
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:bg-card",
                 )}
                 title={`${t} — ${n} item${n === 1 ? "" : "s"}`}
               >
@@ -214,7 +216,7 @@ export function FilterBar({
             <button
               type="button"
               onClick={() => handlers.setTagsExpanded((v) => !v)}
-              className="rounded-full px-2 py-0.5 font-mono text-[10px] lowercase tracking-wide text-fg-faint hover:bg-surface-alt"
+              className="rounded-full px-2 py-0.5 font-mono text-[10px] lowercase tracking-wide text-muted-foreground-faint hover:bg-muted"
             >
               {tagsExpanded ? "show less" : `+${tagCounts.length - tagCollapseLimit} more`}
             </button>
@@ -284,7 +286,9 @@ function SegmentedButton({
       title={title}
       className={cn(
         "px-2.5 py-1 font-mono text-[10px] lowercase tracking-wide transition-colors not-first:border-l not-first:border-border",
-        selected ? "bg-accent text-accent-fg" : "bg-surface text-fg-muted hover:bg-surface-alt",
+        selected
+          ? "bg-primary text-primary-foreground"
+          : "bg-card text-muted-foreground hover:bg-muted",
       )}
     >
       {children}
@@ -339,8 +343,8 @@ function AssigneeChips({
               "inline-flex items-center gap-1.5 rounded-full py-0.5 pr-2 font-mono text-[10px] lowercase tracking-wide transition-colors",
               showAvatars ? "pl-0.5" : "pl-2",
               selected
-                ? "bg-accent text-accent-fg"
-                : "bg-surface-alt text-fg-muted hover:bg-surface",
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:bg-card",
             )}
             title={`${name}${isMe ? " (you)" : ""} — ${n} item${n === 1 ? "" : "s"}`}
           >
@@ -356,7 +360,7 @@ function AssigneeChips({
               <span
                 className={cn(
                   "font-mono text-[9px] uppercase",
-                  selected ? "text-accent-fg/75" : "text-fg-faint",
+                  selected ? "text-primary-foreground/75" : "text-muted-foreground-faint",
                 )}
               >
                 you
@@ -370,7 +374,7 @@ function AssigneeChips({
         <button
           type="button"
           onClick={onToggleExpanded}
-          className="rounded-full px-2 py-0.5 font-mono text-[10px] lowercase tracking-wide text-fg-faint hover:bg-surface-alt"
+          className="rounded-full px-2 py-0.5 font-mono text-[10px] lowercase tracking-wide text-muted-foreground-faint hover:bg-muted"
         >
           {assigneesExpanded ? "show less" : `+${overflow} more`}
         </button>
@@ -394,7 +398,9 @@ function ChipPill({
       onClick={onClick}
       className={cn(
         "rounded-full px-2 py-0.5 font-mono text-[10px] lowercase tracking-wide transition-colors",
-        selected ? "bg-accent text-accent-fg" : "bg-surface-alt text-fg-muted hover:bg-surface",
+        selected
+          ? "bg-primary text-primary-foreground"
+          : "bg-muted text-muted-foreground hover:bg-card",
       )}
     >
       {label}
@@ -426,7 +432,7 @@ function AssigneeAvatar({
   return (
     <span
       aria-hidden="true"
-      className="relative flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full bg-bg/40 font-sans text-[8px] font-medium text-fg-faint"
+      className="relative flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full bg-background/40 font-sans text-[8px] font-medium text-muted-foreground-faint"
     >
       <span>{initial}</span>
       {url ? (
@@ -481,13 +487,13 @@ function AssigneeDropdown({
       multiple
     >
       <div className="relative">
-        <ListboxButton className="inline-flex min-w-[10rem] items-center justify-between gap-2 rounded-md border border-border bg-surface px-2 py-1 text-xs text-fg hover:bg-surface-alt">
+        <ListboxButton className="inline-flex min-w-[10rem] items-center justify-between gap-2 rounded-md border border-border bg-card px-2 py-1 text-xs text-foreground hover:bg-muted">
           <span className="truncate">{summary}</span>
-          <ChevronDown aria-hidden="true" className="size-3 shrink-0 text-fg-faint" />
+          <ChevronDown aria-hidden="true" className="size-3 shrink-0 text-muted-foreground-faint" />
         </ListboxButton>
         <ListboxOptions
           anchor="bottom start"
-          className="z-30 mt-1 max-h-72 w-64 overflow-auto rounded-md border border-border bg-surface p-1 text-xs shadow-lg focus:outline-none"
+          className="z-30 mt-1 max-h-72 w-64 overflow-auto rounded-md border border-border bg-card p-1 text-xs shadow-lg focus:outline-none"
         >
           <button
             type="button"
@@ -495,8 +501,8 @@ function AssigneeDropdown({
             className={cn(
               "flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left",
               activeAssignees.size === 0
-                ? "bg-accent/10 text-fg"
-                : "text-fg-muted hover:bg-surface-alt",
+                ? "bg-primary/10 text-foreground"
+                : "text-muted-foreground hover:bg-muted",
             )}
           >
             <span>Anyone</span>
@@ -516,7 +522,9 @@ function AssigneeDropdown({
                 }}
                 className={cn(
                   "flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left",
-                  selected ? "bg-accent/10 text-fg" : "text-fg-muted hover:bg-surface-alt",
+                  selected
+                    ? "bg-primary/10 text-foreground"
+                    : "text-muted-foreground hover:bg-muted",
                 )}
               >
                 <span>{s.label}</span>
@@ -541,7 +549,9 @@ function AssigneeDropdown({
                     }}
                     className={cn(
                       "flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left",
-                      selected ? "bg-accent/10 text-fg" : "text-fg-muted hover:bg-surface-alt",
+                      selected
+                        ? "bg-primary/10 text-foreground"
+                        : "text-muted-foreground hover:bg-muted",
                     )}
                   >
                     <span className="flex items-center gap-1.5 truncate">
@@ -554,11 +564,15 @@ function AssigneeDropdown({
                       ) : null}
                       <span className="truncate">{name}</span>
                       {isMe ? (
-                        <span className="font-mono text-[9px] uppercase text-fg-faint">you</span>
+                        <span className="font-mono text-[9px] uppercase text-muted-foreground-faint">
+                          you
+                        </span>
                       ) : null}
                     </span>
                     <span className="flex items-center gap-1.5">
-                      <span className="font-mono text-[9px] tabular-nums text-fg-faint">{n}</span>
+                      <span className="font-mono text-[9px] tabular-nums text-muted-foreground-faint">
+                        {n}
+                      </span>
                       {selected ? <Check aria-hidden="true" className="size-3" /> : null}
                     </span>
                   </ListboxOption>

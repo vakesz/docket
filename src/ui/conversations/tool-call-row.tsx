@@ -38,8 +38,8 @@ export function ToolCallRow({
   const preview = argsPreview || fallbackPreview;
 
   const errored = ok === false;
-  const palette = errored ? "bg-danger-bg text-danger-fg" : "bg-warning-bg text-warning-fg";
-  const hoverBg = errored ? "hover:bg-danger-bg/70" : "hover:bg-warning-bg/70";
+  const palette = errored ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning";
+  const hoverBg = errored ? "hover:bg-destructive/10/70" : "hover:bg-warning/10/70";
 
   const prettyArgs = args ? safeStringify(args) : null;
 
@@ -57,7 +57,9 @@ export function ToolCallRow({
         <span className={metaLabelClass}>{label}</span>
         {status && <span className="font-mono text-[11px]">{status}</span>}
         {!open && preview && (
-          <span className="truncate font-mono text-[11px] text-fg-faint">{preview}</span>
+          <span className="truncate font-mono text-[11px] text-muted-foreground-faint">
+            {preview}
+          </span>
         )}
       </button>
       {open && (
@@ -103,7 +105,7 @@ export function ToolCallProgress({
     return null;
   }
   return (
-    <div className="mb-3 flex flex-col gap-1 rounded border border-dashed border-border px-3 py-1.5 font-mono text-xs text-fg-muted">
+    <div className="mb-3 flex flex-col gap-1 rounded border border-dashed border-border px-3 py-1.5 font-mono text-xs text-muted-foreground">
       {toolCalls.map((tc) => {
         const arrow = tc.ok === null ? "→" : tc.ok ? "✓" : "✗";
         const argSummary = condenseArgs(tc.arguments, 80);

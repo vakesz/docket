@@ -33,19 +33,21 @@ export function ItemDetailPanel() {
     <div className="flex flex-col gap-6">
       <section className="flex flex-col gap-3">
         <header className="flex flex-col gap-1">
-          <h3 className="text-sm font-medium text-fg">Reactions</h3>
-          <p className="text-xs text-fg-muted">
+          <h3 className="text-sm font-medium text-foreground">Reactions</h3>
+          <p className="text-xs text-muted-foreground">
             Hide reaction pickers and existing chips on the detail page. Sync still pulls reactions;
             flip these off when you don't care to see or post them.
           </p>
         </header>
 
         <Field className="flex flex-col gap-1">
-          <Label className="text-sm font-medium text-fg">Show reactions on item header</Label>
-          <p className="text-xs text-fg-muted">
+          <Label className="text-sm font-medium text-foreground">
+            Show reactions on item header
+          </Label>
+          <p className="text-xs text-muted-foreground">
             Controls the reactions strip below the item title. Comment reactions are unaffected.
           </p>
-          <Field className="flex items-center gap-2 text-sm text-fg">
+          <Field className="flex items-center gap-2 text-sm text-foreground">
             <Switch
               checked={headerOn}
               disabled={disabled}
@@ -59,11 +61,11 @@ export function ItemDetailPanel() {
         </Field>
 
         <Field className="flex flex-col gap-1">
-          <Label className="text-sm font-medium text-fg">Show reactions in comments</Label>
-          <p className="text-xs text-fg-muted">
+          <Label className="text-sm font-medium text-foreground">Show reactions in comments</Label>
+          <p className="text-xs text-muted-foreground">
             Controls the reactions strip below each comment. Header reactions are unaffected.
           </p>
-          <Field className="flex items-center gap-2 text-sm text-fg">
+          <Field className="flex items-center gap-2 text-sm text-foreground">
             <Switch
               checked={commentsOn}
               disabled={disabled}
@@ -77,7 +79,7 @@ export function ItemDetailPanel() {
         </Field>
       </section>
 
-      {update.error ? <p className="text-xs text-danger-fg">{update.error.message}</p> : null}
+      {update.error ? <p className="text-xs text-destructive">{update.error.message}</p> : null}
     </div>
   );
 }

@@ -46,15 +46,17 @@ export function SyncPanel({ projectId }: { projectId: string }) {
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="flex flex-col gap-1">
             <span className={metaLabelClass}>Watermark</span>
-            <span className="font-mono text-sm text-fg">{formatTimestamp(watermark)}</span>
-            <p className="text-xs text-fg-muted">
+            <span className="font-mono text-sm text-foreground">{formatTimestamp(watermark)}</span>
+            <p className="text-xs text-muted-foreground">
               Incremental sync pulls items updated after this point.
             </p>
           </div>
           <div className="flex flex-col gap-1">
             <span className={metaLabelClass}>Last full sync</span>
-            <span className="font-mono text-sm text-fg">{formatTimestamp(lastFullSyncAt)}</span>
-            <p className="text-xs text-fg-muted">
+            <span className="font-mono text-sm text-foreground">
+              {formatTimestamp(lastFullSyncAt)}
+            </span>
+            <p className="text-xs text-muted-foreground">
               A full walk reconciles archived items the provider no longer returns.
             </p>
           </div>
@@ -86,9 +88,9 @@ export function SyncPanel({ projectId }: { projectId: string }) {
             {pending && sync.variables?.mode === "full" ? "Running full sync…" : "Run full sync"}
           </button>
           {sync.error ? (
-            <span className="text-xs text-danger-fg">{sync.error.message}</span>
+            <span className="text-xs text-destructive">{sync.error.message}</span>
           ) : sync.data ? (
-            <span className="text-xs text-fg-muted">
+            <span className="text-xs text-muted-foreground">
               {sync.data.upserted} upserted · {sync.data.archived} archived
               {sync.data.inboundConversations > 0
                 ? ` · ${sync.data.inboundConversations} conversation${

@@ -104,7 +104,7 @@ export function ViewBar({ projectId }: Props) {
   }
 
   return (
-    <section className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-3 text-sm shadow-sm">
+    <section className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-3 text-sm shadow-sm">
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">
           <span className={metaLabelFaintClass}>View</span>
@@ -132,8 +132,8 @@ export function ViewBar({ projectId }: Props) {
               className={cn(
                 "rounded-full px-3 py-1 text-xs transition-colors",
                 bucket === b
-                  ? "bg-accent text-accent-fg"
-                  : "border border-border text-fg-muted hover:bg-surface-alt",
+                  ? "bg-primary text-primary-foreground"
+                  : "border border-border text-muted-foreground hover:bg-muted",
               )}
               disabled={activeView !== null}
               title={
@@ -152,7 +152,7 @@ export function ViewBar({ projectId }: Props) {
             <>
               <button
                 type="button"
-                className="text-fg-muted hover:text-fg disabled:opacity-50"
+                className="text-muted-foreground hover:text-foreground disabled:opacity-50"
                 disabled={setDefault.isPending || activeView.isDefault}
                 onClick={() => setDefault.mutate({ projectId, viewId: activeView.id })}
               >
@@ -160,7 +160,7 @@ export function ViewBar({ projectId }: Props) {
               </button>
               <button
                 type="button"
-                className="text-danger-fg hover:opacity-80 disabled:opacity-50"
+                className="text-destructive hover:opacity-80 disabled:opacity-50"
                 disabled={remove.isPending}
                 onClick={() => {
                   if (confirm(`Delete view “${activeView.name}”?`)) {
@@ -174,7 +174,7 @@ export function ViewBar({ projectId }: Props) {
           ) : (
             <button
               type="button"
-              className="text-fg-muted hover:text-fg"
+              className="text-muted-foreground hover:text-foreground"
               onClick={() => setShowForm((v) => !v)}
             >
               {showForm ? "Cancel" : "Save current as view…"}

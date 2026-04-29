@@ -127,36 +127,40 @@ export function TimezonePicker({
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => setQuery("")}
         />
-        <ComboboxButton className="absolute inset-y-0 right-0 flex items-center pr-2 text-fg-muted">
+        <ComboboxButton className="absolute inset-y-0 right-0 flex items-center pr-2 text-muted-foreground">
           <ChevronDown aria-hidden className="h-4 w-4" />
         </ComboboxButton>
 
         <ComboboxOptions
           transition
-          className="absolute z-10 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-border bg-surface py-1 shadow-lg focus:outline-none data-[closed]:opacity-0"
+          className="absolute z-10 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-border bg-card py-1 shadow-lg focus:outline-none data-[closed]:opacity-0"
         >
           <ComboboxOption
             value=""
-            className="group flex cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-sm text-fg data-[focus]:bg-surface-alt"
+            className="group flex cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-sm text-foreground data-[focus]:bg-muted"
           >
             <span className="truncate">{browserLabel()}</span>
-            {value === "" ? <Check aria-hidden className="h-4 w-4 text-accent" /> : null}
+            {value === "" ? <Check aria-hidden className="h-4 w-4 text-primary" /> : null}
           </ComboboxOption>
           {filtered.length === 0 ? (
-            <div className="px-3 py-2 text-sm text-fg-faint">No matches.</div>
+            <div className="px-3 py-2 text-sm text-muted-foreground-faint">No matches.</div>
           ) : (
             filtered.map((zone) => (
               <ComboboxOption
                 key={zone.id}
                 value={zone.id}
-                className="group flex cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-sm text-fg data-[focus]:bg-surface-alt"
+                className="group flex cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-sm text-foreground data-[focus]:bg-muted"
               >
                 <span className="truncate font-mono text-xs">{zone.id}</span>
                 <span className="flex shrink-0 items-center gap-2">
                   {zone.offset ? (
-                    <span className="font-mono text-[10px] text-fg-muted">{zone.offset}</span>
+                    <span className="font-mono text-[10px] text-muted-foreground">
+                      {zone.offset}
+                    </span>
                   ) : null}
-                  {value === zone.id ? <Check aria-hidden className="h-4 w-4 text-accent" /> : null}
+                  {value === zone.id ? (
+                    <Check aria-hidden className="h-4 w-4 text-primary" />
+                  ) : null}
                 </span>
               </ComboboxOption>
             ))

@@ -55,7 +55,7 @@ export function MemoryPane({ projectId }: { projectId: string }) {
   return (
     <section className="flex flex-col gap-4">
       <form
-        className="flex flex-col gap-2 rounded-2xl border border-dashed border-border bg-surface-alt/40 p-4"
+        className="flex flex-col gap-2 rounded-2xl border border-dashed border-border bg-muted/40 p-4"
         onSubmit={(e) => {
           e.preventDefault();
           void submitNew();
@@ -78,7 +78,7 @@ export function MemoryPane({ projectId }: { projectId: string }) {
           maxLength={50_000}
         />
         <div className="flex items-center justify-between">
-          <span className="text-xs text-fg-muted">{list.data?.length ?? 0} entries</span>
+          <span className="text-xs text-muted-foreground">{list.data?.length ?? 0} entries</span>
           <Button
             type="submit"
             disabled={proposeWrite.isPending || !draftTitle.trim()}
@@ -91,7 +91,7 @@ export function MemoryPane({ projectId }: { projectId: string }) {
       </form>
 
       {list.isPending ? (
-        <p className="text-sm italic text-fg-muted">Loading memory…</p>
+        <p className="text-sm italic text-muted-foreground">Loading memory…</p>
       ) : list.data?.length === 0 ? (
         <p className={emptyStateClass}>No memory entries yet. Stage one above.</p>
       ) : (
@@ -99,17 +99,17 @@ export function MemoryPane({ projectId }: { projectId: string }) {
           {list.data?.map((m) => (
             <li
               key={m.id}
-              className="flex items-start justify-between gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm"
+              className="flex items-start justify-between gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm"
             >
               <div className="flex min-w-0 flex-col gap-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-fg">{m.title}</span>
-                  <span className="text-[10px] uppercase tracking-wide text-fg-muted">
+                  <span className="text-sm font-medium text-foreground">{m.title}</span>
+                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
                     {m.source}
                   </span>
                 </div>
                 {m.bodyMd && (
-                  <p className="line-clamp-2 whitespace-pre-wrap text-xs text-fg-muted">
+                  <p className="line-clamp-2 whitespace-pre-wrap text-xs text-muted-foreground">
                     {m.bodyMd}
                   </p>
                 )}

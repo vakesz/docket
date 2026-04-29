@@ -63,7 +63,7 @@ export function SourcesPane({ projectId }: { projectId: string }) {
   return (
     <section className="flex flex-col gap-4">
       <form
-        className="flex flex-col gap-2 rounded-2xl border border-dashed border-border bg-surface-alt/40 p-4"
+        className="flex flex-col gap-2 rounded-2xl border border-dashed border-border bg-muted/40 p-4"
         onSubmit={(e) => {
           e.preventDefault();
           void submitNew();
@@ -103,7 +103,7 @@ export function SourcesPane({ projectId }: { projectId: string }) {
             ref={fileRef}
             type="file"
             accept=".md,.markdown,.txt,.json,text/plain,text/markdown,application/json"
-            className="text-xs text-fg-muted"
+            className="text-xs text-muted-foreground"
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) void handleFile(file);
@@ -121,7 +121,7 @@ export function SourcesPane({ projectId }: { projectId: string }) {
       </form>
 
       {list.isPending ? (
-        <p className="text-sm italic text-fg-muted">Loading sources…</p>
+        <p className="text-sm italic text-muted-foreground">Loading sources…</p>
       ) : list.data?.length === 0 ? (
         <p className={emptyStateClass}>
           No sources yet. Add one above so the agent has material to cite.
@@ -131,19 +131,19 @@ export function SourcesPane({ projectId }: { projectId: string }) {
           {list.data?.map((s) => (
             <li
               key={s.id}
-              className="flex items-start justify-between gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm"
+              className="flex items-start justify-between gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm"
             >
               <div className="flex min-w-0 flex-col gap-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-fg">{s.title}</span>
+                  <span className="text-sm font-medium text-foreground">{s.title}</span>
                   {s.kind && (
-                    <span className="text-[10px] uppercase tracking-wide text-fg-muted">
+                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
                       {s.kind}
                     </span>
                   )}
                 </div>
                 {s.bodyMd && (
-                  <p className="line-clamp-2 whitespace-pre-wrap text-xs text-fg-muted">
+                  <p className="line-clamp-2 whitespace-pre-wrap text-xs text-muted-foreground">
                     {s.bodyMd}
                   </p>
                 )}

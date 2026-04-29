@@ -75,7 +75,7 @@ export function DetailPane({
   const authorProfileUrl = providerProfileUrl(providerKind, item.author);
   const assigneeProfileUrl = providerProfileUrl(providerKind, item.assignee);
   return (
-    <div className="flex h-full flex-col overflow-auto bg-bg">
+    <div className="flex h-full flex-col overflow-auto bg-background">
       <RecentRecorder projectId={projectId} itemId={item.id} />
       <header className="flex flex-col gap-3 border-b border-border p-4">
         {/* Row 1: chips left, utility cluster + primary CTAs right */}
@@ -83,7 +83,7 @@ export function DetailPane({
           <span className={metaLabelClass}>{formatKind(item.kind)}</span>
           <StatePill state={item.state} />
           <CopyIdButton value={item.providerItemId} />
-          <span className="ml-auto inline-flex items-center gap-1 text-fg-faint">
+          <span className="ml-auto inline-flex items-center gap-1 text-muted-foreground-faint">
             <span className="font-mono text-[10px]">Updated</span>
             <FreshnessStamp updatedAt={item.updatedAt} thresholdDays={staleThresholdDays} />
           </span>
@@ -105,10 +105,10 @@ export function DetailPane({
 
         {/* Rows 2 + 3: title and meta — meta sits tight under the title (mt-1) */}
         <div className="flex flex-col gap-1">
-          <h1 className="text-lg font-semibold leading-snug text-fg">{item.title}</h1>
+          <h1 className="text-lg font-semibold leading-snug text-foreground">{item.title}</h1>
 
           {/* inline meta line — icons replace dl labels, missing fields omitted */}
-          <ul className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-muted">
+          <ul className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             {item.author ? (
               <li className="inline-flex items-center gap-1">
                 <User aria-hidden="true" className="size-3" />
@@ -118,12 +118,12 @@ export function DetailPane({
                     href={authorProfileUrl}
                     target="_blank"
                     rel="noreferrer noopener"
-                    className="text-fg hover:text-accent hover:underline"
+                    className="text-foreground hover:text-primary hover:underline"
                   >
                     {item.author}
                   </a>
                 ) : (
-                  <span className="text-fg">{item.author}</span>
+                  <span className="text-foreground">{item.author}</span>
                 )}
               </li>
             ) : null}
@@ -149,18 +149,18 @@ export function DetailPane({
                       href={assigneeProfileUrl}
                       target="_blank"
                       rel="noreferrer noopener"
-                      className="text-fg hover:text-accent hover:underline"
+                      className="text-foreground hover:text-primary hover:underline"
                     >
                       {item.assignee}
                     </a>
                   ) : (
-                    <span className="text-fg">{item.assignee}</span>
+                    <span className="text-foreground">{item.assignee}</span>
                   )}
                 </>
               ) : (
                 <>
                   <UserX aria-hidden="true" className="size-3" />
-                  <span className="italic text-fg-faint">unassigned</span>
+                  <span className="italic text-muted-foreground-faint">unassigned</span>
                 </>
               )}
             </li>
@@ -170,7 +170,7 @@ export function DetailPane({
                 <span className="sr-only">Parent</span>
                 <Link
                   href={`/projects/${projectId}/items/${item.parentId}`}
-                  className="text-accent hover:underline"
+                  className="text-primary hover:underline"
                 >
                   {item.parentId}
                 </Link>
@@ -185,7 +185,7 @@ export function DetailPane({
                     <span
                       key={tag}
                       title={tag}
-                      className="rounded bg-surface-alt px-1.5 py-0.5 font-mono text-[10px] text-fg-muted"
+                      className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
                     >
                       {displayTag(tag)}
                     </span>
@@ -199,7 +199,7 @@ export function DetailPane({
                   href={item.url}
                   target="_blank"
                   rel="noreferrer noopener"
-                  className="inline-flex items-center gap-1 text-accent hover:underline"
+                  className="inline-flex items-center gap-1 text-primary hover:underline"
                 >
                   Open in provider
                   <ExternalLink aria-hidden="true" className="size-3" />
@@ -214,10 +214,12 @@ export function DetailPane({
         <div className="flex flex-col gap-3 border-t border-border pt-3">
           <div className="flex flex-col gap-1.5">
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-              <h3 className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              <h3 className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                 Actions
               </h3>
-              <span className="text-[11px] italic text-fg-faint">will require approval</span>
+              <span className="text-[11px] italic text-muted-foreground-faint">
+                will require approval
+              </span>
             </div>
             <TransitionActions
               projectId={projectId}
@@ -227,7 +229,7 @@ export function DetailPane({
           </div>
           {capabilities.supportedReactions.length > 0 && showHeaderReactions ? (
             <div className="flex flex-col gap-1.5">
-              <h3 className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+              <h3 className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                 Reactions
               </h3>
               <ReactionRow
@@ -244,29 +246,29 @@ export function DetailPane({
       </header>
 
       <section className="flex flex-col gap-3 p-4">
-        <h2 className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+        <h2 className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
           Description
         </h2>
         {item.descriptionMd ? (
           <Markdown source={item.descriptionMd} />
         ) : (
-          <p className="text-sm italic text-fg-faint">(no description)</p>
+          <p className="text-sm italic text-muted-foreground-faint">(no description)</p>
         )}
       </section>
 
       <section className="flex flex-col gap-3 border-t border-border p-4">
-        <h2 className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
+        <h2 className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
           Comments ({item.comments.length})
         </h2>
         {item.comments.length === 0 ? (
-          <p className="text-sm italic text-fg-faint">No comments cached.</p>
+          <p className="text-sm italic text-muted-foreground-faint">No comments cached.</p>
         ) : (
           <ul className="flex flex-col gap-3">
             {item.comments.map((c) => {
               const commentAuthorProfileUrl = providerProfileUrl(providerKind, c.author);
               return (
                 <li key={c.id} className="rounded border border-border p-3">
-                  <div className="mb-3 flex items-center justify-between gap-2 text-xs text-fg-muted">
+                  <div className="mb-3 flex items-center justify-between gap-2 text-xs text-muted-foreground">
                     <span className="inline-flex items-center gap-2">
                       {c.author ? (
                         <CommentAvatar
@@ -281,15 +283,15 @@ export function DetailPane({
                             href={commentAuthorProfileUrl}
                             target="_blank"
                             rel="noreferrer noopener"
-                            className="font-medium text-fg hover:text-accent hover:underline"
+                            className="font-medium text-foreground hover:text-primary hover:underline"
                           >
                             {c.author}
                           </a>
                         ) : (
-                          <span className="font-medium text-fg">{c.author}</span>
+                          <span className="font-medium text-foreground">{c.author}</span>
                         )
                       ) : (
-                        <span className="font-medium text-fg">(unknown)</span>
+                        <span className="font-medium text-foreground">(unknown)</span>
                       )}
                     </span>
                     <time
@@ -303,7 +305,7 @@ export function DetailPane({
                   <Markdown source={c.bodyMd} />
                   {capabilities.supportedReactions.length > 0 && showCommentReactions ? (
                     <div className="mt-2 flex flex-col gap-1.5">
-                      <h3 className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                      <h3 className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                         Reactions
                       </h3>
                       <ReactionRow

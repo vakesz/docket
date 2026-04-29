@@ -32,7 +32,7 @@ export function SettingsSidebar({
     <nav className="flex flex-col gap-4">
       {grouped.map((group) => (
         <div key={group.key} className="flex flex-col gap-1">
-          <div className="px-3 pb-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-fg-muted">
+          <div className="px-3 pb-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
             {group.label}
           </div>
           {group.sections.map((section) => {
@@ -50,7 +50,7 @@ export function SettingsSidebar({
                 disabled={disabled}
                 className={cn(
                   "flex items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition-colors",
-                  isActive ? "bg-accent/10 text-accent" : "text-fg hover:bg-surface-alt",
+                  isActive ? "bg-primary/10 text-primary" : "text-foreground hover:bg-muted",
                   disabled && "cursor-not-allowed opacity-50 hover:bg-transparent",
                 )}
                 title={disabled ? "Pick a project from the topbar to enable" : undefined}
@@ -65,18 +65,18 @@ export function SettingsSidebar({
 
       {IS_DEV ? (
         <div className="flex flex-col gap-1">
-          <div className="px-3 pb-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-fg-muted">
+          <div className="px-3 pb-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
             Dev tools
           </div>
           <a
             href="/setup-preview"
             target="_blank"
             rel="noreferrer"
-            className="flex items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-fg transition-colors hover:bg-surface-alt"
+            className="flex items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-muted"
           >
             <Wrench className="h-4 w-4 shrink-0" />
             <span className="flex-1 truncate font-medium">Setup wizard preview</span>
-            <ExternalLink className="h-3 w-3 shrink-0 text-fg-muted" />
+            <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />
           </a>
         </div>
       ) : null}

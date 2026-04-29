@@ -105,7 +105,7 @@ export function SettingsShell({ publicBase, project, initialSection }: Props) {
 
   return (
     <div className="grid min-h-0 w-full flex-1 grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)]">
-      <aside className="hidden min-h-0 overflow-auto border-border bg-surface/80 px-3 py-4 lg:block lg:border-r">
+      <aside className="hidden min-h-0 overflow-auto border-border bg-card/80 px-3 py-4 lg:block lg:border-r">
         <SettingsSidebar active={active} onSelect={handleSelect} projectId={projectId} />
       </aside>
 
@@ -114,18 +114,18 @@ export function SettingsShell({ publicBase, project, initialSection }: Props) {
         onClose={() => setMobileNavOpen(false)}
         className="relative z-40 lg:hidden"
       >
-        <DialogBackdrop className="fixed inset-0 bg-fg/30 backdrop-blur-sm" />
+        <DialogBackdrop className="fixed inset-0 bg-foreground/30 backdrop-blur-sm" />
         <div className="fixed inset-0 flex">
-          <DialogPanel className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col overflow-auto border-r border-border bg-surface px-3 py-4 shadow-xl">
+          <DialogPanel className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col overflow-auto border-r border-border bg-card px-3 py-4 shadow-xl">
             <div className="mb-3 flex items-center justify-between px-3">
-              <DialogTitle className="font-mono text-[11px] uppercase tracking-[0.18em] text-fg-muted">
+              <DialogTitle className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
                 Settings
               </DialogTitle>
               <button
                 type="button"
                 onClick={() => setMobileNavOpen(false)}
                 aria-label="Close menu"
-                className="rounded-md p-1 text-fg-muted hover:bg-surface-alt hover:text-fg"
+                className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -136,26 +136,26 @@ export function SettingsShell({ publicBase, project, initialSection }: Props) {
       </Dialog>
 
       <section className="min-h-0 overflow-auto">
-        <header className="border-b border-border bg-surface/70 px-4 py-4 backdrop-blur sm:px-6">
+        <header className="border-b border-border bg-card/70 px-4 py-4 backdrop-blur sm:px-6">
           <div className="flex flex-wrap items-baseline gap-2">
-            <h2 className="text-lg font-semibold text-fg">{activeMeta.label}</h2>
+            <h2 className="text-lg font-semibold text-foreground">{activeMeta.label}</h2>
             {activeMeta.needsProject && project ? (
               <span
                 className={cn(
-                  "rounded-full border border-border bg-surface-alt px-2 py-0.5",
-                  "text-[11px] uppercase tracking-wide text-fg-muted",
+                  "rounded-full border border-border bg-muted px-2 py-0.5",
+                  "text-[11px] uppercase tracking-wide text-muted-foreground",
                 )}
               >
                 {project.name}
               </span>
             ) : null}
           </div>
-          <p className="mt-1 max-w-3xl text-sm text-fg-muted">{activeMeta.description}</p>
+          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{activeMeta.description}</p>
         </header>
 
         <div className="px-4 py-6 sm:px-6">
           {blockedByMissingProject ? (
-            <p className="rounded-2xl border border-dashed border-border bg-surface p-6 text-center text-sm text-fg-muted">
+            <p className="rounded-2xl border border-dashed border-border bg-card p-6 text-center text-sm text-muted-foreground">
               Pick a project from the sidebar to manage its {activeMeta.label.toLowerCase()}.
             </p>
           ) : (

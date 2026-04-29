@@ -57,12 +57,12 @@ export function QuestionCard({
   };
 
   return (
-    <section className="rounded border border-accent bg-surface p-3 text-sm text-fg">
+    <section className="rounded border border-primary bg-card p-3 text-sm text-foreground">
       <header className="mb-2 flex items-center gap-2">
-        <span className="rounded bg-accent px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-accent-fg">
+        <span className="rounded bg-primary px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-primary-foreground">
           ask
         </span>
-        <span className="font-mono text-[11px] text-fg-muted">Awaiting your answer</span>
+        <span className="font-mono text-[11px] text-muted-foreground">Awaiting your answer</span>
         {question.multiSelect && (
           <span className={cn("ml-auto", metaLabelClass)}>multi-select</span>
         )}
@@ -81,8 +81,8 @@ export function QuestionCard({
                 className={cn(
                   "rounded border px-2 py-1 text-xs",
                   active
-                    ? "border-accent bg-accent text-accent-fg"
-                    : "border-border bg-bg text-fg hover:bg-surface-alt",
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-background text-foreground hover:bg-muted",
                   disabled && "opacity-60",
                 )}
               >
@@ -101,14 +101,14 @@ export function QuestionCard({
           setOther(e.target.value);
           if (!question.multiSelect) setSelected(new Set());
         }}
-        className="mt-3 w-full rounded border border-border bg-bg px-2 py-1 text-xs text-fg focus:border-accent focus:outline-none disabled:bg-surface-alt"
+        className="mt-3 w-full rounded border border-border bg-background px-2 py-1 text-xs text-foreground focus:border-primary focus:outline-none disabled:bg-muted"
       />
       <div className="mt-3 flex justify-end">
         <button
           type="button"
           disabled={disabled || !ready}
           onClick={submit}
-          className="rounded bg-accent px-3 py-1 text-xs font-semibold text-accent-fg hover:opacity-90 disabled:opacity-60"
+          className="rounded bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-60"
         >
           {disabled ? "Sending…" : "Submit"}
         </button>

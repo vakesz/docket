@@ -97,12 +97,12 @@ export function ProposalDialog({
     >
       <DialogBackdrop className="fixed inset-0 bg-black/50" />
       <div className="fixed inset-0 flex w-screen items-center justify-center p-4">
-        <DialogPanel className="grid w-full max-w-2xl gap-4 rounded-lg border border-border bg-surface p-6 text-fg shadow-lg">
+        <DialogPanel className="grid w-full max-w-2xl gap-4 rounded-lg border border-border bg-card p-6 text-foreground shadow-lg">
           <div className="flex flex-col gap-1.5">
             <DialogTitle className="text-lg font-semibold leading-none tracking-tight">
               Confirm proposal
             </DialogTitle>
-            <Description className="text-sm text-fg-muted">
+            <Description className="text-sm text-muted-foreground">
               Review the change before it&rsquo;s sent to the provider. Nothing has been written
               yet.
             </Description>
@@ -110,15 +110,15 @@ export function ProposalDialog({
 
           <div className="min-h-[6rem]">
             {query.isPending ? (
-              <p className="text-sm text-fg-muted">Loading proposal…</p>
+              <p className="text-sm text-muted-foreground">Loading proposal…</p>
             ) : query.data?.isEmpty ? (
-              <p className="text-sm text-fg-muted">
+              <p className="text-sm text-muted-foreground">
                 Nothing to apply — the change is already reflected. Dismissing…
               </p>
             ) : query.data ? (
               <>
                 {query.data.row.advisory ? (
-                  <p className="mb-3 rounded-md border border-warning/40 bg-warning-bg/40 p-2 text-xs text-warning-fg">
+                  <p className="mb-3 rounded-md border border-warning/40 bg-warning/10 p-2 text-xs text-warning">
                     Heads up: {query.data.row.advisory}
                   </p>
                 ) : null}
@@ -128,7 +128,7 @@ export function ProposalDialog({
           </div>
 
           {errorMessage ? (
-            <p className="rounded-md border border-danger/40 bg-danger-bg/40 p-2 text-xs text-danger-fg">
+            <p className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
               {errorMessage}
             </p>
           ) : null}
