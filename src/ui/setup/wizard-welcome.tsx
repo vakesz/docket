@@ -1,6 +1,6 @@
 "use client";
 
-import { primaryButtonClass } from "@/lib/form-classes";
+import { Button } from "@/ui/primitives/button";
 import { DocketLogo } from "@/ui/setup/docket-logo";
 import { ThemePicker } from "@/ui/shell/theme-picker";
 
@@ -19,9 +19,9 @@ export function WizardWelcome({ onStart }: { onStart: () => void }) {
         <span className="text-xs uppercase tracking-wide text-muted-foreground-faint">Theme</span>
         <ThemePicker />
       </div>
-      <button type="button" onClick={onStart} className={primaryButtonClass}>
+      <Button type="button" onClick={onStart}>
         Let&rsquo;s set things up
-      </button>
+      </Button>
     </div>
   );
 }

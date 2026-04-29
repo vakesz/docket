@@ -1,7 +1,8 @@
 "use client";
 
-import { Field, Input, Label } from "@headlessui/react";
-import { fieldClass, fieldMonoClass } from "@/lib/form-classes";
+import { useId } from "react";
+import { Input } from "@/ui/primitives/input";
+import { Label } from "@/ui/primitives/label";
 import { ProviderToggle } from "@/ui/setup/provider-toggle";
 
 export type GithubStepState = {
@@ -33,6 +34,12 @@ export function StepGithub({
   alreadyConfigured: boolean;
   callbackUrl: string;
 }) {
+  const labelId = useId();
+  const clientIdId = useId();
+  const clientSecretId = useId();
+  const scopesId = useId();
+  const baseUrlId = useId();
+
   return (
     <ProviderToggle
       label="GitHub OAuth App"
@@ -56,29 +63,34 @@ export function StepGithub({
         </>
       }
     >
-      <Field className="flex flex-col gap-1">
-        <Label className="text-xs text-muted-foreground">Display label</Label>
+      <div className="flex flex-col gap-1">
+        <Label htmlFor={labelId} className="text-xs text-muted-foreground">
+          Display label
+        </Label>
         <Input
+          id={labelId}
           value={state.label}
           onChange={(e) => handlers.setLabel(e.target.value)}
           placeholder="GitHub"
-          className={fieldClass}
           autoComplete="off"
           required={state.enabled}
         />
         <p className="text-xs text-muted-foreground-faint">
           Shown on the sign-in button. Useful when running multiple GitHub Enterprise instances.
         </p>
-      </Field>
+      </div>
 
       <div className="flex gap-3">
-        <Field className="flex flex-1 flex-col gap-1">
-          <Label className="text-xs text-muted-foreground">Client ID</Label>
+        <div className="flex flex-1 flex-col gap-1">
+          <Label htmlFor={clientIdId} className="text-xs text-muted-foreground">
+            Client ID
+          </Label>
           <Input
+            id={clientIdId}
             value={state.clientId}
             onChange={(e) => handlers.setClientId(e.target.value)}
             placeholder="Iv23liab1cd2EFG3hijK"
-            className={fieldMonoClass}
+            className="font-mono"
             autoComplete="off"
             required={state.enabled}
           />
@@ -86,22 +98,25 @@ export function StepGithub({
             20 chars, starts with <code className="font-mono">Iv1.</code> (legacy) or{" "}
             <code className="font-mono">Iv23li</code> (new apps).
           </p>
-        </Field>
-        <Field className="flex flex-1 flex-col gap-1">
-          <Label className="text-xs text-muted-foreground">Client secret</Label>
+        </div>
+        <div className="flex flex-1 flex-col gap-1">
+          <Label htmlFor={clientSecretId} className="text-xs text-muted-foreground">
+            Client secret
+          </Label>
           <Input
+            id={clientSecretId}
             type="password"
             value={state.clientSecret}
             onChange={(e) => handlers.setClientSecret(e.target.value)}
             placeholder="abc1234567890def1234567890ghijklmnopqrst"
-            className={fieldMonoClass}
+            className="font-mono"
             autoComplete="off"
             required={state.enabled}
           />
           <p className="text-xs text-muted-foreground-faint">
             40-char hex string from the OAuth App page. Stored AES-GCM encrypted.
           </p>
-        </Field>
+        </div>
       </div>
 
       <details className="flex flex-col gap-3">
@@ -109,31 +124,36 @@ export function StepGithub({
           Advanced
         </summary>
         <div className="mt-3 flex flex-col gap-3">
-          <Field className="flex flex-col gap-1">
-            <Label className="text-xs text-muted-foreground">Scopes (space-separated)</Label>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor={scopesId} className="text-xs text-muted-foreground">
+              Scopes (space-separated)
+            </Label>
             <Input
+              id={scopesId}
               value={state.scopes}
               onChange={(e) => handlers.setScopes(e.target.value)}
-              className={fieldMonoClass}
+              className="font-mono"
               autoComplete="off"
             />
             <p className="text-xs text-muted-foreground-faint">
               Default covers sign-in + repo access. Trim if you only need read access.
             </p>
-          </Field>
-          <Field className="flex flex-col gap-1">
-            <Label className="text-xs text-muted-foreground">Enterprise base URL</Label>
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor={baseUrlId} className="text-xs text-muted-foreground">
+              Enterprise base URL
+            </Label>
             <Input
+              id={baseUrlId}
               value={state.baseUrl}
               onChange={(e) => handlers.setBaseUrl(e.target.value)}
               placeholder="https://github.example.com"
-              className={fieldClass}
               autoComplete="off"
             />
             <p className="text-xs text-muted-foreground-faint">
               Leave blank for github.com. Only fill in for GitHub Enterprise Server.
             </p>
-          </Field>
+          </div>
         </div>
       </details>
     </ProviderToggle>

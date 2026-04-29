@@ -1,14 +1,10 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
-import {
-  errorMessageClass,
-  primaryButtonClass,
-  secondaryButtonClass,
-  xsBorderButtonClass,
-} from "@/lib/form-classes";
 import { parsePriceDollarsToCents } from "@/lib/pricing";
 import { trpc } from "@/lib/trpc-client";
+import { Alert, AlertDescription } from "@/ui/primitives/alert";
+import { Button } from "@/ui/primitives/button";
 import { StepAzdo } from "@/ui/setup/step-azdo";
 import { StepGithub } from "@/ui/setup/step-github";
 import { type OpenaiRole, type OpenaiStepState, StepOpenai } from "@/ui/setup/step-openai";
@@ -279,27 +275,20 @@ export function SetupWizardForm({
             />
 
             {!oauthSatisfied ? (
-              <p className={errorMessageClass}>
-                At least one sign-in provider must be enabled and filled in to continue.
-              </p>
+              <Alert variant="destructive">
+                <AlertDescription>
+                  At least one sign-in provider must be enabled and filled in to continue.
+                </AlertDescription>
+              </Alert>
             ) : null}
 
             <div className="flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => setStarted(false)}
-                className={secondaryButtonClass}
-              >
+              <Button type="button" variant="outline" onClick={() => setStarted(false)}>
                 Back
-              </button>
-              <button
-                type="button"
-                disabled={!oauthGate}
-                onClick={() => setPage("llm")}
-                className={primaryButtonClass}
-              >
+              </Button>
+              <Button type="button" disabled={!oauthGate} onClick={() => setPage("llm")}>
                 Next: LLM
-              </button>
+              </Button>
             </div>
           </section>
         ) : page === "llm" ? (
@@ -336,32 +325,31 @@ export function SetupWizardForm({
             ))}
 
             {llmsHaveRoleConflict ? (
-              <p className={errorMessageClass}>
-                Two enabled drafts share the same role. Disable one or change its role — the wizard
-                writes at most one row per role.
-              </p>
+              <Alert variant="destructive">
+                <AlertDescription>
+                  Two enabled drafts share the same role. Disable one or change its role — the
+                  wizard writes at most one row per role.
+                </AlertDescription>
+              </Alert>
             ) : null}
 
-            <button type="button" onClick={addLlm} className={`${xsBorderButtonClass} self-start`}>
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              onClick={addLlm}
+              className="self-start"
+            >
               + Add another LLM
-            </button>
+            </Button>
 
             <div className="flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => setPage("oauth")}
-                className={secondaryButtonClass}
-              >
+              <Button type="button" variant="outline" onClick={() => setPage("oauth")}>
                 Back
-              </button>
-              <button
-                type="button"
-                disabled={!llmGate}
-                onClick={() => setPage("done")}
-                className={primaryButtonClass}
-              >
+              </Button>
+              <Button type="button" disabled={!llmGate} onClick={() => setPage("done")}>
                 Next: Finish
-              </button>
+              </Button>
             </div>
           </section>
         ) : (
@@ -410,22 +398,22 @@ export function SetupWizardForm({
               />
             </dl>
 
-            {submit.error ? <p className={errorMessageClass}>{submit.error.message}</p> : null}
+            {submit.error ? (
+              <Alert variant="destructive">
+                <AlertDescription>{submit.error.message}</AlertDescription>
+              </Alert>
+            ) : null}
 
             <div className="flex items-center justify-between">
-              <button
+              <Button
                 type="button"
+                variant="outline"
                 onClick={() => setPage("llm")}
-                className={secondaryButtonClass}
                 disabled={submit.isPending}
               >
                 Back
-              </button>
-              <button
-                type="submit"
-                disabled={!finishGate || submitDone}
-                className={primaryButtonClass}
-              >
+              </Button>
+              <Button type="submit" disabled={!finishGate || submitDone}>
                 {submitDone
                   ? "Confirmed"
                   : previewMode
@@ -433,7 +421,7 @@ export function SetupWizardForm({
                     : submit.isPending
                       ? "Saving…"
                       : "Confirm setup"}
-              </button>
+              </Button>
             </div>
           </section>
         )}

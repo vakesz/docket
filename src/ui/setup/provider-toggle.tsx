@@ -1,7 +1,9 @@
 "use client";
 
-import { Field, Label, Switch } from "@headlessui/react";
-import { switchThumbClass, switchTrackClass } from "@/lib/form-classes";
+import { useId } from "react";
+import { cn } from "@/lib/utils";
+import { Label } from "@/ui/primitives/label";
+import { Switch } from "@/ui/primitives/switch";
 
 export function ProviderToggle({
   label,
@@ -20,29 +22,32 @@ export function ProviderToggle({
   help: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const switchId = useId();
   return (
     <div className="flex flex-col gap-4 border-t border-border pt-4 first:border-t-0 first:pt-0">
-      <Field
-        className={`flex items-start gap-3 ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+      <div
+        className={cn(
+          "flex items-start gap-3",
+          disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
+        )}
       >
         <Switch
+          id={switchId}
           checked={checked}
           disabled={disabled}
-          onChange={onChange}
-          className={switchTrackClass}
-        >
-          <span aria-hidden className={switchThumbClass} />
-        </Switch>
-        <Label as="span" className="flex flex-1 flex-col gap-1">
+          onCheckedChange={onChange}
+          className="mt-0.5"
+        />
+        <Label htmlFor={switchId} className="flex flex-1 flex-col items-start gap-1">
           <span className="flex items-baseline gap-2">
             <span className="font-medium text-foreground">{label}</span>
             {alreadyConfigured ? (
               <span className="text-xs uppercase tracking-wide text-success">configured</span>
             ) : null}
           </span>
-          {help ? <span className="text-xs text-muted-foreground">{help}</span> : null}
+          {help ? <span className="text-xs font-normal text-muted-foreground">{help}</span> : null}
         </Label>
-      </Field>
+      </div>
       {checked && !disabled ? <div className="flex flex-col gap-3">{children}</div> : null}
     </div>
   );
