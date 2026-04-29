@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
-import { mostRecent } from "@/lib/format";
 import { auth } from "@/server/auth";
 import { db } from "@/server/db";
 import { loadGlobalSetting } from "@/server/settings/effective";
@@ -63,23 +62,12 @@ export default async function SettingsLayout({
     projectOptions[0]?.id ??
     null;
 
-  // Mirror the project layout's footer state so the user keeps the same
-  // sync/pending signal while navigating into /settings. Without this the
-  // footer shows "never synced" on settings even when the selected project
-  // has been syncing happily.
-  const [pendingProposalsCount, syncCursor] = currentProjectId
-    ? await Promise.all([
-        trpc.proposals.count({ projectId: currentProjectId, status: "pending" }),
-        db.syncCursor.findUnique({
-          where: { projectId: currentProjectId },
-          select: { watermark: true, lastFullSyncAt: true, updatedAt: true },
-        }),
-      ])
-    : [0, null];
-
-  const lastSyncAt = syncCursor
-    ? mostRecent([syncCursor.watermark, syncCursor.lastFullSyncAt, syncCursor.updatedAt])
-    : null;
+  // Mirror the project layout's pending-proposal signal so the user keeps
+  // the same footer state while navigating into /settings. The footer
+  // pulls its own sync timestamp client-side via items.syncStatus.
+  const pendingProposalsCount = currentProjectId
+    ? await trpc.proposals.count({ projectId: currentProjectId, status: "pending" })
+    : 0;
 
   const userLabel = session.user.email ?? session.user.name ?? "you";
   const userImage = session.user.image ?? null;
@@ -97,7 +85,6 @@ export default async function SettingsLayout({
         <main className="flex flex-1 flex-col overflow-hidden">{children}</main>
         <StatusFooter
           projectId={currentProjectId}
-          lastSyncAt={lastSyncAt}
           pendingProposals={pendingProposalsCount}
           readOnly={readOnly}
         />

@@ -1,10 +1,14 @@
 "use client";
 
-import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from "@headlessui/react";
 import { useEffect, useState } from "react";
-import { metaLabelFaintClass } from "@/lib/form-classes";
 import { isMacLike } from "@/lib/platform";
-import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/ui/primitives/dialog";
 
 type Shortcut = { keys: string[]; label: string };
 
@@ -46,49 +50,33 @@ export function ShortcutHelp() {
   const modKey = mac ? "⌘" : "Ctrl";
 
   return (
-    <Dialog open={open} onClose={() => setOpen(false)} className="relative z-50">
-      <DialogBackdrop className="fixed inset-0 bg-foreground/40" />
-      <div className="fixed inset-0 flex items-center justify-center p-4">
-        <DialogPanel className="w-[420px] max-w-full overflow-hidden rounded-lg border border-border bg-card text-foreground shadow-2xl">
-          <div
-            className={cn(
-              "flex items-center justify-between border-b border-border px-4 py-2",
-              metaLabelFaintClass,
-            )}
-          >
-            <DialogTitle>Keyboard shortcuts</DialogTitle>
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              className="rounded px-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-              aria-label="Close shortcuts"
-            >
-              Esc
-            </button>
-          </div>
-          <ul className="flex flex-col divide-y divide-border">
-            {SHORTCUTS.map((s) => (
-              <li
-                key={s.label}
-                className="flex items-center justify-between gap-3 px-4 py-2 text-sm"
-              >
-                <span className="text-foreground">{s.label}</span>
-                <span className="flex items-center gap-1">
-                  {s.keys.map((k, i) => (
-                    <span
-                      // biome-ignore lint/suspicious/noArrayIndexKey: stable list rendered once.
-                      key={`${s.label}-${i}`}
-                      className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
-                    >
-                      {k === "mod" ? modKey : k}
-                    </span>
-                  ))}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </DialogPanel>
-      </div>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="p-0 sm:max-w-[420px]">
+        <DialogHeader className="border-b border-border px-4 py-3">
+          <DialogTitle>Keyboard shortcuts</DialogTitle>
+          <DialogDescription className="sr-only">
+            Globally-bound keys for the workspace.
+          </DialogDescription>
+        </DialogHeader>
+        <ul className="flex flex-col divide-y divide-border">
+          {SHORTCUTS.map((s) => (
+            <li key={s.label} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
+              <span className="text-foreground">{s.label}</span>
+              <span className="flex items-center gap-1">
+                {s.keys.map((k, i) => (
+                  <kbd
+                    // biome-ignore lint/suspicious/noArrayIndexKey: stable list rendered once.
+                    key={`${s.label}-${i}`}
+                    className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
+                  >
+                    {k === "mod" ? modKey : k}
+                  </kbd>
+                ))}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </DialogContent>
     </Dialog>
   );
 }

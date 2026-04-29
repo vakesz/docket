@@ -5,6 +5,7 @@ import type { BacklogBucket, Item, ItemKind, ItemState, StateBucket } from "@/co
 import { BACKLOG_BUCKETS } from "@/core/types";
 import { applyViewFilter, STATE_BUCKET_MEMBERS, type ViewFilter } from "@/core/view-filter";
 import type { Prisma, Item as PrismaItem } from "@/db/generated/client";
+import { mostRecent } from "@/lib/format";
 import { asPlainObject } from "@/lib/json";
 import { injectExternalChange, materialDiff } from "@/server/inbound-changes/inject";
 import { getProviderSpec } from "@/server/provider-registry";
@@ -370,16 +371,22 @@ export const itemsRouter = router({
   /**
    * Read the project's sync cursor. Powers the settings "Sync" pane so the
    * user can see when the last full walk happened and the watermark the
-   * incremental sync will pick up from.
+   * incremental sync will pick up from. Also feeds the status footer's
+   * 'synced X ago' indicator via `lastSyncAt`, which is the most-recent of
+   * the cursor's three timestamps — `updatedAt` covers syncs that ran but
+   * didn't bump either payload column.
    */
   syncStatus: projectScopedProcedure.input(projectIdSchema).query(async ({ ctx }) => {
     const cursor = await ctx.db.syncCursor.findUnique({
       where: { projectId: ctx.projectId },
-      select: { watermark: true, lastFullSyncAt: true },
+      select: { watermark: true, lastFullSyncAt: true, updatedAt: true },
     });
     return {
       watermark: cursor?.watermark ?? null,
       lastFullSyncAt: cursor?.lastFullSyncAt ?? null,
+      lastSyncAt: cursor
+        ? mostRecent([cursor.watermark, cursor.lastFullSyncAt, cursor.updatedAt])
+        : null,
     };
   }),
 

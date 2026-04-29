@@ -79,12 +79,13 @@ export function ProfilePanel() {
 
       <div className="flex flex-col gap-1 border-t border-border pt-6">
         <Label htmlFor={refreshId} className="text-sm font-medium text-foreground">
-          Auto-refresh interval (minutes)
+          Background sync interval (minutes)
         </Label>
         <p className="text-xs text-muted-foreground">
-          How often dashboard list views (LLM providers, OAuth providers, and similar) silently
-          re-fetch in the background. 0 disables auto-refresh; manual refetches still work. Maximum
-          60 (one hour).
+          While a project is open, sync from the provider every N minutes and refetch dashboard list
+          views (LLM providers, OAuth providers, and similar) on the same cadence. The footer's
+          "synced X ago" tracks each sync. 0 disables — the manual sync button still works. Maximum
+          60 (one hour); ≥ 2 minutes recommended.
         </p>
         <NumberField
           id={refreshId}

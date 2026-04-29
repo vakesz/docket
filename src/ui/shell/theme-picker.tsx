@@ -10,7 +10,15 @@ import {
   type ThemeId,
   writeStoredTheme,
 } from "@/lib/theme";
-import { SelectField } from "@/ui/forms/select-field";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/ui/primitives/select";
 
 /**
  * Theme switcher that mirrors main's pattern: localStorage-backed,
@@ -50,36 +58,39 @@ export function ThemePicker() {
   const dark = THEMES.filter((t) => t.group === "dark");
 
   return (
-    <SelectField
-      value={theme}
-      onChange={(e) => onPick(e.target.value as ThemeId)}
-      wrapperClassName="max-w-xs"
-      aria-label="Color theme"
-    >
-      <optgroup label="Adaptive">
-        {adaptive.map((t) => (
-          <option key={t.id} value={t.id}>
-            {t.label}
-            {isAdaptiveTheme(t.id)
-              ? ` (${ADAPTIVE_VARIANTS[t.id].light} / ${ADAPTIVE_VARIANTS[t.id].dark})`
-              : ""}
-          </option>
-        ))}
-      </optgroup>
-      <optgroup label="Light">
-        {light.map((t) => (
-          <option key={t.id} value={t.id}>
-            {t.label}
-          </option>
-        ))}
-      </optgroup>
-      <optgroup label="Dark">
-        {dark.map((t) => (
-          <option key={t.id} value={t.id}>
-            {t.label}
-          </option>
-        ))}
-      </optgroup>
-    </SelectField>
+    <Select value={theme} onValueChange={(v) => onPick(v as ThemeId)}>
+      <SelectTrigger aria-label="Color theme" className="w-full max-w-xs">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectGroup>
+          <SelectLabel>Adaptive</SelectLabel>
+          {adaptive.map((t) => (
+            <SelectItem key={t.id} value={t.id}>
+              {t.label}
+              {isAdaptiveTheme(t.id)
+                ? ` (${ADAPTIVE_VARIANTS[t.id].light} / ${ADAPTIVE_VARIANTS[t.id].dark})`
+                : ""}
+            </SelectItem>
+          ))}
+        </SelectGroup>
+        <SelectGroup>
+          <SelectLabel>Light</SelectLabel>
+          {light.map((t) => (
+            <SelectItem key={t.id} value={t.id}>
+              {t.label}
+            </SelectItem>
+          ))}
+        </SelectGroup>
+        <SelectGroup>
+          <SelectLabel>Dark</SelectLabel>
+          {dark.map((t) => (
+            <SelectItem key={t.id} value={t.id}>
+              {t.label}
+            </SelectItem>
+          ))}
+        </SelectGroup>
+      </SelectContent>
+    </Select>
   );
 }

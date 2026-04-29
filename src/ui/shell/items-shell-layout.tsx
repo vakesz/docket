@@ -1,14 +1,14 @@
 "use client";
 
-import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from "@headlessui/react";
-import { X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
-import { SEPARATOR } from "@/lib/form-classes";
-import { cn } from "@/lib/utils";
 import { useChatPaneController } from "@/ui/conversations/chat-pane-context";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/ui/primitives/sheet";
 import { useRegisterSidebarMount, useSidebarDrawer } from "@/ui/shell/sidebar-drawer-context";
+
+const RESIZE_HANDLE_CLASS =
+  "w-px bg-border transition-colors data-[resize-handle-state=hover]:bg-muted-foreground-faint data-[resize-handle-state=drag]:bg-primary";
 
 /**
  * The 3-pane workspace.
@@ -56,15 +56,11 @@ export function ItemsShellLayout({
     if (backlogOpen && chatOpen) setChatOpen(false);
   }, [backlogOpen, chatOpen, setChatOpen]);
 
-  // Headless UI's Dialog mounts its portal + children whenever `open=true`,
-  // even when the dialog itself is display:none via `lg:hidden`. On lg+ that
-  // double-mounts ChatPane (once in the desktop Group, once inside the
-  // hidden Dialog) AND lets the Dialog's outside-click logic fire onClose
-  // moments after opening — the visible "pops up then closes instantly"
-  // bug. Gate the Dialog `open` on viewport so it stays unmounted on lg+.
-  // `null` (pre-hydration) is treated as "not below lg" so SSR markup
-  // matches the desktop default and the Dialog doesn't briefly mount on
-  // first paint.
+  // Sheet (radix Dialog) only mounts its portal children while open. We
+  // still gate the controlled `open` prop on viewport so the same drawer
+  // doesn't try to render `left` / `right` while they're already mounted
+  // in the desktop Group above. `null` (pre-hydration) is treated as "not
+  // below lg" so SSR markup matches the desktop default.
   const showMobileBacklog = isBelowLg === true && backlogOpen;
   const showMobileChat = isBelowLg === true && chatOpen;
 
@@ -84,7 +80,7 @@ export function ItemsShellLayout({
           >
             {left}
           </Panel>
-          <Separator className={cn("w-px", SEPARATOR)} />
+          <Separator className={RESIZE_HANDLE_CLASS} />
           <Panel
             id="middle"
             defaultSize={showRight ? 48 : 72}
@@ -95,7 +91,7 @@ export function ItemsShellLayout({
           </Panel>
           {showRight && (
             <>
-              <Separator className={cn("w-px", SEPARATOR)} />
+              <Separator className={RESIZE_HANDLE_CLASS} />
               <Panel id="right" defaultSize={30} minSize={18} className="overflow-hidden">
                 {right}
               </Panel>
@@ -165,31 +161,15 @@ function MobileDrawer({
   children: React.ReactNode;
 }) {
   return (
-    <Dialog open={open} onClose={onClose} className="relative z-40 lg:hidden">
-      <DialogBackdrop className="fixed inset-0 bg-foreground/30 backdrop-blur-sm" />
-      <div className="fixed inset-0 flex">
-        <DialogPanel
-          className={cn(
-            "absolute inset-y-0 flex w-[88vw] max-w-[420px] flex-col overflow-hidden border-border bg-background shadow-xl",
-            side === "left" ? "left-0 border-r" : "right-0 border-l",
-          )}
-        >
-          <div className="flex items-center justify-between border-b border-border bg-card px-3 py-2">
-            <DialogTitle className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-              {label}
-            </DialogTitle>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label={`Close ${label.toLowerCase()}`}
-              className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-          <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
-        </DialogPanel>
-      </div>
-    </Dialog>
+    <Sheet open={open} onOpenChange={(next) => (next ? null : onClose())}>
+      <SheetContent side={side} className="flex w-[88vw] max-w-[420px] flex-col p-0 lg:hidden">
+        <SheetHeader className="border-b border-border bg-card px-3 py-2">
+          <SheetTitle className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+            {label}
+          </SheetTitle>
+        </SheetHeader>
+        <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+      </SheetContent>
+    </Sheet>
   );
 }

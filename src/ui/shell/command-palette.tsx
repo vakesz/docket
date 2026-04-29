@@ -1,23 +1,26 @@
 "use client";
 
-import {
-  Combobox,
-  ComboboxInput,
-  ComboboxOption,
-  ComboboxOptions,
-  Dialog,
-  DialogBackdrop,
-  DialogPanel,
-} from "@headlessui/react";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
-import { metaLabelClass, metaLabelFaintClass } from "@/lib/form-classes";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatKind } from "@/lib/format";
 import { shortcut } from "@/lib/platform";
 import { trpc } from "@/lib/trpc-client";
-import { cn } from "@/lib/utils";
-
-type Group = "Recent" | "Item" | "Navigate" | "Actions" | "Pinned" | "Items";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from "@/ui/primitives/command";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/ui/primitives/dialog";
 
 type ProjectOption = { id: string; name: string };
 
@@ -35,14 +38,9 @@ interface PaletteCommand {
   label: string;
   description?: string;
   hint?: string;
-  group: Group;
   keywords?: string;
   run: () => void;
 }
-
-type Entry =
-  | { kind: "command"; group: Group; command: PaletteCommand; searchText: string }
-  | { kind: "item"; group: "Pinned" | "Items"; item: ItemSummary; searchText: string };
 
 const RECENTS_KEY = "docket.cmdPaletteRecents";
 const RECENTS_LIMIT = 5;
@@ -81,10 +79,10 @@ function extractItemId(pathname: string | null, projectId: string): string | und
 }
 
 /**
- * Global Headless UI Combobox palette mounted by the project shell.
- * Cmd/Ctrl+K toggles it; Headless UI handles Esc and the dismissive
- * backdrop click. Recents are kept in localStorage so commands the user
- * actually uses float to the top across reloads.
+ * Global cmdk-backed palette mounted by the project shell. Cmd/Ctrl+K
+ * toggles it; Esc and outside-click dismiss it via radix Dialog. Recents
+ * are kept in localStorage so commands the user actually uses float to
+ * the top across reloads.
  */
 export function CommandPalette({
   projectId,
@@ -95,12 +93,6 @@ export function CommandPalette({
 }) {
   const [open, setOpen] = useState(false);
   const [recents, setRecents] = useState<string[]>(() => loadRecents());
-  const [query, setQuery] = useState("");
-  // The combobox input stays bound to `query` (instant typing feedback);
-  // the heavier filter pass that runs against every item/command/proposal
-  // reads `deferredQuery`, letting React skip stale work when the user is
-  // still typing fast.
-  const deferredQuery = useDeferredValue(query);
 
   const router = useRouter();
   const pathname = usePathname();
@@ -158,7 +150,6 @@ export function CommandPalette({
 
   const close = useCallback(() => {
     setOpen(false);
-    setQuery("");
   }, []);
 
   const go = useCallback(
@@ -177,13 +168,47 @@ export function CommandPalette({
     });
   }, []);
 
-  const commands = useMemo<PaletteCommand[]>(() => {
-    const list: PaletteCommand[] = [
+  const itemCommands = useMemo<PaletteCommand[]>(() => {
+    const list: PaletteCommand[] = [];
+    if (!itemId) return list;
+    const it = currentItem.data;
+    if (it?.url) {
+      list.push({
+        id: "open-in-browser",
+        label: "Open in browser",
+        description: "Open the current ticket in your browser.",
+        keywords: it.providerItemId,
+        run: () => {
+          window.open(it.url ?? "", "_blank", "noopener,noreferrer");
+          close();
+        },
+      });
+    }
+    if (it?.providerItemId) {
+      const pinnedNow = isPinned.data?.pinned ?? false;
+      list.push({
+        id: pinnedNow ? "unpin-item" : "pin-item",
+        label: pinnedNow ? "Unpin item" : "Pin item",
+        description: pinnedNow
+          ? "Remove this item from the pinned list."
+          : "Pin this item so it survives view and sync changes.",
+        keywords: it.providerItemId,
+        run: () => {
+          if (pinnedNow) unpin.mutate({ projectId, providerItemId: it.providerItemId });
+          else pin.mutate({ projectId, providerItemId: it.providerItemId });
+          close();
+        },
+      });
+    }
+    return list;
+  }, [close, currentItem.data, isPinned.data?.pinned, itemId, pin, projectId, unpin]);
+
+  const navigateCommands = useMemo<PaletteCommand[]>(
+    () => [
       {
         id: "nav-items",
         label: "All items",
         description: "Open the items list for this project.",
-        group: "Navigate",
         run: () => go(`/projects/${projectId}/items`),
       },
       {
@@ -191,16 +216,20 @@ export function CommandPalette({
         label: "Settings",
         description:
           "Per-user preferences (default project, send-on-enter) plus deployment-wide LLM and OAuth provider config.",
-        group: "Navigate",
         keywords:
           "config preferences default project profile llm oauth openai anthropic github azure devops",
         run: () => go("/settings"),
       },
+    ],
+    [go, projectId],
+  );
+
+  const actionCommands = useMemo<PaletteCommand[]>(() => {
+    const list: PaletteCommand[] = [
       {
         id: "sync-now",
         label: "Sync now",
         description: "Pull the latest items from the project's provider (incremental).",
-        group: "Actions",
         keywords: "refresh pull",
         run: () => {
           sync.mutate({ projectId, mode: "incremental" });
@@ -211,7 +240,6 @@ export function CommandPalette({
         id: "full-sync",
         label: "Full sync",
         description: "Reset the watermark and re-pull everything the provider exposes.",
-        group: "Actions",
         keywords: "refresh reset rebuild",
         run: () => {
           sync.mutate({ projectId, mode: "full" });
@@ -227,7 +255,6 @@ export function CommandPalette({
         label: `Dismiss all pending proposals (${pendingCount})`,
         description:
           "Reject every staged proposal in this project — useful when an agent run errored mid-turn and left orphans behind.",
-        group: "Actions",
         keywords: "reject clear pending proposals orphan",
         run: () => {
           const ids = pendingProposals.data?.map((p) => p.id) ?? [];
@@ -239,79 +266,35 @@ export function CommandPalette({
       });
     }
 
-    if (itemId) {
-      const it = currentItem.data;
-      if (it?.url) {
-        list.push({
-          id: "open-in-browser",
-          label: "Open in browser",
-          description: "Open the current ticket in your browser.",
-          group: "Item",
-          keywords: it.providerItemId,
-          run: () => {
-            window.open(it.url ?? "", "_blank", "noopener,noreferrer");
-            close();
-          },
-        });
-      }
-      if (it?.providerItemId) {
-        const pinnedNow = isPinned.data?.pinned ?? false;
-        list.push({
-          id: pinnedNow ? "unpin-item" : "pin-item",
-          label: pinnedNow ? "Unpin item" : "Pin item",
-          description: pinnedNow
-            ? "Remove this item from the pinned list."
-            : "Pin this item so it survives view and sync changes.",
-          group: "Item",
-          keywords: it.providerItemId,
-          run: () => {
-            if (pinnedNow) unpin.mutate({ projectId, providerItemId: it.providerItemId });
-            else pin.mutate({ projectId, providerItemId: it.providerItemId });
-            close();
-          },
-        });
-      }
-    }
-
     for (const p of projects) {
       if (p.id === projectId) continue;
       list.push({
         id: `switch-project-${p.id}`,
         label: `Switch project → ${p.name}`,
         description: `Open the '${p.name}' project's items.`,
-        group: "Actions",
         keywords: p.name,
         run: () => go(`/projects/${p.id}/items`),
       });
     }
 
     return list;
-  }, [
-    close,
-    currentItem.data,
-    go,
-    isPinned.data?.pinned,
-    itemId,
-    pendingProposals.data,
-    pin,
-    projectId,
-    projects,
-    rejectProposal,
-    sync,
-    unpin,
-  ]);
+  }, [close, go, pendingProposals.data, projectId, projects, rejectProposal, sync]);
+
+  const allCommands = useMemo(
+    () => [...itemCommands, ...navigateCommands, ...actionCommands],
+    [actionCommands, itemCommands, navigateCommands],
+  );
 
   const byId = useMemo(() => {
     const map = new Map<string, PaletteCommand>();
-    for (const c of commands) map.set(c.id, c);
+    for (const c of allCommands) map.set(c.id, c);
     return map;
-  }, [commands]);
+  }, [allCommands]);
 
   const recentCommands = useMemo(
     () => recents.map((id) => byId.get(id)).filter((c): c is PaletteCommand => Boolean(c)),
     [byId, recents],
   );
-
   const recentIds = useMemo(() => new Set(recentCommands.map((c) => c.id)), [recentCommands]);
 
   const pinnedItems: ItemSummary[] = useMemo(
@@ -329,7 +312,7 @@ export function CommandPalette({
 
   const itemList: ItemSummary[] = useMemo(
     () =>
-      (items.data ?? []).map((row) => ({
+      (items.data ?? []).slice(0, 80).map((row) => ({
         id: row.id,
         providerItemId: row.providerItemId,
         kind: row.kind,
@@ -340,198 +323,113 @@ export function CommandPalette({
     [items.data],
   );
 
-  const sections = useMemo(() => {
-    const recentEntries: Entry[] = recentCommands.map((c) => ({
-      kind: "command",
-      group: c.group,
-      command: c,
-      searchText: [c.label, c.description ?? "", c.keywords ?? ""].filter(Boolean).join(" "),
-    }));
-
-    const grouped: Record<Exclude<Group, "Recent">, Entry[]> = {
-      Item: [],
-      Navigate: [],
-      Actions: [],
-      Pinned: [],
-      Items: [],
-    };
-    for (const c of commands) {
-      if (recentIds.has(c.id)) continue;
-      if (c.group === "Recent") continue;
-      grouped[c.group].push({
-        kind: "command",
-        group: c.group,
-        command: c,
-        searchText: [c.label, c.description ?? "", c.keywords ?? ""].filter(Boolean).join(" "),
-      });
-    }
-    for (const it of pinnedItems) {
-      grouped.Pinned.push({
-        kind: "item",
-        group: "Pinned",
-        item: it,
-        searchText: `${it.providerItemId} ${it.title}`,
-      });
-    }
-    for (const it of itemList.slice(0, 80)) {
-      grouped.Items.push({
-        kind: "item",
-        group: "Items",
-        item: it,
-        searchText: `${it.providerItemId} ${it.title}`,
-      });
-    }
-
-    const q = deferredQuery.trim().toLowerCase();
-    const filterEntries = (entries: Entry[]) =>
-      q === "" ? entries : entries.filter((e) => e.searchText.toLowerCase().includes(q));
-
-    return {
-      recent: filterEntries(recentEntries),
-      item: filterEntries(grouped.Item),
-      navigate: filterEntries(grouped.Navigate),
-      actions: filterEntries(grouped.Actions),
-      pinned: filterEntries(grouped.Pinned),
-      items: filterEntries(grouped.Items),
-    };
-  }, [commands, recentCommands, recentIds, pinnedItems, itemList, deferredQuery]);
-
-  const totalMatches =
-    sections.recent.length +
-    sections.item.length +
-    sections.navigate.length +
-    sections.actions.length +
-    sections.pinned.length +
-    sections.items.length;
-
-  const onSelect = (entry: Entry | null) => {
-    if (!entry) return;
-    if (entry.kind === "command") {
-      record(entry.command.id);
-      entry.command.run();
-    } else {
-      go(`/projects/${projectId}/items/${entry.item.id}`);
-    }
+  const runCommand = (c: PaletteCommand) => {
+    record(c.id);
+    c.run();
   };
 
   return (
-    <Dialog
-      open={open}
-      onClose={close}
-      className="relative z-50"
-      // Disable Headless UI's autofocus so we can hand focus to the input
-      // explicitly via ComboboxInput's autoFocus prop.
-    >
-      <DialogBackdrop className="fixed inset-0 bg-foreground/40" />
-      <div className="fixed inset-0 flex items-start justify-center pt-[12vh]">
-        <DialogPanel className="w-[560px] max-w-[92vw] overflow-hidden rounded-lg border border-border bg-card text-foreground shadow-2xl">
-          <Combobox<Entry | null> immediate value={null} onChange={onSelect}>
-            <ComboboxInput
-              placeholder="Jump to item, run command…"
-              className="w-full border-b border-border bg-transparent px-4 py-3 text-sm text-foreground outline-none"
-              autoFocus
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="off"
-              spellCheck={false}
-              name="docket-command-palette-search"
-              enterKeyHint="search"
-              data-form-type="other"
-              data-lpignore="true"
-              data-1p-ignore="true"
-              data-bwignore="true"
-              displayValue={() => query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-            <ComboboxOptions static className="max-h-[56vh] overflow-auto p-1">
-              {totalMatches === 0 ? (
-                <div className="px-4 py-6 text-center text-sm text-muted-foreground-faint">
-                  No matches.
-                </div>
-              ) : null}
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent
+        className="top-[12vh] translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-[560px]"
+        showCloseButton={false}
+      >
+        <DialogHeader className="sr-only">
+          <DialogTitle>Command palette</DialogTitle>
+          <DialogDescription>Jump to an item or run a command.</DialogDescription>
+        </DialogHeader>
+        <Command className="rounded-none">
+          <CommandInput
+            placeholder="Jump to item, run command…"
+            autoFocus
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            name="docket-command-palette-search"
+            enterKeyHint="search"
+            data-form-type="other"
+            data-lpignore="true"
+            data-1p-ignore="true"
+            data-bwignore="true"
+          />
+          <CommandList className="max-h-[56vh]">
+            <CommandEmpty>No matches.</CommandEmpty>
 
-              {sections.recent.length > 0 ? (
-                <PaletteSection heading="Recent">
-                  {sections.recent.map((entry) =>
-                    entry.kind === "command" ? (
-                      <CommandRow key={entry.command.id} entry={entry} />
-                    ) : null,
-                  )}
-                </PaletteSection>
-              ) : null}
+            {recentCommands.length > 0 ? (
+              <CommandGroup heading="Recent">
+                {recentCommands.map((c) => (
+                  <CommandRow key={`recent-${c.id}`} command={c} onSelect={() => runCommand(c)} />
+                ))}
+              </CommandGroup>
+            ) : null}
 
-              {sections.item.length > 0 ? (
-                <PaletteSection heading="Item">
-                  {sections.item.map((entry) =>
-                    entry.kind === "command" ? (
-                      <CommandRow key={entry.command.id} entry={entry} />
-                    ) : null,
-                  )}
-                </PaletteSection>
-              ) : null}
+            {itemCommands.length > 0 ? (
+              <CommandGroup heading="Item">
+                {itemCommands
+                  .filter((c) => !recentIds.has(c.id))
+                  .map((c) => (
+                    <CommandRow key={c.id} command={c} onSelect={() => runCommand(c)} />
+                  ))}
+              </CommandGroup>
+            ) : null}
 
-              {sections.navigate.length > 0 ? (
-                <PaletteSection heading="Navigate">
-                  {sections.navigate.map((entry) =>
-                    entry.kind === "command" ? (
-                      <CommandRow key={entry.command.id} entry={entry} />
-                    ) : null,
-                  )}
-                </PaletteSection>
-              ) : null}
+            <CommandGroup heading="Navigate">
+              {navigateCommands
+                .filter((c) => !recentIds.has(c.id))
+                .map((c) => (
+                  <CommandRow key={c.id} command={c} onSelect={() => runCommand(c)} />
+                ))}
+            </CommandGroup>
 
-              {sections.actions.length > 0 ? (
-                <PaletteSection heading="Actions">
-                  {sections.actions.map((entry) =>
-                    entry.kind === "command" ? (
-                      <CommandRow key={entry.command.id} entry={entry} />
-                    ) : null,
-                  )}
-                </PaletteSection>
-              ) : null}
+            <CommandGroup heading="Actions">
+              {actionCommands
+                .filter((c) => !recentIds.has(c.id))
+                .map((c) => (
+                  <CommandRow key={c.id} command={c} onSelect={() => runCommand(c)} />
+                ))}
+            </CommandGroup>
 
-              {sections.pinned.length > 0 ? (
-                <PaletteSection heading="Pinned">
-                  {sections.pinned.map((entry) =>
-                    entry.kind === "item" ? <ItemRow key={entry.item.id} entry={entry} /> : null,
-                  )}
-                </PaletteSection>
-              ) : null}
+            {pinnedItems.length > 0 ? (
+              <CommandGroup heading="Pinned">
+                {pinnedItems.map((it) => (
+                  <ItemRow
+                    key={`pinned-${it.id}`}
+                    item={it}
+                    onSelect={() => go(`/projects/${projectId}/items/${it.id}`)}
+                  />
+                ))}
+              </CommandGroup>
+            ) : null}
 
-              {sections.items.length > 0 ? (
-                <PaletteSection heading="Items">
-                  {sections.items.map((entry) =>
-                    entry.kind === "item" ? <ItemRow key={entry.item.id} entry={entry} /> : null,
-                  )}
-                </PaletteSection>
-              ) : null}
-            </ComboboxOptions>
-          </Combobox>
-          <div className={cn("border-t border-border px-3 py-2", metaLabelFaintClass)}>
+            {itemList.length > 0 ? (
+              <CommandGroup heading="Items">
+                {itemList.map((it) => (
+                  <ItemRow
+                    key={it.id}
+                    item={it}
+                    onSelect={() => go(`/projects/${projectId}/items/${it.id}`)}
+                  />
+                ))}
+              </CommandGroup>
+            ) : null}
+          </CommandList>
+          <CommandSeparator />
+          <div className="px-3 py-2 text-xs uppercase tracking-wide text-muted-foreground-faint">
             {shortcut("K")} · Esc to close
           </div>
-        </DialogPanel>
-      </div>
+        </Command>
+      </DialogContent>
     </Dialog>
   );
 }
 
-function PaletteSection({ heading, children }: { heading: string; children: React.ReactNode }) {
+function CommandRow({ command, onSelect }: { command: PaletteCommand; onSelect: () => void }) {
+  const value = [command.id, command.label, command.description ?? "", command.keywords ?? ""]
+    .filter(Boolean)
+    .join(" ");
   return (
-    <div>
-      <div className={cn("px-2 py-1", metaLabelFaintClass)}>{heading}</div>
-      {children}
-    </div>
-  );
-}
-
-function CommandRow({ entry }: { entry: Extract<Entry, { kind: "command" }> }) {
-  const { command } = entry;
-  return (
-    <ComboboxOption
-      value={entry}
-      className="flex cursor-pointer items-center gap-3 rounded px-3 py-2 text-sm data-focus:bg-muted"
-    >
+    <CommandItem value={value} onSelect={onSelect}>
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="truncate text-foreground">{command.label}</span>
         {command.description ? (
@@ -541,26 +439,24 @@ function CommandRow({ entry }: { entry: Extract<Entry, { kind: "command" }> }) {
         ) : null}
       </span>
       {command.hint ? (
-        <span className="ml-auto rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+        <kbd className="ml-auto rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
           {command.hint}
-        </span>
+        </kbd>
       ) : null}
-    </ComboboxOption>
+    </CommandItem>
   );
 }
 
-function ItemRow({ entry }: { entry: Extract<Entry, { kind: "item" }> }) {
-  const { item } = entry;
+function ItemRow({ item, onSelect }: { item: ItemSummary; onSelect: () => void }) {
   return (
-    <ComboboxOption
-      value={entry}
-      className="flex cursor-pointer items-center gap-2 rounded px-3 py-2 text-sm data-focus:bg-muted"
-    >
-      <span className={metaLabelClass}>{formatKind(item.kind)}</span>
+    <CommandItem value={`${item.providerItemId} ${item.title}`} onSelect={onSelect}>
+      <span className="text-xs uppercase tracking-wide text-muted-foreground">
+        {formatKind(item.kind)}
+      </span>
       <span className="ml-2 truncate">{item.title}</span>
       <span className="ml-auto font-mono text-[10px] text-muted-foreground-faint">
         #{item.providerItemId}
       </span>
-    </ComboboxOption>
+    </CommandItem>
   );
 }

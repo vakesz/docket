@@ -1,11 +1,17 @@
 "use client";
 
-import { Menu, MenuButton, MenuItem, MenuItems } from "@headlessui/react";
 import { LogOut, Settings } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { metaLabelFaintClass } from "@/lib/form-classes";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/ui/primitives/dropdown-menu";
 
 type Props = {
   userLabel: string;
@@ -39,13 +45,14 @@ export function AccountMenu({
   const [imageBroken, setImageBroken] = useState(false);
   const initial = userLabel.trim().charAt(0).toUpperCase() || "?";
   const showImage = !!userImage && !imageBroken;
+  const settingsHref = currentProjectId ? `/settings?project=${currentProjectId}` : "/settings";
 
   return (
-    <Menu as="div" className="relative inline-block shrink-0 leading-none">
-      <MenuButton
+    <DropdownMenu>
+      <DropdownMenuTrigger
         className={cn(
-          "inline-flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border border-border bg-card text-xs font-semibold text-foreground",
-          "hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring",
+          "inline-flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-card text-xs font-semibold text-foreground leading-none",
+          "hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         )}
         title={userLabel}
       >
@@ -61,40 +68,31 @@ export function AccountMenu({
         ) : (
           initial
         )}
-      </MenuButton>
-      <MenuItems
-        anchor="bottom end"
-        transition
-        className={cn(
-          "z-30 w-56 origin-top-right overflow-hidden rounded-xl border border-border bg-card shadow-lg [--anchor-gap:0.5rem] focus:outline-none",
-          "transition data-closed:scale-95 data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in",
-        )}
-      >
-        <div className="border-b border-border px-3 py-2 text-xs text-muted-foreground">
-          <div className={metaLabelFaintClass}>Signed in as</div>
-          <div className="truncate text-sm text-foreground">{userLabel}</div>
-        </div>
-        <MenuItem>
-          <Link
-            href={currentProjectId ? `/settings?project=${currentProjectId}` : "/settings"}
-            className="flex items-center gap-2 px-3 py-2 text-sm text-foreground data-focus:bg-muted"
-          >
-            <Settings aria-hidden="true" className="h-4 w-4 shrink-0 text-muted-foreground" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" sideOffset={8} className="w-56">
+        <DropdownMenuLabel className="flex flex-col gap-0.5">
+          <span className="text-xs uppercase tracking-wide text-muted-foreground-faint">
+            Signed in as
+          </span>
+          <span className="truncate text-sm text-foreground">{userLabel}</span>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link href={settingsHref}>
+            <Settings aria-hidden="true" className="text-muted-foreground" />
             Settings
           </Link>
-        </MenuItem>
-        <form action={signOutAction} className="border-t border-border">
-          <MenuItem>
-            <button
-              type="submit"
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground data-focus:bg-muted"
-            >
-              <LogOut aria-hidden="true" className="h-4 w-4 shrink-0 text-muted-foreground" />
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <form action={signOutAction}>
+          <DropdownMenuItem asChild>
+            <button type="submit" className="flex w-full items-center gap-1.5 text-left">
+              <LogOut aria-hidden="true" className="text-muted-foreground" />
               Sign out
             </button>
-          </MenuItem>
+          </DropdownMenuItem>
         </form>
-      </MenuItems>
-    </Menu>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

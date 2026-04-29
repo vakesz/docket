@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { formatRelative } from "@/lib/format";
 import { trpc } from "@/lib/trpc-client";
+import { useAutoRefreshIntervalMs } from "@/lib/use-auto-refresh";
+import { useBackgroundSync } from "@/lib/use-background-sync";
 import { cn } from "@/lib/utils";
 import { ProposalDialog } from "@/ui/proposals/proposal-dialog";
 import { PaletteHint } from "@/ui/shell/palette-hint";
@@ -18,20 +20,34 @@ import { SyncButton } from "@/ui/shell/sync-button";
  * Sync stays here as a labeled control alongside `synced X ago` for
  * discoverability, while the topbar mounts a glyph-only twin so refresh
  * is reachable from anywhere without scanning the footer.
+ *
+ * The footer also hosts `useBackgroundSync` — same lifetime as the layout
+ * chrome, both layouts mount one footer, no separate wrapper needed.
  */
 export function StatusFooter({
   projectId,
-  lastSyncAt = null,
   pendingProposals = 0,
   readOnly = false,
 }: {
   projectId: string | null;
-  lastSyncAt?: Date | string | null;
   pendingProposals?: number;
   readOnly?: boolean;
 }) {
   const [online, setOnline] = useState(true);
   const [, setTick] = useState(0);
+
+  const refetchInterval = useAutoRefreshIntervalMs();
+  const syncStatus = trpc.items.syncStatus.useQuery(
+    { projectId: projectId ?? "" },
+    {
+      enabled: !!projectId,
+      refetchInterval: refetchInterval === false ? undefined : refetchInterval,
+      staleTime: 0,
+    },
+  );
+  const lastSyncAt = syncStatus.data?.lastSyncAt ?? null;
+
+  useBackgroundSync(projectId, readOnly);
 
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);

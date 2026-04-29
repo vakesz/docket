@@ -28,7 +28,10 @@ export function SyncButton({
   const utils = trpc.useUtils();
   const sync = trpc.items.runSync.useMutation({
     onSuccess: async () => {
-      await utils.items.list.invalidate();
+      await Promise.all([
+        utils.items.list.invalidate(),
+        projectId ? utils.items.syncStatus.invalidate({ projectId }) : Promise.resolve(),
+      ]);
       router.refresh();
     },
   });

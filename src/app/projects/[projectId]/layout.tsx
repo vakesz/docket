@@ -1,7 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { notFound, redirect } from "next/navigation";
 import type { ReactNode } from "react";
-import { mostRecent } from "@/lib/format";
 import { auth } from "@/server/auth";
 import { db } from "@/server/db";
 import { loadGlobalSetting } from "@/server/settings/effective";
@@ -29,7 +28,7 @@ export default async function ProjectLayout({
   const { projectId } = await params;
   const trpc = await createCaller();
 
-  // All five fetches are independent of each other, so they fan out at
+  // All four fetches are independent of each other, so they fan out at
   // once. `projects.get` is the only one that can short-circuit with a
   // 404; the rest do unnecessary work in that error path, which is fine
   // since the happy path (project visible) is the common case.
@@ -37,17 +36,12 @@ export default async function ProjectLayout({
   let projects: Awaited<ReturnType<typeof trpc.projects.list>>;
   let readOnly: Awaited<ReturnType<typeof loadGlobalSetting<"app.read-only">>>;
   let pendingProposalsCount: number;
-  let syncCursor: { watermark: Date | null; lastFullSyncAt: Date | null; updatedAt: Date } | null;
   try {
-    [project, projects, readOnly, pendingProposalsCount, syncCursor] = await Promise.all([
+    [project, projects, readOnly, pendingProposalsCount] = await Promise.all([
       trpc.projects.get({ projectId }),
       trpc.projects.list(),
       loadGlobalSetting(db, "app.read-only"),
       trpc.proposals.count({ projectId, status: "pending" }),
-      db.syncCursor.findUnique({
-        where: { projectId },
-        select: { watermark: true, lastFullSyncAt: true, updatedAt: true },
-      }),
     ]);
   } catch (err) {
     if (err instanceof TRPCError && (err.code === "FORBIDDEN" || err.code === "NOT_FOUND")) {
@@ -57,13 +51,6 @@ export default async function ProjectLayout({
   }
   const userLabel = session.user.email ?? session.user.name ?? "you";
   const userImage = session.user.image ?? null;
-
-  // Pick the most recent of (incremental watermark, full-sync timestamp,
-  // row-update timestamp). The cursor row's updatedAt covers cases where a
-  // sync ran but didn't bump either of the two payload columns.
-  const lastSyncAt = syncCursor
-    ? mostRecent([syncCursor.watermark, syncCursor.lastFullSyncAt, syncCursor.updatedAt])
-    : null;
 
   const projectOptions = projects.map((p) => ({
     id: p.id,
@@ -84,7 +71,6 @@ export default async function ProjectLayout({
         <main className="flex flex-1 flex-col overflow-hidden">{children}</main>
         <StatusFooter
           projectId={project.id}
-          lastSyncAt={lastSyncAt}
           pendingProposals={pendingProposalsCount}
           readOnly={readOnly}
         />

@@ -1,9 +1,9 @@
-import { secondaryButtonClass } from "@/lib/form-classes";
 import { nextAuthProviderId } from "@/lib/next-auth-provider-id";
 import { ProviderLogo } from "@/lib/provider-logos";
 import { signIn } from "@/server/auth";
 import { db } from "@/server/db";
 import { logger } from "@/server/logger";
+import { Button } from "@/ui/primitives/button";
 
 export async function SignInButtons({ redirectTo = "/" }: { redirectTo?: string }) {
   // Render one button per enabled OauthProviderConfig row so a new provider
@@ -44,13 +44,10 @@ export async function SignInButtons({ redirectTo = "/" }: { redirectTo?: string 
               await signIn(providerId, { redirectTo });
             }}
           >
-            <button
-              type="submit"
-              className={`${secondaryButtonClass} inline-flex items-center justify-center gap-2`}
-            >
+            <Button type="submit" variant="outline" className="w-full">
               <ProviderLogo kind={row.kind} className="h-4 w-4" />
               Sign in with {label}
-            </button>
+            </Button>
           </form>
         );
       })}
