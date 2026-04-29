@@ -1,0 +1,37 @@
+version: 2
+
+updates:
+  # Dependabot has no bun ecosystem — npm handles all package.json-based projects
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    assignees:
+      - vakesz
+    groups:
+      minor-patch:
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # Major bumps need manual review
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    assignees:
+      - vakesz
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    assignees:
+      - vakesz
