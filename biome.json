@@ -47,7 +47,10 @@
     "formatter": {
       "quoteStyle": "double",
       "trailingCommas": "all",
-      "semicolons": "always"
+      "semicolons": "always",
+      "bracketSpacing": true,
+      "bracketSameLine": false,
+      "trailingNewline": true
     }
   },
   "css": {

@@ -1,5 +1,6 @@
 "use client";
 
+import "./markdown.css";
 import type { ComponentProps } from "react";
 import { memo } from "react";
 import ReactMarkdown from "react-markdown";
@@ -11,7 +12,7 @@ import type { PluggableList } from "unified";
 import { cn } from "@/lib/utils";
 import rehypeHljs from "@/ui/markdown/rehype-hljs";
 
-// Typography lives entirely in globals.css under `.docket-md` — these
+// Typography lives entirely in markdown.css under `.docket-md` — these
 // component overrides only carry behavior (external-link rel/target).
 
 /**
