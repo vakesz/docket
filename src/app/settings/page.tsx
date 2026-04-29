@@ -56,22 +56,27 @@ export default async function SettingsPage({
       ? (params.section as SectionKey)
       : undefined;
 
-  const me = await db.user.findUnique({
-    where: { id: userId },
-    select: { defaultProjectId: true },
-  });
-
   const accessOr = [{ ownerUserId: userId }, { memberships: { some: { userId } } }];
 
   // ?project=<slug> wins; fall back to the user's pinned default (id), then
-  // to the most-recently-touched membership.
-  const project =
-    (requested
-      ? await db.project.findFirst({
+  // to the most-recently-touched membership. The slug branch and the user
+  // record are independent — race them in parallel so the common case
+  // (?project= matches) doesn't pay for the user lookup we won't use.
+  const [requestedProject, me] = await Promise.all([
+    requested
+      ? db.project.findFirst({
           where: { slug: requested, archivedAt: null, OR: accessOr },
           select: { id: true, slug: true, name: true },
         })
-      : null) ??
+      : Promise.resolve(null),
+    db.user.findUnique({
+      where: { id: userId },
+      select: { defaultProjectId: true },
+    }),
+  ]);
+
+  const project =
+    requestedProject ??
     (me?.defaultProjectId
       ? await db.project.findFirst({
           where: { id: me.defaultProjectId, archivedAt: null, OR: accessOr },

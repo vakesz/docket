@@ -149,16 +149,12 @@ export function CommandPalette({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const close = useCallback(() => {
-    setOpen(false);
-  }, []);
-
   const go = useCallback(
     (to: string) => {
-      close();
+      setOpen(false);
       router.push(to);
     },
-    [close, router],
+    [router],
   );
 
   const record = useCallback((id: string) => {
@@ -181,7 +177,7 @@ export function CommandPalette({
         keywords: it.providerItemId,
         run: () => {
           window.open(it.url ?? "", "_blank", "noopener,noreferrer");
-          close();
+          setOpen(false);
         },
       });
     }
@@ -197,12 +193,12 @@ export function CommandPalette({
         run: () => {
           if (pinnedNow) unpin.mutate({ projectSlug, providerItemId: it.providerItemId });
           else pin.mutate({ projectSlug, providerItemId: it.providerItemId });
-          close();
+          setOpen(false);
         },
       });
     }
     return list;
-  }, [close, currentItem.data, isPinned.data?.pinned, itemNumber, pin, projectSlug, unpin]);
+  }, [currentItem.data, isPinned.data?.pinned, itemNumber, pin, projectSlug, unpin]);
 
   const navigateCommands = useMemo<PaletteCommand[]>(
     () => [
@@ -234,7 +230,7 @@ export function CommandPalette({
         keywords: "refresh pull",
         run: () => {
           sync.mutate({ projectSlug, mode: "incremental" });
-          close();
+          setOpen(false);
         },
       },
       {
@@ -244,7 +240,7 @@ export function CommandPalette({
         keywords: "refresh reset rebuild",
         run: () => {
           sync.mutate({ projectSlug, mode: "full" });
-          close();
+          setOpen(false);
         },
       },
     ];
@@ -262,7 +258,7 @@ export function CommandPalette({
           for (const id of ids) {
             rejectProposal.mutate({ projectSlug, proposalId: id });
           }
-          close();
+          setOpen(false);
         },
       });
     }
@@ -279,7 +275,7 @@ export function CommandPalette({
     }
 
     return list;
-  }, [close, go, pendingProposals.data, projectSlug, projects, rejectProposal, sync]);
+  }, [go, pendingProposals.data, projectSlug, projects, rejectProposal, sync]);
 
   const allCommands = useMemo(
     () => [...itemCommands, ...navigateCommands, ...actionCommands],
