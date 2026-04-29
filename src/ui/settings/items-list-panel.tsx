@@ -1,13 +1,21 @@
 "use client";
 
-import { Field, Label, Switch } from "@headlessui/react";
 import { AlertTriangle } from "lucide-react";
-import { switchThumbClass, switchTrackClass } from "@/lib/form-classes";
+import { useId } from "react";
 import { DEFAULT_STALE_THRESHOLD_DAYS } from "@/lib/staleness";
 import { trpc } from "@/lib/trpc-client";
 import { RECENT_LIMIT_MAX, useRecentEnabled, useRecentLimit } from "@/lib/ui-prefs";
 import { NumberField } from "@/ui/forms/number-field";
-import { SelectField } from "@/ui/forms/select-field";
+import { Alert, AlertDescription } from "@/ui/primitives/alert";
+import { Label } from "@/ui/primitives/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/ui/primitives/select";
+import { Switch } from "@/ui/primitives/switch";
 
 const USER_STALE_OVERRIDE_KEY = "items.stale-after-days.user";
 
@@ -36,6 +44,20 @@ export function ItemsListPanel({ projectId }: { projectId: string | null }) {
 
   const [recentEnabled, setRecentEnabled] = useRecentEnabled();
   const [recentLimit, setRecentLimit] = useRecentLimit();
+
+  const recentEnabledId = useId();
+  const recentLimitId = useId();
+  const sortId = useId();
+  const stateId = useId();
+  const archivedId = useId();
+  const assigneeStyleId = useId();
+  const showAvatarsId = useId();
+  const maxTagsId = useId();
+  const maxAssigneesId = useId();
+  const densityId = useId();
+  const overrideId = useId();
+  const indicatorId = useId();
+  const thresholdId = useId();
 
   const maxVisibleTagsRaw = list.data?.find((r) => r.key === "items.max-visible-tags")?.value;
   const maxVisibleTags = typeof maxVisibleTagsRaw === "number" ? maxVisibleTagsRaw : 2;
@@ -112,20 +134,21 @@ export function ItemsListPanel({ projectId }: { projectId: string | null }) {
           </p>
         </header>
 
-        <Field className="flex items-center gap-2 text-sm text-foreground">
-          <Switch checked={recentEnabled} onChange={setRecentEnabled} className={switchTrackClass}>
-            <span aria-hidden className={switchThumbClass} />
-          </Switch>
-          <Label>{recentEnabled ? "Visible" : "Hidden"}</Label>
-        </Field>
+        <div className="flex items-center gap-2 text-sm text-foreground">
+          <Switch id={recentEnabledId} checked={recentEnabled} onCheckedChange={setRecentEnabled} />
+          <Label htmlFor={recentEnabledId}>{recentEnabled ? "Visible" : "Hidden"}</Label>
+        </div>
 
-        <Field className="flex flex-col gap-1">
-          <Label className="text-sm font-medium text-foreground">Maximum recents to show</Label>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor={recentLimitId} className="text-sm font-medium text-foreground">
+            Maximum recents to show
+          </Label>
           <p className="text-xs text-muted-foreground">
             How many rows the Recent strip shows above the backlog. Maximum {RECENT_LIMIT_MAX}; set
             to 0 to hide the strip entirely.
           </p>
           <NumberField
+            id={recentLimitId}
             min={0}
             max={RECENT_LIMIT_MAX}
             step={1}
@@ -134,7 +157,7 @@ export function ItemsListPanel({ projectId }: { projectId: string | null }) {
             onCommit={setRecentLimit}
             className="max-w-[6rem]"
           />
-        </Field>
+        </div>
       </section>
 
       <section className="flex flex-col gap-4 border-t border-border pt-6">
@@ -145,123 +168,140 @@ export function ItemsListPanel({ projectId }: { projectId: string | null }) {
           </p>
         </header>
 
-        <Field className="flex flex-col gap-1">
-          <Label className="text-sm font-medium text-foreground">Default sort</Label>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor={sortId} className="text-sm font-medium text-foreground">
+            Default sort
+          </Label>
           <p className="text-xs text-muted-foreground">
             Sort order applied when a project's backlog opens. Changing the sort on a saved view
             still wins for that view.
           </p>
-          <SelectField
+          <Select
             value={backlogSort}
             disabled={disabled}
-            onChange={(e) =>
-              update.mutate({ key: "backlog.default-sort" as never, value: e.target.value })
+            onValueChange={(value) =>
+              update.mutate({ key: "backlog.default-sort" as never, value })
             }
-            wrapperClassName="max-w-[10rem]"
           >
-            <option value="updated">Updated</option>
-            <option value="created">Created</option>
-            <option value="priority">Priority</option>
-            <option value="title">Title</option>
-          </SelectField>
-        </Field>
+            <SelectTrigger id={sortId} className="max-w-[10rem]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="updated">Updated</SelectItem>
+              <SelectItem value="created">Created</SelectItem>
+              <SelectItem value="priority">Priority</SelectItem>
+              <SelectItem value="title">Title</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
-        <Field className="flex flex-col gap-1">
-          <Label className="text-sm font-medium text-foreground">Default state filter</Label>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor={stateId} className="text-sm font-medium text-foreground">
+            Default state filter
+          </Label>
           <p className="text-xs text-muted-foreground">
             Initial state bucket applied when the backlog opens.
           </p>
-          <SelectField
+          <Select
             value={backlogState}
             disabled={disabled}
-            onChange={(e) =>
+            onValueChange={(value) =>
               update.mutate({
                 key: "backlog.default-state-filter" as never,
-                value: e.target.value,
+                value,
               })
             }
-            wrapperClassName="max-w-[10rem]"
           >
-            <option value="all">All</option>
-            <option value="open">Open</option>
-            <option value="in_progress">In progress</option>
-            <option value="done">Done</option>
-          </SelectField>
-        </Field>
+            <SelectTrigger id={stateId} className="max-w-[10rem]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="open">Open</SelectItem>
+              <SelectItem value="in_progress">In progress</SelectItem>
+              <SelectItem value="done">Done</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
-        <Field className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1">
           <Label className="text-sm font-medium text-foreground">Show Archived bucket</Label>
           <p className="text-xs text-muted-foreground">
             When on, the filter bar offers an Archived bucket alongside Open / Closed / All.
             Archived rows remain reachable via the All-states bucket either way.
           </p>
-          <Field className="flex items-center gap-2 text-sm text-foreground">
+          <div className="flex items-center gap-2 text-sm text-foreground">
             <Switch
+              id={archivedId}
               checked={showArchivedBucket}
               disabled={disabled}
-              onChange={(next) =>
+              onCheckedChange={(next) =>
                 update.mutate({ key: "items.show-archived-bucket" as never, value: next })
               }
-              className={switchTrackClass}
-            >
-              <span aria-hidden className={switchThumbClass} />
-            </Switch>
-            <Label>{showArchivedBucket ? "Visible" : "Hidden"}</Label>
-          </Field>
-        </Field>
+            />
+            <Label htmlFor={archivedId}>{showArchivedBucket ? "Visible" : "Hidden"}</Label>
+          </div>
+        </div>
 
-        <Field className="flex flex-col gap-1">
-          <Label className="text-sm font-medium text-foreground">Assignee selector style</Label>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor={assigneeStyleId} className="text-sm font-medium text-foreground">
+            Assignee selector style
+          </Label>
           <p className="text-xs text-muted-foreground">
             Chips show each assignee as a toggleable pill — good for small teams. Dropdown is a
             multi-select list — switch when the project has many people and chips would overflow.
           </p>
-          <SelectField
+          <Select
             value={assigneeSelectorStyle}
             disabled={disabled}
-            onChange={(e) =>
+            onValueChange={(value) =>
               update.mutate({
                 key: "items.assignee-selector-style" as never,
-                value: e.target.value,
+                value,
               })
             }
-            wrapperClassName="max-w-[10rem]"
           >
-            <option value="chips">Chips</option>
-            <option value="dropdown">Dropdown</option>
-          </SelectField>
-        </Field>
+            <SelectTrigger id={assigneeStyleId} className="max-w-[10rem]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="chips">Chips</SelectItem>
+              <SelectItem value="dropdown">Dropdown</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
-        <Field className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1">
           <Label className="text-sm font-medium text-foreground">Show assignee avatars</Label>
           <p className="text-xs text-muted-foreground">
             When on, assignee chips render with the user's profile picture pulled from the provider.
             Currently GitHub-only — a deterministic CDN URL, no extra API calls. Other providers
             fall back to a colored initial circle. Turn off to show only the username.
           </p>
-          <Field className="flex items-center gap-2 text-sm text-foreground">
+          <div className="flex items-center gap-2 text-sm text-foreground">
             <Switch
+              id={showAvatarsId}
               checked={showAvatars}
               disabled={disabled}
-              onChange={(next) =>
+              onCheckedChange={(next) =>
                 update.mutate({ key: "items.show-assignee-avatars" as never, value: next })
               }
-              className={switchTrackClass}
-            >
-              <span aria-hidden className={switchThumbClass} />
-            </Switch>
-            <Label>{showAvatars ? "Visible" : "Hidden"}</Label>
-          </Field>
-        </Field>
+            />
+            <Label htmlFor={showAvatarsId}>{showAvatars ? "Visible" : "Hidden"}</Label>
+          </div>
+        </div>
 
-        <Field className="flex flex-col gap-1">
-          <Label className="text-sm font-medium text-foreground">Max tag chips shown</Label>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor={maxTagsId} className="text-sm font-medium text-foreground">
+            Max tag chips shown
+          </Label>
           <p className="text-xs text-muted-foreground">
             How many tag chips render inline (on each backlog row, and in the tag-filter bar at the
             top of the backlog) before the rest collapse into a +N badge. Set to 0 to always
             collapse.
           </p>
           <NumberField
+            id={maxTagsId}
             min={0}
             max={20}
             step={1}
@@ -272,16 +312,19 @@ export function ItemsListPanel({ projectId }: { projectId: string | null }) {
             }
             className="max-w-[6rem]"
           />
-        </Field>
+        </div>
 
-        <Field className="flex flex-col gap-1">
-          <Label className="text-sm font-medium text-foreground">Max assignee chips shown</Label>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor={maxAssigneesId} className="text-sm font-medium text-foreground">
+            Max assignee chips shown
+          </Label>
           <p className="text-xs text-muted-foreground">
             How many assignee chips render in the filter row before the rest collapse into a +N
             badge. Only applies when the assignee selector style is set to chips. Set to 0 to always
             collapse.
           </p>
           <NumberField
+            id={maxAssigneesId}
             min={0}
             max={20}
             step={1}
@@ -292,7 +335,7 @@ export function ItemsListPanel({ projectId }: { projectId: string | null }) {
             }
             className="max-w-[6rem]"
           />
-        </Field>
+        </div>
       </section>
 
       <section className="flex flex-col gap-4 border-t border-border pt-6">
@@ -303,24 +346,28 @@ export function ItemsListPanel({ projectId }: { projectId: string | null }) {
           </p>
         </header>
 
-        <Field className="flex flex-col gap-1">
-          <Label className="text-sm font-medium text-foreground">Row density</Label>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor={densityId} className="text-sm font-medium text-foreground">
+            Row density
+          </Label>
           <p className="text-xs text-muted-foreground">
             Compact packs more rows on screen with smaller padding; cozy is the default
             touch-friendly height.
           </p>
-          <SelectField
+          <Select
             value={backlogDensity}
             disabled={disabled}
-            onChange={(e) =>
-              update.mutate({ key: "backlog.density" as never, value: e.target.value })
-            }
-            wrapperClassName="max-w-[10rem]"
+            onValueChange={(value) => update.mutate({ key: "backlog.density" as never, value })}
           >
-            <option value="cozy">Cozy</option>
-            <option value="compact">Compact</option>
-          </SelectField>
-        </Field>
+            <SelectTrigger id={densityId} className="max-w-[10rem]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="cozy">Cozy</SelectItem>
+              <SelectItem value="compact">Compact</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </section>
 
       <section className="flex flex-col gap-3 border-t border-border pt-6">
@@ -333,18 +380,18 @@ export function ItemsListPanel({ projectId }: { projectId: string | null }) {
           </p>
         </header>
 
-        <Field className="flex flex-col gap-1">
-          <Field className="flex items-center gap-2 text-sm text-foreground">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2 text-sm text-foreground">
             <Switch
+              id={overrideId}
               checked={overrideOn}
               disabled={disabled}
-              onChange={onToggleStaleOverride}
-              className={switchTrackClass}
-            >
-              <span aria-hidden className={switchThumbClass} />
-            </Switch>
-            <Label>{overrideOn ? "Using my own threshold" : "Inheriting project default"}</Label>
-          </Field>
+              onCheckedChange={onToggleStaleOverride}
+            />
+            <Label htmlFor={overrideId}>
+              {overrideOn ? "Using my own threshold" : "Inheriting project default"}
+            </Label>
+          </div>
           {overrideOn ? (
             <p className="inline-flex items-start gap-1.5 text-xs text-warning">
               <AlertTriangle aria-hidden className="mt-0.5 size-3 shrink-0" />
@@ -359,10 +406,10 @@ export function ItemsListPanel({ projectId }: { projectId: string | null }) {
               projects use.
             </p>
           )}
-        </Field>
+        </div>
 
         {overrideOn ? (
-          <Field className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1">
             <Label className="text-sm font-medium text-foreground">
               Show staleness indicator (mine)
             </Label>
@@ -370,27 +417,28 @@ export function ItemsListPanel({ projectId }: { projectId: string | null }) {
               When off, the freshness tint and detail-page age badge are hidden for me on every
               project — even if a project's own default is positive.
             </p>
-            <Field className="flex items-center gap-2 text-sm text-foreground">
+            <div className="flex items-center gap-2 text-sm text-foreground">
               <Switch
+                id={indicatorId}
                 checked={indicatorOn}
                 disabled={disabled}
-                onChange={onToggleStaleIndicator}
-                className={switchTrackClass}
-              >
-                <span aria-hidden className={switchThumbClass} />
-              </Switch>
-              <Label>{indicatorOn ? "Visible" : "Hidden"}</Label>
-            </Field>
-          </Field>
+                onCheckedChange={onToggleStaleIndicator}
+              />
+              <Label htmlFor={indicatorId}>{indicatorOn ? "Visible" : "Hidden"}</Label>
+            </div>
+          </div>
         ) : null}
 
         {overrideOn && indicatorOn ? (
-          <Field className="flex flex-col gap-1">
-            <Label className="text-sm font-medium text-foreground">My threshold (days)</Label>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor={thresholdId} className="text-sm font-medium text-foreground">
+              My threshold (days)
+            </Label>
             <p className="text-xs text-muted-foreground">
               Days an item can sit untouched before it tints amber. Range: 1 to 3650.
             </p>
             <NumberField
+              id={thresholdId}
               min={1}
               max={3650}
               step={1}
@@ -399,11 +447,15 @@ export function ItemsListPanel({ projectId }: { projectId: string | null }) {
               onCommit={onChangeStaleThreshold}
               className="max-w-[8rem]"
             />
-          </Field>
+          </div>
         ) : null}
       </section>
 
-      {update.error ? <p className="text-xs text-destructive">{update.error.message}</p> : null}
+      {update.error ? (
+        <Alert variant="destructive">
+          <AlertDescription>{update.error.message}</AlertDescription>
+        </Alert>
+      ) : null}
     </div>
   );
 }

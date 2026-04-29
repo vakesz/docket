@@ -1,16 +1,19 @@
 "use client";
 
-import { Field, Label, Switch } from "@headlessui/react";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
-import {
-  primaryButtonClass,
-  secondaryButtonClass,
-  switchThumbClass,
-  switchTrackClass,
-} from "@/lib/form-classes";
+import { useEffect, useId, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc-client";
-import { SelectField } from "@/ui/forms/select-field";
+import { Alert, AlertDescription, AlertTitle } from "@/ui/primitives/alert";
+import { Button } from "@/ui/primitives/button";
+import { Label } from "@/ui/primitives/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/ui/primitives/select";
+import { Switch } from "@/ui/primitives/switch";
 
 type GuardrailKind = "noop" | "pattern" | "llm-judge" | "composite";
 
@@ -64,6 +67,13 @@ export function GuardrailPanel({ projectId }: { projectId: string }) {
   const [blockOffTopic, setBlockOffTopic] = useState(true);
   const [scopeCheckEnabled, setScopeCheckEnabled] = useState(true);
   const [outputCheckEnabled, setOutputCheckEnabled] = useState(false);
+
+  const enabledId = useId();
+  const kindId = useId();
+  const injectionId = useId();
+  const offTopicId = useId();
+  const scopeId = useId();
+  const outputId = useId();
 
   // Seed once per project. Parallel mutateAsync calls below would
   // otherwise let an intermediate refetch (after one mutation lands but
@@ -142,12 +152,9 @@ export function GuardrailPanel({ projectId }: { projectId: string }) {
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-6">
       {!hasGuardrailProvider ? (
-        <aside
-          role="note"
-          className="rounded-2xl border border-warning/40 bg-warning/10 p-4 text-xs text-warning"
-        >
-          <p className="mb-1 font-medium">No guardrail model configured</p>
-          <p>
+        <Alert variant="warning">
+          <AlertTitle>No guardrail model configured</AlertTitle>
+          <AlertDescription>
             Chat guardrails need a dedicated LLM provider (role:{" "}
             <code className="rounded bg-card px-1 py-0.5 font-mono text-foreground">guardrail</code>
             ) before they can be enabled.{" "}
@@ -158,22 +165,20 @@ export function GuardrailPanel({ projectId }: { projectId: string }) {
               Add one in Deployment &rarr; LLM providers
             </Link>
             , then come back to flip this on.
-          </p>
-        </aside>
+          </AlertDescription>
+        </Alert>
       ) : null}
 
       <div className="flex flex-col gap-2">
-        <Field className="flex items-center gap-2 text-sm text-foreground">
+        <div className="flex items-center gap-2 text-sm text-foreground">
           <Switch
+            id={enabledId}
             checked={hasGuardrailProvider && enabled}
             disabled={!hasGuardrailProvider || save.isPending}
-            onChange={setEnabled}
-            className={switchTrackClass}
-          >
-            <span aria-hidden className={switchThumbClass} />
-          </Switch>
-          <Label>Enable chat guardrails</Label>
-        </Field>
+            onCheckedChange={setEnabled}
+          />
+          <Label htmlFor={enabledId}>Enable chat guardrails</Label>
+        </div>
         <p className="text-xs text-muted-foreground">
           When on, every user message, tool result, and final assistant reply runs through the
           guardrail layer. Calls go to the project&rsquo;s configured guardrail model
@@ -189,26 +194,29 @@ export function GuardrailPanel({ projectId }: { projectId: string }) {
       </div>
 
       <div className="flex flex-col gap-2 border-t border-border pt-6">
-        <label htmlFor="guardrail-kind" className="text-sm font-medium text-foreground">
+        <Label htmlFor={kindId} className="text-sm font-medium text-foreground">
           Strategy
-        </label>
+        </Label>
         <p className="text-xs text-muted-foreground">
           Composite is the default — pattern is fast and free, and the model only runs when the
           regex layer is uncertain.
         </p>
-        <SelectField
-          id="guardrail-kind"
+        <Select
           value={kind}
           disabled={knobsDisabled}
-          onChange={(e) => setKind(e.target.value as GuardrailKind)}
-          wrapperClassName="max-w-md"
+          onValueChange={(value) => setKind(value as GuardrailKind)}
         >
-          {KIND_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </SelectField>
+          <SelectTrigger id={kindId} className="max-w-md">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {KIND_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <p className="text-[11px] text-muted-foreground-faint">
           {KIND_OPTIONS.find((opt) => opt.value === kind)?.hint}
         </p>
@@ -217,41 +225,37 @@ export function GuardrailPanel({ projectId }: { projectId: string }) {
       <div className="flex flex-col gap-3 border-t border-border pt-6">
         <h3 className="text-sm font-medium text-foreground">Behavior</h3>
 
-        <Field className="flex items-start gap-2 text-sm text-foreground">
+        <div className="flex items-start gap-2 text-sm text-foreground">
           <Switch
+            id={injectionId}
             checked={blockOnInjection}
             disabled={knobsDisabled}
-            onChange={setBlockOnInjection}
-            className={switchTrackClass}
-          >
-            <span aria-hidden className={switchThumbClass} />
-          </Switch>
+            onCheckedChange={setBlockOnInjection}
+          />
           <div className="flex flex-col gap-0.5">
-            <Label>Block prompt-injection attempts</Label>
+            <Label htmlFor={injectionId}>Block prompt-injection attempts</Label>
             <p className="text-xs text-muted-foreground">
               Tool results flagged as injection are replaced with a refusal stub before re-entering
               the prompt. Off keeps the original payload and only annotates the row.
             </p>
           </div>
-        </Field>
+        </div>
 
-        <Field className="flex items-start gap-2 text-sm text-foreground">
+        <div className="flex items-start gap-2 text-sm text-foreground">
           <Switch
+            id={offTopicId}
             checked={blockOffTopic}
             disabled={knobsDisabled}
-            onChange={setBlockOffTopic}
-            className={switchTrackClass}
-          >
-            <span aria-hidden className={switchThumbClass} />
-          </Switch>
+            onCheckedChange={setBlockOffTopic}
+          />
           <div className="flex flex-col gap-0.5">
-            <Label>Block off-topic chat</Label>
+            <Label htmlFor={offTopicId}>Block off-topic chat</Label>
             <p className="text-xs text-muted-foreground">
               User messages classified as outside the software / work-item scope (cooking, shopping,
               medical advice) are refused before the agent sees them. Off downgrades to a banner.
             </p>
           </div>
-        </Field>
+        </div>
       </div>
 
       <div className="flex flex-col gap-3 border-t border-border pt-6">
@@ -261,56 +265,48 @@ export function GuardrailPanel({ projectId }: { projectId: string }) {
           strategy is <em>composite</em> or <em>llm-judge</em>; pattern-only and off ignore them.
         </p>
 
-        <Field className="flex items-start gap-2 text-sm text-foreground">
+        <div className="flex items-start gap-2 text-sm text-foreground">
           <Switch
+            id={scopeId}
             checked={scopeCheckEnabled}
             disabled={subKnobsDisabled}
-            onChange={setScopeCheckEnabled}
-            className={switchTrackClass}
-          >
-            <span aria-hidden className={switchThumbClass} />
-          </Switch>
+            onCheckedChange={setScopeCheckEnabled}
+          />
           <div className="flex flex-col gap-0.5">
-            <Label>Scope-check user input</Label>
+            <Label htmlFor={scopeId}>Scope-check user input</Label>
             <p className="text-xs text-muted-foreground">
               Classify each user message as on-topic / off-topic. Turn off if your projects extend
               beyond software work-items.
             </p>
           </div>
-        </Field>
+        </div>
 
-        <Field className="flex items-start gap-2 text-sm text-foreground">
+        <div className="flex items-start gap-2 text-sm text-foreground">
           <Switch
+            id={outputId}
             checked={outputCheckEnabled}
             disabled={subKnobsDisabled}
-            onChange={setOutputCheckEnabled}
-            className={switchTrackClass}
-          >
-            <span aria-hidden className={switchThumbClass} />
-          </Switch>
+            onCheckedChange={setOutputCheckEnabled}
+          />
           <div className="flex flex-col gap-0.5">
-            <Label>Output safety check</Label>
+            <Label htmlFor={outputId}>Output safety check</Label>
             <p className="text-xs text-muted-foreground">
               Run the assistant&rsquo;s final reply through a harmful-content classifier. Output is
               never blocked mid-stream — flagged messages get a banner. Costs one extra round-trip
               per turn.
             </p>
           </div>
-        </Field>
+        </div>
       </div>
 
       <div className="flex items-center gap-3 border-t border-border pt-6">
-        <button
-          type="submit"
-          disabled={save.isPending || !hasGuardrailProvider}
-          className={primaryButtonClass}
-        >
+        <Button type="submit" disabled={save.isPending || !hasGuardrailProvider}>
           {save.isPending ? "Saving…" : "Save guardrail settings"}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="secondary"
           disabled={save.isPending}
-          className={secondaryButtonClass}
           onClick={() => {
             setEnabled(true);
             setKind("composite");
@@ -321,7 +317,7 @@ export function GuardrailPanel({ projectId }: { projectId: string }) {
           }}
         >
           Reset to defaults
-        </button>
+        </Button>
         {save.error ? <span className="text-xs text-destructive">{save.error.message}</span> : null}
         {save.isSuccess ? <span className="text-xs text-muted-foreground">Saved.</span> : null}
       </div>

@@ -1,10 +1,9 @@
 "use client";
-import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from "@headlessui/react";
-import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { McpPane } from "@/ui/mcp/mcp-pane";
 import { MemoryPane } from "@/ui/memory/memory-pane";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/ui/primitives/sheet";
 import { AnalyticsPanel } from "@/ui/settings/analytics-panel";
 import { AutoAcceptPanel } from "@/ui/settings/auto-accept-panel";
 import { BudgetAuditPanel } from "@/ui/settings/budget-audit-panel";
@@ -109,31 +108,18 @@ export function SettingsShell({ publicBase, project, initialSection }: Props) {
         <SettingsSidebar active={active} onSelect={handleSelect} projectId={projectId} />
       </aside>
 
-      <Dialog
-        open={mobileNavOpen}
-        onClose={() => setMobileNavOpen(false)}
-        className="relative z-40 lg:hidden"
-      >
-        <DialogBackdrop className="fixed inset-0 bg-foreground/30 backdrop-blur-sm" />
-        <div className="fixed inset-0 flex">
-          <DialogPanel className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col overflow-auto border-r border-border bg-card px-3 py-4 shadow-xl">
-            <div className="mb-3 flex items-center justify-between px-3">
-              <DialogTitle className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                Settings
-              </DialogTitle>
-              <button
-                type="button"
-                onClick={() => setMobileNavOpen(false)}
-                aria-label="Close menu"
-                className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
+      <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+        <SheetContent side="left" className="px-0 py-0 lg:hidden">
+          <SheetHeader className="px-3 pt-3 pb-0">
+            <SheetTitle className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+              Settings
+            </SheetTitle>
+          </SheetHeader>
+          <div className="flex-1 overflow-auto px-3 pb-4">
             <SettingsSidebar active={active} onSelect={handleSelect} projectId={projectId} />
-          </DialogPanel>
-        </div>
-      </Dialog>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <section className="min-h-0 overflow-auto">
         <header className="border-b border-border bg-card/70 px-4 py-4 backdrop-blur sm:px-6">

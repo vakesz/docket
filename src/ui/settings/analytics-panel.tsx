@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc-client";
 import { cn } from "@/lib/utils";
-import { NumberField } from "@/ui/forms/number-field";
+import { Input } from "@/ui/primitives/input";
+import { Label } from "@/ui/primitives/label";
 
 type Bucket = {
   date: string;
@@ -37,6 +38,7 @@ export function AnalyticsPanel(
   props: { scope: "global" } | { scope: "project"; projectId: string },
 ) {
   const [days, setDays] = useState(14);
+  const customDaysId = useId();
 
   const projectQuery = trpc.analytics.projectDaily.useQuery(
     {
@@ -84,16 +86,22 @@ export function AnalyticsPanel(
           </button>
         ))}
         <div className="ml-auto flex items-center gap-2">
-          <label htmlFor="analytics-custom-days" className="text-xs text-muted-foreground">
+          <Label htmlFor={customDaysId} className="text-xs text-muted-foreground">
             Custom (days):
-          </label>
-          <NumberField
-            id="analytics-custom-days"
+          </Label>
+          <Input
+            id={customDaysId}
+            type="number"
+            inputMode="numeric"
             min={1}
             max={365}
             step={1}
             value={days}
-            onCommit={setDays}
+            onChange={(e) => {
+              const next = Number.parseInt(e.target.value, 10);
+              if (!Number.isFinite(next)) return;
+              setDays(Math.max(1, Math.min(365, next)));
+            }}
             className="w-20"
           />
         </div>

@@ -1,6 +1,7 @@
 "use client";
-import { accentBadgeClass, xsBorderButtonClass, xsDangerButtonClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
+import { Badge } from "@/ui/primitives/badge";
+import { Button } from "@/ui/primitives/button";
 
 export function LlmProviderActions({
   id,
@@ -23,32 +24,36 @@ export function LlmProviderActions({
   const pending = setDefault.isPending || setEnabled.isPending || del.isPending;
 
   return (
-    <div className="flex items-center gap-2 text-xs">
-      {!isDefault ? (
-        <button
+    <div className="flex items-center gap-2">
+      {isDefault ? (
+        <Badge variant="default">default</Badge>
+      ) : (
+        <Button
           type="button"
+          variant="outline"
+          size="xs"
           disabled={pending}
           onClick={() => setDefault.mutate({ id })}
-          className={xsBorderButtonClass}
         >
           Set default
-        </button>
-      ) : (
-        <span className={accentBadgeClass}>default</span>
+        </Button>
       )}
-      <button type="button" disabled={pending} onClick={onEdit} className={xsBorderButtonClass}>
+      <Button type="button" variant="outline" size="xs" disabled={pending} onClick={onEdit}>
         Edit
-      </button>
-      <button
+      </Button>
+      <Button
         type="button"
+        variant="outline"
+        size="xs"
         disabled={pending}
         onClick={() => setEnabled.mutate({ id, enabled: !enabled })}
-        className={xsBorderButtonClass}
       >
         {enabled ? "Disable" : "Enable"}
-      </button>
-      <button
+      </Button>
+      <Button
         type="button"
+        variant="destructive"
+        size="xs"
         disabled={pending}
         onClick={() => {
           if (
@@ -59,10 +64,9 @@ export function LlmProviderActions({
             del.mutate({ id });
           }
         }}
-        className={xsDangerButtonClass}
       >
         Delete
-      </button>
+      </Button>
     </div>
   );
 }

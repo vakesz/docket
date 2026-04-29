@@ -1,14 +1,10 @@
 "use client";
 
-import { Field, Label, Switch } from "@headlessui/react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  primaryButtonClass,
-  secondaryButtonClass,
-  switchThumbClass,
-  switchTrackClass,
-} from "@/lib/form-classes";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc-client";
+import { Button } from "@/ui/primitives/button";
+import { Label } from "@/ui/primitives/label";
+import { Switch } from "@/ui/primitives/switch";
 
 /**
  * Per-project auto-accept policy.
@@ -103,49 +99,57 @@ export function AutoAcceptPanel({ projectId }: { projectId: string }) {
       </p>
 
       <ul className="flex flex-col gap-4">
-        {KINDS.map((k) => {
-          const checked = selected.has(k.key);
-          return (
-            <li key={k.key} className="flex flex-col gap-1">
-              <Field className="flex items-center gap-2 text-sm text-foreground">
-                <Switch
-                  checked={checked}
-                  disabled={save.isPending}
-                  onChange={() => toggle(k.key)}
-                  className={switchTrackClass}
-                >
-                  <span aria-hidden className={switchThumbClass} />
-                </Switch>
-                <Label>{k.label}</Label>
-              </Field>
-              <p className="ml-6 text-xs text-muted-foreground">{k.hint}</p>
-            </li>
-          );
-        })}
+        {KINDS.map((k) => (
+          <AutoAcceptRow
+            key={k.key}
+            kind={k}
+            checked={selected.has(k.key)}
+            disabled={save.isPending}
+            onToggle={() => toggle(k.key)}
+          />
+        ))}
       </ul>
 
       <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={onSave}
-          disabled={save.isPending || !isDirty}
-          className={primaryButtonClass}
-        >
+        <Button type="button" onClick={onSave} disabled={save.isPending || !isDirty}>
           {save.isPending ? "Saving…" : "Save auto-accept policy"}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="secondary"
           disabled={save.isPending}
-          className={secondaryButtonClass}
           onClick={() => setSelected(new Set())}
         >
           Disable all
-        </button>
+        </Button>
         {save.error ? <span className="text-xs text-destructive">{save.error.message}</span> : null}
         {save.isSuccess && !isDirty ? (
           <span className="text-xs text-muted-foreground">Saved.</span>
         ) : null}
       </div>
     </div>
+  );
+}
+
+function AutoAcceptRow({
+  kind,
+  checked,
+  disabled,
+  onToggle,
+}: {
+  kind: AutoAcceptKind;
+  checked: boolean;
+  disabled: boolean;
+  onToggle: () => void;
+}) {
+  const id = useId();
+  return (
+    <li className="flex flex-col gap-1">
+      <div className="flex items-center gap-2 text-sm text-foreground">
+        <Switch id={id} checked={checked} disabled={disabled} onCheckedChange={onToggle} />
+        <Label htmlFor={id}>{kind.label}</Label>
+      </div>
+      <p className="ml-6 text-xs text-muted-foreground">{kind.hint}</p>
+    </li>
   );
 }

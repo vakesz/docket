@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { primaryButtonClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
+import { Alert, AlertDescription } from "@/ui/primitives/alert";
+import { Button } from "@/ui/primitives/button";
 
 type Props = {
   projectId: string;
@@ -58,9 +59,9 @@ export function ExportPanel({ projectId }: Props) {
         and not retained server-side.
       </p>
       <div className="flex items-center gap-3">
-        <button type="button" onClick={onExport} disabled={busy} className={primaryButtonClass}>
+        <Button type="button" onClick={onExport} disabled={busy}>
           {busy ? "Preparing…" : "Download JSON"}
-        </button>
+        </Button>
         {last ? (
           <span className="text-xs text-muted-foreground">
             Exported {last.counts.memory} memory · {last.counts.sources} sources ·{" "}
@@ -69,7 +70,11 @@ export function ExportPanel({ projectId }: Props) {
           </span>
         ) : null}
       </div>
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+      {error ? (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
     </div>
   );
 }

@@ -41,11 +41,9 @@ import { appendMessage, getConversation } from "@/server/conversations/storage";
 import type { db as Db } from "@/server/db";
 import { loadGuardrailSettings } from "@/server/guardrail/settings";
 import { logger } from "@/server/logger";
+import { loadUserSetting } from "@/server/settings/effective";
 
 type Database = typeof Db;
-
-/** Hard cap on tool-call rounds within a single user turn. */
-const MAX_TOOL_ROUNDS = 8;
 
 export type LoopEvent =
   | { kind: "text_delta"; delta: string }
@@ -120,7 +118,10 @@ export type RunTurnArgs = {
  */
 export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
   const { db, adapter, conversationId, userId, userMessage, readOnly, signal } = args;
-  const cap = args.maxToolRounds ?? MAX_TOOL_ROUNDS;
+  // Per-user cap from the settings catalog. The override path (tests, future
+  // admin tooling) wins so a misconfigured user setting can't lock the loop
+  // out of an explicit caller intent.
+  const cap = args.maxToolRounds ?? (await loadUserSetting(db, userId, "chat.max-tool-rounds"));
   const turnId = randomUUID();
   const turnStartedAt = Date.now();
 

@@ -84,6 +84,10 @@ const WebFetchAllowedHostsSchema = z.array(z.string().min(1).max(253)).max(200);
 // pulling a multi-GB payload into the agent context.
 const WebFetchMaxBytesSchema = z.number().int().min(64_000).max(8_000_000);
 const GuardrailKindSchema = z.enum(GUARDRAIL_KINDS);
+// Hard cap on agent tool-call rounds within one user turn. 3 is the floor
+// that still allows "read → think → answer"; 30 is well past where extra
+// rounds stop helping a stuck model and start risking SSE/proxy timeouts.
+const MaxToolRoundsSchema = z.number().int().min(3).max(30);
 
 // Hardcoded eligibility list for auto-accept. The kinds here are restricted
 // to those the user can low-risk emit through the UI as direct interactions:
@@ -119,6 +123,15 @@ export const SETTINGS_CATALOG = {
     label: "Send chat on Enter",
     description:
       "When on, Enter sends the message and Shift-Enter inserts a newline. When off, the keys swap.",
+  },
+  "chat.max-tool-rounds": {
+    key: "chat.max-tool-rounds",
+    scope: "user",
+    schema: MaxToolRoundsSchema,
+    default: 12,
+    label: "Max agent tool-call rounds per turn",
+    description:
+      "Hard cap on how many back-and-forth tool rounds the agent runs inside a single turn before aborting. Each round = one LLM response that includes tool calls. Lower values cut off runaway loops sooner; higher values let multi-step investigations finish. Range 3–30.",
   },
   "items.max-visible-tags": {
     key: "items.max-visible-tags",
@@ -313,9 +326,9 @@ export const SETTINGS_CATALOG = {
     scope: "user",
     schema: AutoRefreshSecondsSchema,
     default: 0,
-    label: "Auto-refresh interval (seconds)",
+    label: "Background sync interval (seconds)",
     description:
-      "How often the UI re-fetches list views (LLM providers, OAuth providers, and similar dashboards) in the background. 0 disables auto-refresh; manual refetches still work. Maximum 3600 (one hour). Surfaced to users as minutes in the settings UI.",
+      "While you have a project open, run an incremental sync against the provider every N seconds and refetch settings dashboards (LLM/OAuth providers) on the same cadence. The footer's 'synced X ago' tracks each sync. 0 disables — the manual sync button in the footer still works. A catch-up sync also fires on tab focus when the cached cursor is older than one interval. Maximum 3600 (one hour). Surfaced to users as minutes in the settings UI; ≥ 120 seconds recommended.",
   },
   "llm.cost-cap-action": {
     key: "llm.cost-cap-action",

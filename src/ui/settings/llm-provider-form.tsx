@@ -1,20 +1,31 @@
 "use client";
-import { Field, Input, Label, Switch } from "@headlessui/react";
-import { type FormEvent, useId, useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
 import { LLM_KIND_LABELS, LLM_KINDS, type LlmKind } from "@/agent/llm/types";
-import {
-  errorMessageClass,
-  fieldClass,
-  fieldMonoClass,
-  primaryButtonClass,
-  settingsPanelClass,
-  switchThumbClass,
-  switchTrackClass,
-  xsBorderButtonClass,
-} from "@/lib/form-classes";
 import { formatPriceCentsAsDollars, parsePriceDollarsToCents } from "@/lib/pricing";
 import { trpc } from "@/lib/trpc-client";
-import { SelectField } from "@/ui/forms/select-field";
+import { Alert, AlertDescription } from "@/ui/primitives/alert";
+import { Button } from "@/ui/primitives/button";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/ui/primitives/form";
+import { Input } from "@/ui/primitives/input";
+import { Label } from "@/ui/primitives/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/ui/primitives/select";
+import { Switch } from "@/ui/primitives/switch";
 
 type Kind = LlmKind;
 type Role = "chat" | "guardrail";
@@ -43,14 +54,27 @@ type Props =
     }
   | { mode: "edit"; initial: EditInitial; onClose: () => void };
 
+const formSchema = z.object({
+  kind: z.enum(LLM_KINDS),
+  role: z.enum(["chat", "guardrail"]),
+  label: z.string().trim().min(1, "Label is required"),
+  apiKey: z.string(),
+  model: z.string().trim(),
+  baseUrl: z.string().trim(),
+  inputPrice: z.string().trim(),
+  outputPrice: z.string().trim(),
+  isDefault: z.boolean(),
+});
+
+type FormValues = z.infer<typeof formSchema>;
+
 /**
  * Single LLM-provider form serving both the "add" panel and the inline
  * "edit" view in `llm-providers-panel.tsx`. The two only diverge on:
  *   - which mutation runs (create vs update),
  *   - whether the API key is required (create) or optional rotation (edit),
  *   - whether the "make default" checkbox is shown (create only),
- *   - the chrome around the form (create wraps in `settingsPanelClass`;
- *     edit renders bare so the panel row owns the border).
+ *   - the chrome around the form (create wraps in a card; edit renders bare).
  */
 export function LlmProviderForm(props: Props) {
   const utils = trpc.useUtils();
@@ -65,7 +89,7 @@ export function LlmProviderForm(props: Props) {
 
   const create = trpc.llmProviders.create.useMutation({
     onSuccess: async () => {
-      resetCreateFields();
+      form.reset(defaultValues);
       await utils.llmProviders.list.invalidate();
     },
   });
@@ -77,260 +101,313 @@ export function LlmProviderForm(props: Props) {
   });
   const mutation = isEdit ? update : create;
 
-  const kindId = useId();
-  const roleId = useId();
-  const [kind, setKind] = useState<Kind>(initialKind);
-  const [role, setRole] = useState<Role>(initialRole);
-  const [label, setLabel] = useState(isEdit ? props.initial.label : "");
-  const [apiKey, setApiKey] = useState("");
-  const [model, setModel] = useState(isEdit ? props.initial.model : "");
-  const [baseUrl, setBaseUrl] = useState(isEdit ? props.initial.baseUrl : "");
-  const [inputPrice, setInputPrice] = useState(
-    isEdit ? formatPriceCentsAsDollars(props.initial.inputPriceCentsPerMtok) : "",
-  );
-  const [outputPrice, setOutputPrice] = useState(
-    isEdit ? formatPriceCentsAsDollars(props.initial.outputPriceCentsPerMtok) : "",
-  );
   const canBeDefaultForCurrentRole =
-    !isEdit && props.mode === "create" ? props.defaultRoleAvailability[role] : false;
-  const [isDefault, setIsDefault] = useState(canBeDefaultForCurrentRole);
+    !isEdit && props.mode === "create" ? props.defaultRoleAvailability[initialRole] : false;
 
-  function resetCreateFields() {
-    setKind("openai");
-    setRole("chat");
-    setLabel("");
-    setApiKey("");
-    setModel("");
-    setBaseUrl("");
-    setInputPrice("");
-    setOutputPrice("");
-    setIsDefault(props.mode === "create" ? props.defaultRoleAvailability.chat : false);
-  }
+  const defaultValues: FormValues = {
+    kind: initialKind,
+    role: initialRole,
+    label: isEdit ? props.initial.label : "",
+    apiKey: "",
+    model: isEdit ? props.initial.model : "",
+    baseUrl: isEdit ? props.initial.baseUrl : "",
+    inputPrice: isEdit ? formatPriceCentsAsDollars(props.initial.inputPriceCentsPerMtok) : "",
+    outputPrice: isEdit ? formatPriceCentsAsDollars(props.initial.outputPriceCentsPerMtok) : "",
+    isDefault: canBeDefaultForCurrentRole,
+  };
 
-  function onSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues,
+  });
+
+  const role = form.watch("role");
+
+  function onSubmit(values: FormValues) {
+    if (!isEdit && values.apiKey.trim() === "") {
+      form.setError("apiKey", { message: "API key is required" });
+      return;
+    }
     const common = {
-      kind,
-      label: label.trim(),
-      apiKey: apiKey.trim(),
-      model: model.trim(),
-      baseUrl: baseUrl.trim(),
-      inputPriceCentsPerMtok: parsePriceDollarsToCents(inputPrice),
-      outputPriceCentsPerMtok: parsePriceDollarsToCents(outputPrice),
+      kind: values.kind,
+      label: values.label.trim(),
+      apiKey: values.apiKey.trim(),
+      model: values.model.trim(),
+      baseUrl: values.baseUrl.trim(),
+      inputPriceCentsPerMtok: parsePriceDollarsToCents(values.inputPrice),
+      outputPriceCentsPerMtok: parsePriceDollarsToCents(values.outputPrice),
     };
     if (props.mode === "edit") {
       update.mutate({ id: props.initial.id, ...common });
     } else {
-      create.mutate({ ...common, role, isDefault });
+      create.mutate({ ...common, role: values.role, isDefault: values.isDefault });
     }
   }
 
   const formClass = isEdit
     ? "flex flex-col gap-3 text-sm"
-    : `${settingsPanelClass} flex flex-col gap-4 text-sm`;
+    : "flex flex-col gap-4 rounded-2xl border border-border bg-card p-6 text-sm shadow-sm";
 
   return (
-    <form onSubmit={onSubmit} className={formClass}>
-      {!isEdit ? <h2 className="text-base font-medium text-foreground">Add LLM provider</h2> : null}
-
-      <div className="flex gap-3">
-        <div className="flex w-40 flex-col gap-1">
-          <label htmlFor={kindId} className="text-xs text-muted-foreground">
-            Kind
-          </label>
-          <SelectField id={kindId} value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
-            {LLM_KINDS.map((k) => (
-              <option key={k} value={k}>
-                {LLM_KIND_LABELS[k]}
-              </option>
-            ))}
-          </SelectField>
-        </div>
-        <div className="flex w-40 flex-col gap-1">
-          <label htmlFor={roleId} className="text-xs text-muted-foreground">
-            Role
-          </label>
-          <SelectField
-            id={roleId}
-            value={role}
-            disabled={isEdit}
-            onChange={(e) => {
-              const next = e.target.value as Role;
-              setRole(next);
-              if (props.mode === "create") {
-                setIsDefault(props.defaultRoleAvailability[next]);
-              }
-            }}
-          >
-            <option value="chat">Chat</option>
-            <option value="guardrail">Guardrail</option>
-          </SelectField>
-        </div>
-        <Field className="flex flex-1 flex-col gap-1">
-          <Label className="text-xs text-muted-foreground">Label</Label>
-          <Input
-            required
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            placeholder={role === "guardrail" ? "OpenAI guardrail" : "OpenAI prod"}
-            className={fieldClass}
-          />
-        </Field>
-      </div>
-      {!isEdit ? (
-        <p className="-mt-2 text-xs text-muted-foreground">
-          {role === "chat"
-            ? "Chat rows feed the agent loop. The conversation LLM picker only sees chat rows."
-            : "Guardrail rows feed the prompt-injection / topic-scope / output-safety classifier. They run alongside chat — never as the chat model. A small / cheap model is recommended (e.g. gpt-5-nano)."}
-        </p>
-      ) : null}
-
-      <Field className="flex flex-col gap-1">
-        <Label className="text-xs text-muted-foreground">
-          {isEdit ? "API key (leave blank to keep current)" : "API key"}
-        </Label>
-        <Input
-          required={!isEdit}
-          type="password"
-          autoComplete="off"
-          value={apiKey}
-          onChange={(e) => setApiKey(e.target.value)}
-          placeholder="sk-..."
-          className={fieldMonoClass}
-        />
-        <p className="text-xs text-muted-foreground">
-          {isEdit ? (
-            "Stored encrypted at rest. Only fill this in to rotate the key."
-          ) : (
-            <>
-              Stored encrypted at rest. Format depends on the vendor (OpenAI starts with{" "}
-              <code className="rounded bg-muted px-1 py-0.5 font-mono">sk-</code>, Anthropic with{" "}
-              <code className="rounded bg-muted px-1 py-0.5 font-mono">sk-ant-</code>).
-            </>
-          )}
-        </p>
-      </Field>
-
-      <div className="flex gap-3">
-        <Field className="flex flex-1 flex-col gap-1">
-          <Label className="text-xs text-muted-foreground">
-            {isEdit ? "Model" : "Model (optional)"}
-          </Label>
-          <Input
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            placeholder="gpt-5"
-            className={fieldClass}
-          />
-          <p className="text-xs text-muted-foreground">
-            {isEdit ? (
-              "Optional override. Empty lets the adapter pick its default."
-            ) : (
-              <>
-                Optional override (e.g.{" "}
-                <code className="rounded bg-muted px-1 py-0.5 font-mono">gpt-5</code>,{" "}
-                <code className="rounded bg-muted px-1 py-0.5 font-mono">claude-sonnet-4-6</code>
-                ). Empty lets the adapter pick its default.
-              </>
-            )}
-          </p>
-        </Field>
-        <Field className="flex flex-1 flex-col gap-1">
-          <Label className="text-xs text-muted-foreground">
-            {isEdit ? "Base URL" : "Base URL (optional)"}
-          </Label>
-          <Input
-            value={baseUrl}
-            onChange={(e) => setBaseUrl(e.target.value)}
-            placeholder="https://api.openai.com/v1"
-            className={fieldClass}
-          />
-          <p className="text-xs text-muted-foreground">
-            Only set for non-vanilla endpoints — Azure OpenAI, an internal proxy, or a self-hosted
-            Ollama. Blank uses the vendor's public endpoint.
-          </p>
-        </Field>
-      </div>
-
-      <div className="flex gap-3">
-        <Field className="flex flex-1 flex-col gap-1">
-          <Label className="text-xs text-muted-foreground">Input price ($ / Mtok)</Label>
-          <Input
-            type="text"
-            inputMode="decimal"
-            value={inputPrice}
-            onChange={(e) => setInputPrice(e.target.value)}
-            placeholder="2.00"
-            className={fieldClass}
-          />
-        </Field>
-        <Field className="flex flex-1 flex-col gap-1">
-          <Label className="text-xs text-muted-foreground">Output price ($ / Mtok)</Label>
-          <Input
-            type="text"
-            inputMode="decimal"
-            value={outputPrice}
-            onChange={(e) => setOutputPrice(e.target.value)}
-            placeholder="8.00"
-            className={fieldClass}
-          />
-        </Field>
-      </div>
-      <p className="-mt-2 text-xs text-muted-foreground">
-        USD per million tokens — paste the vendor's published rate as-is
-        {isEdit
-          ? ". Leave blank if unknown — turns will then be logged with no cost and budget tracking will undercount."
-          : " (e.g. OpenAI gpt-4.1 is "}
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className={formClass}>
         {!isEdit ? (
-          <>
-            <code className="font-mono">2.00</code> in / <code className="font-mono">8.00</code>{" "}
-            out). Leave blank if unknown — turns will then be logged with no cost and budget
-            tracking will undercount.
-          </>
+          <h2 className="text-base font-medium text-foreground">Add LLM provider</h2>
         ) : null}
-      </p>
 
-      {!isEdit ? (
-        <div className="flex flex-col gap-1">
-          <Field className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-            <Switch checked={isDefault} onChange={setIsDefault} className={switchTrackClass}>
-              <span aria-hidden className={switchThumbClass} />
-            </Switch>
-            <Label>Make this the {role === "guardrail" ? "guardrail" : "chat"} default</Label>
-          </Field>
-          <p className="text-xs text-muted-foreground">
-            {role === "guardrail"
-              ? "Becomes the fallback used by any project that hasn't pinned its own guardrail row. The pattern guardrail still runs first regardless."
-              : "Becomes the fallback used by any project that hasn't picked its own chat LLM. Per-conversation overrides still win."}
+        <div className="flex gap-3">
+          <FormField
+            control={form.control}
+            name="kind"
+            render={({ field }) => (
+              <FormItem className="w-40">
+                <FormLabel>Kind</FormLabel>
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <FormControl>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {LLM_KINDS.map((k) => (
+                      <SelectItem key={k} value={k}>
+                        {LLM_KIND_LABELS[k]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="role"
+            render={({ field }) => (
+              <FormItem className="w-40">
+                <FormLabel>Role</FormLabel>
+                <Select
+                  value={field.value}
+                  disabled={isEdit}
+                  onValueChange={(next) => {
+                    const nextRole = next as Role;
+                    field.onChange(nextRole);
+                    if (props.mode === "create") {
+                      form.setValue("isDefault", props.defaultRoleAvailability[nextRole]);
+                    }
+                  }}
+                >
+                  <FormControl>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="chat">Chat</SelectItem>
+                    <SelectItem value="guardrail">Guardrail</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="label"
+            render={({ field }) => (
+              <FormItem className="flex-1">
+                <FormLabel>Label</FormLabel>
+                <FormControl>
+                  <Input
+                    {...field}
+                    placeholder={role === "guardrail" ? "OpenAI guardrail" : "OpenAI prod"}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        {!isEdit ? (
+          <p className="-mt-2 text-xs text-muted-foreground">
+            {role === "chat"
+              ? "Chat rows feed the agent loop. The conversation LLM picker only sees chat rows."
+              : "Guardrail rows feed the prompt-injection / topic-scope / output-safety classifier. They run alongside chat — never as the chat model. A small / cheap model is recommended (e.g. gpt-5-nano)."}
           </p>
-        </div>
-      ) : null}
+        ) : null}
 
-      {mutation.error ? <p className={errorMessageClass}>{mutation.error.message}</p> : null}
+        <FormField
+          control={form.control}
+          name="apiKey"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>{isEdit ? "API key (leave blank to keep current)" : "API key"}</FormLabel>
+              <FormControl>
+                <Input
+                  {...field}
+                  type="password"
+                  autoComplete="off"
+                  placeholder="sk-..."
+                  className="font-mono"
+                />
+              </FormControl>
+              <FormDescription className="text-xs">
+                {isEdit ? (
+                  "Stored encrypted at rest. Only fill this in to rotate the key."
+                ) : (
+                  <>
+                    Stored encrypted at rest. Format depends on the vendor (OpenAI starts with{" "}
+                    <code className="rounded bg-muted px-1 py-0.5 font-mono">sk-</code>, Anthropic
+                    with <code className="rounded bg-muted px-1 py-0.5 font-mono">sk-ant-</code>).
+                  </>
+                )}
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-      {isEdit ? (
-        <div className="flex items-center gap-2">
-          <button type="submit" disabled={mutation.isPending} className={primaryButtonClass}>
-            {mutation.isPending ? "Saving…" : "Save"}
-          </button>
-          <button
-            type="button"
-            onClick={props.onClose}
-            disabled={mutation.isPending}
-            className={xsBorderButtonClass}
-          >
-            Cancel
-          </button>
+        <div className="flex gap-3">
+          <FormField
+            control={form.control}
+            name="model"
+            render={({ field }) => (
+              <FormItem className="flex-1">
+                <FormLabel>{isEdit ? "Model" : "Model (optional)"}</FormLabel>
+                <FormControl>
+                  <Input {...field} placeholder="gpt-5" />
+                </FormControl>
+                <FormDescription className="text-xs">
+                  {isEdit ? (
+                    "Optional override. Empty lets the adapter pick its default."
+                  ) : (
+                    <>
+                      Optional override (e.g.{" "}
+                      <code className="rounded bg-muted px-1 py-0.5 font-mono">gpt-5</code>,{" "}
+                      <code className="rounded bg-muted px-1 py-0.5 font-mono">
+                        claude-sonnet-4-6
+                      </code>
+                      ). Empty lets the adapter pick its default.
+                    </>
+                  )}
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="baseUrl"
+            render={({ field }) => (
+              <FormItem className="flex-1">
+                <FormLabel>{isEdit ? "Base URL" : "Base URL (optional)"}</FormLabel>
+                <FormControl>
+                  <Input {...field} placeholder="https://api.openai.com/v1" />
+                </FormControl>
+                <FormDescription className="text-xs">
+                  Only set for non-vanilla endpoints — Azure OpenAI, an internal proxy, or a
+                  self-hosted Ollama. Blank uses the vendor's public endpoint.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
         </div>
-      ) : (
-        <button
-          type="submit"
-          disabled={mutation.isPending}
-          className={`${primaryButtonClass} self-start`}
-        >
-          {mutation.isPending ? "Creating…" : "Create"}
-        </button>
-      )}
-    </form>
+
+        <div className="flex gap-3">
+          <FormField
+            control={form.control}
+            name="inputPrice"
+            render={({ field }) => (
+              <FormItem className="flex-1">
+                <FormLabel>Input price ($ / Mtok)</FormLabel>
+                <FormControl>
+                  <Input {...field} type="text" inputMode="decimal" placeholder="2.00" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="outputPrice"
+            render={({ field }) => (
+              <FormItem className="flex-1">
+                <FormLabel>Output price ($ / Mtok)</FormLabel>
+                <FormControl>
+                  <Input {...field} type="text" inputMode="decimal" placeholder="8.00" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+        <p className="-mt-2 text-xs text-muted-foreground">
+          USD per million tokens — paste the vendor's published rate as-is
+          {isEdit
+            ? ". Leave blank if unknown — turns will then be logged with no cost and budget tracking will undercount."
+            : " (e.g. OpenAI gpt-4.1 is "}
+          {!isEdit ? (
+            <>
+              <code className="font-mono">2.00</code> in / <code className="font-mono">8.00</code>{" "}
+              out). Leave blank if unknown — turns will then be logged with no cost and budget
+              tracking will undercount.
+            </>
+          ) : null}
+        </p>
+
+        {!isEdit ? (
+          <FormField
+            control={form.control}
+            name="isDefault"
+            render={({ field }) => (
+              <FormItem className="flex flex-col gap-1">
+                <div className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                  <FormControl>
+                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                  </FormControl>
+                  <Label>Make this the {role === "guardrail" ? "guardrail" : "chat"} default</Label>
+                </div>
+                <FormDescription className="text-xs">
+                  {role === "guardrail"
+                    ? "Becomes the fallback used by any project that hasn't pinned its own guardrail row. The pattern guardrail still runs first regardless."
+                    : "Becomes the fallback used by any project that hasn't picked its own chat LLM. Per-conversation overrides still win."}
+                </FormDescription>
+              </FormItem>
+            )}
+          />
+        ) : null}
+
+        {mutation.error ? (
+          <Alert variant="destructive">
+            <AlertDescription>{mutation.error.message}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {isEdit ? (
+          <div className="flex items-center gap-2">
+            <Button type="submit" disabled={mutation.isPending}>
+              {mutation.isPending ? "Saving…" : "Save"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={props.onClose}
+              disabled={mutation.isPending}
+            >
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <Button type="submit" disabled={mutation.isPending} className="self-start">
+            {mutation.isPending ? "Creating…" : "Create"}
+          </Button>
+        )}
+      </form>
+    </Form>
   );
 }

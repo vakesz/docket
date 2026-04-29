@@ -194,7 +194,7 @@ export const SECTIONS: SectionMeta[] = [
   {
     key: "chat",
     label: "Chat",
-    description: "Tool-call rendering and the send-on-Enter key in the chat pane.",
+    description: "Tool-call rendering, send-on-Enter, and the agent's per-turn tool-call budget.",
     icon: MessageSquare,
     group: "you",
   },

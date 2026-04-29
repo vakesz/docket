@@ -1,11 +1,12 @@
 "use client";
 
-import { Field, Label, Switch } from "@headlessui/react";
-import { useState } from "react";
-import { switchThumbClass, switchTrackClass } from "@/lib/form-classes";
+import { useId, useState } from "react";
 import { DEFAULT_STALE_THRESHOLD_DAYS } from "@/lib/staleness";
 import { trpc } from "@/lib/trpc-client";
 import { NumberField } from "@/ui/forms/number-field";
+import { Alert, AlertDescription } from "@/ui/primitives/alert";
+import { Label } from "@/ui/primitives/label";
+import { Switch } from "@/ui/primitives/switch";
 
 const STALE_KEY = "items.stale-after-days";
 
@@ -30,6 +31,8 @@ export function ProjectItemsPanel({ projectId }: { projectId: string }) {
     value > 0 ? value : DEFAULT_STALE_THRESHOLD_DAYS,
   );
   const disabled = list.isPending || update.isPending;
+  const indicatorId = useId();
+  const thresholdId = useId();
 
   const onToggleIndicator = (next: boolean) => {
     update.mutate({
@@ -60,32 +63,33 @@ export function ProjectItemsPanel({ projectId }: { projectId: string }) {
           </p>
         </header>
 
-        <Field className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1">
           <Label className="text-sm font-medium text-foreground">Show staleness indicator</Label>
           <p className="text-xs text-muted-foreground">
             When off, the freshness tint and detail-page age badge are hidden for everyone viewing
             this project (members with their own override still see their value).
           </p>
-          <Field className="flex items-center gap-2 text-sm text-foreground">
+          <div className="flex items-center gap-2 text-sm text-foreground">
             <Switch
+              id={indicatorId}
               checked={indicatorOn}
               disabled={disabled}
-              onChange={onToggleIndicator}
-              className={switchTrackClass}
-            >
-              <span aria-hidden className={switchThumbClass} />
-            </Switch>
-            <Label>{indicatorOn ? "Visible" : "Hidden"}</Label>
-          </Field>
-        </Field>
+              onCheckedChange={onToggleIndicator}
+            />
+            <Label htmlFor={indicatorId}>{indicatorOn ? "Visible" : "Hidden"}</Label>
+          </div>
+        </div>
 
         {indicatorOn ? (
-          <Field className="flex flex-col gap-1">
-            <Label className="text-sm font-medium text-foreground">Threshold (days)</Label>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor={thresholdId} className="text-sm font-medium text-foreground">
+              Threshold (days)
+            </Label>
             <p className="text-xs text-muted-foreground">
               Days an item can sit untouched before it tints amber. Range: 1 to 3650.
             </p>
             <NumberField
+              id={thresholdId}
               min={1}
               max={3650}
               step={1}
@@ -94,11 +98,15 @@ export function ProjectItemsPanel({ projectId }: { projectId: string }) {
               onCommit={onChangeThreshold}
               className="max-w-[8rem]"
             />
-          </Field>
+          </div>
         ) : null}
       </section>
 
-      {update.error ? <p className="text-xs text-destructive">{update.error.message}</p> : null}
+      {update.error ? (
+        <Alert variant="destructive">
+          <AlertDescription>{update.error.message}</AlertDescription>
+        </Alert>
+      ) : null}
     </div>
   );
 }

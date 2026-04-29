@@ -1,9 +1,10 @@
 "use client";
 import { useState } from "react";
-import { badgeClass, emptyStateClass } from "@/lib/form-classes";
 import { nextAuthCallbackPath } from "@/lib/next-auth-provider-id";
 import { trpc } from "@/lib/trpc-client";
 import { useAutoRefreshIntervalMs } from "@/lib/use-auto-refresh";
+import { Badge } from "@/ui/primitives/badge";
+import { Separator } from "@/ui/primitives/separator";
 import { OauthProviderActions } from "@/ui/settings/oauth-provider-actions";
 import { OauthProviderForm } from "@/ui/settings/oauth-provider-form";
 
@@ -29,7 +30,7 @@ export function OauthProvidersPanel({ publicBase }: { publicBase: string }) {
       <section className="flex flex-col gap-3">
         <h2 className="text-base font-medium text-foreground">Configured providers</h2>
         {list.data.length === 0 ? (
-          <p className={emptyStateClass}>
+          <p className="rounded-2xl border border-dashed border-border bg-card p-6 text-center text-sm text-muted-foreground">
             No OAuth providers yet. Until at least one row exists, no one can sign in.
           </p>
         ) : (
@@ -60,7 +61,7 @@ export function OauthProvidersPanel({ publicBase }: { publicBase: string }) {
                         <span className="text-xs uppercase tracking-wide text-muted-foreground">
                           {row.kind.replace("_", " ")}
                         </span>
-                        {!row.enabled ? <span className={badgeClass}>disabled</span> : null}
+                        {!row.enabled ? <Badge variant="outline">disabled</Badge> : null}
                       </div>
                       <p className="font-mono text-xs text-muted-foreground">{row.clientId}</p>
                       <p className="text-xs text-muted-foreground">
@@ -83,7 +84,7 @@ export function OauthProvidersPanel({ publicBase }: { publicBase: string }) {
         )}
       </section>
 
-      <div aria-hidden="true" className="my-4 h-px bg-border" />
+      <Separator />
 
       <OauthProviderForm />
     </div>

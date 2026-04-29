@@ -1,16 +1,18 @@
 "use client";
 
-import { Input } from "@headlessui/react";
-import { useState } from "react";
-import {
-  fieldClass,
-  primaryButtonClass,
-  settingsRowClass,
-  xsBorderButtonClass,
-  xsDangerButtonClass,
-} from "@/lib/form-classes";
+import { useId, useState } from "react";
 import { trpc } from "@/lib/trpc-client";
-import { SelectField } from "@/ui/forms/select-field";
+import { Alert, AlertDescription } from "@/ui/primitives/alert";
+import { Badge } from "@/ui/primitives/badge";
+import { Button } from "@/ui/primitives/button";
+import { Input } from "@/ui/primitives/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/ui/primitives/select";
 
 type Props = {
   projectId: string;
@@ -44,6 +46,8 @@ export function MembersPanel({ projectId }: Props) {
 
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("member");
+  const emailId = useId();
+  const roleId = useId();
 
   const callerIsOwner = list.data?.callerIsOwner ?? false;
   const canManage = callerIsOwner;
@@ -65,50 +69,59 @@ export function MembersPanel({ projectId }: Props) {
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <Input
+            id={emailId}
             type="email"
             placeholder="someone@example.com"
             value={email}
             disabled={!canManage || add.isPending}
             onChange={(e) => setEmail(e.target.value)}
             aria-label="Member email address"
-            className={`${fieldClass} max-w-[20rem]`}
+            className="max-w-[20rem]"
           />
-          <SelectField
+          <Select
             value={role}
             disabled={!canManage || add.isPending}
-            onChange={(e) => setRole(e.target.value as Role)}
-            aria-label="Member role"
-            wrapperClassName="max-w-[10rem]"
+            onValueChange={(value) => setRole(value as Role)}
           >
-            {ROLES.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </SelectField>
-          <button
+            <SelectTrigger id={roleId} aria-label="Member role" className="max-w-[10rem]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {ROLES.map((r) => (
+                <SelectItem key={r} value={r}>
+                  {r}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
             type="button"
             onClick={onAdd}
             disabled={!canManage || add.isPending || !email.trim()}
-            className={primaryButtonClass}
           >
             {add.isPending ? "Adding…" : "Add"}
-          </button>
+          </Button>
         </div>
         {!canManage ? (
           <p className="text-xs text-muted-foreground-faint">
             Only the project owner can change membership.
           </p>
         ) : null}
-        {add.error ? <p className="text-xs text-destructive">{add.error.message}</p> : null}
+        {add.error ? (
+          <Alert variant="destructive">
+            <AlertDescription>{add.error.message}</AlertDescription>
+          </Alert>
+        ) : null}
       </section>
 
-      <section className={settingsRowClass}>
+      <section className="flex flex-col gap-2 border-t border-border first:border-t-0 first:pt-0 pt-4">
         <h3 className="text-sm font-medium text-foreground">Members</h3>
         {list.isPending ? (
           <p className="text-xs text-muted-foreground-faint">Loading…</p>
         ) : list.error ? (
-          <p className="text-xs text-destructive">{list.error.message}</p>
+          <Alert variant="destructive">
+            <AlertDescription>{list.error.message}</AlertDescription>
+          </Alert>
         ) : list.data ? (
           <ul className="flex flex-col divide-y divide-border rounded-2xl border border-border bg-card">
             <MemberRow
@@ -132,40 +145,48 @@ export function MembersPanel({ projectId }: Props) {
                   controls={
                     canManage ? (
                       <div className="flex items-center gap-2">
-                        <SelectField
+                        <Select
                           value={m.role}
                           disabled={updateRole.isPending}
-                          onChange={(e) =>
+                          onValueChange={(value) =>
                             updateRole.mutate({
                               projectId,
                               membershipId: m.membershipId,
-                              role: e.target.value as Role,
+                              role: value as Role,
                             })
                           }
-                          aria-label={`Role for ${m.email ?? m.name ?? "member"}`}
-                          wrapperClassName="max-w-[8rem]"
-                          className="h-8 py-1 text-xs"
                         >
-                          {ROLES.map((r) => (
-                            <option key={r} value={r}>
-                              {r}
-                            </option>
-                          ))}
-                        </SelectField>
-                        <button
+                          <SelectTrigger
+                            aria-label={`Role for ${m.email ?? m.name ?? "member"}`}
+                            className="h-7 max-w-[8rem] text-xs"
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ROLES.map((r) => (
+                              <SelectItem key={r} value={r}>
+                                {r}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
                           type="button"
+                          variant="destructive"
+                          size="xs"
                           onClick={() => {
                             if (!confirm(`Remove ${m.email ?? m.name ?? "this member"}?`)) return;
                             remove.mutate({ projectId, membershipId: m.membershipId });
                           }}
                           disabled={remove.isPending}
-                          className={xsDangerButtonClass}
                         >
                           Remove
-                        </button>
+                        </Button>
                       </div>
                     ) : (
-                      <span className={xsBorderButtonClass}>{m.role}</span>
+                      <Badge variant="outline" className="uppercase tracking-wide">
+                        {m.role}
+                      </Badge>
                     )
                   }
                 />
@@ -174,9 +195,15 @@ export function MembersPanel({ projectId }: Props) {
           </ul>
         ) : null}
         {updateRole.error ? (
-          <p className="text-xs text-destructive">{updateRole.error.message}</p>
+          <Alert variant="destructive">
+            <AlertDescription>{updateRole.error.message}</AlertDescription>
+          </Alert>
         ) : null}
-        {remove.error ? <p className="text-xs text-destructive">{remove.error.message}</p> : null}
+        {remove.error ? (
+          <Alert variant="destructive">
+            <AlertDescription>{remove.error.message}</AlertDescription>
+          </Alert>
+        ) : null}
       </section>
     </div>
   );
@@ -208,9 +235,9 @@ function MemberRow({
       </div>
       <div className="flex items-center gap-3">
         {controls ?? (
-          <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+          <Badge variant="outline" className="uppercase tracking-wide">
             {roleBadge}
-          </span>
+          </Badge>
         )}
       </div>
     </li>

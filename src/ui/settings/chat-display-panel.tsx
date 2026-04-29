@@ -1,9 +1,17 @@
 "use client";
 
-import { Description, Field, Label, Radio, RadioGroup, Switch } from "@headlessui/react";
-import { switchThumbClass, switchTrackClass } from "@/lib/form-classes";
+import { useEffect, useId, useState } from "react";
 import { trpc } from "@/lib/trpc-client";
 import { type ToolDisplayMode, useToolDisplayMode } from "@/lib/ui-prefs";
+import { Alert, AlertDescription } from "@/ui/primitives/alert";
+import { Input } from "@/ui/primitives/input";
+import { Label } from "@/ui/primitives/label";
+import { RadioGroup, RadioGroupItem } from "@/ui/primitives/radio-group";
+import { Switch } from "@/ui/primitives/switch";
+
+const MAX_TOOL_ROUNDS_MIN = 3;
+const MAX_TOOL_ROUNDS_MAX = 30;
+const MAX_TOOL_ROUNDS_DEFAULT = 12;
 
 const OPTIONS: { value: ToolDisplayMode; label: string; helper: string }[] = [
   {
@@ -41,61 +49,119 @@ export function ChatDisplayPanel() {
   });
 
   const sendOnEnter = list.data?.find((r) => r.key === "chat.send-on-enter")?.value ?? true;
+  const storedMaxRounds = list.data?.find((r) => r.key === "chat.max-tool-rounds")?.value;
   const disabled = list.isPending || update.isPending;
+  const sendOnEnterId = useId();
+  const maxRoundsId = useId();
+
+  const [maxRounds, setMaxRounds] = useState<string>(String(MAX_TOOL_ROUNDS_DEFAULT));
+  useEffect(() => {
+    if (typeof storedMaxRounds === "number") {
+      setMaxRounds(String(storedMaxRounds));
+    }
+  }, [storedMaxRounds]);
+
+  const commitMaxRounds = () => {
+    const n = Number.parseInt(maxRounds, 10);
+    if (!Number.isFinite(n) || n < MAX_TOOL_ROUNDS_MIN || n > MAX_TOOL_ROUNDS_MAX) {
+      // Snap back to the last valid stored value so the field never holds garbage.
+      setMaxRounds(String(storedMaxRounds ?? MAX_TOOL_ROUNDS_DEFAULT));
+      return;
+    }
+    if (n === storedMaxRounds) return;
+    update.mutate({ key: "chat.max-tool-rounds" as never, value: n });
+  };
 
   return (
     <div className="flex flex-col gap-6">
-      <RadioGroup
-        value={mode}
-        onChange={setMode}
-        aria-label="Tool calls in chat"
-        className="flex flex-col gap-3"
-      >
+      <div className="flex flex-col gap-3">
         <Label className="text-sm font-medium text-foreground">Tool calls in chat</Label>
         <p className="text-xs text-muted-foreground">
           Controls how the agent's tool invocations appear inside the chat transcript. Stored on
           this device only.
         </p>
-        <div className="flex flex-col gap-2">
+        <RadioGroup
+          value={mode}
+          onValueChange={(value) => setMode(value as ToolDisplayMode)}
+          aria-label="Tool calls in chat"
+          className="flex flex-col gap-2"
+        >
           {OPTIONS.map((opt) => (
-            <Field
-              key={opt.value}
-              className="flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground hover:bg-muted"
-            >
-              <Radio
-                value={opt.value}
-                className="group mt-1 grid size-4 shrink-0 place-items-center rounded-full border border-border bg-card data-[checked]:border-primary data-[checked]:bg-primary"
-              >
-                <span className="size-1.5 rounded-full bg-card opacity-0 group-data-[checked]:opacity-100" />
-              </Radio>
-              <span className="flex flex-col">
-                <Label className="font-medium text-foreground">{opt.label}</Label>
-                <Description className="text-xs text-muted-foreground">{opt.helper}</Description>
-              </span>
-            </Field>
+            <ToolDisplayOption key={opt.value} option={opt} />
           ))}
-        </div>
-      </RadioGroup>
+        </RadioGroup>
+      </div>
 
-      <Field className="flex flex-col gap-1 border-t border-border pt-6">
-        <Label className="text-sm font-medium text-foreground">Send on Enter</Label>
+      <div className="flex flex-col gap-1 border-t border-border pt-6">
+        <Label htmlFor={sendOnEnterId} className="text-sm font-medium text-foreground">
+          Send on Enter
+        </Label>
         <p className="text-xs text-muted-foreground">
           When on, Enter sends a message and Shift+Enter inserts a newline. When off, Enter inserts
           a newline and Cmd/Ctrl+Enter sends.
         </p>
-        <Field className="flex items-center gap-2 text-sm text-foreground">
+        <div className="flex items-center gap-2 text-sm text-foreground">
           <Switch
+            id={sendOnEnterId}
             checked={sendOnEnter === true}
             disabled={disabled}
-            onChange={(next) => update.mutate({ key: "chat.send-on-enter" as never, value: next })}
-            className={switchTrackClass}
-          >
-            <span aria-hidden className={switchThumbClass} />
-          </Switch>
-          <Label>{sendOnEnter === true ? "Enabled" : "Disabled"}</Label>
-        </Field>
-        {update.error ? <p className="text-xs text-destructive">{update.error.message}</p> : null}
-      </Field>
+            onCheckedChange={(next) =>
+              update.mutate({ key: "chat.send-on-enter" as never, value: next })
+            }
+          />
+          <Label htmlFor={sendOnEnterId}>{sendOnEnter === true ? "Enabled" : "Disabled"}</Label>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2 border-t border-border pt-6">
+        <Label htmlFor={maxRoundsId} className="text-sm font-medium text-foreground">
+          Max agent tool-call rounds per turn
+        </Label>
+        <p className="text-xs text-muted-foreground">
+          Hard cap on how many tool-call rounds the agent runs inside one turn before it aborts.
+          Higher values let multi-step investigations finish; lower values cut off runaway loops
+          sooner. Range {MAX_TOOL_ROUNDS_MIN}–{MAX_TOOL_ROUNDS_MAX}.
+        </p>
+        <Input
+          id={maxRoundsId}
+          type="number"
+          inputMode="numeric"
+          min={MAX_TOOL_ROUNDS_MIN}
+          max={MAX_TOOL_ROUNDS_MAX}
+          step={1}
+          value={maxRounds}
+          disabled={disabled}
+          onChange={(e) => setMaxRounds(e.target.value)}
+          onBlur={commitMaxRounds}
+          className="max-w-[8rem]"
+        />
+      </div>
+
+      {update.error ? (
+        <Alert variant="destructive">
+          <AlertDescription>{update.error.message}</AlertDescription>
+        </Alert>
+      ) : null}
     </div>
+  );
+}
+
+function ToolDisplayOption({
+  option,
+}: {
+  option: { value: ToolDisplayMode; label: string; helper: string };
+}) {
+  const id = useId();
+  return (
+    <label
+      htmlFor={id}
+      className="flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground hover:bg-muted"
+    >
+      <RadioGroupItem id={id} value={option.value} className="mt-1" />
+      <span className="flex flex-col">
+        <span className="font-medium text-foreground">{option.label}</span>
+        <span className="text-xs text-muted-foreground">{option.helper}</span>
+      </span>
+    </label>
   );
 }

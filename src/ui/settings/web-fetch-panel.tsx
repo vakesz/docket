@@ -1,16 +1,12 @@
 "use client";
 
-import { Field, Input, Label, Switch, Textarea } from "@headlessui/react";
-import { useEffect, useRef, useState } from "react";
-import {
-  fieldClass,
-  fieldMonoClass,
-  primaryButtonClass,
-  secondaryButtonClass,
-  switchThumbClass,
-  switchTrackClass,
-} from "@/lib/form-classes";
+import { useEffect, useId, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc-client";
+import { Button } from "@/ui/primitives/button";
+import { Input } from "@/ui/primitives/input";
+import { Label } from "@/ui/primitives/label";
+import { Switch } from "@/ui/primitives/switch";
+import { Textarea } from "@/ui/primitives/textarea";
 
 /**
  * Per-project knobs for the agent's web_fetch tool.
@@ -29,6 +25,10 @@ export function WebFetchPanel({ projectId }: { projectId: string }) {
   const [enabled, setEnabled] = useState(true);
   const [hostsText, setHostsText] = useState("");
   const [maxBytes, setMaxBytes] = useState<string>("1000000");
+
+  const enabledId = useId();
+  const hostsId = useId();
+  const maxBytesId = useId();
 
   // Seed once per project. Parallel mutateAsync calls below would
   // otherwise let an intermediate refetch (after one mutation lands but
@@ -77,17 +77,15 @@ export function WebFetchPanel({ projectId }: { projectId: string }) {
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <Field className="flex items-center gap-2 text-sm text-foreground">
+        <div className="flex items-center gap-2 text-sm text-foreground">
           <Switch
+            id={enabledId}
             checked={enabled}
             disabled={save.isPending}
-            onChange={setEnabled}
-            className={switchTrackClass}
-          >
-            <span aria-hidden className={switchThumbClass} />
-          </Switch>
-          <Label>Allow agent to fetch web pages</Label>
-        </Field>
+            onCheckedChange={setEnabled}
+          />
+          <Label htmlFor={enabledId}>Allow agent to fetch web pages</Label>
+        </div>
         <p className="text-xs text-muted-foreground">
           When on, the agent can call web_fetch to read public URLs (RFCs, docs, changelogs).
           Private IPs and cloud metadata endpoints are blocked regardless of this flag.
@@ -95,35 +93,35 @@ export function WebFetchPanel({ projectId }: { projectId: string }) {
       </div>
 
       <div className="flex flex-col gap-2 border-t border-border pt-6">
-        <label htmlFor="web-fetch-hosts" className="text-sm font-medium text-foreground">
+        <Label htmlFor={hostsId} className="text-sm font-medium text-foreground">
           Host allowlist
-        </label>
+        </Label>
         <p className="text-xs text-muted-foreground">
           Optional strict allowlist, one hostname per line (e.g.{" "}
           <code className="rounded bg-muted px-1 py-0.5 font-mono">docs.python.org</code>). Leave
           empty to let the agent reach any public host.
         </p>
         <Textarea
-          id="web-fetch-hosts"
+          id={hostsId}
           value={hostsText}
           disabled={save.isPending}
           onChange={(e) => setHostsText(e.target.value)}
           rows={5}
           placeholder="docs.python.org&#10;learn.microsoft.com&#10;www.rfc-editor.org"
-          className={`${fieldMonoClass} max-w-xl text-xs`}
+          className="max-w-xl font-mono text-xs"
         />
       </div>
 
       <div className="flex flex-col gap-2 border-t border-border pt-6">
-        <label htmlFor="web-fetch-max-bytes" className="text-sm font-medium text-foreground">
+        <Label htmlFor={maxBytesId} className="text-sm font-medium text-foreground">
           Response size cap (bytes)
-        </label>
+        </Label>
         <p className="text-xs text-muted-foreground">
           Larger payloads are truncated and reported as denied_size. Range: 64 000 to 8 000 000.
           Default 1 000 000 (~1 MB).
         </p>
         <Input
-          id="web-fetch-max-bytes"
+          id={maxBytesId}
           type="number"
           inputMode="numeric"
           min={64_000}
@@ -132,18 +130,18 @@ export function WebFetchPanel({ projectId }: { projectId: string }) {
           value={maxBytes}
           disabled={save.isPending}
           onChange={(e) => setMaxBytes(e.target.value)}
-          className={`${fieldClass} max-w-[12rem]`}
+          className="max-w-[12rem]"
         />
       </div>
 
       <div className="flex items-center gap-3">
-        <button type="submit" disabled={save.isPending} className={primaryButtonClass}>
+        <Button type="submit" disabled={save.isPending}>
           {save.isPending ? "Saving…" : "Save web-fetch settings"}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="secondary"
           disabled={save.isPending}
-          className={secondaryButtonClass}
           onClick={() => {
             setEnabled(true);
             setHostsText("");
@@ -151,7 +149,7 @@ export function WebFetchPanel({ projectId }: { projectId: string }) {
           }}
         >
           Reset to defaults
-        </button>
+        </Button>
         {save.error ? <span className="text-xs text-destructive">{save.error.message}</span> : null}
         {save.isSuccess ? <span className="text-xs text-muted-foreground">Saved.</span> : null}
       </div>

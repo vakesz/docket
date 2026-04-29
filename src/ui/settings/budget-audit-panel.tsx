@@ -1,15 +1,17 @@
 "use client";
 
-import { Input } from "@headlessui/react";
 import { useEffect, useState } from "react";
-import {
-  dangerButtonClass,
-  fieldClass,
-  primaryButtonClass,
-  settingsRowClass,
-} from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
-import { SelectField } from "@/ui/forms/select-field";
+import { Alert, AlertDescription } from "@/ui/primitives/alert";
+import { Button } from "@/ui/primitives/button";
+import { Input } from "@/ui/primitives/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/ui/primitives/select";
 
 /**
  * Deployment-hub panel for the LLM monthly cost cap and the audit
@@ -95,16 +97,11 @@ export function BudgetAuditPanel() {
             value={capDollars}
             disabled={list.isPending || update.isPending}
             onChange={(e) => setCapDollars(e.target.value)}
-            className={`${fieldClass} max-w-[10rem]`}
+            className="max-w-[10rem]"
           />
-          <button
-            type="button"
-            onClick={onSaveCap}
-            disabled={update.isPending}
-            className={primaryButtonClass}
-          >
+          <Button type="button" onClick={onSaveCap} disabled={update.isPending}>
             Save cap
-          </button>
+          </Button>
         </div>
         <div className="flex flex-col gap-1">
           <span className="text-xs font-medium text-foreground">
@@ -114,21 +111,23 @@ export function BudgetAuditPanel() {
             {action?.description ??
               "'warn' lets the turn proceed but surfaces a banner; 'block' refuses agent turns until the cap is raised or the calendar month rolls over."}
           </p>
-          <SelectField
+          <Select
             value={typeof action?.value === "string" ? action.value : "warn"}
             disabled={list.isPending || update.isPending}
-            onChange={(e) =>
-              update.mutate({ key: "llm.cost-cap-action" as never, value: e.target.value })
-            }
-            wrapperClassName="max-w-[10rem]"
+            onValueChange={(value) => update.mutate({ key: "llm.cost-cap-action" as never, value })}
           >
-            <option value="warn">warn (allow + banner)</option>
-            <option value="block">block (refuse turns)</option>
-          </SelectField>
+            <SelectTrigger className="max-w-[14rem]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="warn">warn (allow + banner)</SelectItem>
+              <SelectItem value="block">block (refuse turns)</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </section>
 
-      <section className={settingsRowClass}>
+      <section className="flex flex-col gap-2 border-t border-border first:border-t-0 first:pt-0 pt-4">
         <h3 className="text-sm font-medium text-foreground">
           {retention?.label ?? "Audit retention (days)"}
         </h3>
@@ -145,16 +144,11 @@ export function BudgetAuditPanel() {
             value={retentionInput}
             disabled={list.isPending || update.isPending}
             onChange={(e) => setRetentionInput(e.target.value)}
-            className={`${fieldClass} max-w-[8rem]`}
+            className="max-w-[8rem]"
           />
-          <button
-            type="button"
-            onClick={onSaveRetention}
-            disabled={update.isPending}
-            className={primaryButtonClass}
-          >
+          <Button type="button" onClick={onSaveRetention} disabled={update.isPending}>
             Save retention
-          </button>
+          </Button>
         </div>
         {audit.data ? (
           <p className="text-xs text-muted-foreground-faint">
@@ -165,8 +159,9 @@ export function BudgetAuditPanel() {
           </p>
         ) : null}
         <div className="flex items-center gap-3">
-          <button
+          <Button
             type="button"
+            variant="destructive"
             onClick={() => prune.mutate()}
             disabled={
               prune.isPending ||
@@ -174,10 +169,9 @@ export function BudgetAuditPanel() {
               audit.data.retentionDays === 0 ||
               audit.data.eligible === 0
             }
-            className={dangerButtonClass}
           >
             {prune.isPending ? "Pruning…" : "Prune eligible rows"}
-          </button>
+          </Button>
           {prune.data?.ok ? (
             <span className="text-xs text-muted-foreground">
               Pruned {prune.data.deleted.toLocaleString()} row{prune.data.deleted === 1 ? "" : "s"}.
@@ -189,7 +183,11 @@ export function BudgetAuditPanel() {
         </div>
       </section>
 
-      {update.error ? <p className="text-xs text-destructive">{update.error.message}</p> : null}
+      {update.error ? (
+        <Alert variant="destructive">
+          <AlertDescription>{update.error.message}</AlertDescription>
+        </Alert>
+      ) : null}
     </div>
   );
 }

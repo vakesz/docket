@@ -1,8 +1,10 @@
 "use client";
 
-import { Field, Label, Switch } from "@headlessui/react";
-import { switchThumbClass, switchTrackClass } from "@/lib/form-classes";
+import { useId } from "react";
 import { trpc } from "@/lib/trpc-client";
+import { Alert, AlertDescription } from "@/ui/primitives/alert";
+import { Label } from "@/ui/primitives/label";
+import { Switch } from "@/ui/primitives/switch";
 
 const HEADER_KEY = "items.show-reactions-header";
 const COMMENTS_KEY = "items.show-reactions-comments";
@@ -28,6 +30,8 @@ export function ItemDetailPanel() {
   const commentsOn = typeof commentsRaw === "boolean" ? commentsRaw : true;
 
   const disabled = list.isPending || update.isPending;
+  const headerId = useId();
+  const commentsId = useId();
 
   return (
     <div className="flex flex-col gap-6">
@@ -40,46 +44,46 @@ export function ItemDetailPanel() {
           </p>
         </header>
 
-        <Field className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1">
           <Label className="text-sm font-medium text-foreground">
             Show reactions on item header
           </Label>
           <p className="text-xs text-muted-foreground">
             Controls the reactions strip below the item title. Comment reactions are unaffected.
           </p>
-          <Field className="flex items-center gap-2 text-sm text-foreground">
+          <div className="flex items-center gap-2 text-sm text-foreground">
             <Switch
+              id={headerId}
               checked={headerOn}
               disabled={disabled}
-              onChange={(next) => update.mutate({ key: HEADER_KEY as never, value: next })}
-              className={switchTrackClass}
-            >
-              <span aria-hidden className={switchThumbClass} />
-            </Switch>
-            <Label>{headerOn ? "Visible" : "Hidden"}</Label>
-          </Field>
-        </Field>
+              onCheckedChange={(next) => update.mutate({ key: HEADER_KEY as never, value: next })}
+            />
+            <Label htmlFor={headerId}>{headerOn ? "Visible" : "Hidden"}</Label>
+          </div>
+        </div>
 
-        <Field className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1">
           <Label className="text-sm font-medium text-foreground">Show reactions in comments</Label>
           <p className="text-xs text-muted-foreground">
             Controls the reactions strip below each comment. Header reactions are unaffected.
           </p>
-          <Field className="flex items-center gap-2 text-sm text-foreground">
+          <div className="flex items-center gap-2 text-sm text-foreground">
             <Switch
+              id={commentsId}
               checked={commentsOn}
               disabled={disabled}
-              onChange={(next) => update.mutate({ key: COMMENTS_KEY as never, value: next })}
-              className={switchTrackClass}
-            >
-              <span aria-hidden className={switchThumbClass} />
-            </Switch>
-            <Label>{commentsOn ? "Visible" : "Hidden"}</Label>
-          </Field>
-        </Field>
+              onCheckedChange={(next) => update.mutate({ key: COMMENTS_KEY as never, value: next })}
+            />
+            <Label htmlFor={commentsId}>{commentsOn ? "Visible" : "Hidden"}</Label>
+          </div>
+        </div>
       </section>
 
-      {update.error ? <p className="text-xs text-destructive">{update.error.message}</p> : null}
+      {update.error ? (
+        <Alert variant="destructive">
+          <AlertDescription>{update.error.message}</AlertDescription>
+        </Alert>
+      ) : null}
     </div>
   );
 }

@@ -1,8 +1,10 @@
 "use client";
 import { useState } from "react";
-import { badgeClass, emptyStateClass } from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
 import { useAutoRefreshIntervalMs } from "@/lib/use-auto-refresh";
+import { Alert, AlertDescription, AlertTitle } from "@/ui/primitives/alert";
+import { Badge } from "@/ui/primitives/badge";
+import { Separator } from "@/ui/primitives/separator";
 import { LlmProviderActions } from "@/ui/settings/llm-provider-actions";
 import { LlmProviderForm } from "@/ui/settings/llm-provider-form";
 
@@ -54,24 +56,25 @@ export function LlmProvidersPanel() {
 
   return (
     <div className="flex flex-col gap-6">
-      <aside
-        role="note"
-        className="rounded-2xl border border-warning/40 bg-warning/10 p-4 text-xs text-warning"
-      >
-        <p className="mb-1 font-medium">Adding an Azure AI Foundry model</p>
-        <p>
-          Use the project&rsquo;s OpenAI v1 endpoint as the Base URL — the path must end with{" "}
-          <code className="rounded bg-card px-1 py-0.5 font-mono text-foreground">/openai/v1/</code>
-          . Set <span className="font-medium">Model</span> to the deployment name shown in Foundry
-          &rarr; Model deployments (for example <code className="font-mono">gpt-5</code>).
-        </p>
-        <p className="mt-2">
-          Template:{" "}
-          <code className="rounded bg-card px-1 py-0.5 font-mono text-foreground">
-            https://&lt;resource&gt;.services.ai.azure.com/api/projects/&lt;project&gt;/openai/v1/
-          </code>
-        </p>
-      </aside>
+      <Alert variant="warning">
+        <AlertTitle>Adding an Azure AI Foundry model</AlertTitle>
+        <AlertDescription>
+          <p>
+            Use the project&rsquo;s OpenAI v1 endpoint as the Base URL — the path must end with{" "}
+            <code className="rounded bg-card px-1 py-0.5 font-mono text-foreground">
+              /openai/v1/
+            </code>
+            . Set <span className="font-medium">Model</span> to the deployment name shown in Foundry
+            &rarr; Model deployments (for example <code className="font-mono">gpt-5</code>).
+          </p>
+          <p>
+            Template:{" "}
+            <code className="rounded bg-card px-1 py-0.5 font-mono text-foreground">
+              https://&lt;resource&gt;.services.ai.azure.com/api/projects/&lt;project&gt;/openai/v1/
+            </code>
+          </p>
+        </AlertDescription>
+      </Alert>
 
       <Section
         title="Chat models"
@@ -89,7 +92,7 @@ export function LlmProvidersPanel() {
         setEditingId={setEditingId}
       />
 
-      <div aria-hidden="true" className="my-2 h-px bg-border" />
+      <Separator />
 
       <LlmProviderForm mode="create" defaultRoleAvailability={defaultRoleAvailability} />
     </div>
@@ -116,7 +119,9 @@ function Section({
         <p className="text-xs text-muted-foreground">{description}</p>
       </header>
       {rows.length === 0 ? (
-        <p className={emptyStateClass}>None configured yet.</p>
+        <p className="rounded-2xl border border-dashed border-border bg-card p-6 text-center text-sm text-muted-foreground">
+          None configured yet.
+        </p>
       ) : (
         <ul className="flex flex-col gap-2">
           {rows.map((row) => (
@@ -147,10 +152,10 @@ function Section({
                       <span className="text-xs uppercase tracking-wide text-muted-foreground">
                         {row.kind}
                       </span>
-                      {!row.enabled ? <span className={badgeClass}>disabled</span> : null}
+                      {!row.enabled ? <Badge variant="outline">disabled</Badge> : null}
                       {row.inputPriceCentsPerMtok === null ||
                       row.outputPriceCentsPerMtok === null ? (
-                        <span className={badgeClass}>no price</span>
+                        <Badge variant="outline">no price</Badge>
                       ) : null}
                     </div>
                     <p className="text-xs text-muted-foreground">

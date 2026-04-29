@@ -1,14 +1,9 @@
 "use client";
 import { useRouter } from "next/navigation";
-import {
-  accentBadgeClass,
-  badgeClass,
-  emptyStateClass,
-  settingsPanelClass,
-  xsBorderButtonClass,
-  xsDangerButtonClass,
-} from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
+import { Alert, AlertDescription } from "@/ui/primitives/alert";
+import { Badge } from "@/ui/primitives/badge";
+import { Button } from "@/ui/primitives/button";
 import { CreateProjectForm } from "@/ui/projects/create-project-form";
 
 type ProjectRow = {
@@ -49,7 +44,11 @@ export function ProjectsPanel() {
     return <p className="text-sm text-muted-foreground-faint">Loading projects…</p>;
   }
   if (list.error) {
-    return <p className="text-sm text-destructive">{list.error.message}</p>;
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>{list.error.message}</AlertDescription>
+      </Alert>
+    );
   }
 
   const defaultId = me.data?.defaultProjectId ?? null;
@@ -60,7 +59,7 @@ export function ProjectsPanel() {
       <section className="flex flex-col gap-3">
         <h2 className="text-base font-medium text-foreground">Your projects</h2>
         {projects.length === 0 ? (
-          <p className={emptyStateClass}>
+          <p className="rounded-2xl border border-dashed border-border bg-card p-6 text-center text-sm text-muted-foreground">
             No projects yet. Add one below — each project tracks one repo (GitHub) or one team
             project (Azure DevOps), and they all share the same sign-in.
           </p>
@@ -72,13 +71,17 @@ export function ProjectsPanel() {
               return (
                 <li
                   key={p.id}
-                  className={`${settingsPanelClass} flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between`}
+                  className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div className="flex flex-col gap-1">
                     <div className="flex flex-wrap items-baseline gap-2">
                       <span className="font-medium text-foreground">{p.name}</span>
-                      <span className={badgeClass}>{p.providerKind.replace("_", " ")}</span>
-                      {isDefault ? <span className={accentBadgeClass}>default</span> : null}
+                      <Badge variant="outline" className="uppercase tracking-wide">
+                        {p.providerKind.replace("_", " ")}
+                      </Badge>
+                      {isDefault ? (
+                        <Badge className="uppercase tracking-wide">default</Badge>
+                      ) : null}
                     </div>
                     {label ? (
                       <p className="font-mono text-xs text-muted-foreground">{label}</p>
@@ -89,18 +92,20 @@ export function ProjectsPanel() {
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {!isDefault ? (
-                      <button
+                      <Button
                         type="button"
-                        className={xsBorderButtonClass}
+                        variant="outline"
+                        size="xs"
                         disabled={setDefault.isPending}
                         onClick={() => setDefault.mutate({ projectId: p.id })}
                       >
                         Set default
-                      </button>
+                      </Button>
                     ) : null}
-                    <button
+                    <Button
                       type="button"
-                      className={xsDangerButtonClass}
+                      variant="destructive"
+                      size="xs"
                       disabled={archive.isPending}
                       onClick={() => {
                         if (
@@ -113,7 +118,7 @@ export function ProjectsPanel() {
                       }}
                     >
                       Archive
-                    </button>
+                    </Button>
                   </div>
                 </li>
               );
@@ -121,9 +126,15 @@ export function ProjectsPanel() {
           </ul>
         )}
         {setDefault.error ? (
-          <p className="text-xs text-destructive">{setDefault.error.message}</p>
+          <Alert variant="destructive">
+            <AlertDescription>{setDefault.error.message}</AlertDescription>
+          </Alert>
         ) : null}
-        {archive.error ? <p className="text-xs text-destructive">{archive.error.message}</p> : null}
+        {archive.error ? (
+          <Alert variant="destructive">
+            <AlertDescription>{archive.error.message}</AlertDescription>
+          </Alert>
+        ) : null}
       </section>
 
       <div aria-hidden="true" className="my-2 h-px bg-border" />

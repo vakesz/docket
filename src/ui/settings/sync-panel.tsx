@@ -1,13 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import {
-  metaLabelClass,
-  primaryButtonClass,
-  secondaryButtonClass,
-  settingsPanelClass,
-} from "@/lib/form-classes";
 import { trpc } from "@/lib/trpc-client";
+import { Button } from "@/ui/primitives/button";
 
 function formatTimestamp(value: Date | string | null): string {
   if (!value) return "never";
@@ -42,17 +37,19 @@ export function SyncPanel({ projectId }: { projectId: string }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <section className={`${settingsPanelClass} flex flex-col gap-4`}>
+      <section className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-6 shadow-sm">
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="flex flex-col gap-1">
-            <span className={metaLabelClass}>Watermark</span>
+            <span className="text-xs uppercase tracking-wide text-muted-foreground">Watermark</span>
             <span className="font-mono text-sm text-foreground">{formatTimestamp(watermark)}</span>
             <p className="text-xs text-muted-foreground">
               Incremental sync pulls items updated after this point.
             </p>
           </div>
           <div className="flex flex-col gap-1">
-            <span className={metaLabelClass}>Last full sync</span>
+            <span className="text-xs uppercase tracking-wide text-muted-foreground">
+              Last full sync
+            </span>
             <span className="font-mono text-sm text-foreground">
               {formatTimestamp(lastFullSyncAt)}
             </span>
@@ -63,15 +60,15 @@ export function SyncPanel({ projectId }: { projectId: string }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-3 border-t border-border pt-4">
-          <button
+          <Button
             type="button"
+            variant="secondary"
             disabled={pending}
             onClick={() => sync.mutate({ projectId, mode: "incremental" })}
-            className={secondaryButtonClass}
           >
             {pending && sync.variables?.mode !== "full" ? "Refreshing…" : "Refresh"}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             disabled={pending}
             onClick={() => {
@@ -83,10 +80,9 @@ export function SyncPanel({ projectId }: { projectId: string }) {
                 sync.mutate({ projectId, mode: "full" });
               }
             }}
-            className={primaryButtonClass}
           >
             {pending && sync.variables?.mode === "full" ? "Running full sync…" : "Run full sync"}
-          </button>
+          </Button>
           {sync.error ? (
             <span className="text-xs text-destructive">{sync.error.message}</span>
           ) : sync.data ? (

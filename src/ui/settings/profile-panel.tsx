@@ -1,7 +1,9 @@
 "use client";
-import { Field, Label } from "@headlessui/react";
+import { useId } from "react";
 import { trpc } from "@/lib/trpc-client";
 import { NumberField } from "@/ui/forms/number-field";
+import { Alert, AlertDescription } from "@/ui/primitives/alert";
+import { Label } from "@/ui/primitives/label";
 import { DefaultProjectPicker } from "@/ui/settings/default-project-picker";
 import { TimezonePicker } from "@/ui/settings/timezone-picker";
 import { ThemePicker } from "@/ui/shell/theme-picker";
@@ -33,35 +35,50 @@ export function ProfilePanel() {
   const autoRefreshMinutes = Math.round(autoRefreshSeconds / 60);
   const disabled = list.isPending || update.isPending;
 
+  const themeId = useId();
+  const tzId = useId();
+  const refreshId = useId();
+
   return (
     <div className="flex flex-col gap-6">
       <DefaultProjectPicker />
 
-      <Field className="flex flex-col gap-1 border-t border-border pt-6">
-        <Label className="text-sm font-medium text-foreground">Theme</Label>
+      <div className="flex flex-col gap-1 border-t border-border pt-6">
+        <Label htmlFor={themeId} className="text-sm font-medium text-foreground">
+          Theme
+        </Label>
         <p className="text-xs text-muted-foreground">
           Color scheme for this browser. Adaptive variants follow your OS&rsquo;s light/dark
           preference; a fixed theme overrides it.
         </p>
-        <ThemePicker />
-      </Field>
+        <div id={themeId}>
+          <ThemePicker />
+        </div>
+      </div>
 
-      <Field className="flex flex-col gap-1 border-t border-border pt-6">
-        <Label className="text-sm font-medium text-foreground">Display time zone</Label>
+      <div className="flex flex-col gap-1 border-t border-border pt-6">
+        <Label htmlFor={tzId} className="text-sm font-medium text-foreground">
+          Display time zone
+        </Label>
         <p className="text-xs text-muted-foreground">
           Used for relative dates and the staleness tint window. Pick &ldquo;Browser local&rdquo; to
           follow whatever zone the browser reports.
         </p>
         <TimezonePicker
+          id={tzId}
           value={timezone}
           disabled={disabled}
           onChange={(next) => update.mutate({ key: "display.timezone" as never, value: next })}
         />
-        {update.error ? <p className="text-xs text-destructive">{update.error.message}</p> : null}
-      </Field>
+        {update.error ? (
+          <Alert variant="destructive">
+            <AlertDescription>{update.error.message}</AlertDescription>
+          </Alert>
+        ) : null}
+      </div>
 
-      <Field className="flex flex-col gap-1 border-t border-border pt-6">
-        <Label className="text-sm font-medium text-foreground">
+      <div className="flex flex-col gap-1 border-t border-border pt-6">
+        <Label htmlFor={refreshId} className="text-sm font-medium text-foreground">
           Auto-refresh interval (minutes)
         </Label>
         <p className="text-xs text-muted-foreground">
@@ -70,6 +87,7 @@ export function ProfilePanel() {
           60 (one hour).
         </p>
         <NumberField
+          id={refreshId}
           min={0}
           max={60}
           step={1}
@@ -80,8 +98,12 @@ export function ProfilePanel() {
           }
           className="max-w-[8rem]"
         />
-        {update.error ? <p className="text-xs text-destructive">{update.error.message}</p> : null}
-      </Field>
+        {update.error ? (
+          <Alert variant="destructive">
+            <AlertDescription>{update.error.message}</AlertDescription>
+          </Alert>
+        ) : null}
+      </div>
     </div>
   );
 }

@@ -1,16 +1,27 @@
 "use client";
-import { Field, Input, Label } from "@headlessui/react";
-import { type FormEvent, useId, useState } from "react";
-import {
-  errorMessageClass,
-  fieldClass,
-  fieldMonoClass,
-  primaryButtonClass,
-  secondaryButtonClass,
-  settingsPanelClass,
-} from "@/lib/form-classes";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
 import { trpc } from "@/lib/trpc-client";
-import { SelectField } from "@/ui/forms/select-field";
+import { Alert, AlertDescription } from "@/ui/primitives/alert";
+import { Button } from "@/ui/primitives/button";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/ui/primitives/form";
+import { Input } from "@/ui/primitives/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/ui/primitives/select";
 
 type OauthDefaults = {
   defaultLabel: string;
@@ -37,6 +48,17 @@ type Props =
   | { mode?: "create"; initial?: undefined; onDone?: () => void }
   | { mode: "edit"; initial: OauthProviderFormInitial; onDone?: () => void };
 
+const formSchema = z.object({
+  kind: z.string(),
+  label: z.string().trim().min(1, "Label is required"),
+  clientId: z.string().trim().min(1, "Client ID is required"),
+  clientSecret: z.string(),
+  scopes: z.string().trim(),
+  baseUrl: z.string().trim(),
+});
+
+type FormValues = z.infer<typeof formSchema>;
+
 export function OauthProviderForm(props: Props) {
   const mode = props.mode ?? "create";
   const initial = props.initial;
@@ -58,12 +80,15 @@ export function OauthProviderForm(props: Props) {
 
   const create = trpc.oauthProviders.create.useMutation({
     onSuccess: async () => {
-      const d = defaultsByKind.get(kind) ?? FALLBACK_DEFAULTS;
-      setLabel(d.defaultLabel);
-      setClientId("");
-      setClientSecret("");
-      setScopes(d.defaultScopes);
-      setBaseUrl("");
+      const d = defaultsByKind.get(form.getValues("kind")) ?? FALLBACK_DEFAULTS;
+      form.reset({
+        kind: form.getValues("kind"),
+        label: d.defaultLabel,
+        clientId: "",
+        clientSecret: "",
+        scopes: d.defaultScopes,
+        baseUrl: "",
+      });
       await utils.oauthProviders.list.invalidate();
       props.onDone?.();
     },
@@ -75,171 +100,229 @@ export function OauthProviderForm(props: Props) {
     },
   });
 
-  const kindId = useId();
-  const [kind, setKind] = useState<string>(initial?.kind ?? firstKind);
-  const [label, setLabel] = useState(initial?.label ?? initialDefaults.defaultLabel);
-  const [clientId, setClientId] = useState(initial?.clientId ?? "");
-  const [clientSecret, setClientSecret] = useState("");
-  const [scopes, setScopes] = useState(initial?.scopes ?? initialDefaults.defaultScopes);
-  const [baseUrl, setBaseUrl] = useState(initial?.baseUrl ?? "");
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      kind: initial?.kind ?? firstKind,
+      label: initial?.label ?? initialDefaults.defaultLabel,
+      clientId: initial?.clientId ?? "",
+      clientSecret: "",
+      scopes: initial?.scopes ?? initialDefaults.defaultScopes,
+      baseUrl: initial?.baseUrl ?? "",
+    },
+  });
+
+  const watchKind = form.watch("kind");
 
   function onKindChange(next: string) {
-    setKind(next);
+    form.setValue("kind", next);
     const d = defaultsByKind.get(next) ?? FALLBACK_DEFAULTS;
-    setLabel(d.defaultLabel);
-    setScopes(d.defaultScopes);
+    form.setValue("label", d.defaultLabel);
+    form.setValue("scopes", d.defaultScopes);
   }
 
-  function onSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  function onSubmit(values: FormValues) {
+    if (mode === "create" && values.clientSecret.trim() === "") {
+      form.setError("clientSecret", { message: "Client secret is required" });
+      return;
+    }
     if (mode === "edit" && initial) {
       update.mutate({
         id: initial.id,
-        label: label.trim(),
-        clientId: clientId.trim(),
+        label: values.label.trim(),
+        clientId: values.clientId.trim(),
         // Preserve existing ciphertext when the field is left blank.
-        clientSecret: clientSecret.trim() ? clientSecret : undefined,
-        scopes: scopes.trim(),
-        baseUrl: baseUrl.trim(),
+        clientSecret: values.clientSecret.trim() ? values.clientSecret : undefined,
+        scopes: values.scopes.trim(),
+        baseUrl: values.baseUrl.trim(),
       });
       return;
     }
     create.mutate({
-      kind,
-      label: label.trim(),
-      clientId: clientId.trim(),
-      clientSecret: clientSecret.trim(),
-      scopes: scopes.trim(),
-      baseUrl: baseUrl.trim(),
+      kind: values.kind,
+      label: values.label.trim(),
+      clientId: values.clientId.trim(),
+      clientSecret: values.clientSecret.trim(),
+      scopes: values.scopes.trim(),
+      baseUrl: values.baseUrl.trim(),
     });
   }
 
   const pending = mode === "edit" ? update.isPending : create.isPending;
   const error = (mode === "edit" ? update.error : create.error)?.message;
-  const baseUrlHint = (defaultsByKind.get(kind) ?? FALLBACK_DEFAULTS).baseUrlPlaceholder;
+  const baseUrlHint = (defaultsByKind.get(watchKind) ?? FALLBACK_DEFAULTS).baseUrlPlaceholder;
 
   return (
-    <form onSubmit={onSubmit} className={`${settingsPanelClass} flex flex-col gap-4 text-sm`}>
-      <h2 className="text-base font-medium text-foreground">
-        {mode === "edit" ? "Edit OAuth provider" : "Add OAuth provider"}
-      </h2>
+    <Form {...form}>
+      <form
+        onSubmit={form.handleSubmit(onSubmit)}
+        className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-6 text-sm shadow-sm"
+      >
+        <h2 className="text-base font-medium text-foreground">
+          {mode === "edit" ? "Edit OAuth provider" : "Add OAuth provider"}
+        </h2>
 
-      <div className="flex gap-3">
-        <div className="flex w-40 flex-col gap-1">
-          <label htmlFor={kindId} className="text-xs text-muted-foreground">
-            Kind
-          </label>
-          {mode === "edit" ? (
-            <Input
-              id={kindId}
-              value={kind.replace("_", " ")}
-              readOnly
-              className={`${fieldClass} cursor-not-allowed opacity-70`}
-            />
-          ) : (
-            <SelectField id={kindId} value={kind} onChange={(e) => onKindChange(e.target.value)}>
-              {oauthKinds.map((k) => (
-                <option key={k.typeId} value={k.typeId}>
-                  {k.displayName}
-                </option>
-              ))}
-            </SelectField>
-          )}
+        <div className="flex gap-3">
+          <FormField
+            control={form.control}
+            name="kind"
+            render={({ field }) => (
+              <FormItem className="w-40">
+                <FormLabel>Kind</FormLabel>
+                {mode === "edit" ? (
+                  <FormControl>
+                    <Input
+                      value={field.value.replace("_", " ")}
+                      readOnly
+                      className="cursor-not-allowed opacity-70"
+                    />
+                  </FormControl>
+                ) : (
+                  <Select value={field.value} onValueChange={onKindChange}>
+                    <FormControl>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {oauthKinds.map((k) => (
+                        <SelectItem key={k.typeId} value={k.typeId}>
+                          {k.displayName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="label"
+            render={({ field }) => (
+              <FormItem className="flex-1">
+                <FormLabel>Label</FormLabel>
+                <FormControl>
+                  <Input {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
         </div>
-        <Field className="flex flex-1 flex-col gap-1">
-          <Label className="text-xs text-muted-foreground">Label</Label>
-          <Input
-            required
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            className={fieldClass}
-          />
-        </Field>
-      </div>
 
-      <div className="flex gap-3">
-        <Field className="flex flex-1 flex-col gap-1">
-          <Label className="text-xs text-muted-foreground">Client ID</Label>
-          <Input
-            required
-            value={clientId}
-            onChange={(e) => setClientId(e.target.value)}
-            className={fieldMonoClass}
+        <div className="flex gap-3">
+          <FormField
+            control={form.control}
+            name="clientId"
+            render={({ field }) => (
+              <FormItem className="flex-1">
+                <FormLabel>Client ID</FormLabel>
+                <FormControl>
+                  <Input {...field} className="font-mono" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
           />
-        </Field>
-        <Field className="flex flex-1 flex-col gap-1">
-          <Label className="text-xs text-muted-foreground">
-            Client secret
-            {mode === "edit" ? (
-              <span className="ml-1 font-normal text-muted-foreground-faint">
-                (leave blank to keep current)
-              </span>
-            ) : null}
-          </Label>
-          <Input
-            required={mode !== "edit"}
-            type="password"
-            autoComplete="off"
-            placeholder={mode === "edit" ? "•••••••• (unchanged)" : undefined}
-            value={clientSecret}
-            onChange={(e) => setClientSecret(e.target.value)}
-            className={fieldMonoClass}
+          <FormField
+            control={form.control}
+            name="clientSecret"
+            render={({ field }) => (
+              <FormItem className="flex-1">
+                <FormLabel>
+                  Client secret
+                  {mode === "edit" ? (
+                    <span className="ml-1 font-normal text-muted-foreground-faint">
+                      (leave blank to keep current)
+                    </span>
+                  ) : null}
+                </FormLabel>
+                <FormControl>
+                  <Input
+                    {...field}
+                    type="password"
+                    autoComplete="off"
+                    placeholder={mode === "edit" ? "•••••••• (unchanged)" : undefined}
+                    className="font-mono"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
           />
-        </Field>
-      </div>
+        </div>
 
-      <Field className="flex flex-col gap-1">
-        <Label className="text-xs text-muted-foreground">Scopes (space-separated)</Label>
-        <Input
-          value={scopes}
-          onChange={(e) => setScopes(e.target.value)}
-          className={fieldMonoClass}
+        <FormField
+          control={form.control}
+          name="scopes"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Scopes (space-separated)</FormLabel>
+              <FormControl>
+                <Input {...field} className="font-mono" />
+              </FormControl>
+              <FormDescription className="text-xs">
+                Pre-filled per kind. Only edit if you need extra capability beyond the defaults.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
         />
-        <p className="text-xs text-muted-foreground">
-          Pre-filled per kind. Only edit if you need extra capability beyond the defaults.
-        </p>
-      </Field>
 
-      <Field className="flex flex-col gap-1">
-        <Label className="text-xs text-muted-foreground">Base URL / tenant (optional)</Label>
-        <Input
-          value={baseUrl}
-          onChange={(e) => setBaseUrl(e.target.value)}
-          placeholder={baseUrlHint}
-          className={fieldClass}
+        <FormField
+          control={form.control}
+          name="baseUrl"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Base URL / tenant (optional)</FormLabel>
+              <FormControl>
+                <Input {...field} placeholder={baseUrlHint} />
+              </FormControl>
+              <FormDescription className="text-xs">
+                GitHub Enterprise base URL (e.g.{" "}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">
+                  https://github.example.com
+                </code>
+                ), or the Entra tenant id for Azure DevOps. Blank ={" "}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">github.com</code> /
+                multi-tenant <code className="rounded bg-muted px-1 py-0.5 font-mono">common</code>.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
         />
-        <p className="text-xs text-muted-foreground">
-          GitHub Enterprise base URL (e.g.{" "}
-          <code className="rounded bg-muted px-1 py-0.5 font-mono">https://github.example.com</code>
-          ), or the Entra tenant id for Azure DevOps. Blank ={" "}
-          <code className="rounded bg-muted px-1 py-0.5 font-mono">github.com</code> / multi-tenant{" "}
-          <code className="rounded bg-muted px-1 py-0.5 font-mono">common</code>.
-        </p>
-      </Field>
 
-      {error ? <p className={errorMessageClass}>{error}</p> : null}
-
-      <div className="flex gap-2">
-        <button type="submit" disabled={pending} className={primaryButtonClass}>
-          {pending
-            ? mode === "edit"
-              ? "Saving…"
-              : "Creating…"
-            : mode === "edit"
-              ? "Save"
-              : "Create"}
-        </button>
-        {mode === "edit" ? (
-          <button
-            type="button"
-            onClick={() => props.onDone?.()}
-            disabled={pending}
-            className={secondaryButtonClass}
-          >
-            Cancel
-          </button>
+        {error ? (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         ) : null}
-      </div>
-    </form>
+
+        <div className="flex gap-2">
+          <Button type="submit" disabled={pending}>
+            {pending
+              ? mode === "edit"
+                ? "Saving…"
+                : "Creating…"
+              : mode === "edit"
+                ? "Save"
+                : "Create"}
+          </Button>
+          {mode === "edit" ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => props.onDone?.()}
+              disabled={pending}
+            >
+              Cancel
+            </Button>
+          ) : null}
+        </div>
+      </form>
+    </Form>
   );
 }

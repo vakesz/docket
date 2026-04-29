@@ -1,16 +1,18 @@
 "use client";
 
-import {
-  Combobox,
-  ComboboxButton,
-  ComboboxInput,
-  ComboboxOption,
-  ComboboxOptions,
-} from "@headlessui/react";
 import { Check, ChevronDown } from "lucide-react";
 import { useMemo, useState } from "react";
-import { fieldClass } from "@/lib/form-classes";
 import { cn } from "@/lib/utils";
+import { Button } from "@/ui/primitives/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/ui/primitives/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/ui/primitives/popover";
 
 /**
  * Searchable IANA time-zone picker. Empty value (`""`) is the "follow the
@@ -24,6 +26,8 @@ import { cn } from "@/lib/utils";
  */
 
 type Zone = { id: string; offset: string };
+
+const BROWSER_SENTINEL = "__browser";
 
 const BROWSER_ZONE: string = (() => {
   if (typeof Intl === "undefined") return "UTC";
@@ -78,15 +82,17 @@ function browserLabel(): string {
 }
 
 export function TimezonePicker({
+  id,
   value,
   disabled,
   onChange,
 }: {
+  id?: string;
   value: string;
   disabled?: boolean;
   onChange: (next: string) => void;
 }) {
-  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
 
   const candidates = useMemo<Zone[]>(() => {
     // If the persisted value is non-empty and not in the runtime's list,
@@ -97,76 +103,72 @@ export function TimezonePicker({
     return SUPPORTED_ZONES.slice();
   }, [value]);
 
-  const filtered = useMemo<Zone[]>(() => {
-    const q = query.trim().toLowerCase();
-    if (q === "") return candidates;
-    return candidates.filter(
-      (z) => z.id.toLowerCase().includes(q) || z.offset.toLowerCase().includes(q),
-    );
-  }, [candidates, query]);
-
   const selectedLabel =
     value === "" ? browserLabel() : entryLabel({ id: value, offset: offsetFor(value) });
 
   return (
-    <Combobox
-      value={value}
-      onChange={(next: string | null) => {
-        onChange(next ?? "");
-        setQuery("");
-      }}
-      disabled={disabled}
-    >
-      <div className="relative max-w-md">
-        <ComboboxInput
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          id={id}
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
           aria-label="Display time zone"
-          autoComplete="off"
-          spellCheck={false}
-          className={cn(fieldClass, "pr-9")}
-          displayValue={() => selectedLabel}
-          onChange={(e) => setQuery(e.target.value)}
-          onFocus={() => setQuery("")}
-        />
-        <ComboboxButton className="absolute inset-y-0 right-0 flex items-center pr-2 text-muted-foreground">
-          <ChevronDown aria-hidden className="h-4 w-4" />
-        </ComboboxButton>
-
-        <ComboboxOptions
-          transition
-          className="absolute z-10 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-border bg-card py-1 shadow-lg focus:outline-none data-[closed]:opacity-0"
+          disabled={disabled}
+          className={cn("w-full max-w-md justify-between font-normal")}
         >
-          <ComboboxOption
-            value=""
-            className="group flex cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-sm text-foreground data-[focus]:bg-muted"
-          >
-            <span className="truncate">{browserLabel()}</span>
-            {value === "" ? <Check aria-hidden className="h-4 w-4 text-primary" /> : null}
-          </ComboboxOption>
-          {filtered.length === 0 ? (
-            <div className="px-3 py-2 text-sm text-muted-foreground-faint">No matches.</div>
-          ) : (
-            filtered.map((zone) => (
-              <ComboboxOption
-                key={zone.id}
-                value={zone.id}
-                className="group flex cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-sm text-foreground data-[focus]:bg-muted"
+          <span className="truncate">{selectedLabel}</span>
+          <ChevronDown aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-(--radix-popover-trigger-width) p-0">
+        <Command>
+          <CommandInput placeholder="Search time zones…" />
+          <CommandList className="max-h-64">
+            <CommandEmpty>No matches.</CommandEmpty>
+            <CommandGroup>
+              <CommandItem
+                value={BROWSER_SENTINEL}
+                onSelect={() => {
+                  onChange("");
+                  setOpen(false);
+                }}
+                data-checked={value === ""}
               >
-                <span className="truncate font-mono text-xs">{zone.id}</span>
-                <span className="flex shrink-0 items-center gap-2">
-                  {zone.offset ? (
-                    <span className="font-mono text-[10px] text-muted-foreground">
-                      {zone.offset}
-                    </span>
-                  ) : null}
-                  {value === zone.id ? (
-                    <Check aria-hidden className="h-4 w-4 text-primary" />
-                  ) : null}
-                </span>
-              </ComboboxOption>
-            ))
-          )}
-        </ComboboxOptions>
-      </div>
-    </Combobox>
+                <span className="truncate">{browserLabel()}</span>
+                {value === "" ? (
+                  <Check aria-hidden className="ml-auto size-4 text-primary" />
+                ) : null}
+              </CommandItem>
+              {candidates.map((zone) => (
+                <CommandItem
+                  key={zone.id}
+                  value={`${zone.id} ${zone.offset}`}
+                  onSelect={() => {
+                    onChange(zone.id);
+                    setOpen(false);
+                  }}
+                  data-checked={value === zone.id}
+                >
+                  <span className="truncate font-mono text-xs">{zone.id}</span>
+                  <span className="ml-auto flex shrink-0 items-center gap-2">
+                    {zone.offset ? (
+                      <span className="font-mono text-[10px] text-muted-foreground">
+                        {zone.offset}
+                      </span>
+                    ) : null}
+                    {value === zone.id ? (
+                      <Check aria-hidden className="size-4 text-primary" />
+                    ) : null}
+                  </span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }

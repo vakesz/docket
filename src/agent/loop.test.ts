@@ -12,7 +12,7 @@
  *   - tool calls dispatch to the registered handler, re-feed the result,
  *     and resume the loop on the next turn
  *   - `ask_user_question` ends the turn early (no further LLM round)
- *   - the iteration cap (`MAX_TOOL_ROUNDS`) trips with a clear error
+ *   - the iteration cap (`chat.max-tool-rounds`) trips with a clear error
  *     instead of running forever
  *   - usage events accumulate and are written back to the conversation row
  */
@@ -362,6 +362,46 @@ describe("agent loop", () => {
     const err = events.find((e): e is { kind: "error"; message: string } => e.kind === "error");
     expect(err?.message).toMatch(/exceeded 3 tool-call rounds/);
     expect(llm.requests.length).toBe(3);
+  });
+
+  it("honors the user's chat.max-tool-rounds setting when no override is passed", async () => {
+    const { db } = makeStubDb();
+    (db as unknown as { item: { findMany: () => Promise<unknown[]> } }).item.findMany =
+      async () => [];
+
+    // Seed a stored user setting of 4. The catalog-default fallback is 12,
+    // so this proves the loop is reading the stored row, not the default.
+    (
+      db as unknown as { setting: { findFirst: (args: unknown) => Promise<unknown> } }
+    ).setting.findFirst = async (args: unknown) => {
+      const a = args as { where?: { key?: string } } | undefined;
+      if (a?.where?.key === "chat.max-tool-rounds") return { value: JSON.stringify(4) };
+      return null;
+    };
+
+    const turn: readonly LlmEvent[] = [
+      {
+        kind: "tool_call",
+        call: { id: "call_x", name: "list_items", arguments: { bucket: "open" } },
+      },
+      { kind: "done" },
+    ];
+    const llm = new FakeLlm([turn, turn, turn, turn, turn] as readonly (readonly LlmEvent[])[]);
+
+    const events = await collect(
+      runTurn({
+        db,
+        adapter: llm,
+        conversationId: "conv_1",
+        userId: "user_1",
+        userMessage: "loop",
+        readOnly: false,
+      }),
+    );
+
+    const err = events.find((e): e is { kind: "error"; message: string } => e.kind === "error");
+    expect(err?.message).toMatch(/exceeded 4 tool-call rounds/);
+    expect(llm.requests.length).toBe(4);
   });
 
   it("surfaces an LLM error event as a final loop error and stops streaming", async () => {

@@ -1,8 +1,10 @@
 "use client";
 
-import { Field, Label, Switch } from "@headlessui/react";
-import { switchThumbClass, switchTrackClass } from "@/lib/form-classes";
+import { useId } from "react";
 import { trpc } from "@/lib/trpc-client";
+import { Alert, AlertDescription } from "@/ui/primitives/alert";
+import { Label } from "@/ui/primitives/label";
+import { Switch } from "@/ui/primitives/switch";
 
 /**
  * Deployment-wide kill-switch. When on, every mutation route — including
@@ -21,10 +23,11 @@ export function ReadOnlyModePanel() {
   const row = list.data?.find((r) => r.key === "app.read-only");
   const enabled = row?.value === true;
   const disabled = list.isPending || update.isPending;
+  const switchId = useId();
 
   return (
     <div className="flex flex-col gap-3">
-      <Field className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1">
         <Label className="text-sm font-medium text-foreground">
           {row?.label ?? "System read-only mode"}
         </Label>
@@ -32,20 +35,28 @@ export function ReadOnlyModePanel() {
           {row?.description ??
             "When on, every mutation route — including proposal confirms — is blocked. Reads stay open. Flip on for maintenance windows."}
         </p>
-        <Field className="flex items-center gap-2 text-sm text-foreground">
+        <div className="flex items-center gap-2 text-sm text-foreground">
           <Switch
+            id={switchId}
             checked={enabled}
             disabled={disabled}
-            onChange={(next) => update.mutate({ key: "app.read-only" as never, value: next })}
-            className={switchTrackClass}
-          >
-            <span aria-hidden className={switchThumbClass} />
-          </Switch>
-          <Label>{enabled ? "Enabled — all writes blocked" : "Disabled"}</Label>
-        </Field>
-      </Field>
-      {update.error ? <p className="text-xs text-destructive">{update.error.message}</p> : null}
-      {list.error ? <p className="text-xs text-destructive">{list.error.message}</p> : null}
+            onCheckedChange={(next) =>
+              update.mutate({ key: "app.read-only" as never, value: next })
+            }
+          />
+          <Label htmlFor={switchId}>{enabled ? "Enabled — all writes blocked" : "Disabled"}</Label>
+        </div>
+      </div>
+      {update.error ? (
+        <Alert variant="destructive">
+          <AlertDescription>{update.error.message}</AlertDescription>
+        </Alert>
+      ) : null}
+      {list.error ? (
+        <Alert variant="destructive">
+          <AlertDescription>{list.error.message}</AlertDescription>
+        </Alert>
+      ) : null}
     </div>
   );
 }

@@ -1,18 +1,23 @@
 "use client";
 
-import { Field, Input, Label, Switch } from "@headlessui/react";
-import { useEffect, useRef, useState } from "react";
-import {
-  fieldClass,
-  primaryButtonClass,
-  secondaryButtonClass,
-  switchThumbClass,
-  switchTrackClass,
-} from "@/lib/form-classes";
+import { useEffect, useId, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc-client";
-import { SelectField } from "@/ui/forms/select-field";
+import { Alert, AlertDescription } from "@/ui/primitives/alert";
+import { Button } from "@/ui/primitives/button";
+import { Input } from "@/ui/primitives/input";
+import { Label } from "@/ui/primitives/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/ui/primitives/select";
+import { Switch } from "@/ui/primitives/switch";
 
 type CompactionStrategy = "summary" | "drop-tools";
+
+const PROVIDER_NONE = "__none";
 
 /**
  * Per-project LLM defaults — provider row + sampling temperature, plus the
@@ -33,6 +38,13 @@ export function ProjectLlmPanel({ projectId }: { projectId: string }) {
   const [compactThreshold, setCompactThreshold] = useState<string>("60000");
   const [compactKeep, setCompactKeep] = useState<string>("8");
   const [compactStrategy, setCompactStrategy] = useState<CompactionStrategy>("summary");
+
+  const providerSelectId = useId();
+  const temperatureId = useId();
+  const compactEnabledId = useId();
+  const thresholdId = useId();
+  const keepId = useId();
+  const strategyId = useId();
 
   // Seed the form once per project. Re-seeding on every refetch would
   // clobber in-flight user edits — including the partial-state window
@@ -138,42 +150,45 @@ export function ProjectLlmPanel({ projectId }: { projectId: string }) {
     <div className="flex flex-col gap-8">
       <form onSubmit={onSubmitLlm} className="flex flex-col gap-6">
         <div className="flex flex-col gap-2">
-          <label htmlFor="project-llm-provider" className="text-sm font-medium text-foreground">
+          <Label htmlFor={providerSelectId} className="text-sm font-medium text-foreground">
             Default provider
-          </label>
+          </Label>
           <p className="text-xs text-muted-foreground">
             Picks the LLM row used by every conversation in this project. Empty falls back to the
             global default
             {globalDefault ? ` (currently ${globalDefault.label})` : " (none configured)"}. A
             per-conversation switcher in the chat pane still wins for individual threads.
           </p>
-          <SelectField
-            id="project-llm-provider"
-            value={providerId}
+          <Select
+            value={providerId === "" ? PROVIDER_NONE : providerId}
             disabled={saveLlm.isPending}
-            onChange={(e) => setProviderId(e.target.value)}
-            wrapperClassName="max-w-md"
+            onValueChange={(value) => setProviderId(value === PROVIDER_NONE ? "" : value)}
           >
-            <option value="">Use global default</option>
-            {enabled.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label} ({p.kind}
-                {p.model ? ` · ${p.model}` : ""})
-              </option>
-            ))}
-          </SelectField>
+            <SelectTrigger id={providerSelectId} className="max-w-md">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={PROVIDER_NONE}>Use global default</SelectItem>
+              {enabled.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.label} ({p.kind}
+                  {p.model ? ` · ${p.model}` : ""})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="flex flex-col gap-2 border-t border-border pt-6">
-          <label htmlFor="project-llm-temperature" className="text-sm font-medium text-foreground">
+          <Label htmlFor={temperatureId} className="text-sm font-medium text-foreground">
             Sampling temperature
-          </label>
+          </Label>
           <p className="text-xs text-muted-foreground">
             0–2. Lower is more deterministic, higher is more creative. Empty falls back to the
             adapter default. Per-request overrides (e.g. tool-mode turns) still win.
           </p>
           <Input
-            id="project-llm-temperature"
+            id={temperatureId}
             type="number"
             inputMode="decimal"
             min={0}
@@ -183,14 +198,14 @@ export function ProjectLlmPanel({ projectId }: { projectId: string }) {
             value={temperature}
             disabled={saveLlm.isPending}
             onChange={(e) => setTemperature(e.target.value)}
-            className={`${fieldClass} max-w-[8rem]`}
+            className="max-w-[8rem]"
           />
         </div>
 
         <div className="flex items-center gap-3">
-          <button type="submit" disabled={saveLlm.isPending} className={primaryButtonClass}>
+          <Button type="submit" disabled={saveLlm.isPending}>
             {saveLlm.isPending ? "Saving…" : "Save LLM defaults"}
-          </button>
+          </Button>
           {saveLlm.error ? (
             <span className="text-xs text-destructive">{saveLlm.error.message}</span>
           ) : null}
@@ -211,28 +226,26 @@ export function ProjectLlmPanel({ projectId }: { projectId: string }) {
           </p>
         </div>
 
-        <Field className="flex items-center gap-2 text-sm text-foreground">
+        <div className="flex items-center gap-2 text-sm text-foreground">
           <Switch
+            id={compactEnabledId}
             checked={compactEnabled}
             disabled={saveSetting.isPending}
-            onChange={setCompactEnabled}
-            className={switchTrackClass}
-          >
-            <span aria-hidden className={switchThumbClass} />
-          </Switch>
-          <Label>Auto-compact long conversations</Label>
-        </Field>
+            onCheckedChange={setCompactEnabled}
+          />
+          <Label htmlFor={compactEnabledId}>Auto-compact long conversations</Label>
+        </div>
 
         <div className="flex flex-col gap-2">
-          <label htmlFor="compact-threshold" className="text-sm font-medium text-foreground">
+          <Label htmlFor={thresholdId} className="text-sm font-medium text-foreground">
             Token threshold
-          </label>
+          </Label>
           <p className="text-xs text-muted-foreground">
             Trigger compaction once the live transcript reaches this many estimated tokens (4 chars
             ≈ 1 token). Default 60 000.
           </p>
           <Input
-            id="compact-threshold"
+            id={thresholdId}
             type="number"
             inputMode="numeric"
             min={1_000}
@@ -241,19 +254,19 @@ export function ProjectLlmPanel({ projectId }: { projectId: string }) {
             value={compactThreshold}
             disabled={saveSetting.isPending}
             onChange={(e) => setCompactThreshold(e.target.value)}
-            className={`${fieldClass} max-w-[10rem]`}
+            className="max-w-[10rem]"
           />
         </div>
 
         <div className="flex flex-col gap-2">
-          <label htmlFor="compact-keep" className="text-sm font-medium text-foreground">
+          <Label htmlFor={keepId} className="text-sm font-medium text-foreground">
             Recent turns to keep verbatim
-          </label>
+          </Label>
           <p className="text-xs text-muted-foreground">
             How many of the most-recent message turns survive compaction unchanged. 2–50.
           </p>
           <Input
-            id="compact-keep"
+            id={keepId}
             type="number"
             inputMode="numeric"
             min={2}
@@ -262,37 +275,42 @@ export function ProjectLlmPanel({ projectId }: { projectId: string }) {
             value={compactKeep}
             disabled={saveSetting.isPending}
             onChange={(e) => setCompactKeep(e.target.value)}
-            className={`${fieldClass} max-w-[8rem]`}
+            className="max-w-[8rem]"
           />
         </div>
 
         <div className="flex flex-col gap-2">
-          <label htmlFor="compact-strategy" className="text-sm font-medium text-foreground">
+          <Label htmlFor={strategyId} className="text-sm font-medium text-foreground">
             Strategy
-          </label>
+          </Label>
           <p className="text-xs text-muted-foreground">
             <strong>summary</strong> replaces older turns with a synthetic system summary.
             <strong> drop-tools</strong> only sheds stale tool-call/result rows and keeps the prose
             — cheaper but less aggressive.
           </p>
-          <SelectField
-            id="compact-strategy"
+          <Select
             value={compactStrategy}
             disabled={saveSetting.isPending}
-            onChange={(e) => setCompactStrategy(e.target.value as CompactionStrategy)}
-            wrapperClassName="max-w-[14rem]"
+            onValueChange={(value) => setCompactStrategy(value as CompactionStrategy)}
           >
-            <option value="summary">summary</option>
-            <option value="drop-tools">drop-tools</option>
-          </SelectField>
+            <SelectTrigger id={strategyId} className="max-w-[14rem]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="summary">summary</SelectItem>
+              <SelectItem value="drop-tools">drop-tools</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="flex items-center gap-3">
-          <button type="submit" disabled={saveSetting.isPending} className={secondaryButtonClass}>
+          <Button type="submit" variant="secondary" disabled={saveSetting.isPending}>
             {saveSetting.isPending ? "Saving…" : "Save compaction settings"}
-          </button>
+          </Button>
           {saveSetting.error ? (
-            <span className="text-xs text-destructive">{saveSetting.error.message}</span>
+            <Alert variant="destructive">
+              <AlertDescription>{saveSetting.error.message}</AlertDescription>
+            </Alert>
           ) : null}
           {saveSetting.isSuccess ? (
             <span className="text-xs text-muted-foreground">Saved.</span>
