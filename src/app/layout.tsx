@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { AppProviders } from "@/app/providers";
 import { publicBaseUrl } from "@/lib/public-base-url";
+import { Toaster } from "@/ui/primitives/sonner";
 import { ThemeBootScript } from "@/ui/shell/theme-boot-script";
 import "./globals.css";
 
@@ -47,6 +48,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <AppProviders>{children}</AppProviders>
+        <Toaster />
       </body>
     </html>
   );

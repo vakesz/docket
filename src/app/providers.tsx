@@ -5,6 +5,7 @@ import { useState } from "react";
 import superjson from "superjson";
 import { publicBaseUrl } from "@/lib/public-base-url";
 import { trpc } from "@/lib/trpc-client";
+import { TooltipProvider } from "@/ui/primitives/tooltip";
 
 function getBaseUrl(): string {
   if (typeof window !== "undefined") return "";
@@ -40,7 +41,9 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
 
   return (
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>{children}</TooltipProvider>
+      </QueryClientProvider>
     </trpc.Provider>
   );
 }

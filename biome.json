@@ -30,6 +30,19 @@
       "recommended": true
     }
   },
+  "overrides": [
+    {
+      "includes": ["src/ui/primitives/**"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "useSemanticElements": "off",
+            "useKeyWithClickEvents": "off"
+          }
+        }
+      }
+    }
+  ],
   "javascript": {
     "formatter": {
       "quoteStyle": "double",
