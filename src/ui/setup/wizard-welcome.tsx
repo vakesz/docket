@@ -16,7 +16,7 @@ export function WizardWelcome({ onStart }: { onStart: () => void }) {
         </p>
       </div>
       <div className="flex flex-col items-center gap-1.5">
-        <span className="text-xs uppercase tracking-wide text-muted-foreground-faint">Theme</span>
+        <span className="text-xs uppercase tracking-wide text-muted-foreground/70">Theme</span>
         <ThemePicker />
       </div>
       <Button type="button" onClick={onStart}>

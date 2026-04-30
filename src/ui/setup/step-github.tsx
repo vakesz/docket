@@ -75,7 +75,7 @@ export function StepGithub({
           autoComplete="off"
           required={state.enabled}
         />
-        <p className="text-xs text-muted-foreground-faint">
+        <p className="text-xs text-muted-foreground/70">
           Shown on the sign-in button. Useful when running multiple GitHub Enterprise instances.
         </p>
       </div>
@@ -94,7 +94,7 @@ export function StepGithub({
             autoComplete="off"
             required={state.enabled}
           />
-          <p className="text-xs text-muted-foreground-faint">
+          <p className="text-xs text-muted-foreground/70">
             20 chars, starts with <code className="font-mono">Iv1.</code> (legacy) or{" "}
             <code className="font-mono">Iv23li</code> (new apps).
           </p>
@@ -113,7 +113,7 @@ export function StepGithub({
             autoComplete="off"
             required={state.enabled}
           />
-          <p className="text-xs text-muted-foreground-faint">
+          <p className="text-xs text-muted-foreground/70">
             40-char hex string from the OAuth App page. Stored AES-GCM encrypted.
           </p>
         </div>
@@ -135,7 +135,7 @@ export function StepGithub({
               className="font-mono"
               autoComplete="off"
             />
-            <p className="text-xs text-muted-foreground-faint">
+            <p className="text-xs text-muted-foreground/70">
               Default covers sign-in + repo access. Trim if you only need read access.
             </p>
           </div>
@@ -150,7 +150,7 @@ export function StepGithub({
               placeholder="https://github.example.com"
               autoComplete="off"
             />
-            <p className="text-xs text-muted-foreground-faint">
+            <p className="text-xs text-muted-foreground/70">
               Leave blank for github.com. Only fill in for GitHub Enterprise Server.
             </p>
           </div>

@@ -80,7 +80,7 @@ export function BudgetAuditPanel() {
             "Hard ceiling on the sum of `Conversation.costCents` accrued in the current calendar month (UTC). 0 disables the cap."}
         </p>
         {budget.data ? (
-          <p className="text-xs text-muted-foreground-faint">
+          <p className="text-xs text-muted-foreground/70">
             This month: ${(budget.data.monthCents / 100).toFixed(2)}
             {budget.data.capCents > 0
               ? ` of $${(budget.data.capCents / 100).toFixed(2)} (${budget.data.capReached ? "cap reached" : `$${(budget.data.remainingCents / 100).toFixed(2)} remaining`})`
@@ -151,7 +151,7 @@ export function BudgetAuditPanel() {
           </Button>
         </div>
         {audit.data ? (
-          <p className="text-xs text-muted-foreground-faint">
+          <p className="text-xs text-muted-foreground/70">
             Total audit rows: {audit.data.total.toLocaleString()}.
             {audit.data.retentionDays > 0
               ? ` ${audit.data.eligible.toLocaleString()} older than ${audit.data.retentionDays} day${audit.data.retentionDays === 1 ? "" : "s"} are eligible for pruning.`

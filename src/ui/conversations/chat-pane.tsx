@@ -20,7 +20,7 @@ import { ProposalCard } from "@/ui/proposals/proposal-card";
 
 const MICRO_CAPS_BUTTON =
   "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground hover:bg-muted hover:text-foreground";
-const META_LABEL_FAINT = "text-xs uppercase tracking-wide text-muted-foreground-faint";
+const META_LABEL_FAINT = "text-xs uppercase tracking-wide text-muted-foreground/70";
 
 /**
  * Right pane of the workspace: per-item chat. Reuses the persisted
@@ -256,7 +256,7 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
           Chat
         </h2>
         {conversation && (
-          <span className="font-mono text-[10px] text-muted-foreground-faint">
+          <span className="font-mono text-[10px] text-muted-foreground/70">
             tokens {conversation.tokensIn + conversation.tokensOut} · $
             {(conversation.costCents / 100).toFixed(3)}
           </span>
@@ -290,11 +290,11 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
 
       <div ref={scrollRef} className="relative flex-1 overflow-auto px-3 py-3">
         {!conversationId && messages.length === 0 && !hasStreamingActivity ? (
-          <p className="text-sm italic text-muted-foreground-faint">
+          <p className="text-sm italic text-muted-foreground/70">
             No conversation yet. Send a message to start one.
           </p>
         ) : detail.isPending && messages.length === 0 && !hasStreamingActivity ? (
-          <p className="text-sm italic text-muted-foreground-faint">Loading messages…</p>
+          <p className="text-sm italic text-muted-foreground/70">Loading messages…</p>
         ) : (
           <>
             {renderUnits.map((unit) => {
@@ -393,7 +393,7 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
         }}
         className="border-t border-border p-2"
       >
-        <p className="mb-1 text-[10px] text-muted-foreground-faint">
+        <p className="mb-1 text-[10px] text-muted-foreground/70">
           {streaming.question
             ? "Pick from the card above — or type free text and it'll be sent as your answer."
             : "Ask the agent to comment, transition, or rewrite — changes appear as cards to confirm."}
@@ -476,15 +476,15 @@ function ThinkingDots() {
   return (
     <output className="mb-3 flex items-center gap-1 px-3 py-2" aria-label="Thinking">
       <span
-        className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground-faint"
+        className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/70"
         style={{ animationDelay: "0ms" }}
       />
       <span
-        className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground-faint"
+        className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/70"
         style={{ animationDelay: "150ms" }}
       />
       <span
-        className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground-faint"
+        className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/70"
         style={{ animationDelay: "300ms" }}
       />
     </output>

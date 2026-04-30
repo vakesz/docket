@@ -39,7 +39,7 @@ export function LlmProvidersPanel() {
   const [editingId, setEditingId] = useState<string | null>(null);
 
   if (list.isPending) {
-    return <p className="text-sm text-muted-foreground-faint">Loading providers…</p>;
+    return <p className="text-sm text-muted-foreground/70">Loading providers…</p>;
   }
   if (list.error) {
     return <p className="text-sm text-destructive">{list.error.message}</p>;

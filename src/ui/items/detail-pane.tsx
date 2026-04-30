@@ -86,7 +86,7 @@ export function DetailPane({
           </span>
           <StatePill state={item.state} />
           <CopyIdButton value={item.providerItemId} />
-          <span className="ml-auto inline-flex items-center gap-1 text-muted-foreground-faint">
+          <span className="ml-auto inline-flex items-center gap-1 text-muted-foreground/70">
             <span className="font-mono text-[10px]">Updated</span>
             <FreshnessStamp updatedAt={item.updatedAt} thresholdDays={staleThresholdDays} />
           </span>
@@ -163,7 +163,7 @@ export function DetailPane({
               ) : (
                 <>
                   <UserX aria-hidden="true" className="size-3" />
-                  <span className="italic text-muted-foreground-faint">unassigned</span>
+                  <span className="italic text-muted-foreground/70">unassigned</span>
                 </>
               )}
             </li>
@@ -220,7 +220,7 @@ export function DetailPane({
               <h3 className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                 Actions
               </h3>
-              <span className="text-[11px] italic text-muted-foreground-faint">
+              <span className="text-[11px] italic text-muted-foreground/70">
                 will require approval
               </span>
             </div>
@@ -255,7 +255,7 @@ export function DetailPane({
         {item.descriptionMd ? (
           <Markdown source={item.descriptionMd} />
         ) : (
-          <p className="text-sm italic text-muted-foreground-faint">(no description)</p>
+          <p className="text-sm italic text-muted-foreground/70">(no description)</p>
         )}
       </section>
 
@@ -264,7 +264,7 @@ export function DetailPane({
           Comments ({item.comments.length})
         </h2>
         {item.comments.length === 0 ? (
-          <p className="text-sm italic text-muted-foreground-faint">No comments cached.</p>
+          <p className="text-sm italic text-muted-foreground/70">No comments cached.</p>
         ) : (
           <ul className="flex flex-col gap-3">
             {item.comments.map((c) => {

@@ -80,7 +80,7 @@ export const Markdown = memo(function Markdown({
   className?: string;
 }) {
   if (!source?.trim()) {
-    return <p className="text-sm italic text-muted-foreground-faint">(no content)</p>;
+    return <p className="text-sm italic text-muted-foreground/70">(no content)</p>;
   }
   return (
     <div className={cn("docket-md break-words text-sm text-foreground", className)}>

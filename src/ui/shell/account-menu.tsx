@@ -71,7 +71,7 @@ export function AccountMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" sideOffset={8} className="w-56">
         <DropdownMenuLabel className="flex flex-col gap-0.5">
-          <span className="text-xs uppercase tracking-wide text-muted-foreground-faint">
+          <span className="text-xs uppercase tracking-wide text-muted-foreground/70">
             Signed in as
           </span>
           <span className="truncate text-sm text-foreground">{userLabel}</span>

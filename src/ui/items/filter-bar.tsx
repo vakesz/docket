@@ -66,7 +66,7 @@ function summarizeSelection(selected: ReadonlySet<string>, meIdentifier: string 
 function FilterRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-start gap-2">
-      <span className="mt-1 w-14 shrink-0 font-mono text-[10px] uppercase tracking-wider text-muted-foreground-faint">
+      <span className="mt-1 w-14 shrink-0 font-mono text-[10px] uppercase tracking-wider text-muted-foreground/70">
         {label}
       </span>
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">{children}</div>
@@ -79,7 +79,7 @@ function ClearButton({ onClick }: { onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="ml-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground-faint transition-colors hover:bg-muted hover:text-foreground"
+      className="ml-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
       title="Clear selection"
     >
       <X aria-hidden="true" className="size-3" />
@@ -95,7 +95,7 @@ function CountBadge({ n, selected }: { n: number; selected: boolean }) {
         "rounded px-1 py-px text-[9px] tabular-nums",
         selected
           ? "bg-primary-foreground/15 text-primary-foreground"
-          : "bg-background/60 text-muted-foreground-faint",
+          : "bg-background/60 text-muted-foreground/70",
       )}
     >
       {n}
@@ -218,7 +218,7 @@ export function FilterBar({
             <button
               type="button"
               onClick={() => handlers.setTagsExpanded((v) => !v)}
-              className="rounded-full px-2 py-0.5 font-mono text-[10px] lowercase tracking-wide text-muted-foreground-faint hover:bg-muted"
+              className="rounded-full px-2 py-0.5 font-mono text-[10px] lowercase tracking-wide text-muted-foreground/70 hover:bg-muted"
             >
               {tagsExpanded ? "show less" : `+${tagCounts.length - tagCollapseLimit} more`}
             </button>
@@ -362,7 +362,7 @@ function AssigneeChips({
               <span
                 className={cn(
                   "font-mono text-[9px] uppercase",
-                  selected ? "text-primary-foreground/75" : "text-muted-foreground-faint",
+                  selected ? "text-primary-foreground/75" : "text-muted-foreground/70",
                 )}
               >
                 you
@@ -376,7 +376,7 @@ function AssigneeChips({
         <button
           type="button"
           onClick={onToggleExpanded}
-          className="rounded-full px-2 py-0.5 font-mono text-[10px] lowercase tracking-wide text-muted-foreground-faint hover:bg-muted"
+          className="rounded-full px-2 py-0.5 font-mono text-[10px] lowercase tracking-wide text-muted-foreground/70 hover:bg-muted"
         >
           {assigneesExpanded ? "show less" : `+${overflow} more`}
         </button>
@@ -434,7 +434,7 @@ function AssigneeAvatar({
   return (
     <span
       aria-hidden="true"
-      className="relative flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full bg-background/40 font-sans text-[8px] font-medium text-muted-foreground-faint"
+      className="relative flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full bg-background/40 font-sans text-[8px] font-medium text-muted-foreground/70"
     >
       <span>{initial}</span>
       {url ? (
@@ -484,7 +484,7 @@ function AssigneeDropdown({
     <Popover>
       <PopoverTrigger className="inline-flex min-w-[10rem] items-center justify-between gap-2 rounded-md border border-border bg-card px-2 py-1 text-xs text-foreground hover:bg-muted">
         <span className="truncate">{summary}</span>
-        <ChevronDown aria-hidden="true" className="size-3 shrink-0 text-muted-foreground-faint" />
+        <ChevronDown aria-hidden="true" className="size-3 shrink-0 text-muted-foreground/70" />
       </PopoverTrigger>
       <PopoverContent
         align="start"
@@ -549,13 +549,13 @@ function AssigneeDropdown({
                     ) : null}
                     <span className="truncate">{name}</span>
                     {isMe ? (
-                      <span className="font-mono text-[9px] uppercase text-muted-foreground-faint">
+                      <span className="font-mono text-[9px] uppercase text-muted-foreground/70">
                         you
                       </span>
                     ) : null}
                   </span>
                   <span className="flex items-center gap-1.5">
-                    <span className="font-mono text-[9px] tabular-nums text-muted-foreground-faint">
+                    <span className="font-mono text-[9px] tabular-nums text-muted-foreground/70">
                       {n}
                     </span>
                     {selected ? <Check aria-hidden="true" className="size-3" /> : null}

@@ -101,7 +101,7 @@
     font-weight: 500;
   }
   .docket-md mark {
-    background-color: color-mix(in oklab, var(--warning) 25%, transparent);
+    background-color: color-mix(in oklab, var(--primary) 25%, transparent);
     color: inherit;
     padding: 0 0.15em;
   }
@@ -143,7 +143,7 @@
   }
   .hljs-comment,
   .hljs-quote {
-    color: var(--muted-foreground-faint);
+    color: color-mix(in oklab, var(--muted-foreground) 70%, transparent);
     font-style: italic;
   }
   .hljs-keyword,
@@ -157,14 +157,14 @@
   .hljs-attr,
   .hljs-template-variable,
   .hljs-variable {
-    color: var(--success);
+    color: var(--primary);
   }
   .hljs-number,
   .hljs-literal,
   .hljs-built_in,
   .hljs-bullet,
   .hljs-symbol {
-    color: var(--warning);
+    color: var(--primary);
   }
   .hljs-title,
   .hljs-section,
@@ -176,7 +176,7 @@
   }
   .hljs-type,
   .hljs-class .hljs-title {
-    color: var(--warning);
+    color: var(--primary);
     font-weight: 600;
   }
   .hljs-tag,
@@ -187,7 +187,7 @@
     color: var(--destructive);
   }
   .hljs-addition {
-    color: var(--success);
+    color: var(--primary);
   }
   .hljs-emphasis {
     font-style: italic;

@@ -71,7 +71,7 @@ export function WebFetchPanel({ projectSlug }: { projectSlug: string }) {
   };
 
   if (projectSettings.isPending) {
-    return <p className="text-sm text-muted-foreground-faint">Loading…</p>;
+    return <p className="text-sm text-muted-foreground/70">Loading…</p>;
   }
 
   return (

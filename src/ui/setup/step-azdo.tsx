@@ -91,9 +91,7 @@ export function StepAzdo({
             autoComplete="off"
             required={state.enabled}
           />
-          <p className="text-xs text-muted-foreground-faint">
-            UUID shown on the app's Overview page.
-          </p>
+          <p className="text-xs text-muted-foreground/70">UUID shown on the app's Overview page.</p>
         </div>
         <div className="flex flex-1 flex-col gap-1">
           <Label htmlFor={clientSecretId} className="text-xs text-muted-foreground">
@@ -109,7 +107,7 @@ export function StepAzdo({
             autoComplete="off"
             required={state.enabled}
           />
-          <p className="text-xs text-muted-foreground-faint">
+          <p className="text-xs text-muted-foreground/70">
             Use the <em>value</em>, not the secret id. ~40 chars, may include{" "}
             <code className="font-mono">~</code>, <code className="font-mono">-</code>,{" "}
             <code className="font-mono">.</code>.
@@ -130,7 +128,7 @@ export function StepAzdo({
           autoComplete="off"
           required={state.enabled}
         />
-        <p className="text-xs text-muted-foreground-faint">
+        <p className="text-xs text-muted-foreground/70">
           UUID. Found on the Entra tenant overview page; required so the OAuth endpoints resolve
           correctly.
         </p>
@@ -152,7 +150,7 @@ export function StepAzdo({
               className="font-mono"
               autoComplete="off"
             />
-            <p className="text-xs text-muted-foreground-faint">
+            <p className="text-xs text-muted-foreground/70">
               Default is the AzDO v6 work-items scope plus offline access for refresh tokens.
             </p>
           </div>

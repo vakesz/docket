@@ -137,10 +137,10 @@ export function ProjectLlmPanel({ projectSlug }: { projectSlug: string }) {
   };
 
   if (projectsList.isPending || providers.isPending || projectSettings.isPending) {
-    return <p className="text-sm text-muted-foreground-faint">Loading…</p>;
+    return <p className="text-sm text-muted-foreground/70">Loading…</p>;
   }
   if (!project) {
-    return <p className="text-sm text-muted-foreground-faint">Project not found.</p>;
+    return <p className="text-sm text-muted-foreground/70">Project not found.</p>;
   }
 
   const enabled = providers.data?.filter((p) => p.enabled && p.role === "chat") ?? [];

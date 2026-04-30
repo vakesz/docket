@@ -40,7 +40,7 @@ export function WizardStepper({
               }`}
             />
             <span
-              className={`mt-3 text-xs ${state === "pending" ? "text-muted-foreground-faint" : "text-foreground"}`}
+              className={`mt-3 text-xs ${state === "pending" ? "text-muted-foreground/70" : "text-foreground"}`}
             >
               {step.title}
             </span>

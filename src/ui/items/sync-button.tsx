@@ -33,7 +33,7 @@ export function SyncButton({
       {sync.error ? (
         <span className="text-xs text-destructive">{sync.error.message}</span>
       ) : sync.data ? (
-        <span className="text-xs text-muted-foreground-faint">
+        <span className="text-xs text-muted-foreground/70">
           +{sync.data.upserted} upserted, {sync.data.archived} archived
         </span>
       ) : null}

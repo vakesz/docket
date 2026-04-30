@@ -235,7 +235,7 @@ export function OauthProviderForm(props: Props) {
                 <FormLabel>
                   Client secret
                   {mode === "edit" ? (
-                    <span className="ml-1 font-normal text-muted-foreground-faint">
+                    <span className="ml-1 font-normal text-muted-foreground/70">
                       (leave blank to keep current)
                     </span>
                   ) : null}

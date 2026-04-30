@@ -66,14 +66,14 @@ export function StatusFooter({
     <footer className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border bg-card px-3 py-1.5 text-[11px] text-muted-foreground">
       <span className="flex items-center gap-1.5">
         <span
-          className={cn("h-1.5 w-1.5 rounded-full", online ? "bg-success" : "bg-destructive")}
+          className={cn("h-1.5 w-1.5 rounded-full", online ? "bg-emerald-500" : "bg-destructive")}
           aria-hidden="true"
         />
         <span className="uppercase tracking-wide">{online ? "online" : "offline"}</span>
       </span>
       {projectSlug ? (
         <>
-          <span className="text-muted-foreground-faint">·</span>
+          <span className="text-muted-foreground/70">·</span>
           <span className="inline-flex items-center gap-1">
             <span>{lastSyncAt ? `synced ${formatRelative(lastSyncAt)}` : "never synced"}</span>
             <SyncButton projectSlug={projectSlug} readOnly={readOnly} variant="footer" />
@@ -85,7 +85,7 @@ export function StatusFooter({
       ) : null}
       {readOnly ? (
         <>
-          <span className="text-muted-foreground-faint">·</span>
+          <span className="text-muted-foreground/70">·</span>
           <span className="rounded-full border border-destructive/40 bg-destructive/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-destructive">
             Read-only
           </span>
@@ -145,14 +145,14 @@ function PendingProposalsButton({
 
   return (
     <>
-      <span className="text-muted-foreground-faint">·</span>
+      <span className="text-muted-foreground/70">·</span>
       <button
         type="button"
         onClick={openNext}
         aria-haspopup="dialog"
         aria-label={`Review next of ${count} pending proposal${count === 1 ? "" : "s"}`}
         className={cn(
-          "cursor-pointer rounded px-1 text-warning hover:bg-muted",
+          "cursor-pointer rounded px-1 text-amber-600 dark:text-amber-400 hover:bg-muted",
           "focus:outline-none focus:ring-1 focus:ring-ring",
         )}
       >

@@ -5,13 +5,17 @@ import { useTheme } from "next-themes";
 import { Button } from "@/ui/primitives/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/ui/primitives/tooltip";
 
-const LABELS: Record<string, string> = { light: "Light", dark: "Dark", system: "Auto" };
+const LABELS: Record<string, string> = {
+  light: "Light",
+  dark: "Dark",
+  system: "Auto",
+};
 
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
 
   function toggle() {
-    const next = theme === "dark" ? "system" : theme === "system" ? "dark" : "light";
+    const next = theme === "dark" ? "system" : theme === "system" ? "light" : "dark";
     setTheme(next);
   }
 

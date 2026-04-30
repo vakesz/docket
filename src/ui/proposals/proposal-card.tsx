@@ -151,7 +151,7 @@ export function ProposalCard({
           <Badge className="font-mono uppercase tracking-wider">propose</Badge>
           <span className="truncate font-medium">{kindLabel}</span>
           {row.providerItemId ? (
-            <span className="truncate font-mono text-[11px] text-muted-foreground-faint">
+            <span className="truncate font-mono text-[11px] text-muted-foreground/70">
               {row.providerItemId}
             </span>
           ) : null}

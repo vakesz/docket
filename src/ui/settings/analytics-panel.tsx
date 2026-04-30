@@ -107,7 +107,7 @@ export function AnalyticsPanel(
         </div>
       </div>
 
-      {isPending ? <p className="text-sm text-muted-foreground-faint">Loading…</p> : null}
+      {isPending ? <p className="text-sm text-muted-foreground/70">Loading…</p> : null}
       {error ? <p className="text-xs text-destructive">{error.message}</p> : null}
 
       {data ? (
@@ -171,7 +171,7 @@ function TotalsStrip({
             </div>
             <div className="mt-1 font-mono text-lg text-foreground">{s.value}</div>
             {s.sub ? (
-              <div className="mt-0.5 text-[10px] text-muted-foreground-faint">{s.sub}</div>
+              <div className="mt-0.5 text-[10px] text-muted-foreground/70">{s.sub}</div>
             ) : null}
           </div>
         ))}
@@ -276,10 +276,10 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
         <h4 className="text-sm font-medium text-foreground">Trends</h4>
         <div className="flex flex-wrap items-center gap-3 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
           <LegendDot color="bg-primary" label="Chat spend" />
-          <LegendDot color="bg-warning" label="Guardrail spend" />
+          <LegendDot color="bg-amber-500" label="Guardrail spend" />
           <LegendDot color="bg-primary/50" label="7-day avg" dashed />
           <LegendDot color="bg-muted-foreground" label="Tokens in" />
-          <LegendDot color="bg-muted-foreground-faint" label="Tokens out" />
+          <LegendDot color="bg-muted-foreground/70" label="Tokens out" />
         </div>
       </div>
       <svg
@@ -338,7 +338,7 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
         {/* guardrail spend (separate line, same y-axis) */}
         <polyline
           points={guardrailCostLine}
-          className="fill-none stroke-warning"
+          className="fill-none stroke-amber-500"
           strokeWidth={1.5}
           strokeLinejoin="round"
           strokeLinecap="round"
@@ -362,7 +362,7 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
         />
         <polyline
           points={tokensOutLine}
-          className="fill-none stroke-muted-foreground-faint"
+          className="fill-none stroke-muted-foreground/70"
           strokeWidth={1.25}
           strokeDasharray="2 3"
           strokeLinejoin="round"
@@ -374,7 +374,7 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
             key={b.date}
             x={xAt(i)}
             y={padTop + innerH + 14}
-            className="fill-muted-foreground-faint font-mono text-[9px]"
+            className="fill-muted-foreground/70 font-mono text-[9px]"
             textAnchor="middle"
           >
             {shortDate(b.date)}
@@ -388,7 +388,7 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
               x2={xAt(hover)}
               y1={padTop}
               y2={padTop + innerH}
-              className="stroke-muted-foreground-faint"
+              className="stroke-muted-foreground/70"
               strokeWidth={1}
               strokeDasharray="2 2"
             />
@@ -397,7 +397,7 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
               cx={xAt(hover)}
               cy={yCost(hovered.guardrailCostCents)}
               r={3}
-              className="fill-warning"
+              className="fill-amber-500"
             />
             <circle
               cx={xAt(hover)}
@@ -409,7 +409,7 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
               cx={xAt(hover)}
               cy={yTokens(hovered.tokensOut)}
               r={2.5}
-              className="fill-muted-foreground-faint"
+              className="fill-muted-foreground/70"
             />
           </g>
         ) : null}
@@ -531,7 +531,7 @@ function BarChart({ buckets, peakCost }: { buckets: Bucket[]; peakCost: number }
         <h4 className="text-sm font-medium text-foreground">Daily spend</h4>
         <div className="flex items-center gap-3 text-[10px] uppercase tracking-wide text-muted-foreground">
           <LegendDot color="bg-primary/70" label="Chat" />
-          <LegendDot color="bg-warning/80" label="Guardrail" />
+          <LegendDot color="bg-amber-500/80" label="Guardrail" />
           <span>peak ${(peak / 100).toFixed(2)}</span>
         </div>
       </div>
@@ -548,7 +548,7 @@ function BarChart({ buckets, peakCost }: { buckets: Bucket[]; peakCost: number }
               title={`${b.date}: chat $${(b.costCents / 100).toFixed(3)} · guardrail $${(b.guardrailCostCents / 100).toFixed(3)} · ${b.conversations} conv`}
             >
               <div
-                className="w-full bg-warning/80 transition-colors group-hover:bg-warning"
+                className="w-full bg-amber-500/80 transition-colors group-hover:bg-amber-500"
                 style={{ height: `${guardShare}%` }}
               />
               <div
@@ -559,7 +559,7 @@ function BarChart({ buckets, peakCost }: { buckets: Bucket[]; peakCost: number }
           );
         })}
       </div>
-      <div className="mt-2 flex justify-between font-mono text-[10px] text-muted-foreground-faint">
+      <div className="mt-2 flex justify-between font-mono text-[10px] text-muted-foreground/70">
         <span>{buckets[0]?.date}</span>
         <span>{buckets[buckets.length - 1]?.date}</span>
       </div>
@@ -604,7 +604,7 @@ function DataTable({ buckets }: { buckets: Bucket[] }) {
                   <td className="py-1 text-right text-foreground">
                     ${(b.costCents / 100).toFixed(3)}
                   </td>
-                  <td className="py-1 text-right text-warning">
+                  <td className="py-1 text-right text-amber-600 dark:text-amber-400">
                     ${(b.guardrailCostCents / 100).toFixed(3)}
                   </td>
                   <td className="py-1 text-right font-medium text-foreground">

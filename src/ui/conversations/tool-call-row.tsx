@@ -39,8 +39,10 @@ export function ToolCallRow({
   const preview = argsPreview || fallbackPreview;
 
   const errored = ok === false;
-  const palette = errored ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning";
-  const hoverBg = errored ? "hover:bg-destructive/15" : "hover:bg-warning/15";
+  const palette = errored
+    ? "bg-destructive/10 text-destructive"
+    : "bg-amber-500/10 text-amber-600 dark:text-amber-400";
+  const hoverBg = errored ? "hover:bg-destructive/15" : "hover:bg-amber-500/15";
 
   const prettyArgs = args ? safeStringify(args) : null;
 
@@ -58,9 +60,7 @@ export function ToolCallRow({
         <span className={META_LABEL}>{label}</span>
         {status && <span className="font-mono text-[11px]">{status}</span>}
         {!open && preview && (
-          <span className="truncate font-mono text-[11px] text-muted-foreground-faint">
-            {preview}
-          </span>
+          <span className="truncate font-mono text-[11px] text-muted-foreground/70">{preview}</span>
         )}
       </button>
       {open && (

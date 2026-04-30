@@ -8,7 +8,7 @@ import { trpc } from "@/lib/trpc-client";
 import { ASSIGNEE_UNASSIGNED, FilterBar } from "@/ui/items/filter-bar";
 import { EmptyMessage, ItemRow, type ListItem, PinnedRow } from "@/ui/items/item-row";
 
-const META_LABEL_FAINT = "text-xs uppercase tracking-wide text-muted-foreground-faint";
+const META_LABEL_FAINT = "text-xs uppercase tracking-wide text-muted-foreground/70";
 
 const KINDS: Array<ItemKind | "all"> = ["all", "epic", "feature", "story", "task", "bug"];
 
@@ -228,7 +228,7 @@ export function BacklogPane({
         <div className="border-b border-border bg-card">
           <div className={`flex items-center gap-2 px-3 pt-2 pb-1 ${META_LABEL_FAINT}`}>
             <span>Recent</span>
-            <span className="text-muted-foreground-faint">{recentItems.length}</span>
+            <span className="text-muted-foreground/70">{recentItems.length}</span>
           </div>
           {recentItems.map((it) => (
             <PinnedRow
@@ -246,7 +246,7 @@ export function BacklogPane({
           <div className={`flex items-center gap-2 px-3 pt-2 pb-1 ${META_LABEL_FAINT}`}>
             <span className="text-primary">●</span>
             <span>Pinned</span>
-            <span className="text-muted-foreground-faint">{pinned.data.length}</span>
+            <span className="text-muted-foreground/70">{pinned.data.length}</span>
           </div>
           {pinned.data.map(({ item: it }) => (
             <PinnedRow

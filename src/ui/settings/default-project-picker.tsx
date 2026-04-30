@@ -29,7 +29,7 @@ export function DefaultProjectPicker() {
   const fieldId = useId();
 
   if (me.isPending || projects.isPending) {
-    return <p className="text-sm text-muted-foreground-faint">Loading…</p>;
+    return <p className="text-sm text-muted-foreground/70">Loading…</p>;
   }
   if (me.error || projects.error) {
     return (

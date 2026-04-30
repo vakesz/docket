@@ -42,7 +42,7 @@ export function ProjectsPanel() {
   });
 
   if (list.isPending) {
-    return <p className="text-sm text-muted-foreground-faint">Loading projects…</p>;
+    return <p className="text-sm text-muted-foreground/70">Loading projects…</p>;
   }
   if (list.error) {
     return (

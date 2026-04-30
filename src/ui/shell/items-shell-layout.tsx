@@ -8,7 +8,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/ui/primitives/sh
 import { useRegisterSidebarMount, useSidebarDrawer } from "@/ui/shell/sidebar-drawer-context";
 
 const RESIZE_HANDLE_CLASS =
-  "w-px bg-border transition-colors data-[resize-handle-state=hover]:bg-muted-foreground-faint data-[resize-handle-state=drag]:bg-primary";
+  "w-px bg-border transition-colors data-[resize-handle-state=hover]:bg-muted-foreground/70 data-[resize-handle-state=drag]:bg-primary";
 
 /**
  * The 3-pane workspace.

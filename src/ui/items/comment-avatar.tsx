@@ -16,7 +16,7 @@ export function CommentAvatar({
   return (
     <span
       aria-hidden="true"
-      className="relative flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-background/40 font-sans text-xs font-medium text-muted-foreground-faint"
+      className="relative flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-background/40 font-sans text-xs font-medium text-muted-foreground/70"
     >
       <span>{initial}</span>
       {url ? (

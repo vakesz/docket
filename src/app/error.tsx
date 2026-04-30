@@ -26,7 +26,7 @@ export default function RootError({
           The page hit an unexpected error. Try again, or reload if the problem persists.
         </p>
         {error.digest ? (
-          <p className="text-xs text-muted-foreground-faint">
+          <p className="text-xs text-muted-foreground/70">
             Error ref: <code className="font-mono">{error.digest}</code>
           </p>
         ) : null}

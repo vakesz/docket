@@ -140,7 +140,7 @@ export function GuardrailPanel({ projectSlug }: { projectSlug: string }) {
   };
 
   if (projectSettings.isPending || providers.isPending) {
-    return <p className="text-sm text-muted-foreground-faint">Loading…</p>;
+    return <p className="text-sm text-muted-foreground/70">Loading…</p>;
   }
 
   const knobsDisabled = !enabled || !hasGuardrailProvider || save.isPending;
@@ -217,7 +217,7 @@ export function GuardrailPanel({ projectSlug }: { projectSlug: string }) {
             ))}
           </SelectContent>
         </Select>
-        <p className="text-[11px] text-muted-foreground-faint">
+        <p className="text-[11px] text-muted-foreground/70">
           {KIND_OPTIONS.find((opt) => opt.value === kind)?.hint}
         </p>
       </div>

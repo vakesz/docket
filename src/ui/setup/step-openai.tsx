@@ -124,7 +124,7 @@ export function StepOpenai({
               <SelectItem value="guardrail">Guardrail</SelectItem>
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground-faint">
+          <p className="text-xs text-muted-foreground/70">
             Stamped at create — switch in /settings means delete + recreate.
           </p>
         </div>
@@ -140,7 +140,7 @@ export function StepOpenai({
             autoComplete="off"
             required={state.enabled}
           />
-          <p className="text-xs text-muted-foreground-faint">
+          <p className="text-xs text-muted-foreground/70">
             Shown in the model picker. Useful if you'll add multiple OpenAI-compatible endpoints.
           </p>
         </div>
@@ -160,7 +160,7 @@ export function StepOpenai({
           autoComplete="off"
           required={state.enabled}
         />
-        <p className="text-xs text-muted-foreground-faint">
+        <p className="text-xs text-muted-foreground/70">
           OpenAI keys start with <code className="font-mono">sk-</code> /{" "}
           <code className="font-mono">sk-proj-</code>. Stored AES-GCM encrypted.
         </p>
@@ -186,7 +186,7 @@ export function StepOpenai({
               <option key={m} value={m} />
             ))}
           </datalist>
-          <p className="text-xs text-muted-foreground-faint">
+          <p className="text-xs text-muted-foreground/70">
             {state.role === "guardrail"
               ? "Pick a small / cheap model — guardrail runs on every turn."
               : "Pick a suggestion or type any deployment name (Azure Foundry users — paste your deployment id)."}
@@ -203,7 +203,7 @@ export function StepOpenai({
             placeholder="https://api.openai.com/v1"
             autoComplete="off"
           />
-          <p className="text-xs text-muted-foreground-faint">
+          <p className="text-xs text-muted-foreground/70">
             Blank uses OpenAI's public endpoint. Set for Azure OpenAI / Foundry / Ollama / a proxy.
           </p>
         </div>
@@ -239,7 +239,7 @@ export function StepOpenai({
           />
         </div>
       </div>
-      <p className="-mt-2 text-xs text-muted-foreground-faint">
+      <p className="-mt-2 text-xs text-muted-foreground/70">
         USD per million tokens — paste the vendor's published rate as-is. Leave blank if unknown;
         budget tracking will undercount until you fill them in from{" "}
         <code className="font-mono">/settings</code>.

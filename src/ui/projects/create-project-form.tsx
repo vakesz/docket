@@ -116,7 +116,7 @@ export function CreateProjectForm({ defaultMakeDefault = true, onCreated }: Prop
   }
 
   if (kinds.isPending) {
-    return <p className="text-sm text-muted-foreground-faint">Loading providers…</p>;
+    return <p className="text-sm text-muted-foreground/70">Loading providers…</p>;
   }
   if (kinds.error) {
     return (

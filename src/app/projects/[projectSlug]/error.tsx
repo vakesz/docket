@@ -25,7 +25,7 @@ export default function ProjectError({
         <h1 className="text-lg font-semibold">Project page failed to load</h1>
         <p className="text-sm text-muted-foreground">{error.message || "Something went wrong."}</p>
         {error.digest ? (
-          <p className="text-xs text-muted-foreground-faint">
+          <p className="text-xs text-muted-foreground/70">
             Error ref: <code className="font-mono">{error.digest}</code>
           </p>
         ) : null}

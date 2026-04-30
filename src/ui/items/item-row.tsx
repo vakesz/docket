@@ -59,12 +59,12 @@ export function ItemRow({
           "flex w-full flex-col gap-1 px-3 py-2 text-left transition-colors",
           "hover:bg-muted",
           selected && "bg-muted",
-          tone === "warning" && "bg-warning/10 hover:bg-warning/15",
+          tone === "warning" && "bg-amber-500/10 hover:bg-amber-500/15",
           tone === "stale" && "bg-destructive/10 hover:bg-destructive/15",
         )}
       >
         <div className="flex items-center gap-2 text-xs">
-          <span className="text-xs uppercase tracking-wide text-muted-foreground-faint">
+          <span className="text-xs uppercase tracking-wide text-muted-foreground/70">
             {formatKind(item.kind)}
           </span>
           <StatePill state={item.state} />
@@ -73,17 +73,17 @@ export function ItemRow({
               ●
             </span>
           )}
-          <span className="ml-auto flex items-center gap-2 font-mono text-[10px] text-muted-foreground-faint">
+          <span className="ml-auto flex items-center gap-2 font-mono text-[10px] text-muted-foreground/70">
             <FreshnessStamp updatedAt={item.updatedAt} thresholdDays={staleThresholdDays} />
             <span>#{item.itemNumber}</span>
           </span>
         </div>
         <div className="line-clamp-2 text-sm text-foreground">{item.title}</div>
         {hasMeta && (
-          <div className="flex flex-wrap items-center gap-1.5 font-mono text-[10px] text-muted-foreground-faint">
+          <div className="flex flex-wrap items-center gap-1.5 font-mono text-[10px] text-muted-foreground/70">
             {item.assignee && <span className="truncate">{item.assignee}</span>}
             {item.assignee && tags.length > 0 && (
-              <span aria-hidden className="text-muted-foreground-faint">
+              <span aria-hidden className="text-muted-foreground/70">
                 ·
               </span>
             )}
@@ -96,7 +96,7 @@ export function ItemRow({
                 {displayTag(t)}
               </span>
             ))}
-            {extraTags > 0 && <span className="text-muted-foreground-faint">+{extraTags}</span>}
+            {extraTags > 0 && <span className="text-muted-foreground/70">+{extraTags}</span>}
           </div>
         )}
       </Link>
@@ -108,7 +108,7 @@ export function ItemRow({
           onClick={(e) => e.stopPropagation()}
           title="Open in provider (new tab)"
           aria-label={`Open #${item.itemNumber} in a new tab`}
-          className="absolute right-1.5 top-1.5 rounded bg-card p-1 text-muted-foreground-faint opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover/row:opacity-100"
+          className="absolute right-1.5 top-1.5 rounded bg-card p-1 text-muted-foreground/70 opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover/row:opacity-100"
         >
           <ExternalLink aria-hidden="true" className="h-3 w-3" />
         </a>
@@ -135,12 +135,12 @@ export function PinnedRow({
         selected && "bg-muted",
       )}
     >
-      <span className="text-xs uppercase tracking-wide text-muted-foreground-faint">
+      <span className="text-xs uppercase tracking-wide text-muted-foreground/70">
         {formatKind(item.kind)}
       </span>
       <StatePill state={item.state} />
       <span className="flex-1 truncate text-foreground">{item.title}</span>
-      <span className="font-mono text-[10px] text-muted-foreground-faint">#{item.itemNumber}</span>
+      <span className="font-mono text-[10px] text-muted-foreground/70">#{item.itemNumber}</span>
     </Link>
   );
 }
@@ -150,7 +150,7 @@ export function EmptyMessage({ text, tone }: { text: string; tone?: "error" }) {
     <div
       className={cn(
         "flex h-full items-center justify-center p-6 text-center text-sm",
-        tone === "error" ? "text-destructive" : "text-muted-foreground-faint",
+        tone === "error" ? "text-destructive" : "text-muted-foreground/70",
       )}
     >
       {text}

@@ -103,7 +103,7 @@ export function MembersPanel({ projectSlug }: Props) {
           </Button>
         </div>
         {!canManage ? (
-          <p className="text-xs text-muted-foreground-faint">
+          <p className="text-xs text-muted-foreground/70">
             Only the project owner can change membership.
           </p>
         ) : null}
@@ -117,7 +117,7 @@ export function MembersPanel({ projectSlug }: Props) {
       <section className="flex flex-col gap-2 border-t border-border first:border-t-0 first:pt-0 pt-4">
         <h3 className="text-sm font-medium text-foreground">Members</h3>
         {list.isPending ? (
-          <p className="text-xs text-muted-foreground-faint">Loading…</p>
+          <p className="text-xs text-muted-foreground/70">Loading…</p>
         ) : list.error ? (
           <Alert variant="destructive">
             <AlertDescription>{list.error.message}</AlertDescription>
@@ -131,7 +131,7 @@ export function MembersPanel({ projectSlug }: Props) {
               roleBadge="owner"
             />
             {list.data.members.length === 0 ? (
-              <li className="px-4 py-3 text-xs text-muted-foreground-faint">
+              <li className="px-4 py-3 text-xs text-muted-foreground/70">
                 No additional members. Invite a teammate above.
               </li>
             ) : (
