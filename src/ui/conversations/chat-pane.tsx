@@ -1,11 +1,12 @@
 "use client";
 
-import { Send, Square } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSettingsMap } from "@/lib/settings-client";
 import { trpc } from "@/lib/trpc-client";
 import { type ToolDisplayMode, useToolDisplayMode } from "@/lib/ui-prefs";
 import { cn } from "@/lib/utils";
 import { Bubble } from "@/ui/conversations/bubble";
+import { ChatComposer } from "@/ui/conversations/chat-composer";
 import { useChatPaneController } from "@/ui/conversations/chat-pane-context";
 import type { SettledRound } from "@/ui/conversations/chat-stream";
 import { LlmSwitcher } from "@/ui/conversations/llm-switcher";
@@ -15,12 +16,11 @@ import { buildRenderUnits, type PersistedMessage } from "@/ui/conversations/tran
 import { useChatStream } from "@/ui/conversations/use-chat-stream";
 import { extractSeedKind } from "@/ui/items/suggest-seeds";
 import { Alert, AlertDescription } from "@/ui/primitives/alert";
-import { Textarea } from "@/ui/primitives/textarea";
+import { ScrollArea } from "@/ui/primitives/scroll-area";
 import { ProposalCard } from "@/ui/proposals/proposal-card";
 
 const MICRO_CAPS_BUTTON =
   "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground hover:bg-muted hover:text-foreground";
-const META_LABEL_FAINT = "text-xs uppercase tracking-wide text-muted-foreground-faint";
 
 /**
  * Right pane of the workspace: per-item chat. Reuses the persisted
@@ -39,7 +39,6 @@ const META_LABEL_FAINT = "text-xs uppercase tracking-wide text-muted-foreground-
 export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; itemNumber: string }) {
   const utils = trpc.useUtils();
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
   const autoscrollFrameRef = useRef<number | null>(null);
@@ -64,7 +63,7 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
     { projectSlug, itemId: itemId ?? "", limit: 20, archived: false },
     { enabled: itemId !== null, staleTime: 5_000 },
   );
-  const fallbackId = useMemo(() => list.data?.[0]?.id ?? null, [list.data]);
+  const fallbackId = list.data?.[0]?.id ?? null;
   const conversationId = activeId ?? fallbackId;
 
   const detail = trpc.conversations.get.useQuery(
@@ -82,14 +81,11 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
       resetStream();
     },
   });
-  const settings = trpc.settings.list.useQuery();
-  const sendOnEnter = useMemo(() => {
-    const row = settings.data?.find((r) => r.key === "chat.send-on-enter");
-    return row ? Boolean(row.value) : true;
-  }, [settings.data]);
+  const settings = useSettingsMap();
+  const sendOnEnter = settings.bool("chat.send-on-enter", true);
 
   const messages = (detail.data?.messages ?? []) as PersistedMessage[];
-  const renderUnits = useMemo(() => buildRenderUnits(messages), [messages]);
+  const renderUnits = buildRenderUnits(messages);
   const inFlight = !streaming.done;
   const conversation = detail.data ?? null;
 
@@ -106,22 +102,22 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
     streaming.text.length > 0 ||
     streaming.toolCalls.length > 0 ||
     streaming.settledRounds.length > 0;
-  const showPendingUserMessage = useMemo(() => {
+  const showPendingUserMessage = (() => {
     const pending = streaming.pendingUserMessage;
     if (pending === null) return false;
     const target = pending.trim();
     if (!target) return false;
     return !messages.some((m) => m.role === "user" && m.content.trim() === target);
-  }, [streaming.pendingUserMessage, messages]);
+  })();
 
-  // Reset stream + draft on item switch — closures inside the hook are bound
-  // to (projectSlug, itemId, conversationId) for one turn, so a stale stream
-  // can't bleed across items.
+  // Reset stream on item switch — closures inside the hook are bound to
+  // (projectSlug, itemId, conversationId) for one turn, so a stale stream
+  // can't bleed across items. The composer's own draft resets via
+  // `key={itemNumber}` below.
   // biome-ignore lint/correctness/useExhaustiveDependencies: itemNumber is the trigger; resetStream is stable.
   useEffect(() => {
     resetStream();
     setActiveId(null);
-    setDraft("");
   }, [itemNumber]);
 
   // Stick-to-bottom scroll: flip the ref to false the moment the user
@@ -170,8 +166,8 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
     streaming.done,
   ]);
 
-  const submit = async (raw?: string) => {
-    const body = (raw ?? draft).trim();
+  const sendMessage = async (raw: string) => {
+    const body = raw.trim();
     if (!body || inFlight || itemId === null) return;
     let id = conversationId;
     if (!id) {
@@ -179,7 +175,6 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
       id = conv.id;
       setActiveId(conv.id);
     }
-    setDraft("");
     await drainStream({ projectSlug, itemId, conversationId: id, content: body });
   };
 
@@ -251,12 +246,12 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
 
   return (
     <div className="flex h-full flex-col bg-background">
-      <header className="flex items-center gap-2 border-b border-border px-3 py-2">
-        <h2 className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+      <header className="flex items-center gap-2 border-border border-b px-3 py-2">
+        <h2 className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">
           Chat
         </h2>
         {conversation && (
-          <span className="font-mono text-[10px] text-muted-foreground-faint">
+          <span className="font-mono text-[10px] text-muted-foreground/70">
             tokens {conversation.tokensIn + conversation.tokensOut} · $
             {(conversation.costCents / 100).toFixed(3)}
           </span>
@@ -288,13 +283,13 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
         </div>
       </header>
 
-      <div ref={scrollRef} className="relative flex-1 overflow-auto px-3 py-3">
+      <ScrollArea viewportRef={scrollRef} className="relative flex-1" viewportClassName="px-3 py-3">
         {!conversationId && messages.length === 0 && !hasStreamingActivity ? (
-          <p className="text-sm italic text-muted-foreground-faint">
+          <p className="text-muted-foreground/70 text-sm italic">
             No conversation yet. Send a message to start one.
           </p>
         ) : detail.isPending && messages.length === 0 && !hasStreamingActivity ? (
-          <p className="text-sm italic text-muted-foreground-faint">Loading messages…</p>
+          <p className="text-muted-foreground/70 text-sm italic">Loading messages…</p>
         ) : (
           <>
             {renderUnits.map((unit) => {
@@ -363,7 +358,7 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
               </Alert>
             )}
             {((!inFlight && proposalIds.length > 0) || streaming.question) && (
-              <div className="sticky bottom-0 -mx-3 mt-3 flex flex-col gap-2 border-t border-border bg-background/95 px-3 pb-1 pt-2 backdrop-blur-sm">
+              <div className="sticky bottom-0 -mx-3 mt-3 flex flex-col gap-2 border-border border-t bg-background/95 px-3 pt-2 pb-1 backdrop-blur-sm">
                 {!inFlight &&
                   proposalIds.map((id) => (
                     <ProposalCard
@@ -377,89 +372,36 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
                   <QuestionCard
                     question={streaming.question}
                     disabled={inFlight && !streaming.question}
-                    onSubmit={(answer) => void submit(answer)}
+                    onSubmit={(answer) => void sendMessage(answer)}
                   />
                 )}
               </div>
             )}
           </>
         )}
-      </div>
+      </ScrollArea>
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void submit();
+      <ChatComposer
+        key={itemNumber}
+        inFlight={inFlight}
+        canSubmit={itemId !== null}
+        sendOnEnter={sendOnEnter}
+        hasActiveQuestion={Boolean(streaming.question)}
+        promptRef={promptRef}
+        errorText={create.error?.message}
+        onSubmit={(body) => void sendMessage(body)}
+        onStop={() => {
+          if (!conversationId || itemId === null) return;
+          void stopStream({ projectSlug, itemId, conversationId });
         }}
-        className="border-t border-border p-2"
-      >
-        <p className="mb-1 text-[10px] text-muted-foreground-faint">
-          {streaming.question
-            ? "Pick from the card above — or type free text and it'll be sent as your answer."
-            : "Ask the agent to comment, transition, or rewrite — changes appear as cards to confirm."}
-        </p>
-        <Textarea
-          ref={promptRef}
-          value={draft}
-          disabled={inFlight}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            // Honor the user pref: if "send on Enter" is on, plain Enter
-            // sends and Shift+Enter inserts a newline; flipped otherwise.
-            const enter = e.key === "Enter";
-            if (!enter) return;
-            const wantSend = sendOnEnter ? !e.shiftKey : e.shiftKey;
-            if (wantSend) {
-              e.preventDefault();
-              void submit();
-            }
-          }}
-          rows={3}
-          placeholder={
-            sendOnEnter
-              ? "Ask the agent… (⏎ to send, ⇧⏎ for newline)"
-              : "Ask the agent… (⇧⏎ to send, ⏎ for newline)"
-          }
-          className="resize-none"
-        />
-        <div className={cn("mt-1 flex items-center justify-between gap-2", META_LABEL_FAINT)}>
+        leftSlot={
           <LlmSwitcher
             projectSlug={projectSlug}
             conversationId={conversationId}
             currentOverrideId={detail.data?.llmProviderIdOverride ?? null}
           />
-          <div className="flex items-center gap-2">
-            {create.error && <span className="text-destructive">{create.error.message}</span>}
-            {inFlight ? (
-              <button
-                type="button"
-                onClick={() => {
-                  if (!conversationId || itemId === null) return;
-                  void stopStream({ projectSlug, itemId, conversationId });
-                }}
-                className={cn(
-                  MICRO_CAPS_BUTTON,
-                  "border border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive",
-                )}
-                title="Stop generation"
-              >
-                <Square className="h-3 w-3" aria-hidden />
-                Stop
-              </button>
-            ) : (
-              <button
-                type="submit"
-                disabled={!draft.trim()}
-                className={cn(MICRO_CAPS_BUTTON, "disabled:opacity-50")}
-                title="Send message"
-              >
-                <Send className="h-3 w-3" aria-hidden />
-                Send
-              </button>
-            )}
-          </div>
-        </div>
-      </form>
+        }
+      />
     </div>
   );
 }
@@ -476,15 +418,15 @@ function ThinkingDots() {
   return (
     <output className="mb-3 flex items-center gap-1 px-3 py-2" aria-label="Thinking">
       <span
-        className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground-faint"
+        className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/70"
         style={{ animationDelay: "0ms" }}
       />
       <span
-        className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground-faint"
+        className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/70"
         style={{ animationDelay: "150ms" }}
       />
       <span
-        className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground-faint"
+        className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/70"
         style={{ animationDelay: "300ms" }}
       />
     </output>

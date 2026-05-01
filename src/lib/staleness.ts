@@ -13,21 +13,6 @@ export type FreshnessTone = "fresh" | "warning" | "stale";
 
 export const DEFAULT_STALE_THRESHOLD_DAYS = 7;
 
-function asWholeNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value)
-    ? Math.max(0, Math.trunc(value))
-    : null;
-}
-
-/**
- * Resolve the active stale threshold (in days) from the global Setting
- * value. Anything <= 0 disables the stale tone entirely (returns null).
- */
-export function resolveStaleThreshold(rawSetting: unknown): number | null {
-  const v = asWholeNumber(rawSetting) ?? DEFAULT_STALE_THRESHOLD_DAYS;
-  return v > 0 ? v : null;
-}
-
 /**
  * Resolve the effective stale threshold from the per-user override and the
  * per-project default. The user value uses a sentinel encoding:

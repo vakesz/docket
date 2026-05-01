@@ -61,7 +61,7 @@ export function LlmSwitcher({
   const value = currentOverrideId ?? DEFAULT_VALUE;
 
   return (
-    <span className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground-faint">
+    <span className="flex items-center gap-1 text-[10px] text-muted-foreground/70 uppercase tracking-wide">
       <span>LLM</span>
       <Select
         value={value}

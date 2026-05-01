@@ -35,7 +35,7 @@ export type MaterialChange = {
  * fields a human reasoning about a ticket would care about count.
  */
 export function materialDiff(
-  cached: Pick<ItemRow, "state" | "title" | "descriptionMd" | "assignee">,
+  cached: Pick<ItemRow, "state" | "title" | "description" | "assignee">,
   fresh: CanonicalItem,
 ): MaterialChange[] {
   const out: MaterialChange[] = [];
@@ -49,11 +49,11 @@ export function materialDiff(
   if (cached.title !== fresh.title) {
     out.push({ field: "title", before: cached.title, after: fresh.title });
   }
-  if (cached.descriptionMd !== fresh.descriptionMd) {
+  if (cached.description !== fresh.description) {
     out.push({
       field: "description",
-      before: summarize(cached.descriptionMd),
-      after: summarize(fresh.descriptionMd),
+      before: summarize(cached.description),
+      after: summarize(fresh.description),
     });
   }
   if ((cached.assignee ?? "") !== (fresh.assignee ?? "")) {

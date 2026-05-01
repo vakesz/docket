@@ -18,14 +18,14 @@ export type TokenResponse = {
 };
 
 function parseTokenResponse(raw: Record<string, unknown>): TokenResponse {
-  if (typeof raw.access_token !== "string") {
+  if (typeof raw["access_token"] !== "string") {
     throw new Error("oauth token response missing access_token");
   }
   return {
-    accessToken: raw.access_token,
-    refreshToken: typeof raw.refresh_token === "string" ? raw.refresh_token : null,
-    expiresInSec: typeof raw.expires_in === "number" ? raw.expires_in : null,
-    scope: typeof raw.scope === "string" ? raw.scope : null,
+    accessToken: raw["access_token"],
+    refreshToken: typeof raw["refresh_token"] === "string" ? raw["refresh_token"] : null,
+    expiresInSec: typeof raw["expires_in"] === "number" ? raw["expires_in"] : null,
+    scope: typeof raw["scope"] === "string" ? raw["scope"] : null,
   };
 }
 
@@ -39,8 +39,8 @@ async function postForm(
     accept: "application/json",
   };
   if (clientSecret) {
-    const basic = Buffer.from(`${form.client_id}:${clientSecret}`).toString("base64");
-    headers.authorization = `Basic ${basic}`;
+    const basic = Buffer.from(`${form["client_id"]}:${clientSecret}`).toString("base64");
+    headers["authorization"] = `Basic ${basic}`;
   }
   const res = await fetch(endpoint, {
     method: "POST",
@@ -49,7 +49,8 @@ async function postForm(
   });
   const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
-    const detail = typeof body.error === "string" ? body.error : `${res.status} ${res.statusText}`;
+    const detail =
+      typeof body["error"] === "string" ? body["error"] : `${res.status} ${res.statusText}`;
     throw new Error(`oauth token exchange failed: ${detail}`);
   }
   return parseTokenResponse(body);
@@ -88,6 +89,6 @@ export async function refreshAccessToken(args: {
     refresh_token: args.refreshToken,
     client_id: args.clientId,
   };
-  if (args.scopes) form.scope = args.scopes;
+  if (args.scopes) form["scope"] = args.scopes;
   return postForm(args.tokenEndpoint, form, args.clientSecret);
 }

@@ -17,6 +17,7 @@ import { githubAvatarFetcher } from "@/providers/github/avatar";
 import { githubProfileUrl } from "@/providers/github/profile";
 import { GitHubProvider } from "@/providers/github/provider";
 import { GITHUB_REACTION_KINDS } from "@/providers/github/reactions";
+import { availableIntentsForState } from "@/providers/github/state-map";
 
 /**
  * GitHub providerItemId is `${owner}/${repo}#${number}`. The `(owner, repo)`
@@ -26,8 +27,8 @@ import { GITHUB_REACTION_KINDS } from "@/providers/github/reactions";
 const itemNumberCodec: ProviderItemNumberCodec = {
   parseItemNumber: (scope, urlNumber) => {
     if (!/^\d+$/.test(urlNumber)) return null;
-    const owner = typeof scope.owner === "string" ? scope.owner.trim() : "";
-    const repo = typeof scope.repo === "string" ? scope.repo.trim() : "";
+    const owner = typeof scope["owner"] === "string" ? scope["owner"].trim() : "";
+    const repo = typeof scope["repo"] === "string" ? scope["repo"].trim() : "";
     if (!owner || !repo) return null;
     return `${owner}/${repo}#${urlNumber}`;
   },
@@ -38,8 +39,8 @@ const itemNumberCodec: ProviderItemNumberCodec = {
 };
 
 const labelTemplate: LabelTemplate = (config) => {
-  const owner = typeof config.owner === "string" ? config.owner.trim() : "";
-  const repo = typeof config.repo === "string" ? config.repo.trim() : "";
+  const owner = typeof config["owner"] === "string" ? config["owner"].trim() : "";
+  const repo = typeof config["repo"] === "string" ? config["repo"].trim() : "";
   if (!owner || !repo) {
     return "";
   }
@@ -71,8 +72,8 @@ export const githubSpec = {
   requiresCli: [],
   grouping: "by_state_bucket",
   normalizeConfig: (raw) => {
-    const owner = typeof raw.owner === "string" ? raw.owner.trim() : "";
-    const repo = typeof raw.repo === "string" ? raw.repo.trim() : "";
+    const owner = typeof raw["owner"] === "string" ? raw["owner"].trim() : "";
+    const repo = typeof raw["repo"] === "string" ? raw["repo"].trim() : "";
     if (!owner) {
       throw new Error("GitHub: 'owner' is required");
     }
@@ -90,8 +91,13 @@ export const githubSpec = {
     supportedReactions: GITHUB_REACTION_KINDS,
     ciStatus: true,
     pullRequestDiffs: true,
-    linkedItems: true,
+    // GitHub provider does not currently scan issue/PR bodies for cross-refs;
+    // `Item.linkedItemIds` is always returned empty. Keep this false until
+    // the timeline / cross-reference scan lands.
+    linkedItems: false,
+    creatableKinds: ["task"],
   },
+  availableIntents: availableIntentsForState,
   oauth: {
     defaultLabel: "GitHub",
     defaultScopes: "read:user user:email repo",

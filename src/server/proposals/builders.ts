@@ -28,11 +28,12 @@ import type {
   StateChangeProposal,
   TagsChangeProposal,
 } from "@/core/proposal-types";
-import type { CreateFields, ItemKind, TransitionIntent } from "@/core/types";
+import type { CreateFields, ItemKind, ProjectId, TransitionIntent, UserId } from "@/core/types";
 import type { Prisma, Proposal as ProposalRow } from "@/db/generated/client";
 import type { db as Db } from "@/server/db";
 import { assertFound } from "@/server/errors";
 import { snapshotFromRow } from "@/server/proposals/item-snapshot";
+import { proposalPayloadSchema } from "@/server/proposals/schema";
 
 /**
  * Caller context for proposal builders. `origin` distinguishes a human button
@@ -43,17 +44,10 @@ import { snapshotFromRow } from "@/server/proposals/item-snapshot";
  */
 type ProposalContext = {
   db: typeof Db;
-  projectId: string;
-  userId: string;
+  projectId: ProjectId;
+  userId: UserId;
   origin: ProposalOrigin;
 };
-
-function payloadOf(proposal: Proposal): Record<string, unknown> {
-  // Strip the surrogate id from the persisted payload; the row's own id is
-  // canonical. Re-attached by `hydrateProposal` on load.
-  const { id: _id, ...rest } = proposal;
-  return rest as unknown as Record<string, unknown>;
-}
 
 async function persist(
   ctx: ProposalContext,
@@ -68,7 +62,9 @@ async function persist(
       kind: draft.kind,
       origin: ctx.origin,
       providerItemId,
-      payload: payloadOf({ id: "", ...draft } as Proposal) as Prisma.InputJsonValue,
+      // The row's own surrogate id is canonical; the payload omits it and
+      // `hydrateProposal` re-attaches `row.id` on load.
+      payload: draft as unknown as Prisma.InputJsonValue,
       status: "pending",
       advisory,
     },
@@ -142,52 +138,52 @@ export async function proposeTransition(
  * everything else, so the model can't accidentally double-archive.
  */
 export function appendPreviousVersionFooter(
-  newMd: string,
-  previousMd: string,
+  newDescription: string,
+  previousDescription: string,
   author: string | null,
   timestamp: Date | null,
 ): string {
-  if (!previousMd.trim()) return newMd;
+  if (!previousDescription.trim()) return newDescription;
   const date = timestamp ? timestamp.toISOString().slice(0, 10) : null;
   let label: string;
   if (author && date) label = `*Previous version (by ${author}, ${date}):*`;
   else if (author) label = `*Previous version (by ${author}):*`;
   else if (date) label = `*Previous version (${date}):*`;
   else label = `*Previous version:*`;
-  return `${newMd.trimEnd()}\n\n---\n\n${label}\n\n${previousMd}`;
+  return `${newDescription.trimEnd()}\n\n---\n\n${label}\n\n${previousDescription}`;
 }
 
 export async function proposeDescriptionPatch(
   ctx: ProposalContext,
-  args: { providerItemId: string; newMd: string },
+  args: { providerItemId: string; newDescription: string },
 ): Promise<ProposalRow> {
   const row = await loadCachedItem(ctx, args.providerItemId);
   const item = snapshotFromRow(row);
-  if (item.descriptionMd === args.newMd) {
+  if (item.description === args.newDescription) {
     throw new TRPCError({
       code: "BAD_REQUEST",
       message: "description_patch is a no-op (description unchanged)",
     });
   }
   const merged = appendPreviousVersionFooter(
-    args.newMd,
-    item.descriptionMd,
+    args.newDescription,
+    item.description,
     item.author,
     item.updatedAt ?? item.createdAt,
   );
   const draft: Omit<DescriptionPatchProposal, "id"> = {
     kind: "description_patch",
     item,
-    newMd: merged,
+    newDescription: merged,
   };
   return persist(ctx, draft, args.providerItemId);
 }
 
 export async function proposeComment(
   ctx: ProposalContext,
-  args: { providerItemId: string; bodyMd: string },
+  args: { providerItemId: string; body: string },
 ): Promise<ProposalRow> {
-  if (!args.bodyMd.trim()) {
+  if (!args.body.trim()) {
     throw new TRPCError({ code: "BAD_REQUEST", message: "comment body is empty" });
   }
   const row = await loadCachedItem(ctx, args.providerItemId);
@@ -195,14 +191,14 @@ export async function proposeComment(
   const draft: Omit<CommentAddProposal, "id"> = {
     kind: "comment_add",
     item,
-    bodyMd: args.bodyMd,
+    body: args.body,
   };
   // Advisory: flag a comment that closely echoes the item description. This
   // does NOT block staging — the human can still confirm — it just surfaces
   // a banner in the confirm dialog so the human notices an "agent is
   // restating the body" failure mode before approving.
   let advisory: string | null = null;
-  const sim = jaccardSimilarity(args.bodyMd, item.descriptionMd);
+  const sim = jaccardSimilarity(args.body, item.description);
   if (sim >= COMMENT_ECHO_THRESHOLD) {
     advisory = `This comment shares ${Math.round(sim * 100)}% of its words with the item description. Confirm only if it adds new information.`;
   }
@@ -293,7 +289,7 @@ export async function proposeMemoryWrite(
   ctx: ProposalContext,
   args: {
     title: string;
-    bodyMd: string;
+    body: string;
     tags?: readonly string[];
     source?: "user" | "agent";
     memoryId?: string | null;
@@ -304,7 +300,7 @@ export async function proposeMemoryWrite(
     throw new TRPCError({ code: "BAD_REQUEST", message: "memory title is required" });
   }
   let previousTitle = "";
-  let previousBodyMd = "";
+  let previousBody = "";
   if (args.memoryId) {
     const existing = assertFound(
       await ctx.db.memoryEntry.findFirst({
@@ -313,8 +309,8 @@ export async function proposeMemoryWrite(
       `memory entry '${args.memoryId}' not found`,
     );
     previousTitle = existing.title;
-    previousBodyMd = existing.bodyMd;
-    if (existing.title === title && existing.bodyMd === args.bodyMd) {
+    previousBody = existing.body;
+    if (existing.title === title && existing.body === args.body) {
       throw new TRPCError({
         code: "BAD_REQUEST",
         message: "memory_write is a no-op (title and body unchanged)",
@@ -325,15 +321,15 @@ export async function proposeMemoryWrite(
     kind: "memory_write",
     projectId: ctx.projectId,
     title,
-    bodyMd: args.bodyMd,
+    body: args.body,
     tags: args.tags ?? [],
     source: args.source ?? "user",
     memoryId: args.memoryId ?? null,
     previousTitle,
-    previousBodyMd,
+    previousBody,
   };
   let advisory: string | null = null;
-  const byteLen = Buffer.byteLength(args.bodyMd, "utf8");
+  const byteLen = Buffer.byteLength(args.body, "utf8");
   if (byteLen > MEMORY_BODY_ADVISORY_BYTES) {
     advisory = `This entry is ${(byteLen / 1024).toFixed(1)} KB. Memory loads into every agent turn — consider splitting into multiple titled entries (one per topic) so the next conversation isn't paying the full body for an unrelated question.`;
   }
@@ -363,18 +359,24 @@ export async function proposeMemoryDelete(
  * Re-attach the row's surrogate id to its persisted payload, returning a
  * runtime `Proposal` discriminator the executor / diff renderer can use.
  *
- * Throws if the persisted `kind` doesn't match the payload — that would
- * mean the row is corrupt (someone wrote a payload by hand).
+ * The persisted JSON is parsed against `proposalPayloadSchema` (a
+ * discriminated union over `kind`) so a corrupt row — bad shape, missing
+ * field, mismatched discriminator — fails fast at hydration instead of
+ * crashing inside the executor downstream. Cross-checks `row.kind` against
+ * the payload discriminator as defence in depth.
  */
 export function hydrateProposal(row: ProposalRow): Proposal {
   if (!row.payload || typeof row.payload !== "object") {
     throw new Error(`Proposal ${row.id}: empty or non-object payload`);
   }
-  const payload = row.payload as Record<string, unknown>;
-  if (payload.kind !== row.kind) {
+  const parsed = proposalPayloadSchema.safeParse(row.payload);
+  if (!parsed.success) {
+    throw new Error(`Proposal ${row.id}: invalid payload — ${parsed.error.message}`);
+  }
+  if (parsed.data.kind !== row.kind) {
     throw new Error(
-      `Proposal ${row.id}: row.kind='${row.kind}' but payload.kind='${String(payload.kind)}'`,
+      `Proposal ${row.id}: row.kind='${row.kind}' but payload.kind='${parsed.data.kind}'`,
     );
   }
-  return { ...payload, id: row.id } as Proposal;
+  return { ...parsed.data, id: row.id } as Proposal;
 }

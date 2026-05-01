@@ -1,4 +1,5 @@
 "use client";
+import type { Route } from "next";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { DocketLogo } from "@/ui/setup/docket-logo";
@@ -15,7 +16,7 @@ export function LogoLink({ currentProjectSlug }: { currentProjectSlug: string | 
   const onSettings = pathname?.startsWith("/settings") ?? false;
   const urlProject = onSettings ? searchParams.get("project") : null;
   const effective = urlProject ?? currentProjectSlug;
-  const href = effective ? `/projects/${effective}/items` : "/";
+  const href: Route = effective ? (`/projects/${effective}/items` as Route) : "/";
 
   return (
     <Link
@@ -24,8 +25,8 @@ export function LogoLink({ currentProjectSlug }: { currentProjectSlug: string | 
       aria-label="Docket"
     >
       <DocketLogo size={20} className="shrink-0" />
-      <span className="text-[13px] font-semibold uppercase tracking-[0.18em]">DOCKET</span>
-      <span className="ml-1 hidden text-[12px] font-light italic tracking-wide text-muted-foreground sm:inline">
+      <span className="font-semibold text-[13px] uppercase tracking-[0.18em]">DOCKET</span>
+      <span className="ml-1 hidden font-light text-[12px] text-muted-foreground italic tracking-wide sm:inline">
         build something cool together
       </span>
     </Link>

@@ -33,7 +33,7 @@ export type ProjectExport = {
   memory: Array<{
     id: string;
     title: string;
-    bodyMd: string;
+    body: string;
     tags: string[];
     source: string;
     createdAt: string;
@@ -44,7 +44,7 @@ export type ProjectExport = {
     title: string;
     kind: string;
     uri: string;
-    bodyMd: string;
+    body: string;
     tags: string[];
     createdAt: string;
     updatedAt: string;
@@ -164,7 +164,7 @@ export async function buildProjectExport(
     memory: memory.map((m) => ({
       id: m.id,
       title: m.title,
-      bodyMd: m.bodyMd,
+      body: m.body,
       tags: m.tags,
       source: m.source,
       createdAt: m.createdAt.toISOString(),
@@ -175,7 +175,7 @@ export async function buildProjectExport(
       title: s.title,
       kind: s.kind,
       uri: s.uri,
-      bodyMd: s.bodyMd,
+      body: s.body,
       tags: s.tags,
       createdAt: s.createdAt.toISOString(),
       updatedAt: s.updatedAt.toISOString(),

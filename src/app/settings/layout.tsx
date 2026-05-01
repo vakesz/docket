@@ -30,8 +30,10 @@ export default async function SettingsLayout({
 }: {
   children: ReactNode;
 }) {
-  await requireSetupComplete();
-  const session = await auth();
+  // requireSetupComplete and auth are both single indexed DB lookups with
+  // no dependency between them — fan them out so the layout's first await
+  // batches both round-trips instead of stacking them.
+  const [, session] = await Promise.all([requireSetupComplete(), auth()]);
   if (!session?.user?.id) {
     redirect("/");
   }

@@ -63,7 +63,7 @@ export const TOOL_ORDER = [
   "get_memory",
   // (4) source readonly
   "list_sources",
-  "read_source",
+  "get_source",
   "search_sources",
   // (5) MCP — populated dynamically; tool names depend on configured servers.
   // (6) mutating provider tools (stripped in read-only)
@@ -87,7 +87,7 @@ export const TOOL_ORDER = [
   // tool's slot in the prompt cache key. All four are pure reads, so they
   // appear in both read-only and read-write modes.
   "search_items",
-  "list_audit",
+  "list_audit_log",
   "get_pull_request_diff",
   "search_code",
   "search_pull_requests",

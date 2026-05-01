@@ -29,11 +29,11 @@ export function DefaultProjectPicker() {
   const fieldId = useId();
 
   if (me.isPending || projects.isPending) {
-    return <p className="text-sm text-muted-foreground-faint">Loading…</p>;
+    return <p className="text-muted-foreground/70 text-sm">Loading…</p>;
   }
   if (me.error || projects.error) {
     return (
-      <p className="text-sm text-destructive">
+      <p className="text-destructive text-sm">
         {me.error?.message ?? projects.error?.message ?? "failed to load profile"}
       </p>
     );
@@ -46,10 +46,10 @@ export function DefaultProjectPicker() {
 
   return (
     <div className="flex flex-col gap-2">
-      <Label htmlFor={fieldId} className="text-sm font-medium text-foreground">
+      <Label htmlFor={fieldId} className="font-medium text-foreground text-sm">
         Default project
       </Label>
-      <p className="text-xs text-muted-foreground">
+      <p className="text-muted-foreground text-xs">
         Where <code className="rounded bg-muted px-1 text-foreground">/</code> takes you on every
         visit. Falls back to your most-recently-touched project when unset.
       </p>
@@ -74,7 +74,7 @@ export function DefaultProjectPicker() {
         </SelectContent>
       </Select>
       {setDefault.error ? (
-        <p className="text-xs text-destructive">{setDefault.error.message}</p>
+        <p className="text-destructive text-xs">{setDefault.error.message}</p>
       ) : null}
     </div>
   );

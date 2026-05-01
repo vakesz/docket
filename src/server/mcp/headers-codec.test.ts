@@ -6,11 +6,11 @@ const KEY = Buffer.alloc(32, 7).toString("base64");
 
 describe("mcp headers-codec", () => {
   beforeEach(() => {
-    process.env.SECRETS_KEY = KEY;
+    process.env["SECRETS_KEY"] = KEY;
     _resetEncryptionCacheForTests();
   });
   afterEach(() => {
-    delete process.env.SECRETS_KEY;
+    delete process.env["SECRETS_KEY"];
     _resetEncryptionCacheForTests();
   });
 

@@ -21,20 +21,24 @@ export default async function ItemsLayout({
   params: Promise<{ projectSlug: string }>;
 }) {
   const { projectSlug } = await params;
-  const session = await auth();
-  const userId = session?.user?.id ?? null;
-
-  const project = await db.project.findUnique({
-    where: { slug: projectSlug },
-    select: { id: true },
-  });
+  // Session and project lookup are independent — fan them out so the
+  // first await batches both round-trips. Settings reads then run as a
+  // second wave once we know the project id and user id.
+  const [session, project] = await Promise.all([
+    auth(),
+    db.project.findUnique({
+      where: { slug: projectSlug },
+      select: { id: true },
+    }),
+  ]);
   if (!project) notFound();
+  const userId = session?.user?.id ?? null;
 
   const [projectStale, userStale] = await Promise.all([
     loadProjectSetting(db, project.id, "items.stale-after-days"),
     userId
       ? loadUserSetting(db, userId, "items.stale-after-days.user")
-      : Promise.resolve(-1 as number),
+      : Promise.resolve<number>(-1),
   ]);
   const staleThresholdDays = resolveEffectiveStaleThreshold(userStale, projectStale);
 

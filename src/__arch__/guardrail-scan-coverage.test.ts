@@ -20,6 +20,7 @@ import { describe, expect, it } from "vitest";
 import { mcpTools } from "@/agent/mcp/tools";
 import { buildToolRegistry } from "@/agent/tools/registry";
 import type { GuardrailScan, ToolContext } from "@/agent/tools/types";
+import { asProjectId, asUserId } from "@/core/types";
 
 type ScanMode = GuardrailScan["mode"];
 
@@ -43,7 +44,7 @@ const EXPECTED: Record<string, ScanMode> = {
   get_memory: "fields",
   // (4) source readonly
   list_sources: "fields",
-  read_source: "fields",
+  get_source: "fields",
   search_sources: "fields",
   // (6) provider mutating
   propose_transition: "skip",
@@ -60,7 +61,7 @@ const EXPECTED: Record<string, ScanMode> = {
   web_fetch: "full",
   // (9) discovery
   search_items: "fields",
-  list_audit: "fields",
+  list_audit_log: "fields",
   get_pull_request_diff: "fields",
   search_code: "skip",
   search_pull_requests: "fields",
@@ -71,8 +72,8 @@ const fakeCtx: ToolContext = {
     mcpServerConfig: { findMany: async () => [] },
     setting: { findFirst: async () => null },
   } as unknown as ToolContext["db"],
-  projectId: "proj_arch_test",
-  userId: "user_arch_test",
+  projectId: asProjectId("proj_arch_test"),
+  userId: asUserId("user_arch_test"),
   itemId: null,
   providerItemId: null,
 };

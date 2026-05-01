@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { formatRelative } from "@/lib/format";
 import { trpc } from "@/lib/trpc-client";
 import { useAutoRefreshIntervalMs } from "@/lib/use-auto-refresh";
@@ -41,11 +41,21 @@ export function StatusFooter({
     { projectSlug: projectSlug ?? "" },
     {
       enabled: !!projectSlug,
-      refetchInterval: refetchInterval === false ? false : refetchInterval,
+      // While a sync is running, poll fast so the footer text actually
+      // reflects what's happening; otherwise fall back to the user's
+      // auto-refresh cadence (or off).
+      refetchInterval: (query) =>
+        query.state.data?.progress?.status === "running"
+          ? 1_500
+          : refetchInterval === false
+            ? false
+            : refetchInterval,
       staleTime: 0,
     },
   );
   const lastSyncAt = syncStatus.data?.lastSyncAt ?? null;
+  const syncProgress = syncStatus.data?.progress ?? null;
+  const syncing = syncProgress?.status === "running";
 
   useBackgroundSync(projectSlug, readOnly);
 
@@ -63,19 +73,25 @@ export function StatusFooter({
   }, []);
 
   return (
-    <footer className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border bg-card px-3 py-1.5 text-[11px] text-muted-foreground">
+    <footer className="flex flex-wrap items-center gap-x-3 gap-y-1 border-border border-t bg-card px-3 py-1.5 text-[11px] text-muted-foreground">
       <span className="flex items-center gap-1.5">
         <span
-          className={cn("h-1.5 w-1.5 rounded-full", online ? "bg-success" : "bg-destructive")}
+          className={cn("h-1.5 w-1.5 rounded-full", online ? "bg-primary" : "bg-destructive")}
           aria-hidden="true"
         />
         <span className="uppercase tracking-wide">{online ? "online" : "offline"}</span>
       </span>
       {projectSlug ? (
         <>
-          <span className="text-muted-foreground-faint">·</span>
+          <span className="text-muted-foreground/70">·</span>
           <span className="inline-flex items-center gap-1">
-            <span>{lastSyncAt ? `synced ${formatRelative(lastSyncAt)}` : "never synced"}</span>
+            <span>
+              {syncing && syncProgress
+                ? `syncing · ${syncProgress.phaseLabel.toLowerCase()} · ${syncProgress.itemsSeen} seen · ${syncProgress.upserted} upserted${syncProgress.mode === "full" ? ` · ${syncProgress.archived} archived` : ""}`
+                : lastSyncAt
+                  ? `synced ${formatRelative(lastSyncAt)}`
+                  : "never synced"}
+            </span>
             <SyncButton projectSlug={projectSlug} readOnly={readOnly} variant="footer" />
           </span>
         </>
@@ -85,8 +101,8 @@ export function StatusFooter({
       ) : null}
       {readOnly ? (
         <>
-          <span className="text-muted-foreground-faint">·</span>
-          <span className="rounded-full border border-destructive/40 bg-destructive/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-destructive">
+          <span className="text-muted-foreground/70">·</span>
+          <span className="rounded-full border border-destructive/40 bg-destructive/10 px-1.5 py-0.5 font-semibold text-[10px] text-destructive uppercase tracking-wide">
             Read-only
           </span>
         </>
@@ -128,13 +144,13 @@ function PendingProposalsButton({
 
   // Oldest-first drains the queue in the order the agent staged them,
   // matching the user's mental model of "the one I forgot about first."
-  const oldestPendingId = useMemo(() => {
+  const oldestPendingId = (() => {
     if (proposals.length === 0) return null;
     const next = [...proposals].sort(
       (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
     )[0];
     return next?.id ?? null;
-  }, [proposals]);
+  })();
 
   if (count === 0) return null;
 
@@ -145,14 +161,14 @@ function PendingProposalsButton({
 
   return (
     <>
-      <span className="text-muted-foreground-faint">·</span>
+      <span className="text-muted-foreground/70">·</span>
       <button
         type="button"
         onClick={openNext}
         aria-haspopup="dialog"
         aria-label={`Review next of ${count} pending proposal${count === 1 ? "" : "s"}`}
         className={cn(
-          "cursor-pointer rounded px-1 text-warning hover:bg-muted",
+          "cursor-pointer rounded px-1 text-primary hover:bg-muted",
           "focus:outline-none focus:ring-1 focus:ring-ring",
         )}
       >

@@ -8,7 +8,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/ui/primitives/sh
 import { useRegisterSidebarMount, useSidebarDrawer } from "@/ui/shell/sidebar-drawer-context";
 
 const RESIZE_HANDLE_CLASS =
-  "w-px bg-border transition-colors data-[resize-handle-state=hover]:bg-muted-foreground-faint data-[resize-handle-state=drag]:bg-primary";
+  "w-px bg-border transition-colors data-[resize-handle-state=hover]:bg-muted-foreground/70 data-[resize-handle-state=drag]:bg-primary";
 
 /**
  * The 3-pane workspace.
@@ -163,8 +163,8 @@ function MobileDrawer({
   return (
     <Sheet open={open} onOpenChange={(next) => (next ? null : onClose())}>
       <SheetContent side={side} className="flex w-[88vw] max-w-[420px] flex-col p-0 lg:hidden">
-        <SheetHeader className="border-b border-border bg-card px-3 py-2">
-          <SheetTitle className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+        <SheetHeader className="border-border border-b bg-card px-3 py-2">
+          <SheetTitle className="font-mono text-[11px] text-muted-foreground uppercase tracking-[0.18em]">
             {label}
           </SheetTitle>
         </SheetHeader>

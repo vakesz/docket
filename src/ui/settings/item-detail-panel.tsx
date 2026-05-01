@@ -1,6 +1,7 @@
 "use client";
 
 import { useId } from "react";
+import { useSettingsMap } from "@/lib/settings-client";
 import { trpc } from "@/lib/trpc-client";
 import { Alert, AlertDescription } from "@/ui/primitives/alert";
 import { Label } from "@/ui/primitives/label";
@@ -17,19 +18,17 @@ const COMMENTS_KEY = "items.show-reactions-comments";
  */
 export function ItemDetailPanel() {
   const utils = trpc.useUtils();
-  const list = trpc.settings.list.useQuery();
+  const settings = useSettingsMap();
   const update = trpc.settings.update.useMutation({
     onSuccess: async () => {
       await utils.settings.list.invalidate();
     },
   });
 
-  const headerRaw = list.data?.find((r) => r.key === HEADER_KEY)?.value;
-  const headerOn = typeof headerRaw === "boolean" ? headerRaw : true;
-  const commentsRaw = list.data?.find((r) => r.key === COMMENTS_KEY)?.value;
-  const commentsOn = typeof commentsRaw === "boolean" ? commentsRaw : true;
+  const headerOn = settings.bool(HEADER_KEY, true);
+  const commentsOn = settings.bool(COMMENTS_KEY, true);
 
-  const disabled = list.isPending || update.isPending;
+  const disabled = settings.list.isPending || update.isPending;
   const headerId = useId();
   const commentsId = useId();
 
@@ -37,42 +36,42 @@ export function ItemDetailPanel() {
     <div className="flex flex-col gap-6">
       <section className="flex flex-col gap-3">
         <header className="flex flex-col gap-1">
-          <h3 className="text-sm font-medium text-foreground">Reactions</h3>
-          <p className="text-xs text-muted-foreground">
+          <h3 className="font-medium text-foreground text-sm">Reactions</h3>
+          <p className="text-muted-foreground text-xs">
             Hide reaction pickers and existing chips on the detail page. Sync still pulls reactions;
             flip these off when you don't care to see or post them.
           </p>
         </header>
 
         <div className="flex flex-col gap-1">
-          <Label className="text-sm font-medium text-foreground">
+          <Label className="font-medium text-foreground text-sm">
             Show reactions on item header
           </Label>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-muted-foreground text-xs">
             Controls the reactions strip below the item title. Comment reactions are unaffected.
           </p>
-          <div className="flex items-center gap-2 text-sm text-foreground">
+          <div className="flex items-center gap-2 text-foreground text-sm">
             <Switch
               id={headerId}
               checked={headerOn}
               disabled={disabled}
-              onCheckedChange={(next) => update.mutate({ key: HEADER_KEY as never, value: next })}
+              onCheckedChange={(next) => update.mutate({ key: HEADER_KEY, value: next })}
             />
             <Label htmlFor={headerId}>{headerOn ? "Visible" : "Hidden"}</Label>
           </div>
         </div>
 
         <div className="flex flex-col gap-1">
-          <Label className="text-sm font-medium text-foreground">Show reactions in comments</Label>
-          <p className="text-xs text-muted-foreground">
+          <Label className="font-medium text-foreground text-sm">Show reactions in comments</Label>
+          <p className="text-muted-foreground text-xs">
             Controls the reactions strip below each comment. Header reactions are unaffected.
           </p>
-          <div className="flex items-center gap-2 text-sm text-foreground">
+          <div className="flex items-center gap-2 text-foreground text-sm">
             <Switch
               id={commentsId}
               checked={commentsOn}
               disabled={disabled}
-              onCheckedChange={(next) => update.mutate({ key: COMMENTS_KEY as never, value: next })}
+              onCheckedChange={(next) => update.mutate({ key: COMMENTS_KEY, value: next })}
             />
             <Label htmlFor={commentsId}>{commentsOn ? "Visible" : "Hidden"}</Label>
           </div>

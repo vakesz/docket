@@ -12,13 +12,13 @@
  * (gates a feature, drives audit, etc.) promote it into the catalog.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export type ToolDisplayMode = "show" | "collapse" | "hide";
 
 const TOOL_DISPLAY_KEY = "docket.chat.toolDisplay";
 const VALID_MODES: ReadonlySet<string> = new Set(["show", "collapse", "hide"]);
-const PREF_EVENT = "docket:uiprefs";
+export const PREF_EVENT = "docket:uiprefs";
 
 const RECENT_LIMIT_KEY = "docket.items.recentLimit";
 const RECENT_LIMIT_DEFAULT = 5;
@@ -26,6 +26,47 @@ export const RECENT_LIMIT_MAX = 20;
 
 const RECENT_ENABLED_KEY = "docket.items.recentEnabled";
 const RECENT_ENABLED_DEFAULT = true;
+
+/**
+ * Subscribe a value derived from localStorage to the standard pref-change
+ * channels: cross-tab `storage` events plus our same-tab `PREF_EVENT`.
+ *
+ * `read` is allowed to change between renders — the latest version is held in
+ * a ref so the listener always reads via the current closure. Pass a `rebindKey`
+ * (e.g. the projectSlug a per-project read depends on) to force the value to
+ * refresh when the closure's logical input changes; the listeners themselves
+ * stay bound. `extraEvents` covers stores that fire their own custom event
+ * (e.g. `docket:recent-items`). SSR sees `initial`, hydration sees the read.
+ */
+export function useLocalPref<T>(
+  read: () => T,
+  initial: T,
+  extraEvents: readonly string[] = [],
+  rebindKey?: string,
+): T {
+  const readRef = useRef(read);
+  readRef.current = read;
+  const [value, setValue] = useState<T>(initial);
+
+  useEffect(() => {
+    // `rebindKey` is referenced so the lint rule sees it; its purpose is
+    // to retrigger the effect when callers' read closures depend on
+    // changing inputs (e.g. projectSlug) — `read` itself is held in a ref.
+    void rebindKey;
+    setValue(readRef.current());
+    const onChange = () => setValue(readRef.current());
+    window.addEventListener("storage", onChange);
+    window.addEventListener(PREF_EVENT, onChange);
+    for (const ev of extraEvents) window.addEventListener(ev, onChange);
+    return () => {
+      window.removeEventListener("storage", onChange);
+      window.removeEventListener(PREF_EVENT, onChange);
+      for (const ev of extraEvents) window.removeEventListener(ev, onChange);
+    };
+  }, [rebindKey, extraEvents]);
+
+  return value;
+}
 
 export function readToolDisplayMode(): ToolDisplayMode {
   if (typeof window === "undefined") return "collapse";
@@ -40,24 +81,11 @@ export function writeToolDisplayMode(value: ToolDisplayMode): void {
 }
 
 export function useToolDisplayMode(): [ToolDisplayMode, (v: ToolDisplayMode) => void] {
-  const [value, setValue] = useState<ToolDisplayMode>("collapse");
-
-  useEffect(() => {
-    setValue(readToolDisplayMode());
-    const onChange = () => setValue(readToolDisplayMode());
-    window.addEventListener("storage", onChange);
-    window.addEventListener(PREF_EVENT, onChange);
-    return () => {
-      window.removeEventListener("storage", onChange);
-      window.removeEventListener(PREF_EVENT, onChange);
-    };
-  }, []);
-
+  const value = useLocalPref<ToolDisplayMode>(readToolDisplayMode, "collapse");
   return [
     value,
     (next: ToolDisplayMode) => {
       writeToolDisplayMode(next);
-      setValue(next);
     },
   ];
 }
@@ -84,24 +112,11 @@ export function writeRecentLimit(value: number): void {
 }
 
 export function useRecentLimit(): [number, (v: number) => void] {
-  const [value, setValue] = useState<number>(RECENT_LIMIT_DEFAULT);
-
-  useEffect(() => {
-    setValue(readRecentLimit());
-    const onChange = () => setValue(readRecentLimit());
-    window.addEventListener("storage", onChange);
-    window.addEventListener(PREF_EVENT, onChange);
-    return () => {
-      window.removeEventListener("storage", onChange);
-      window.removeEventListener(PREF_EVENT, onChange);
-    };
-  }, []);
-
+  const value = useLocalPref<number>(readRecentLimit, RECENT_LIMIT_DEFAULT);
   return [
     value,
     (next: number) => {
       writeRecentLimit(next);
-      setValue(readRecentLimit());
     },
   ];
 }
@@ -125,24 +140,11 @@ export function writeRecentEnabled(value: boolean): void {
 }
 
 export function useRecentEnabled(): [boolean, (v: boolean) => void] {
-  const [value, setValue] = useState<boolean>(RECENT_ENABLED_DEFAULT);
-
-  useEffect(() => {
-    setValue(readRecentEnabled());
-    const onChange = () => setValue(readRecentEnabled());
-    window.addEventListener("storage", onChange);
-    window.addEventListener(PREF_EVENT, onChange);
-    return () => {
-      window.removeEventListener("storage", onChange);
-      window.removeEventListener(PREF_EVENT, onChange);
-    };
-  }, []);
-
+  const value = useLocalPref<boolean>(readRecentEnabled, RECENT_ENABLED_DEFAULT);
   return [
     value,
     (next: boolean) => {
       writeRecentEnabled(next);
-      setValue(next);
     },
   ];
 }

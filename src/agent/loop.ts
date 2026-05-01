@@ -33,7 +33,7 @@ import type { LlmAdapter, LlmEvent, LlmMessage, LlmToolCall } from "@/agent/llm/
 import { buildSystemPrefix } from "@/agent/prompt";
 import { buildToolRegistry } from "@/agent/tools/registry";
 import type { AgentTool, ToolContext } from "@/agent/tools/types";
-import type { ItemKind } from "@/core/types";
+import { asProjectId, type ItemKind, type ProjectId, type UserId } from "@/core/types";
 import type { Conversation, Message } from "@/db/generated/client";
 import { getBudgetStatus } from "@/server/billing/budget";
 import { compactConversation, loadCompactionSettings } from "@/server/conversations/compaction";
@@ -96,7 +96,7 @@ export type RunTurnArgs = {
   db: Database;
   adapter: LlmAdapter;
   conversationId: string;
-  userId: string;
+  userId: UserId;
   userMessage: string;
   /** Read-only mode strips mutating tools from the registry. */
   readOnly: boolean;
@@ -136,11 +136,12 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
     yield { kind: "error", message: `conversation '${conversationId}' not found` };
     return;
   }
+  const projectId: ProjectId = asProjectId(conv.projectId);
 
   const baseCtx = {
     turnId,
     conversationId,
-    projectId: conv.projectId,
+    projectId,
     userId,
     adapter: adapter.kind,
     readOnly,
@@ -243,7 +244,7 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
 
   const toolCtx: ToolContext = {
     db,
-    projectId: conv.projectId,
+    projectId,
     userId,
     itemId: conv.itemId,
     providerItemId: itemContext.providerItemId,
@@ -543,22 +544,22 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
             call.name === "propose_description_patch" ||
             call.name === "propose_comment" ||
             call.name === "propose_new_item") &&
-          typeof d.proposalId === "string"
+          typeof d["proposal_id"] === "string"
         ) {
           yield {
             kind: "proposal_staged",
-            proposalId: d.proposalId,
-            proposalKind: typeof d.kind === "string" ? d.kind : call.name,
+            proposalId: d["proposal_id"],
+            proposalKind: typeof d["kind"] === "string" ? d["kind"] : call.name,
             toolName: call.name,
           };
         }
-        if (call.name === "ask_user_question" && typeof d.question === "string") {
+        if (call.name === "ask_user_question" && typeof d["question"] === "string") {
           askedQuestion = true;
           yield {
             kind: "ask_user_question",
-            question: d.question,
-            options: Array.isArray(d.options) ? (d.options as string[]) : null,
-            multiSelect: Boolean(d.multiSelect),
+            question: d["question"],
+            options: Array.isArray(d["options"]) ? (d["options"] as string[]) : null,
+            multiSelect: Boolean(d["multi_select"]),
           };
         }
       }
@@ -704,6 +705,17 @@ function refusalText(reason: string): string {
   return "Sorry, I can't continue with that request.";
 }
 
+/**
+ * Narrow the JSON-column read back to `LlmToolCall[]`. The write side is
+ * `persistAssistantTurn` below, which is the only producer of this column —
+ * Prisma's structural `JsonValue` typing is what makes the assertion
+ * necessary; the runtime shape is fixed.
+ */
+function readToolCallsJson(raw: unknown): LlmToolCall[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  return raw as LlmToolCall[];
+}
+
 async function persistAssistantTurn(
   db: Database,
   conversationId: string,
@@ -715,8 +727,11 @@ async function persistAssistantTurn(
     conversationId,
     role: "assistant",
     content: text,
-    toolCallsJson:
-      toolCalls.length > 0 ? (toolCalls as unknown as Record<string, unknown>[]) : null,
+    // `LlmToolCall[]` carries `Record<string, unknown>` for its `arguments`
+    // field, which Prisma's strict `InputJsonValue` won't accept directly —
+    // round-trip through `object` (the `AppendArgs.toolCallsJson` shape) so
+    // the boundary cast is a single up-and-down rather than `unknown`.
+    toolCallsJson: toolCalls.length > 0 ? (toolCalls as readonly object[]) : null,
     pending,
   });
 }
@@ -731,10 +746,10 @@ async function loadTranscriptForLlm(db: Database, conversationId: string): Promi
     } else if (m.role === "user") {
       out.push({ role: "user", content: m.content });
     } else if (m.role === "assistant") {
-      const calls =
-        Array.isArray(m.toolCallsJson) && m.toolCallsJson.length > 0
-          ? (m.toolCallsJson as unknown as LlmToolCall[])
-          : undefined;
+      // `toolCallsJson` is the round-trip read of what `persistAssistantTurn`
+      // wrote — Prisma's `JsonValue` typing erases the original `LlmToolCall[]`
+      // shape, but the write shape is the only thing that lands here.
+      const calls = readToolCallsJson(m.toolCallsJson);
       out.push({
         role: "assistant",
         content: m.content,

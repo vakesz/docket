@@ -169,7 +169,7 @@ describe("LlmJudgeGuardrail.checkToolResult prompt shape", () => {
     const judge = makeJudge();
     await judge.checkToolResult({
       toolName: "get_item",
-      result: { ok: true, data: { id: "x", title: "T", bodyMd: "B" } },
+      result: { ok: true, data: { id: "x", title: "T", body: "B" } },
       untrusted: "T\n---\nB",
     });
     expect(calls.requests[0]?.user).toBe("T\n---\nB");

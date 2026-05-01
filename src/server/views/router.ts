@@ -34,6 +34,16 @@ const StateBucketEnum = z.enum(STATE_BUCKETS);
 const AssigneeList = z.array(z.string().min(0).max(200)).max(50).default([]);
 const AxesMap = z.record(z.string().min(1).max(64), z.string().max(500)).default({});
 
+/**
+ * Safe parser for the `SavedView.axes` JSON column. Inputs flow through
+ * `AxesMap` at write time, but a corrupt or hand-edited row should still
+ * read back as an empty axes map rather than crashing the items query.
+ */
+export function parseSavedViewAxes(raw: unknown): Record<string, string> {
+  const parsed = AxesMap.safeParse(raw ?? {});
+  return parsed.success ? parsed.data : {};
+}
+
 const ViewIdInput = projectSlugSchema.extend({ viewId: z.string().min(1) });
 
 const CreateInput = projectSlugSchema.extend({
@@ -44,13 +54,22 @@ const CreateInput = projectSlugSchema.extend({
   isDefault: z.boolean().default(false),
 });
 
-const UpdateInput = projectSlugSchema.extend({
-  viewId: z.string().min(1),
-  name: z.string().min(1).max(80).optional(),
-  stateBucket: StateBucketEnum.optional(),
-  assignees: AssigneeList.optional(),
-  axes: AxesMap.optional(),
-});
+const UpdateInput = projectSlugSchema
+  .extend({
+    viewId: z.string().min(1),
+    name: z.string().min(1).max(80).optional(),
+    stateBucket: StateBucketEnum.optional(),
+    assignees: AssigneeList.optional(),
+    axes: AxesMap.optional(),
+  })
+  .refine(
+    (input) =>
+      input.name !== undefined ||
+      input.stateBucket !== undefined ||
+      input.assignees !== undefined ||
+      input.axes !== undefined,
+    { message: "at least one field (name, stateBucket, assignees, axes) must be supplied" },
+  );
 
 export const viewsRouter = router({
   list: projectScopedProcedure.input(projectSlugSchema).query(async ({ ctx }) => {

@@ -36,18 +36,18 @@ export async function discoverOauthEndpoints(serverUrl: string): Promise<Discove
     );
   }
   const body = (await res.json()) as Record<string, unknown>;
-  const authorizationEndpoint = body.authorization_endpoint;
-  const tokenEndpoint = body.token_endpoint;
+  const authorizationEndpoint = body["authorization_endpoint"];
+  const tokenEndpoint = body["token_endpoint"];
   if (typeof authorizationEndpoint !== "string" || typeof tokenEndpoint !== "string") {
     throw new Error(`oauth discovery at ${metadataUrl} missing authorization/token endpoints`);
   }
-  const scopesSupported = Array.isArray(body.scopes_supported)
-    ? body.scopes_supported.filter((s): s is string => typeof s === "string")
+  const scopesSupported = Array.isArray(body["scopes_supported"])
+    ? body["scopes_supported"].filter((s): s is string => typeof s === "string")
     : undefined;
   const registrationEndpoint =
-    typeof body.registration_endpoint === "string" ? body.registration_endpoint : undefined;
+    typeof body["registration_endpoint"] === "string" ? body["registration_endpoint"] : undefined;
   return {
-    issuer: typeof body.issuer === "string" ? body.issuer : origin,
+    issuer: typeof body["issuer"] === "string" ? body["issuer"] : origin,
     authorizationEndpoint,
     tokenEndpoint,
     ...(registrationEndpoint !== undefined ? { registrationEndpoint } : {}),

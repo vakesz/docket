@@ -20,6 +20,7 @@
 import { describe, expect, it } from "vitest";
 import type { LlmEvent } from "@/agent/llm/types";
 import { runTurn } from "@/agent/loop";
+import { asUserId } from "@/core/types";
 import type { db as Db } from "@/server/db";
 import { FakeLlm } from "../../tests/fakes/llm";
 
@@ -187,7 +188,7 @@ describe("agent loop", () => {
         db,
         adapter: llm,
         conversationId: "conv_1",
-        userId: "user_1",
+        userId: asUserId("user_1"),
         userMessage: "hi",
         readOnly: false,
       }),
@@ -247,7 +248,7 @@ describe("agent loop", () => {
         db,
         adapter: llm,
         conversationId: "conv_1",
-        userId: "user_1",
+        userId: asUserId("user_1"),
         userMessage: "list anything",
         readOnly: false,
       }),
@@ -290,7 +291,7 @@ describe("agent loop", () => {
             arguments: {
               question: "Which repo?",
               options: ["repo-a", "repo-b"],
-              multiSelect: false,
+              multi_select: false,
             },
           },
         },
@@ -303,7 +304,7 @@ describe("agent loop", () => {
         db,
         adapter: llm,
         conversationId: "conv_1",
-        userId: "user_1",
+        userId: asUserId("user_1"),
         userMessage: "go",
         readOnly: false,
       }),
@@ -352,7 +353,7 @@ describe("agent loop", () => {
         db,
         adapter: llm,
         conversationId: "conv_1",
-        userId: "user_1",
+        userId: asUserId("user_1"),
         userMessage: "loop",
         readOnly: false,
         maxToolRounds: 3,
@@ -393,7 +394,7 @@ describe("agent loop", () => {
         db,
         adapter: llm,
         conversationId: "conv_1",
-        userId: "user_1",
+        userId: asUserId("user_1"),
         userMessage: "loop",
         readOnly: false,
       }),
@@ -418,7 +419,7 @@ describe("agent loop", () => {
         db,
         adapter: llm,
         conversationId: "conv_1",
-        userId: "user_1",
+        userId: asUserId("user_1"),
         userMessage: "go",
         readOnly: false,
       }),
@@ -438,7 +439,7 @@ describe("agent loop", () => {
         db,
         adapter: llm,
         conversationId: "nope",
-        userId: "user_1",
+        userId: asUserId("user_1"),
         userMessage: "hi",
         readOnly: false,
       }),

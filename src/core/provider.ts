@@ -17,6 +17,7 @@ import type {
   CreateFields,
   Item,
   ItemKind,
+  ItemState,
   PRMatch,
   PullRequestDetail,
   PullRequestDiff,
@@ -80,6 +81,34 @@ export class ProviderAuthError extends ProviderError {
 }
 
 /**
+ * Translate a thrown error from a provider HTTP client into the canonical
+ * `ProviderError` subclass. Centralised so every provider classifies the same
+ * way: 401/403 → auth, 5xx → unreachable, network/DNS/timeout → unreachable,
+ * everything else → generic. `label` prefixes the message so logs and the UI
+ * show which provider raised it. Always throws — typed `never` so callers
+ * read as `wrapProviderError(err, "GitHub")` in a `catch` block.
+ */
+const NETWORK_ERROR_RE = /fetch failed|ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN/i;
+
+export function wrapProviderError(err: unknown, label: string): never {
+  const status =
+    (err as { statusCode?: number; status?: number } | null)?.statusCode ??
+    (err as { status?: number } | null)?.status ??
+    null;
+  const message = err instanceof Error ? err.message : String(err);
+  if (status === 401 || status === 403) {
+    throw new ProviderAuthError(`${label} auth rejected: ${message}`);
+  }
+  if (typeof status === "number" && status >= 500) {
+    throw new ProviderUnreachableError(`${label} upstream error: ${message}`);
+  }
+  if (err instanceof Error && NETWORK_ERROR_RE.test(err.message)) {
+    throw new ProviderUnreachableError(`${label} unreachable: ${message}`);
+  }
+  throw new ProviderError(message);
+}
+
+/**
  * Provider-agnostic interface for work-item systems.
  *
  * All canonical-model instances returned from here have provider-specific
@@ -122,7 +151,7 @@ export interface WorkItemProvider {
 
   transition(id: string, intent: TransitionIntent): Promise<Item>;
 
-  patchDescription(id: string, newMd: string): Promise<Item>;
+  patchDescription(id: string, newDescription: string): Promise<Item>;
 
   uploadAttachment(
     id: string,
@@ -131,7 +160,7 @@ export interface WorkItemProvider {
     contentType: string,
   ): Promise<string>;
 
-  addComment(id: string, bodyMd: string): Promise<Comment>;
+  addComment(id: string, body: string): Promise<Comment>;
 
   createItem(kind: ItemKind, fields: CreateFields): Promise<Item>;
 
@@ -389,6 +418,19 @@ export type ProviderCapabilities = {
   /** Provider surfaces explicit linked-item references (cross-refs,
    *  relations). When false, `Item.linkedItemIds` is always empty. */
   linkedItems: boolean;
+  /**
+   * Canonical item kinds this provider can create. The first entry is the
+   * default the create form lands on; surfaces hide the kind selector when
+   * the list is length 1. Must be non-empty — every provider has to declare
+   * at least one creatable kind (the create form needs a default).
+   *
+   * Kinds reachable through sync but NOT in this list are still rendered
+   * read-only in the cache; this is strictly about what `createItem` can
+   * meaningfully translate. GitHub, which has no native kind concept, lists
+   * `["task"]` because every issue rounds-trips back as `"task"` via
+   * `inferKind`. Azure DevOps under the Agile template lists the full set.
+   */
+  creatableKinds: readonly ItemKind[];
 };
 
 export type ProviderSpec = {
@@ -409,6 +451,17 @@ export type ProviderSpec = {
    */
   itemNumberCodec: ProviderItemNumberCodec;
   capabilities: ProviderCapabilities;
+  /**
+   * Transition intents the UI should expose from a given canonical state.
+   *
+   * The canonical-state-to-intent mapping is also gated by what each provider
+   * can actually represent: e.g. GitHub has no native "open but not active"
+   * state, so `pause` from canonical `active` collapses to a no-op and the UI
+   * shouldn't offer it. Providers that can express the full intent set return
+   * the canonical list; others trim entries that would produce no provider-
+   * side change against the current snapshot.
+   */
+  availableIntents: (state: ItemState) => readonly TransitionIntent[];
   /**
    * OAuth sign-in metadata. `null` for providers that don't support OAuth
    * (CLI-only, API-token-only). The actual NextAuth adapter dispatch lives

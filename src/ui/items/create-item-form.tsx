@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus } from "lucide-react";
-import { useId, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { ITEM_KINDS, type ItemKind } from "@/core/types";
 import { formatKind } from "@/lib/format";
 import { trpc } from "@/lib/trpc-client";
@@ -34,6 +34,11 @@ import { ProposalDialog } from "@/ui/proposals/proposal-dialog";
  * then hands off to the shared `ProposalDialog` so the user reviews the
  * diff and confirms before the provider write fires.
  *
+ * The kind dropdown is populated from `project.capabilities.creatableKinds`
+ * — a provider that lists a single kind (e.g. GitHub: `["task"]`) hides
+ * the selector entirely so the user isn't presented with a choice the
+ * provider can't honor.
+ *
  * Tags are entered as a comma-separated string and split on submit so the
  * form stays a single line. Empty assignee / description are normalized to
  * `null` / `""` to match the router's input shape.
@@ -48,11 +53,25 @@ export function CreateItemForm({ projectSlug }: { projectSlug: string }) {
   const assigneeId = useId();
   const tagsId = useId();
 
-  const [itemKind, setItemKind] = useState<ItemKind>("task");
+  const project = trpc.projects.get.useQuery({ projectSlug }, { staleTime: 5 * 60_000 });
+  const creatableKinds = useMemo<readonly ItemKind[]>(() => {
+    const list = project.data?.capabilities.creatableKinds ?? [];
+    if (list.length === 0) return ["task"];
+    return ITEM_KINDS.filter((k) => list.includes(k));
+  }, [project.data]);
+  const defaultKind: ItemKind = creatableKinds[0] ?? "task";
+
+  const [itemKind, setItemKind] = useState<ItemKind>(defaultKind);
   const [title, setTitle] = useState("");
-  const [descriptionMd, setDescriptionMd] = useState("");
+  const [description, setDescription] = useState("");
   const [assignee, setAssignee] = useState("");
   const [tagsInput, setTagsInput] = useState("");
+
+  // Snap the selected kind into the provider's allowed set whenever the
+  // capability list resolves or changes (project switch, slow first load).
+  useEffect(() => {
+    if (!creatableKinds.includes(itemKind)) setItemKind(defaultKind);
+  }, [creatableKinds, defaultKind, itemKind]);
 
   const propose = trpc.proposals.proposeNewItem.useMutation({
     onSuccess: (res) => {
@@ -63,9 +82,9 @@ export function CreateItemForm({ projectSlug }: { projectSlug: string }) {
   });
 
   function resetForm() {
-    setItemKind("task");
+    setItemKind(defaultKind);
     setTitle("");
-    setDescriptionMd("");
+    setDescription("");
     setAssignee("");
     setTagsInput("");
   }
@@ -114,7 +133,7 @@ export function CreateItemForm({ projectSlug }: { projectSlug: string }) {
                 itemKind,
                 fields: {
                   title: trimmedTitle,
-                  descriptionMd,
+                  description,
                   parentId: null,
                   assignee: assignee.trim() || null,
                   tags,
@@ -123,25 +142,29 @@ export function CreateItemForm({ projectSlug }: { projectSlug: string }) {
             }}
           >
             <div className="grid grid-cols-[8rem_1fr] items-center gap-3">
-              <Label htmlFor={kindId} className="text-xs uppercase tracking-wide">
-                Kind
-              </Label>
-              <Select
-                value={itemKind}
-                onValueChange={(v) => setItemKind(v as ItemKind)}
-                disabled={propose.isPending}
-              >
-                <SelectTrigger id={kindId} className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ITEM_KINDS.map((k) => (
-                    <SelectItem key={k} value={k}>
-                      {formatKind(k)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {creatableKinds.length > 1 ? (
+                <>
+                  <Label htmlFor={kindId} className="text-xs uppercase tracking-wide">
+                    Kind
+                  </Label>
+                  <Select
+                    value={itemKind}
+                    onValueChange={(v) => setItemKind(v as ItemKind)}
+                    disabled={propose.isPending}
+                  >
+                    <SelectTrigger id={kindId} className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {creatableKinds.map((k) => (
+                        <SelectItem key={k} value={k}>
+                          {formatKind(k)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </>
+              ) : null}
 
               <Label htmlFor={titleId} className="text-xs uppercase tracking-wide">
                 Title
@@ -161,8 +184,8 @@ export function CreateItemForm({ projectSlug }: { projectSlug: string }) {
               </Label>
               <Textarea
                 id={descId}
-                value={descriptionMd}
-                onChange={(e) => setDescriptionMd(e.target.value)}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
                 rows={5}
                 placeholder="Markdown body (optional)"
                 disabled={propose.isPending}

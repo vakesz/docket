@@ -43,7 +43,7 @@ export type ItemCreateDiff = {
   kind: "item_create";
   itemKind: string;
   title: string;
-  descriptionMd: string;
+  description: string;
   assignee: string | null;
   tags: readonly string[];
 };
@@ -52,7 +52,7 @@ export type CommentAddDiff = {
   kind: "comment_add";
   itemId: string;
   itemTitle: string;
-  bodyMd: string;
+  body: string;
 };
 
 export type TagsChangeDiff = {
@@ -79,9 +79,9 @@ export type MemoryWriteDiff = {
   kind: "memory_write";
   memoryId: string | null;
   title: string;
-  bodyMd: string;
+  body: string;
   previousTitle: string;
-  previousBodyMd: string;
+  previousBody: string;
 };
 
 export type MemoryDeleteDiff = {
@@ -120,7 +120,7 @@ export type DiffForKind<K extends ProposalKind> = Extract<ProposalDiff, { kind: 
 export function isEmptyDiff(diff: ProposalDiff): boolean {
   switch (diff.kind) {
     case "comment_add":
-      return diff.bodyMd.trim().length === 0;
+      return diff.body.trim().length === 0;
     case "description_patch":
       return diff.before === diff.after;
     case "tags_change":
@@ -129,7 +129,7 @@ export function isEmptyDiff(diff: ProposalDiff): boolean {
       return (
         diff.memoryId !== null &&
         diff.previousTitle === diff.title &&
-        diff.previousBodyMd === diff.bodyMd
+        diff.previousBody === diff.body
       );
     case "state_change":
     case "item_create":
@@ -155,8 +155,8 @@ export function diffOf(proposal: Proposal): ProposalDiff {
         kind: "description_patch",
         itemId: proposal.item.id,
         itemTitle: proposal.item.title,
-        before: proposal.item.descriptionMd,
-        after: proposal.newMd,
+        before: proposal.item.description,
+        after: proposal.newDescription,
       };
     case "attachment_upload":
       return {
@@ -172,7 +172,7 @@ export function diffOf(proposal: Proposal): ProposalDiff {
         kind: "item_create",
         itemKind: proposal.itemKind,
         title: proposal.fields.title,
-        descriptionMd: proposal.fields.descriptionMd,
+        description: proposal.fields.description,
         assignee: proposal.fields.assignee,
         tags: proposal.fields.tags,
       };
@@ -181,7 +181,7 @@ export function diffOf(proposal: Proposal): ProposalDiff {
         kind: "comment_add",
         itemId: proposal.item.id,
         itemTitle: proposal.item.title,
-        bodyMd: proposal.bodyMd,
+        body: proposal.body,
       };
     case "reaction_toggle":
       return {
@@ -213,9 +213,9 @@ export function diffOf(proposal: Proposal): ProposalDiff {
         kind: "memory_write",
         memoryId: proposal.memoryId,
         title: proposal.title,
-        bodyMd: proposal.bodyMd,
+        body: proposal.body,
         previousTitle: proposal.previousTitle,
-        previousBodyMd: proposal.previousBodyMd,
+        previousBody: proposal.previousBody,
       };
     case "memory_delete":
       return {

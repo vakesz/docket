@@ -11,7 +11,7 @@ export function StatePill({ state, className }: { state: string; className?: str
   return (
     <span
       className={cn(
-        "rounded bg-primary/15 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-primary",
+        "rounded bg-primary/15 px-1.5 py-0.5 font-mono text-[10px] text-primary uppercase tracking-wider",
         className,
       )}
     >

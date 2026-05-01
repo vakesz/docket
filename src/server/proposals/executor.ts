@@ -21,7 +21,13 @@
 
 import "server-only";
 import { TRPCError } from "@trpc/server";
-import type { Item as CanonicalItem } from "@/core/types";
+import {
+  asProposalId,
+  type Item as CanonicalItem,
+  type ProjectId,
+  type ProposalId,
+  type UserId,
+} from "@/core/types";
 import { Prisma, type Proposal as ProposalRow } from "@/db/generated/client";
 import type { db as Db } from "@/server/db";
 import { assertFound } from "@/server/errors";
@@ -37,8 +43,8 @@ type ConfirmPhase = "load" | "provider_build" | "provider_call" | "cache_refresh
 
 type ExecutorContext = {
   db: typeof Db;
-  projectId: string;
-  userId: string;
+  projectId: ProjectId;
+  userId: UserId;
 };
 
 /**
@@ -57,7 +63,7 @@ export async function pruneAuditOlderThan(
 async function recordAudit(
   ctx: ExecutorContext,
   action: string,
-  proposalId: string,
+  proposalId: ProposalId,
   payload: Prisma.InputJsonValue,
 ): Promise<void> {
   // Best-effort: never let audit failures swallow the user-visible result.
@@ -85,7 +91,7 @@ async function recordAudit(
   }
 }
 
-async function loadPending(ctx: ExecutorContext, proposalId: string) {
+async function loadPending(ctx: ExecutorContext, proposalId: ProposalId) {
   const row = assertFound(
     await ctx.db.proposal.findFirst({
       where: { id: proposalId, projectId: ctx.projectId },
@@ -122,7 +128,7 @@ export type ConfirmSource = "user" | "auto";
 
 export async function confirmProposal(
   ctx: ExecutorContext,
-  proposalId: string,
+  proposalId: ProposalId,
   options: { source?: ConfirmSource } = {},
 ): Promise<ProposalRow> {
   const source: ConfirmSource = options.source ?? "user";
@@ -178,10 +184,10 @@ export async function confirmProposal(
         canonical = await provider.transition(proposal.item.id, proposal.intent);
         break;
       case "description_patch":
-        canonical = await provider.patchDescription(proposal.item.id, proposal.newMd);
+        canonical = await provider.patchDescription(proposal.item.id, proposal.newDescription);
         break;
       case "comment_add": {
-        const comment = await provider.addComment(proposal.item.id, proposal.bodyMd);
+        const comment = await provider.addComment(proposal.item.id, proposal.body);
         commentId = comment.id;
         const cachedItem = await ctx.db.item.findUnique({
           where: {
@@ -193,7 +199,7 @@ export async function confirmProposal(
           select: { id: true },
         });
         if (cachedItem) {
-          await reconcileComments(ctx.db, cachedItem.id, [comment]);
+          await reconcileComments(ctx.db, [{ itemSurrogate: cachedItem.id, comments: [comment] }]);
         }
         break;
       }
@@ -258,7 +264,7 @@ export async function confirmProposal(
             where: { id: proposal.memoryId },
             data: {
               title: proposal.title,
-              bodyMd: proposal.bodyMd,
+              body: proposal.body,
               tags: [...proposal.tags],
               source: proposal.source,
             },
@@ -268,7 +274,7 @@ export async function confirmProposal(
             data: {
               projectId: ctx.projectId,
               title: proposal.title,
-              bodyMd: proposal.bodyMd,
+              body: proposal.body,
               tags: [...proposal.tags],
               source: proposal.source,
             },
@@ -303,7 +309,7 @@ export async function confirmProposal(
           : {}),
       },
     });
-    await recordAudit(ctx, okAction, row.id, {
+    await recordAudit(ctx, okAction, asProposalId(row.id), {
       kind: row.kind,
       providerItemId: row.providerItemId,
       ...(commentId ? { commentId } : {}),
@@ -325,7 +331,7 @@ export async function confirmProposal(
       where: { id: row.id },
       data: { errorMessage: message },
     });
-    await recordAudit(ctx, failAction, row.id, {
+    await recordAudit(ctx, failAction, asProposalId(row.id), {
       kind: row.kind,
       providerItemId: row.providerItemId,
       error: message,
@@ -374,19 +380,19 @@ export async function maybeAutoAccept(
   ]);
   if (readOnly) return row;
   if (!(policy as readonly string[]).includes(row.kind)) return row;
-  return confirmProposal(ctx, row.id, { source: "auto" });
+  return confirmProposal(ctx, asProposalId(row.id), { source: "auto" });
 }
 
 export async function rejectProposal(
   ctx: ExecutorContext,
-  proposalId: string,
+  proposalId: ProposalId,
 ): Promise<ProposalRow> {
   const row = await loadPending(ctx, proposalId);
   const updated = await ctx.db.proposal.update({
     where: { id: row.id },
     data: { status: "rejected" },
   });
-  await recordAudit(ctx, "proposal.reject", row.id, {
+  await recordAudit(ctx, "proposal.reject", asProposalId(row.id), {
     kind: row.kind,
     providerItemId: row.providerItemId,
   });

@@ -20,6 +20,7 @@ import { NextResponse } from "next/server";
 import { selectAdapterFor } from "@/agent/llm/registry";
 import type { LoopEvent } from "@/agent/loop";
 import { runTurn } from "@/agent/loop";
+import { asUserId } from "@/core/types";
 import { auth } from "@/server/auth";
 import { ownsConversation } from "@/server/conversations/storage";
 import { db } from "@/server/db";
@@ -57,7 +58,7 @@ export async function POST(req: Request, context: RouteContext): Promise<Respons
   if (!session?.user?.id) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  const userId = session.user.id;
+  const userId = asUserId(session.user.id);
   const { projectSlug, conversationId } = await context.params;
 
   // Project membership: shares `projectForUser` with the tRPC
@@ -169,6 +170,20 @@ export async function POST(req: Request, context: RouteContext): Promise<Respons
           closed = true;
         }
       };
+      // Eagerly tear down the controller on client disconnect so subsequent
+      // `enqueue`s no-op immediately even before `runTurn` reaches its next
+      // yield point. `runTurn` itself receives `req.signal` and should bail
+      // at the next checkpoint; this ensures the consumer side stops here.
+      const onAbort = () => {
+        if (closed) return;
+        closed = true;
+        try {
+          controller.close();
+        } catch {
+          // Already torn down; nothing to do.
+        }
+      };
+      req.signal.addEventListener("abort", onAbort, { once: true });
       let terminal: "done" | "error" | "aborted" = "aborted";
       let lastErrorMessage: string | undefined;
       try {
@@ -214,6 +229,7 @@ export async function POST(req: Request, context: RouteContext): Promise<Respons
           send({ kind: "error", message: lastErrorMessage });
         }
       } finally {
+        req.signal.removeEventListener("abort", onAbort);
         if (!closed) {
           try {
             controller.close();
@@ -243,6 +259,9 @@ export async function POST(req: Request, context: RouteContext): Promise<Respons
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
+      // Disable nginx-style proxy buffering. Without this, intermediaries
+      // hold the response until close, defeating the SSE delta UX entirely.
+      "X-Accel-Buffering": "no",
     },
   });
 }

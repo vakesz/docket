@@ -41,7 +41,7 @@ export const listItemsTool: ToolFactory = (ctx) => ({
       }),
     ),
   },
-  // Result is an array of `{providerItemId,kind,title,state,assignee,url}`.
+  // Result is an array of `{item_id,kind,title,state,assignee,url}`.
   // The only field carrying foreign content is `title`; the rest are
   // server-generated ids / provider-controlled enum strings.
   guardrailScan: { mode: "fields", untrusted: ["[].title"] },
@@ -84,7 +84,16 @@ export const listItemsTool: ToolFactory = (ctx) => ({
         url: true,
       },
     });
-    return ok(items);
+    return ok(
+      items.map((i) => ({
+        item_id: i.providerItemId,
+        kind: i.kind,
+        title: i.title,
+        state: i.state,
+        assignee: i.assignee,
+        url: i.url,
+      })),
+    );
   },
 });
 
@@ -92,35 +101,35 @@ export const getItemTool: ToolFactory = (ctx) => ({
   def: {
     name: "get_item",
     description:
-      "Read the active item's cached body and recent comments. Defaults to the item this conversation is anchored on; pass providerItemId (e.g. 'owner/repo#42') only to read a different item. Returns title, body, state, assignee, comments — call this before drafting any propose_* on the active item so you're not echoing stale content.",
+      "Read the active item's cached description and recent comments. Defaults to the item this conversation is anchored on; pass `item_id` (e.g. 'owner/repo#42') only to read a different item. Returns title, description (markdown), state, assignee, comments (each with markdown body) — call this before drafting any propose_* on the active item so you're not echoing stale content.",
     parameters: zodToJsonSchema(
       z.object({
-        providerItemId: z.string().min(1).optional(),
+        item_id: z.string().min(1).optional(),
       }),
     ),
   },
-  // Foreign content lives in title, descriptionMd, and each comment's
-  // bodyMd. The surrounding ids/state/tags/url/timestamps are server-
-  // controlled cache columns.
+  // Foreign content lives in title, description, and each comment's body.
+  // The surrounding ids/state/tags/url/timestamps are server-controlled
+  // cache columns.
   guardrailScan: {
     mode: "fields",
-    untrusted: ["title", "descriptionMd", "comments[].bodyMd"],
+    untrusted: ["title", "description", "comments[].body"],
   },
   handler: async (raw) => {
-    const args = z.object({ providerItemId: z.string().min(1).optional() }).parse(raw);
-    const providerItemId = args.providerItemId ?? ctx.providerItemId;
-    if (!providerItemId) {
+    const args = z.object({ item_id: z.string().min(1).optional() }).parse(raw);
+    const itemId = args.item_id ?? ctx.providerItemId;
+    if (!itemId) {
       return fail(
-        "providerItemId is required when no item is anchored on this conversation; pass an explicit id like 'owner/repo#42'.",
+        "item_id is required when no item is anchored on this conversation; pass an explicit id like 'owner/repo#42'.",
       );
     }
     const item = await ctx.db.item.findFirst({
-      where: { projectId: ctx.projectId, providerItemId },
+      where: { projectId: ctx.projectId, providerItemId: itemId },
       include: { comments: { orderBy: [{ createdAt: "asc" }] } },
     });
-    if (!item) return fail(`Item '${providerItemId}' not in cache; the user may need to sync.`);
+    if (!item) return fail(`Item '${itemId}' not in cache; the user may need to sync.`);
     return ok({
-      providerItemId: item.providerItemId,
+      item_id: item.providerItemId,
       kind: item.kind,
       title: item.title,
       state: item.state,
@@ -128,11 +137,11 @@ export const getItemTool: ToolFactory = (ctx) => ({
       author: item.author,
       tags: item.tags,
       url: item.url,
-      descriptionMd: item.descriptionMd,
+      description: item.description,
       comments: item.comments.map((c) => ({
         author: c.author,
-        bodyMd: c.bodyMd,
-        createdAt: c.createdAt,
+        body: c.body,
+        created_at: c.createdAt,
       })),
     });
   },
@@ -142,22 +151,54 @@ export const getPullRequestTool: ToolFactory = (ctx) => ({
   def: {
     name: "get_pull_request",
     description:
-      "Fetch live pull-request detail (title, body, state, files, reviews) from the project's provider. Provider-specific id format (e.g. 'owner/repo#123' on GitHub).",
-    parameters: zodToJsonSchema(z.object({ pullRequestId: z.string().min(1) })),
+      "Fetch live pull-request detail (title, body markdown, state, files, reviews) from the project's provider. Provider-specific id format passed as `pull_request_id` (e.g. 'owner/repo#123' on GitHub).",
+    parameters: zodToJsonSchema(z.object({ pull_request_id: z.string().min(1) })),
   },
-  // PullRequestDetail carries foreign content in title, bodyMd, and each
-  // review's bodyMd. Refs, shas, label arrays, file paths are provider-
-  // controlled and shouldn't be scanned for prompt injection.
+  // Foreign content lives in title, body, and each review's body. Refs,
+  // shas, label arrays, file paths are provider-controlled and shouldn't
+  // be scanned for prompt injection.
   guardrailScan: {
     mode: "fields",
-    untrusted: ["title", "bodyMd", "reviews[].bodyMd"],
+    untrusted: ["title", "body", "reviews[].body"],
   },
   handler: async (raw) => {
-    const { pullRequestId } = z.object({ pullRequestId: z.string().min(1) }).parse(raw);
+    const { pull_request_id: pullRequestId } = z
+      .object({ pull_request_id: z.string().min(1) })
+      .parse(raw);
     try {
       return await withProvider(ctx, async (p) => {
         if (!p.getPullRequest) return fail("provider does not surface pull requests");
-        return ok(await p.getPullRequest(pullRequestId));
+        const pr = await p.getPullRequest(pullRequestId);
+        return ok({
+          id: pr.id,
+          url: pr.url,
+          title: pr.title,
+          number: pr.number,
+          state: pr.state,
+          author: pr.author,
+          body: pr.body,
+          head_ref: pr.headRef,
+          base_ref: pr.baseRef,
+          head_sha: pr.headSha,
+          draft: pr.draft,
+          merged: pr.merged,
+          mergeable: pr.mergeable,
+          labels: pr.labels,
+          requested_reviewers: pr.requestedReviewers,
+          additions: pr.additions,
+          deletions: pr.deletions,
+          changed_files: pr.changedFiles,
+          files: pr.files,
+          reviews: pr.reviews.map((r) => ({
+            author: r.author,
+            state: r.state,
+            body: r.body,
+            submitted_at: r.submittedAt,
+          })),
+          comments_count: pr.commentsCount,
+          review_comments_count: pr.reviewCommentsCount,
+          updated_at: pr.updatedAt,
+        });
       });
     } catch (err) {
       return fail(err instanceof Error ? err.message : String(err));
@@ -179,7 +220,20 @@ export const getCommitTool: ToolFactory = (ctx) => ({
     try {
       return await withProvider(ctx, async (p) => {
         if (!p.getCommit) return fail("provider does not surface commits");
-        return ok(await p.getCommit(sha));
+        const c = await p.getCommit(sha);
+        return ok({
+          sha: c.sha,
+          url: c.url,
+          author: c.author,
+          author_email: c.authorEmail,
+          committer: c.committer,
+          committed_at: c.committedAt,
+          message: c.message,
+          parents: c.parents,
+          additions: c.additions,
+          deletions: c.deletions,
+          files: c.files,
+        });
       });
     } catch (err) {
       return fail(err instanceof Error ? err.message : String(err));
@@ -202,7 +256,21 @@ export const getCIStatusTool: ToolFactory = (ctx) => ({
     try {
       return await withProvider(ctx, async (p) => {
         if (!p.getCIStatus) return fail("provider does not surface CI status");
-        return ok(await p.getCIStatus(ref));
+        const status = await p.getCIStatus(ref);
+        return ok({
+          ref: status.ref,
+          overall: status.overall,
+          runs: status.runs.map((r) => ({
+            id: r.id,
+            name: r.name,
+            status: r.status,
+            conclusion: r.conclusion,
+            url: r.url,
+            head_sha: r.headSha,
+            started_at: r.startedAt,
+            completed_at: r.completedAt,
+          })),
+        });
       });
     } catch (err) {
       return fail(err instanceof Error ? err.message : String(err));

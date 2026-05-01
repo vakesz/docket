@@ -128,6 +128,7 @@ export const projectsRouter = router({
         ciStatus: false,
         pullRequestDiffs: false,
         linkedItems: false,
+        creatableKinds: ["task"],
       },
       hasAvatarFetcher: spec?.avatarFetcher != null,
     };

@@ -52,7 +52,7 @@ export function ExportPanel({ projectSlug }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-muted-foreground">
+      <p className="text-muted-foreground text-sm">
         Downloads a single JSON file containing this project's memory, sources, and{" "}
         <span className="font-medium text-foreground">your own</span> conversation history (other
         members' chats are excluded). Nothing leaves your browser; the file is generated on request
@@ -63,7 +63,7 @@ export function ExportPanel({ projectSlug }: Props) {
           {busy ? "Preparing…" : "Download JSON"}
         </Button>
         {last ? (
-          <span className="text-xs text-muted-foreground">
+          <span className="text-muted-foreground text-xs">
             Exported {last.counts.memory} memory · {last.counts.sources} sources ·{" "}
             {last.counts.conversations} conversations ({last.counts.messages} messages,{" "}
             {(last.sizeBytes / 1024).toFixed(1)} KiB).

@@ -50,7 +50,7 @@ const ALIASES: Record<string, string> = {
 };
 
 function languageOf(node: Element): string | undefined {
-  const classes = node.properties?.className;
+  const classes = node.properties?.["className"];
   if (!Array.isArray(classes)) return undefined;
   for (const c of classes) {
     if (typeof c !== "string") continue;
@@ -77,12 +77,12 @@ export default function rehypeHljs() {
 
       const text = toText(node, { whitespace: "pre" });
       const result = lowlight.highlight(lang, text);
-      const classes = Array.isArray(node.properties.className)
-        ? node.properties.className.filter((c) => typeof c === "string")
+      const classes = Array.isArray(node.properties["className"])
+        ? node.properties["className"].filter((c) => typeof c === "string")
         : [];
       if (!classes.includes("hljs")) classes.unshift("hljs");
       if (!classes.includes(`language-${lang}`)) classes.push(`language-${lang}`);
-      node.properties.className = classes;
+      node.properties["className"] = classes;
       node.children = result.children as Element["children"];
     });
   };

@@ -18,7 +18,7 @@ export function Bubble({
   if (seedKind) {
     return (
       <div className={cn("mb-3 rounded px-3 py-2 text-sm", tone)}>
-        <div className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">
+        <div className="mb-1 text-muted-foreground text-xs uppercase tracking-wide">
           {messageRole}
         </div>
         <div className="inline-flex items-center gap-1.5 text-foreground">
@@ -30,7 +30,7 @@ export function Bubble({
   }
   return (
     <div className={cn("mb-3 rounded px-3 py-2 text-sm", tone)}>
-      <div className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">
+      <div className="mb-1 text-muted-foreground text-xs uppercase tracking-wide">
         {messageRole}
       </div>
       {text ? <MarkdownLazy source={text} className="text-foreground" /> : null}

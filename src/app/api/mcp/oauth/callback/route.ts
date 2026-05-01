@@ -19,6 +19,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function settingsRedirect(
+  origin: string,
   projectSlug: string | null,
   params: Record<string, string>,
 ): NextResponse {
@@ -26,24 +27,28 @@ function settingsRedirect(
   const target = projectSlug
     ? `/settings?project=${encodeURIComponent(projectSlug)}&group=mcp&${search.toString()}`
     : `/?${search.toString()}`;
-  return NextResponse.redirect(new URL(target, process.env.AUTH_URL || "http://localhost:3000"));
+  // Anchor the redirect on the request's own origin — the callback URL we
+  // registered with the IdP is built from this same origin, so it's the
+  // single source of truth for "where is this app served from."
+  return NextResponse.redirect(new URL(target, origin));
 }
 
 export async function GET(req: Request): Promise<Response> {
   const url = new URL(req.url);
+  const origin = url.origin;
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
   const errorParam = url.searchParams.get("error");
 
   if (errorParam) {
-    return settingsRedirect(null, {
+    return settingsRedirect(origin, null, {
       mcpOauth: "error",
       message:
         url.searchParams.get("error_description") || `oauth provider returned: ${errorParam}`,
     });
   }
   if (!code || !state) {
-    return settingsRedirect(null, {
+    return settingsRedirect(origin, null, {
       mcpOauth: "error",
       message: "callback missing code or state",
     });
@@ -52,7 +57,7 @@ export async function GET(req: Request): Promise<Response> {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) {
-    return settingsRedirect(null, { mcpOauth: "error", message: "not authenticated" });
+    return settingsRedirect(origin, null, { mcpOauth: "error", message: "not authenticated" });
   }
 
   try {
@@ -62,7 +67,7 @@ export async function GET(req: Request): Promise<Response> {
       nonce: state,
       code,
     });
-    return settingsRedirect(projectSlug, {
+    return settingsRedirect(origin, projectSlug, {
       mcpOauth: "ok",
       serverId: mcpServerId,
     });
@@ -71,7 +76,7 @@ export async function GET(req: Request): Promise<Response> {
       { err: err instanceof Error ? err.message : String(err) },
       "mcp.oauth: callback failed",
     );
-    return settingsRedirect(null, {
+    return settingsRedirect(origin, null, {
       mcpOauth: "error",
       message: err instanceof Error ? err.message : String(err),
     });

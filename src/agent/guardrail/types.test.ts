@@ -42,18 +42,18 @@ describe("extractUntrustedFields", () => {
   });
 
   it("extracts multiple paths joined with --- separator", () => {
-    const r = { ok: true, data: { title: "T", bodyMd: "B" } };
-    expect(extractUntrustedFields(r, ["title", "bodyMd"])).toBe("T\n---\nB");
+    const r = { ok: true, data: { title: "T", body: "B" } };
+    expect(extractUntrustedFields(r, ["title", "body"])).toBe("T\n---\nB");
   });
 
   it("ignores missing or null fields", () => {
-    const r = { ok: true, data: { title: "T", bodyMd: null } };
-    expect(extractUntrustedFields(r, ["title", "bodyMd", "missing"])).toBe("T");
+    const r = { ok: true, data: { title: "T", body: null } };
+    expect(extractUntrustedFields(r, ["title", "body", "missing"])).toBe("T");
   });
 
   it("returns empty string when every path is missing", () => {
     const r = { ok: true, data: { id: "x" } };
-    expect(extractUntrustedFields(r, ["title", "bodyMd"])).toBe("");
+    expect(extractUntrustedFields(r, ["title", "body"])).toBe("");
   });
 
   it("supports nested object paths", () => {
@@ -66,12 +66,12 @@ describe("extractUntrustedFields", () => {
       ok: true,
       data: {
         comments: [
-          { author: "a", bodyMd: "first" },
-          { author: "b", bodyMd: "second" },
+          { author: "a", body: "first" },
+          { author: "b", body: "second" },
         ],
       },
     };
-    expect(extractUntrustedFields(r, ["comments[].bodyMd"])).toBe("first\n---\nsecond");
+    expect(extractUntrustedFields(r, ["comments[].body"])).toBe("first\n---\nsecond");
   });
 
   it("iterates a top-level array with []", () => {
@@ -109,9 +109,9 @@ describe("extractUntrustedFields", () => {
     const r = {
       ok: true,
       data: {
-        comments: [{ bodyMd: "" }, { bodyMd: "real text" }, { bodyMd: "" }],
+        comments: [{ body: "" }, { body: "real text" }, { body: "" }],
       },
     };
-    expect(extractUntrustedFields(r, ["comments[].bodyMd"])).toBe("real text");
+    expect(extractUntrustedFields(r, ["comments[].body"])).toBe("real text");
   });
 });

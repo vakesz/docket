@@ -1,4 +1,3 @@
-import { nextAuthProviderId } from "@/lib/next-auth-provider-id";
 import { ProviderLogo } from "@/lib/provider-logos";
 import { signIn } from "@/server/auth";
 import { db } from "@/server/db";
@@ -25,7 +24,7 @@ export async function SignInButtons({ redirectTo = "/" }: { redirectTo?: string 
 
   if (rows.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">
+      <p className="text-muted-foreground text-sm">
         No sign-in providers configured. Ask an admin to add one in settings.
       </p>
     );
@@ -34,14 +33,13 @@ export async function SignInButtons({ redirectTo = "/" }: { redirectTo?: string 
   return (
     <div className="flex flex-col gap-2">
       {rows.map((row) => {
-        const providerId = nextAuthProviderId(row.kind);
         const label = row.label || row.kind;
         return (
           <form
             key={row.id}
             action={async () => {
               "use server";
-              await signIn(providerId, { redirectTo });
+              await signIn(row.kind, { redirectTo });
             }}
           >
             <Button type="submit" variant="outline" className="w-full">

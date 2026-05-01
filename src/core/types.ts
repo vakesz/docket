@@ -10,6 +10,23 @@
  * narrowing). One source, no drift.
  */
 
+/**
+ * Branded id types. Plain strings at runtime, but the compiler refuses to
+ * mix a `UserId` where a `ProjectId` is expected. The brand is attached at
+ * the access boundary (`projectForUser`, the project-membership middleware,
+ * session resolution); inside the system it flows through tRPC ctx and the
+ * proposal executor without further casts. Prisma `where` clauses accept
+ * the branded value transparently because brands are subtypes of `string`.
+ */
+declare const __brand: unique symbol;
+export type ProjectId = string & { readonly [__brand]: "ProjectId" };
+export type UserId = string & { readonly [__brand]: "UserId" };
+export type ProposalId = string & { readonly [__brand]: "ProposalId" };
+
+export const asProjectId = (value: string): ProjectId => value as ProjectId;
+export const asUserId = (value: string): UserId => value as UserId;
+export const asProposalId = (value: string): ProposalId => value as ProposalId;
+
 export const ITEM_KINDS = ["epic", "feature", "story", "task", "bug"] as const;
 export type ItemKind = (typeof ITEM_KINDS)[number];
 
@@ -44,6 +61,30 @@ export type TransitionIntent = (typeof TRANSITION_INTENTS)[number];
 
 export function isTransitionIntent(value: string): value is TransitionIntent {
   return (TRANSITION_INTENTS as readonly string[]).includes(value);
+}
+
+/**
+ * Canonical "intents that move an item out of where it is" per state.
+ *
+ * Used as the upper bound for what a provider's UI can offer. Providers
+ * that can't represent every intent against every state (e.g. GitHub has
+ * no distinct "paused" vs "active" open state) trim further in their own
+ * `availableIntents` implementation.
+ */
+export function canonicalIntentsFor(state: ItemState): readonly TransitionIntent[] {
+  switch (state) {
+    case "new":
+      return ["start_work", "block", "needs_info", "close_done", "close_wontfix"];
+    case "active":
+      return ["pause", "block", "needs_info", "close_done", "close_wontfix"];
+    case "blocked":
+      return ["start_work", "needs_info", "close_done", "close_wontfix"];
+    case "needs_info":
+      return ["start_work", "block", "close_done", "close_wontfix"];
+    case "resolved":
+    case "closed":
+      return ["reopen"];
+  }
 }
 
 export const STATE_BUCKETS = ["open", "closed", "all"] as const;
@@ -90,7 +131,7 @@ export type Item = {
   id: string;
   kind: ItemKind;
   title: string;
-  descriptionMd: string;
+  description: string;
   state: ItemState;
   assignee: string | null;
   /**
@@ -148,7 +189,7 @@ export type Comment = {
   id: string;
   itemId: string;
   author: string;
-  bodyMd: string;
+  body: string;
   createdAt: Date;
   /** Last-touched timestamp from the provider; null when not surfaced. */
   updatedAt?: Date | null;
@@ -187,7 +228,7 @@ export type Conversation = {
 
 export type CreateFields = {
   title: string;
-  descriptionMd: string;
+  description: string;
   parentId: string | null;
   assignee: string | null;
   tags: string[];
@@ -229,7 +270,7 @@ export type PullRequestReview = {
   author: string;
   /** APPROVED | CHANGES_REQUESTED | COMMENTED | DISMISSED */
   state: string;
-  bodyMd: string;
+  body: string;
   submittedAt: Date | null;
 };
 
@@ -250,7 +291,7 @@ export type PullRequestDetail = {
   /** "open" | "closed" | "merged" */
   state: string;
   author: string;
-  bodyMd: string;
+  body: string;
   headRef: string;
   baseRef: string;
   headSha: string;
@@ -381,7 +422,7 @@ export type MemoryEntry = {
   id: string;
   projectId: string;
   title: string;
-  bodyMd: string;
+  body: string;
   tags: string[];
   /** "user" | "agent" — informational, no behavior depends on it. */
   source: string;
@@ -401,22 +442,10 @@ export type Source = {
   id: string;
   projectId: string;
   title: string;
-  bodyMd: string;
+  body: string;
   kind: string;
   uri: string;
   tags: string[];
   createdAt: Date | null;
   updatedAt: Date | null;
 };
-
-/**
- * Deterministic project id — currently identical to the provider key.
- *
- * A project IS a provider: memory, sources, sub-agents, and MCP servers
- * live per-provider and are shared across every scope (view). Scopes are
- * visual filters applied at query time, so they don't split project
- * identity. Empty `providerKey` is allowed for tests.
- */
-export function projectIdFor(providerKey: string): string {
-  return providerKey;
-}

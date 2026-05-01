@@ -60,8 +60,8 @@ export function MembersPanel({ projectSlug }: Props) {
   return (
     <div className="flex flex-col gap-6">
       <section className="flex flex-col gap-2">
-        <h3 className="text-sm font-medium text-foreground">Add member</h3>
-        <p className="text-xs text-muted-foreground">
+        <h3 className="font-medium text-foreground text-sm">Add member</h3>
+        <p className="text-muted-foreground text-xs">
           Invite by email. The user must have signed in at least once. Roles:{" "}
           <span className="font-mono">viewer</span> can read,{" "}
           <span className="font-mono">member</span> can stage proposals,{" "}
@@ -103,7 +103,7 @@ export function MembersPanel({ projectSlug }: Props) {
           </Button>
         </div>
         {!canManage ? (
-          <p className="text-xs text-muted-foreground-faint">
+          <p className="text-muted-foreground/70 text-xs">
             Only the project owner can change membership.
           </p>
         ) : null}
@@ -114,10 +114,10 @@ export function MembersPanel({ projectSlug }: Props) {
         ) : null}
       </section>
 
-      <section className="flex flex-col gap-2 border-t border-border first:border-t-0 first:pt-0 pt-4">
-        <h3 className="text-sm font-medium text-foreground">Members</h3>
+      <section className="flex flex-col gap-2 border-border border-t pt-4 first:border-t-0 first:pt-0">
+        <h3 className="font-medium text-foreground text-sm">Members</h3>
         {list.isPending ? (
-          <p className="text-xs text-muted-foreground-faint">Loading…</p>
+          <p className="text-muted-foreground/70 text-xs">Loading…</p>
         ) : list.error ? (
           <Alert variant="destructive">
             <AlertDescription>{list.error.message}</AlertDescription>
@@ -131,7 +131,7 @@ export function MembersPanel({ projectSlug }: Props) {
               roleBadge="owner"
             />
             {list.data.members.length === 0 ? (
-              <li className="px-4 py-3 text-xs text-muted-foreground-faint">
+              <li className="px-4 py-3 text-muted-foreground/70 text-xs">
                 No additional members. Invite a teammate above.
               </li>
             ) : (
@@ -227,9 +227,9 @@ function MemberRow({
       <div className="flex min-w-0 items-center gap-3">
         <Avatar name={name || email} image={image} />
         <div className="min-w-0">
-          <div className="truncate text-sm text-foreground">{name || email || "—"}</div>
+          <div className="truncate text-foreground text-sm">{name || email || "—"}</div>
           {name && email ? (
-            <div className="truncate text-xs text-muted-foreground">{email}</div>
+            <div className="truncate text-muted-foreground text-xs">{email}</div>
           ) : null}
         </div>
       </div>
@@ -251,7 +251,7 @@ function Avatar({ name, image }: { name: string; image: string | null }) {
     return (
       <div
         aria-hidden="true"
-        className="h-8 w-8 shrink-0 rounded-full border border-border bg-muted bg-cover bg-center"
+        className="h-8 w-8 shrink-0 rounded-full border border-border bg-center bg-cover bg-muted"
         style={{ backgroundImage: `url(${JSON.stringify(image)})` }}
       />
     );

@@ -21,12 +21,12 @@ export default function RootError({
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-6">
       <div className="flex w-full max-w-md flex-col gap-4 rounded-2xl border border-border bg-card p-6 text-foreground shadow-sm">
-        <h1 className="text-lg font-semibold">Something went wrong</h1>
-        <p className="text-sm text-muted-foreground">
+        <h1 className="font-semibold text-lg">Something went wrong</h1>
+        <p className="text-muted-foreground text-sm">
           The page hit an unexpected error. Try again, or reload if the problem persists.
         </p>
         {error.digest ? (
-          <p className="text-xs text-muted-foreground-faint">
+          <p className="text-muted-foreground/70 text-xs">
             Error ref: <code className="font-mono">{error.digest}</code>
           </p>
         ) : null}

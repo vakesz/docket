@@ -1,5 +1,6 @@
 import type { ProposalDiff } from "@/server/proposals/diff";
 import { Badge } from "@/ui/primitives/badge";
+import { ScrollArea } from "@/ui/primitives/scroll-area";
 
 export function ProposalDiffView({ diff }: { diff: ProposalDiff }) {
   switch (diff.kind) {
@@ -39,7 +40,7 @@ export function ProposalDiffView({ diff }: { diff: ProposalDiff }) {
             <span className="font-medium">{diff.itemTitle}</span>{" "}
             <span className="text-muted-foreground">({diff.itemId})</span>
           </Field>
-          <DiffBlock label="New comment" tone="primary" body={diff.bodyMd} />
+          <DiffBlock label="New comment" tone="primary" body={diff.body} />
         </div>
       );
 
@@ -72,7 +73,7 @@ export function ProposalDiffView({ diff }: { diff: ProposalDiff }) {
           ) : null}
           <Field label="Result">
             {diff.after.length === 0 ? (
-              <span className="italic text-muted-foreground">(no tags)</span>
+              <span className="text-muted-foreground italic">(no tags)</span>
             ) : (
               <span className="flex flex-wrap gap-1">
                 {diff.after.map((t) => (
@@ -103,8 +104,8 @@ export function ProposalDiffView({ diff }: { diff: ProposalDiff }) {
               </span>
             </Field>
           ) : null}
-          {diff.descriptionMd ? (
-            <DiffBlock label="Description" tone="primary" body={diff.descriptionMd} />
+          {diff.description ? (
+            <DiffBlock label="Description" tone="primary" body={diff.description} />
           ) : null}
         </div>
       );
@@ -133,11 +134,11 @@ export function ProposalDiffView({ diff }: { diff: ProposalDiff }) {
           </Field>
           {diff.memoryId ? (
             <div className="grid grid-cols-2 gap-3">
-              <DiffBlock label="Before" tone="muted" body={diff.previousBodyMd} />
-              <DiffBlock label="After" tone="primary" body={diff.bodyMd} />
+              <DiffBlock label="Before" tone="muted" body={diff.previousBody} />
+              <DiffBlock label="After" tone="primary" body={diff.body} />
             </div>
           ) : (
-            <DiffBlock label="Body" tone="primary" body={diff.bodyMd} />
+            <DiffBlock label="Body" tone="primary" body={diff.body} />
           )}
         </div>
       );
@@ -157,7 +158,7 @@ export function ProposalDiffView({ diff }: { diff: ProposalDiff }) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-baseline gap-2">
-      <span className="w-24 shrink-0 text-xs uppercase tracking-wide text-muted-foreground">
+      <span className="w-24 shrink-0 text-muted-foreground text-xs uppercase tracking-wide">
         {label}
       </span>
       <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 break-words">
@@ -200,10 +201,10 @@ function DiffBlock({
   const border = tone === "primary" ? "border-primary/30" : "border-border";
   return (
     <div className={`flex min-w-0 flex-col gap-1 rounded-md border ${border} p-2`}>
-      <span className="text-xs uppercase tracking-wide text-muted-foreground">{label}</span>
-      <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs">
-        {body || "(empty)"}
-      </pre>
+      <span className="text-muted-foreground text-xs uppercase tracking-wide">{label}</span>
+      <ScrollArea className="max-h-64">
+        <pre className="whitespace-pre-wrap break-words text-xs">{body || "(empty)"}</pre>
+      </ScrollArea>
     </div>
   );
 }

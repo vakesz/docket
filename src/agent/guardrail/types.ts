@@ -128,7 +128,7 @@ export function stringifyToolResult(result: unknown): string {
  * function returns the empty string and the loop short-circuits the
  * guardrail call entirely — same fast path as `mode: "skip"`.
  */
-export function extractUntrustedFields(result: unknown, paths: ReadonlyArray<string>): string {
+export function extractUntrustedFields(result: unknown, paths: readonly string[]): string {
   if (result === null || result === undefined) return "";
   const r = result as { data?: unknown };
   const data = r.data;

@@ -8,6 +8,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ToolContext } from "@/agent/tools/types";
+import { asProjectId, asUserId } from "@/core/types";
 
 const settings = vi.hoisted(() => ({
   enabled: true as boolean,
@@ -15,7 +16,12 @@ const settings = vi.hoisted(() => ({
   maxBytes: 200_000 as number,
 }));
 
-const auditLog = vi.hoisted(() => ({ rows: [] as Record<string, unknown>[] }));
+interface AuditRow {
+  cleaned?: boolean | null;
+  cleanError?: string;
+}
+
+const auditLog = vi.hoisted(() => ({ rows: [] as AuditRow[] }));
 
 vi.mock("@/server/settings/effective", () => ({
   loadProjectSetting: async (_db: unknown, _projectId: string, key: string) => {
@@ -44,8 +50,8 @@ const { webFetchTool } = await import("@/agent/tools/web-fetch");
 
 const ctx: ToolContext = {
   db: {} as unknown as ToolContext["db"],
-  projectId: "proj_1",
-  userId: "user_1",
+  projectId: asProjectId("proj_1"),
+  userId: asUserId("user_1"),
   itemId: null,
   providerItemId: null,
 };
@@ -80,12 +86,18 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-type ToolOk = { ok: true; data: Record<string, unknown> };
+interface ToolData {
+  cleaned: boolean | null;
+  cleaned_bytes?: number;
+  clean_error?: string;
+  body: string;
+  truncated?: boolean;
+}
 
-async function callTool(args: Record<string, unknown>): Promise<ToolOk["data"]> {
+async function callTool(args: Record<string, unknown>): Promise<ToolData> {
   const tool = webFetchTool(ctx);
   const result = (await tool.handler(args)) as
-    | { ok: true; data: Record<string, unknown> }
+    | { ok: true; data: ToolData }
     | { ok: false; error: string };
   if (!result.ok) throw new Error(`tool failed: ${result.error}`);
   return result.data;
@@ -99,7 +111,7 @@ describe("web_fetch tool", () => {
     );
     const data = await callTool({ url: "https://example.com/page" });
     expect(data.cleaned).toBe(true);
-    expect(typeof data.cleanedBytes).toBe("number");
+    expect(typeof data.cleaned_bytes).toBe("number");
     expect(data.body as string).toContain("# Hi");
     expect(data.body as string).toContain("Body.");
     expect(data.body as string).not.toContain("<script");
@@ -141,7 +153,7 @@ describe("web_fetch tool", () => {
     mockFetchOnce(html, "text/html");
     const data = await callTool({ url: "https://example.com/spa" });
     expect(data.cleaned).toBe(false);
-    expect(data.cleanError).toMatch(/empty/i);
+    expect(data.clean_error).toMatch(/empty/i);
     expect(data.body).toBe(html);
     expect(auditLog.rows.at(-1)?.cleaned).toBe(false);
     expect(auditLog.rows.at(-1)?.cleanError).toMatch(/empty/i);

@@ -37,7 +37,7 @@ const GetInput = projectSlugSchema.extend({
 const ProposeWriteInput = projectSlugSchema.extend({
   memoryId: z.string().min(1).nullable().default(null),
   title: z.string().min(1).max(200),
-  bodyMd: z.string().max(50_000).default(""),
+  body: z.string().max(50_000).default(""),
   tags: z.array(z.string().min(1).max(64)).max(32).default([]),
 });
 
@@ -55,7 +55,7 @@ export const memoryRouter = router({
           ? {
               OR: [
                 { title: { contains: input.search, mode: "insensitive" } },
-                { bodyMd: { contains: input.search, mode: "insensitive" } },
+                { body: { contains: input.search, mode: "insensitive" } },
               ],
             }
           : {}),
@@ -88,7 +88,7 @@ export const memoryRouter = router({
         await proposeMemoryWrite(c, {
           memoryId: input.memoryId,
           title: input.title,
-          bodyMd: input.bodyMd,
+          body: input.body,
           tags: input.tags,
           source: "user",
         }),

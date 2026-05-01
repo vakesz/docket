@@ -80,7 +80,7 @@ export function McpPane({ projectSlug }: { projectSlug: string }) {
       <McpTemplatePicker projectSlug={projectSlug} existingNames={existingNames} />
 
       <form
-        className="flex flex-col gap-2 rounded-2xl border border-dashed border-border bg-muted/40 p-4"
+        className="flex flex-col gap-2 rounded-2xl border border-border border-dashed bg-muted/40 p-4"
         onSubmit={(e) => {
           e.preventDefault();
           void submitNew();
@@ -114,13 +114,13 @@ export function McpPane({ projectSlug }: { projectSlug: string }) {
           rows={2}
           className="font-mono text-xs"
         />
-        <p className="text-xs text-muted-foreground">
+        <p className="text-muted-foreground text-xs">
           Add a custom MCP server. The name is the tool prefix the agent sees; URL must speak SSE or
           streamable-HTTP MCP. Headers JSON (optional, string → string) is sent on every request and
           is encrypted at rest.
         </p>
         <div className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">{list.data?.length ?? 0} configured</span>
+          <span className="text-muted-foreground text-xs">{list.data?.length ?? 0} configured</span>
           <Button
             type="submit"
             size="xs"
@@ -142,9 +142,9 @@ export function McpPane({ projectSlug }: { projectSlug: string }) {
       </form>
 
       {list.isPending ? (
-        <p className="text-sm italic text-muted-foreground">Loading MCP servers…</p>
+        <p className="text-muted-foreground text-sm italic">Loading MCP servers…</p>
       ) : list.data?.length === 0 ? (
-        <p className="rounded-2xl border border-dashed border-border bg-card p-6 text-center text-sm text-muted-foreground">
+        <p className="rounded-2xl border border-border border-dashed bg-card p-6 text-center text-muted-foreground text-sm">
           No MCP servers configured. Pick a template above or add a custom server.
         </p>
       ) : (
@@ -163,8 +163,8 @@ export function McpPane({ projectSlug }: { projectSlug: string }) {
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex min-w-0 flex-col gap-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-medium text-foreground">{s.name}</span>
-                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                      <span className="font-medium text-foreground text-sm">{s.name}</span>
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
                         {s.transport}
                       </span>
                       {!s.enabled && (
@@ -178,17 +178,14 @@ export function McpPane({ projectSlug }: { projectSlug: string }) {
                         </Badge>
                       )}
                       {needsConfig && (
-                        <Badge
-                          variant="secondary"
-                          className="border-amber-500/40 bg-amber-500/15 uppercase tracking-wide text-amber-700 dark:text-amber-300"
-                        >
+                        <Badge variant="warning" className="uppercase tracking-wide">
                           needs config
                         </Badge>
                       )}
                     </div>
-                    <p className="truncate font-mono text-xs text-muted-foreground">{s.url}</p>
+                    <p className="truncate font-mono text-muted-foreground text-xs">{s.url}</p>
                     {headerCount > 0 && (
-                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
                         {headerCount} header{headerCount === 1 ? "" : "s"}
                       </p>
                     )}
@@ -229,7 +226,11 @@ export function McpPane({ projectSlug }: { projectSlug: string }) {
                   </div>
                 </div>
                 {isEditing && (
+                  // Keying by server id remounts the editor on row switch, so
+                  // local form state can't leak across servers and the editor
+                  // doesn't need a defensive useEffect to re-sync from props.
                   <McpServerEditor
+                    key={s.id}
                     projectSlug={projectSlug}
                     row={{
                       id: s.id,

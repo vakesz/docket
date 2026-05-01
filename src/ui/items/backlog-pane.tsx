@@ -4,11 +4,13 @@ import { usePathname } from "next/navigation";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import type { BacklogBucket, ItemKind } from "@/core/types";
 import { useRecentItemNumbers } from "@/lib/recent-items";
+import { useSettingsMap } from "@/lib/settings-client";
 import { trpc } from "@/lib/trpc-client";
 import { ASSIGNEE_UNASSIGNED, FilterBar } from "@/ui/items/filter-bar";
 import { EmptyMessage, ItemRow, type ListItem, PinnedRow } from "@/ui/items/item-row";
+import { ScrollArea } from "@/ui/primitives/scroll-area";
 
-const META_LABEL_FAINT = "text-xs uppercase tracking-wide text-muted-foreground-faint";
+const META_LABEL_FAINT = "text-xs uppercase tracking-wide text-muted-foreground/70";
 
 const KINDS: Array<ItemKind | "all"> = ["all", "epic", "feature", "story", "task", "bug"];
 
@@ -56,30 +58,15 @@ export function BacklogPane({
     { projectSlug, limit: PINNED_QUERY_LIMIT },
     { staleTime: 30_000 },
   );
-  const settings = trpc.settings.list.useQuery(undefined, { staleTime: 60_000 });
+  const settings = useSettingsMap({ staleTime: 60_000 });
   const me = trpc.projects.me.useQuery(undefined, { staleTime: 5 * 60_000 });
   const meIdentifier = me.data?.name ?? null;
-  // Settings come back as a flat array; keying once removes the per-key
-  // O(N) `find` walk we'd otherwise pay for each derived value.
-  const settingsByKey = useMemo(() => {
-    const map = new Map<string, unknown>();
-    for (const row of settings.data ?? []) map.set(row.key, row.value);
-    return map;
-  }, [settings.data]);
-  const numSetting = (key: string, fallback: number): number => {
-    const raw = settingsByKey.get(key);
-    return typeof raw === "number" ? raw : fallback;
-  };
-  const boolSetting = (key: string, fallback: boolean): boolean => {
-    const raw = settingsByKey.get(key);
-    return typeof raw === "boolean" ? raw : fallback;
-  };
-  const maxVisibleTags = numSetting("items.max-visible-tags", 2);
-  const maxVisibleAssignees = numSetting("items.max-visible-assignees", 2);
+  const maxVisibleTags = settings.num("items.max-visible-tags", 2);
+  const maxVisibleAssignees = settings.num("items.max-visible-assignees", 2);
   const assigneeSelectorStyle: "chips" | "dropdown" =
-    settingsByKey.get("items.assignee-selector-style") === "dropdown" ? "dropdown" : "chips";
-  const showAvatars = boolSetting("items.show-assignee-avatars", true);
-  const showArchivedBucket = boolSetting("items.show-archived-bucket", true);
+    settings.raw("items.assignee-selector-style") === "dropdown" ? "dropdown" : "chips";
+  const showAvatars = settings.bool("items.show-assignee-avatars", true);
+  const showArchivedBucket = settings.bool("items.show-archived-bucket", true);
   const project = trpc.projects.get.useQuery({ projectSlug }, { staleTime: 5 * 60_000 });
   const providerKind = project.data?.providerKind ?? "";
   const providerHasAvatars = project.data?.hasAvatarFetcher ?? false;
@@ -225,10 +212,10 @@ export function BacklogPane({
       />
 
       {recentItems.length > 0 && (
-        <div className="border-b border-border bg-card">
+        <div className="border-border border-b bg-card">
           <div className={`flex items-center gap-2 px-3 pt-2 pb-1 ${META_LABEL_FAINT}`}>
             <span>Recent</span>
-            <span className="text-muted-foreground-faint">{recentItems.length}</span>
+            <span className="text-muted-foreground/70">{recentItems.length}</span>
           </div>
           {recentItems.map((it) => (
             <PinnedRow
@@ -242,11 +229,11 @@ export function BacklogPane({
       )}
 
       {pinned.data && pinned.data.length > 0 && (
-        <div className="border-b border-border bg-card">
+        <div className="border-border border-b bg-card">
           <div className={`flex items-center gap-2 px-3 pt-2 pb-1 ${META_LABEL_FAINT}`}>
             <span className="text-primary">●</span>
             <span>Pinned</span>
-            <span className="text-muted-foreground-faint">{pinned.data.length}</span>
+            <span className="text-muted-foreground/70">{pinned.data.length}</span>
           </div>
           {pinned.data.map(({ item: it }) => (
             <PinnedRow
@@ -259,7 +246,7 @@ export function BacklogPane({
         </div>
       )}
 
-      <div className="flex-1 overflow-auto">
+      <ScrollArea className="min-h-0 flex-1">
         {items.isPending ? (
           <EmptyMessage text="Loading…" />
         ) : items.error ? (
@@ -279,7 +266,7 @@ export function BacklogPane({
             />
           ))
         )}
-      </div>
+      </ScrollArea>
     </div>
   );
 }

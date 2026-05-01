@@ -7,15 +7,16 @@ import { DocketLogo } from "@/ui/setup/docket-logo";
 import { SignInButtons } from "@/ui/shell/sign-in-button";
 
 export default async function Home() {
-  await requireSetupComplete();
-  const session = await auth();
+  // Fan out the setup-gate check and the session read — neither depends on
+  // the other, so batching saves a round-trip on every landing-page render.
+  const [, session] = await Promise.all([requireSetupComplete(), auth()]);
 
   if (!session?.user) {
     return (
       <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-6 bg-background p-8 text-center text-foreground">
         <DocketLogo size={50} />
-        <h1 className="text-3xl font-semibold tracking-tight">docket</h1>
-        <p className="text-sm text-muted-foreground">Sign in to manage projects.</p>
+        <h1 className="font-semibold text-3xl tracking-tight">docket</h1>
+        <p className="text-muted-foreground text-sm">Sign in to manage projects.</p>
         <SignInButtons />
       </main>
     );
@@ -64,8 +65,8 @@ export default async function Home() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-6 bg-background p-8 text-center text-foreground">
-      <h1 className="text-3xl font-semibold tracking-tight">Welcome to docket</h1>
-      <p className="text-sm text-muted-foreground">
+      <h1 className="font-semibold text-3xl tracking-tight">Welcome to docket</h1>
+      <p className="text-muted-foreground text-sm">
         Create your first project to get started — it'll become your landing page automatically.
       </p>
       <CreateProjectForm />

@@ -1,6 +1,7 @@
 "use client";
 
 import { LogOut, Settings } from "lucide-react";
+import type { Route } from "next";
 import Link from "next/link";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -45,13 +46,15 @@ export function AccountMenu({
   const [imageBroken, setImageBroken] = useState(false);
   const initial = userLabel.trim().charAt(0).toUpperCase() || "?";
   const showImage = !!userImage && !imageBroken;
-  const settingsHref = currentProjectSlug ? `/settings?project=${currentProjectSlug}` : "/settings";
+  const settingsHref: Route = currentProjectSlug
+    ? (`/settings?project=${currentProjectSlug}` as Route)
+    : "/settings";
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         className={cn(
-          "inline-flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-card text-xs font-semibold text-foreground leading-none",
+          "inline-flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-card font-semibold text-foreground text-xs leading-none",
           "hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         )}
         title={userLabel}
@@ -71,10 +74,10 @@ export function AccountMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" sideOffset={8} className="w-56">
         <DropdownMenuLabel className="flex flex-col gap-0.5">
-          <span className="text-xs uppercase tracking-wide text-muted-foreground-faint">
+          <span className="text-muted-foreground/70 text-xs uppercase tracking-wide">
             Signed in as
           </span>
-          <span className="truncate text-sm text-foreground">{userLabel}</span>
+          <span className="truncate text-foreground text-sm">{userLabel}</span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>

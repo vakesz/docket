@@ -14,5 +14,28 @@ export default defineConfig({
     environment: "node",
     include: ["src/**/*.test.ts", "src/**/*.test.tsx", "tests/**/*.test.ts"],
     exclude: ["node_modules", ".next", "src/db/generated/**"],
+    typecheck: {
+      enabled: false,
+    },
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "html"],
+      include: ["src/server/proposals/**", "src/agent/tools/**"],
+      exclude: ["**/*.test.ts", "**/*.test.tsx", "src/db/generated/**"],
+      thresholds: {
+        "src/server/proposals/**": {
+          lines: 70,
+          functions: 70,
+          statements: 70,
+          branches: 60,
+        },
+        "src/agent/tools/**": {
+          lines: 60,
+          functions: 60,
+          statements: 60,
+          branches: 50,
+        },
+      },
+    },
   },
 });

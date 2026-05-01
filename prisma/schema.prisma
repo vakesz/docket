@@ -272,7 +272,7 @@ model Item {
   /// Canonical kind: ItemKind in src/core/types.ts.
   kind           String
   title          String
-  descriptionMd  String   @default("")
+  description    String   @default("")
   /// Canonical state: ItemState in src/core/types.ts. Provider-native state
   /// strings are translated by each provider's state-map.ts.
   state          String
@@ -342,7 +342,7 @@ model Comment {
   /// Provider-native comment id, scoped under itemId.
   providerCommentId String
   author            String
-  bodyMd            String
+  body              String
   createdAt         DateTime
   /// Last-touched timestamp from the provider. Null when the provider
   /// doesn't surface one or for legacy rows pre-dating the field. Sync
@@ -440,7 +440,7 @@ model MemoryEntry {
   id        String   @id @default(cuid())
   projectId String
   title     String
-  bodyMd    String   @default("")
+  body      String   @default("")
   tags      String[] @default([])
   /// 'user' | 'agent' — informational; both are equally durable.
   source    String   @default("user")
@@ -459,7 +459,7 @@ model SourceDoc {
   /// Free-text category ("requirements", "runbook", "design"). Empty allowed.
   kind      String   @default("")
   uri       String   @default("")
-  bodyMd    String   @default("")
+  body      String   @default("")
   tags      String[] @default([])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -505,7 +505,10 @@ model Conversation {
 
   @@index([projectId, archivedAt])
   @@index([userId, archivedAt])
-  @@index([itemId])
+  // Compound index for `activeConversationsForItem` (sync hot path) — the
+  // archived predicate would otherwise force a heap scan on top of a
+  // single-column itemId lookup once the table grows.
+  @@index([itemId, archivedAt])
   // Budget rollup + analytics aggregate filter by `startedAt` across every
   // project (`where: { startedAt: { gte: since } }`); without this index the
   // monthly spend query falls back to a full scan once the table grows.

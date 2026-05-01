@@ -15,7 +15,6 @@ import "server-only";
 import { ProviderAuthError, ProviderError, type WorkItemProvider } from "@/core/provider";
 import type { Project } from "@/db/generated/client";
 import { asPlainObject } from "@/lib/json";
-import { nextAuthProviderId } from "@/lib/next-auth-provider-id";
 import type { db as Db } from "@/server/db";
 import { getProviderSpec } from "@/server/provider-registry";
 
@@ -31,9 +30,10 @@ export async function buildProviderForUser(
     );
   }
 
-  const authProvider = nextAuthProviderId(project.providerKind);
+  // Each provider's NextAuth wrapper sets `id: <providerKind>` so the
+  // `Account.provider` column matches our `providerKind` value directly.
   const account = await db.account.findFirst({
-    where: { userId, provider: authProvider },
+    where: { userId, provider: project.providerKind },
     select: { access_token: true },
     // Deterministic order: a user can in theory have multiple Account rows
     // for the same provider (re-link with a different OAuth identity).
@@ -43,7 +43,7 @@ export async function buildProviderForUser(
   });
   if (!account?.access_token) {
     throw new ProviderAuthError(
-      `User ${userId} has no '${authProvider}' OAuth token; sign in with that provider first.`,
+      `User ${userId} has no '${project.providerKind}' OAuth token; sign in with that provider first.`,
     );
   }
 

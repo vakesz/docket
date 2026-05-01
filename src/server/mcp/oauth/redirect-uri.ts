@@ -12,7 +12,7 @@ import "server-only";
 const PATH = "/api/mcp/oauth/callback";
 
 export function mcpOauthRedirectUri(): string {
-  const base = process.env.AUTH_URL?.trim() || process.env.NEXTAUTH_URL?.trim();
+  const base = process.env["AUTH_URL"]?.trim() || process.env["NEXTAUTH_URL"]?.trim();
   if (!base) {
     throw new Error("MCP OAuth redirect URI requires AUTH_URL (or NEXTAUTH_URL) to be set");
   }

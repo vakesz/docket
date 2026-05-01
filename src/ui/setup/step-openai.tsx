@@ -104,7 +104,7 @@ export function StepOpenai({
             &rarr; Model deployments (for example <code className="font-mono">gpt-5</code>).
           </p>
           <p className="mt-2">Template:</p>
-          <code className="mt-1 block break-all rounded bg-card px-2 py-1 font-mono text-[0.7rem] leading-snug text-foreground">
+          <code className="mt-1 block break-all rounded bg-card px-2 py-1 font-mono text-[0.7rem] text-foreground leading-snug">
             https://&lt;resource&gt;.services.ai.azure.com/api/projects/&lt;project&gt;/openai/v1/
           </code>
         </AlertDescription>
@@ -112,7 +112,7 @@ export function StepOpenai({
 
       <div className="flex gap-3">
         <div className="flex w-40 flex-col gap-1">
-          <Label htmlFor={roleId} className="text-xs text-muted-foreground">
+          <Label htmlFor={roleId} className="text-muted-foreground text-xs">
             Role
           </Label>
           <Select value={state.role} onValueChange={(next) => handlers.setRole(next as OpenaiRole)}>
@@ -124,12 +124,12 @@ export function StepOpenai({
               <SelectItem value="guardrail">Guardrail</SelectItem>
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground-faint">
+          <p className="text-muted-foreground/70 text-xs">
             Stamped at create — switch in /settings means delete + recreate.
           </p>
         </div>
         <div className="flex flex-1 flex-col gap-1">
-          <Label htmlFor={labelInputId} className="text-xs text-muted-foreground">
+          <Label htmlFor={labelInputId} className="text-muted-foreground text-xs">
             Display label
           </Label>
           <Input
@@ -140,14 +140,14 @@ export function StepOpenai({
             autoComplete="off"
             required={state.enabled}
           />
-          <p className="text-xs text-muted-foreground-faint">
+          <p className="text-muted-foreground/70 text-xs">
             Shown in the model picker. Useful if you'll add multiple OpenAI-compatible endpoints.
           </p>
         </div>
       </div>
 
       <div className="flex flex-col gap-1">
-        <Label htmlFor={apiKeyId} className="text-xs text-muted-foreground">
+        <Label htmlFor={apiKeyId} className="text-muted-foreground text-xs">
           API key
         </Label>
         <Input
@@ -160,7 +160,7 @@ export function StepOpenai({
           autoComplete="off"
           required={state.enabled}
         />
-        <p className="text-xs text-muted-foreground-faint">
+        <p className="text-muted-foreground/70 text-xs">
           OpenAI keys start with <code className="font-mono">sk-</code> /{" "}
           <code className="font-mono">sk-proj-</code>. Stored AES-GCM encrypted.
         </p>
@@ -168,7 +168,7 @@ export function StepOpenai({
 
       <div className="flex gap-3">
         <div className="flex flex-1 flex-col gap-1">
-          <Label htmlFor={modelId} className="text-xs text-muted-foreground">
+          <Label htmlFor={modelId} className="text-muted-foreground text-xs">
             Model
           </Label>
           <Input
@@ -186,14 +186,14 @@ export function StepOpenai({
               <option key={m} value={m} />
             ))}
           </datalist>
-          <p className="text-xs text-muted-foreground-faint">
+          <p className="text-muted-foreground/70 text-xs">
             {state.role === "guardrail"
               ? "Pick a small / cheap model — guardrail runs on every turn."
               : "Pick a suggestion or type any deployment name (Azure Foundry users — paste your deployment id)."}
           </p>
         </div>
         <div className="flex flex-1 flex-col gap-1">
-          <Label htmlFor={baseUrlId} className="text-xs text-muted-foreground">
+          <Label htmlFor={baseUrlId} className="text-muted-foreground text-xs">
             Base URL (optional)
           </Label>
           <Input
@@ -203,7 +203,7 @@ export function StepOpenai({
             placeholder="https://api.openai.com/v1"
             autoComplete="off"
           />
-          <p className="text-xs text-muted-foreground-faint">
+          <p className="text-muted-foreground/70 text-xs">
             Blank uses OpenAI's public endpoint. Set for Azure OpenAI / Foundry / Ollama / a proxy.
           </p>
         </div>
@@ -211,7 +211,7 @@ export function StepOpenai({
 
       <div className="flex gap-3">
         <div className="flex flex-1 flex-col gap-1">
-          <Label htmlFor={inputPriceId} className="text-xs text-muted-foreground">
+          <Label htmlFor={inputPriceId} className="text-muted-foreground text-xs">
             Input price ($ / Mtok)
           </Label>
           <Input
@@ -225,7 +225,7 @@ export function StepOpenai({
           />
         </div>
         <div className="flex flex-1 flex-col gap-1">
-          <Label htmlFor={outputPriceId} className="text-xs text-muted-foreground">
+          <Label htmlFor={outputPriceId} className="text-muted-foreground text-xs">
             Output price ($ / Mtok)
           </Label>
           <Input
@@ -239,7 +239,7 @@ export function StepOpenai({
           />
         </div>
       </div>
-      <p className="-mt-2 text-xs text-muted-foreground-faint">
+      <p className="-mt-2 text-muted-foreground/70 text-xs">
         USD per million tokens — paste the vendor's published rate as-is. Leave blank if unknown;
         budget tracking will undercount until you fill them in from{" "}
         <code className="font-mono">/settings</code>.

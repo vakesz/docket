@@ -5,13 +5,20 @@ import type { BacklogBucket, Item, ItemKind, ItemState, StateBucket } from "@/co
 import { BACKLOG_BUCKETS } from "@/core/types";
 import { applyViewFilter, STATE_BUCKET_MEMBERS, type ViewFilter } from "@/core/view-filter";
 import type { Prisma, Item as PrismaItem } from "@/db/generated/client";
-import { mostRecent } from "@/lib/format";
 import { asPlainObject } from "@/lib/json";
 import { injectExternalChange, materialDiff } from "@/server/inbound-changes/inject";
 import { getProviderSpec } from "@/server/provider-registry";
 import { buildProviderForUser } from "@/server/providers/build";
-import { reconcileComments, runFullSync, runIncrementalSync, toItemRow } from "@/server/sync";
+import {
+  loadSyncProgress,
+  reconcileComments,
+  runFullSync,
+  runIncrementalSync,
+  toItemRow,
+  toSyncProgressLabel,
+} from "@/server/sync";
 import { assertFound, projectScopedProcedure, projectSlugSchema, router } from "@/server/trpc";
+import { parseSavedViewAxes } from "@/server/views/router";
 
 /**
  * Translate the URL-facing `itemNumber` into the provider's stored
@@ -27,7 +34,10 @@ function resolveProviderItemId(
 ): string {
   const spec = getProviderSpec(providerKind);
   if (!spec) {
-    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "unknown provider kind" });
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "unknown provider kind",
+    });
   }
   const providerItemId = spec.itemNumberCodec.parseItemNumber(
     asPlainObject(providerScope),
@@ -123,7 +133,7 @@ async function resolveViewFilter(
       view: {
         stateBucket: row.stateBucket as StateBucket,
         assignees: row.assignees,
-        axes: (row.axes ?? {}) as Record<string, string>,
+        axes: parseSavedViewAxes(row.axes),
       },
       archivedFlag: false,
     };
@@ -181,7 +191,7 @@ function buildItemListWhere(
       ? {
           OR: [
             { title: { contains: input.search, mode: "insensitive" } },
-            { descriptionMd: { contains: input.search, mode: "insensitive" } },
+            { description: { contains: input.search, mode: "insensitive" } },
             { providerItemId: { contains: input.search, mode: "insensitive" } },
           ],
         }
@@ -215,7 +225,10 @@ function filterRowsByAxes(
   // Build a (row, lifted) zip so we can keep the original row identity
   // around for the projection step while passing the canonical shape into
   // the matcher.
-  const lifted = rows.map((row) => ({ row, item: liftRowToCanonical(row, providerKind) }));
+  const lifted = rows.map((row) => ({
+    row,
+    item: liftRowToCanonical(row, providerKind),
+  }));
   const filtered = applyViewFilter(
     lifted.map((x) => x.item),
     { stateBucket: "all", assignees: [], axes: view.axes },
@@ -231,7 +244,7 @@ function liftRowToCanonical(row: PrismaItem, providerKind: string): Item {
     id: row.id,
     kind: row.kind as ItemKind,
     title: row.title,
-    descriptionMd: row.descriptionMd,
+    description: row.description,
     state: row.state as ItemState,
     assignee: row.assignee,
     parentId: row.parentId,
@@ -321,7 +334,10 @@ export const itemsRouter = router({
   get: projectScopedProcedure.input(ItemRef).query(async ({ ctx, input }) => {
     const spec = getProviderSpec(ctx.project.providerKind);
     if (!spec) {
-      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "unknown provider kind" });
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "unknown provider kind",
+      });
     }
     const providerItemId = resolveProviderItemId(
       ctx.project.providerKind,
@@ -339,7 +355,7 @@ export const itemsRouter = router({
           providerItemId: true,
           kind: true,
           title: true,
-          descriptionMd: true,
+          description: true,
           state: true,
           assignee: true,
           author: true,
@@ -356,7 +372,7 @@ export const itemsRouter = router({
               id: true,
               providerCommentId: true,
               author: true,
-              bodyMd: true,
+              body: true,
               reactions: true,
               createdAt: true,
             },
@@ -430,15 +446,42 @@ export const itemsRouter = router({
    * didn't bump either payload column.
    */
   syncStatus: projectScopedProcedure.input(projectSlugSchema).query(async ({ ctx }) => {
-    const cursor = await ctx.db.syncCursor.findUnique({
-      where: { projectId: ctx.projectId },
-      select: { watermark: true, lastFullSyncAt: true, updatedAt: true },
-    });
+    const [cursor, progress] = await Promise.all([
+      ctx.db.syncCursor.findUnique({
+        where: { projectId: ctx.projectId },
+        select: { watermark: true, lastFullSyncAt: true, updatedAt: true },
+      }),
+      loadSyncProgress(ctx.db, ctx.projectId),
+    ]);
+
     return {
       watermark: cursor?.watermark ?? null,
       lastFullSyncAt: cursor?.lastFullSyncAt ?? null,
       lastSyncAt: cursor
-        ? mostRecent([cursor.watermark, cursor.lastFullSyncAt, cursor.updatedAt])
+        ? [cursor.watermark, cursor.lastFullSyncAt, cursor.updatedAt].reduce<Date | null>(
+            (best, d) => (d && (!best || d.getTime() > best.getTime()) ? d : best),
+            null,
+          )
+        : null,
+      progress: progress
+        ? {
+            runId: progress.runId,
+            mode: progress.mode,
+            status: progress.status,
+            phase: progress.phase,
+            phaseLabel: toSyncProgressLabel(progress.phase),
+            startedAt: progress.startedAt,
+            updatedAt: progress.updatedAt,
+            finishedAt: progress.finishedAt,
+            chunksCompleted: progress.chunksCompleted,
+            itemsSeen: progress.itemsSeen,
+            upserted: progress.upserted,
+            archived: progress.archived,
+            inboundConversations: progress.inboundConversations,
+            commentsReconciled: progress.commentsReconciled,
+            watermark: progress.watermark,
+            error: progress.error,
+          }
         : null,
     };
   }),
@@ -466,7 +509,7 @@ export const itemsRouter = router({
           providerItemId: true,
           state: true,
           title: true,
-          descriptionMd: true,
+          description: true,
           assignee: true,
         },
       }),
@@ -501,7 +544,7 @@ export const itemsRouter = router({
     }
 
     const comments = await provider.getComments(cached.providerItemId);
-    await reconcileComments(ctx.db, upserted.id, comments);
+    await reconcileComments(ctx.db, [{ itemSurrogate: upserted.id, comments }]);
 
     return { commentsCount: comments.length, inboundConversations };
   }),

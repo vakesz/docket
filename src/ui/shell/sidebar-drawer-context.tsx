@@ -16,12 +16,14 @@ interface SidebarDrawerController {
   registerMount: () => () => void;
 }
 
+const noop = (): void => undefined;
+
 const NO_OP: SidebarDrawerController = {
   open: false,
-  setOpen: () => {},
-  toggle: () => {},
+  setOpen: noop,
+  toggle: noop,
   mounted: false,
-  registerMount: () => () => {},
+  registerMount: () => noop,
 };
 
 const Ctx = createContext<SidebarDrawerController | null>(null);

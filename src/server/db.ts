@@ -5,10 +5,14 @@ import { PrismaClient } from "@/db/generated/client";
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
 function makeClient(): PrismaClient {
-  const connectionString = process.env.DATABASE_URL;
+  const connectionString = process.env["DATABASE_URL"];
   if (!connectionString) {
     throw new Error("DATABASE_URL is not set. Copy .env.example to .env.local and fill it in.");
   }
+  // Pool sizing is delegated to node-postgres via the adapter. To cap
+  // per-process connections (e.g. behind PgBouncer or with multiple Node
+  // workers), append `?connection_limit=N` to DATABASE_URL — the driver
+  // honors it. See `.env.example` for the deployment-side note.
   const adapter = new PrismaPg({ connectionString });
   return new PrismaClient({
     adapter,

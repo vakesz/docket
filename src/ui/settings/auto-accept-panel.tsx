@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc-client";
 import { Button } from "@/ui/primitives/button";
 import { Label } from "@/ui/primitives/label";
@@ -60,13 +60,13 @@ export function AutoAcceptPanel({ projectSlug }: { projectSlug: string }) {
     },
   });
 
-  const isDirty = useMemo(() => {
+  const isDirty = (() => {
     const row = projectSettings.data?.find((r) => r.key === "proposals.auto-accept-kinds");
     const stored = Array.isArray(row?.value) ? new Set(row.value as string[]) : new Set<string>();
     if (stored.size !== selected.size) return true;
     for (const k of stored) if (!selected.has(k)) return true;
     return false;
-  }, [projectSettings.data, selected]);
+  })();
 
   const toggle = (key: string) => {
     setSelected((prev) => {
@@ -86,12 +86,12 @@ export function AutoAcceptPanel({ projectSlug }: { projectSlug: string }) {
   };
 
   if (projectSettings.isPending) {
-    return <p className="text-sm text-muted-foreground-faint">Loading…</p>;
+    return <p className="text-muted-foreground/70 text-sm">Loading…</p>;
   }
 
   return (
     <div className="flex flex-col gap-6">
-      <p className="text-xs text-muted-foreground">
+      <p className="text-muted-foreground text-xs">
         Off by default. Each toggle skips the confirm step for proposals of that kind on this
         project. Only memory writes/deletes are eligible — anything that touches the provider (state
         changes, descriptions, comments, labels/tags, assignee changes, new items) always requires
@@ -122,9 +122,9 @@ export function AutoAcceptPanel({ projectSlug }: { projectSlug: string }) {
         >
           Disable all
         </Button>
-        {save.error ? <span className="text-xs text-destructive">{save.error.message}</span> : null}
+        {save.error ? <span className="text-destructive text-xs">{save.error.message}</span> : null}
         {save.isSuccess && !isDirty ? (
-          <span className="text-xs text-muted-foreground">Saved.</span>
+          <span className="text-muted-foreground text-xs">Saved.</span>
         ) : null}
       </div>
     </div>
@@ -145,11 +145,11 @@ function AutoAcceptRow({
   const id = useId();
   return (
     <li className="flex flex-col gap-1">
-      <div className="flex items-center gap-2 text-sm text-foreground">
+      <div className="flex items-center gap-2 text-foreground text-sm">
         <Switch id={id} checked={checked} disabled={disabled} onCheckedChange={onToggle} />
         <Label htmlFor={id}>{kind.label}</Label>
       </div>
-      <p className="ml-6 text-xs text-muted-foreground">{kind.hint}</p>
+      <p className="ml-6 text-muted-foreground text-xs">{kind.hint}</p>
     </li>
   );
 }

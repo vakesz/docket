@@ -39,7 +39,7 @@ loadEnv({ path: ".env.local" });
 loadEnv({ path: ".env" });
 
 async function main() {
-  const databaseUrl = process.env.DATABASE_URL;
+  const databaseUrl = process.env["DATABASE_URL"];
   if (!databaseUrl) {
     console.warn("[seed-dev] DATABASE_URL not set — skipping.");
     return;
@@ -61,7 +61,7 @@ async function main() {
 }
 
 async function seedOpenAi(db: PrismaClient): Promise<void> {
-  const apiKey = process.env.DEV_OPENAI_API_KEY;
+  const apiKey = process.env["DEV_OPENAI_API_KEY"];
   if (!apiKey) {
     console.warn("[seed-dev] DEV_OPENAI_API_KEY not set — skipping OpenAI seed.");
     return;
@@ -88,10 +88,10 @@ async function seedOpenAi(db: PrismaClient): Promise<void> {
         role: "chat",
         label,
         apiKey: writeKey,
-        model: process.env.DEV_OPENAI_MODEL?.trim() || "gpt-5",
-        baseUrl: process.env.DEV_OPENAI_BASE_URL?.trim() || "",
-        inputPriceCentsPerMtok: parsePrice(process.env.DEV_OPENAI_INPUT_PRICE_CENTS_PER_MTOK),
-        outputPriceCentsPerMtok: parsePrice(process.env.DEV_OPENAI_OUTPUT_PRICE_CENTS_PER_MTOK),
+        model: process.env["DEV_OPENAI_MODEL"]?.trim() || "gpt-5",
+        baseUrl: process.env["DEV_OPENAI_BASE_URL"]?.trim() || "",
+        inputPriceCentsPerMtok: parsePrice(process.env["DEV_OPENAI_INPUT_PRICE_CENTS_PER_MTOK"]),
+        outputPriceCentsPerMtok: parsePrice(process.env["DEV_OPENAI_OUTPUT_PRICE_CENTS_PER_MTOK"]),
         isDefault: anyChat === 0,
         enabled: true,
       },
@@ -104,27 +104,27 @@ async function seedOpenAi(db: PrismaClient): Promise<void> {
 
   // Fill in fields that are still at their schema defaults (empty / null) from
   // env without stomping admin edits — once a value is in the row, it wins.
-  const envModel = process.env.DEV_OPENAI_MODEL?.trim();
-  const envBaseUrl = process.env.DEV_OPENAI_BASE_URL?.trim();
-  const envInputPrice = parsePrice(process.env.DEV_OPENAI_INPUT_PRICE_CENTS_PER_MTOK);
-  const envOutputPrice = parsePrice(process.env.DEV_OPENAI_OUTPUT_PRICE_CENTS_PER_MTOK);
+  const envModel = process.env["DEV_OPENAI_MODEL"]?.trim();
+  const envBaseUrl = process.env["DEV_OPENAI_BASE_URL"]?.trim();
+  const envInputPrice = parsePrice(process.env["DEV_OPENAI_INPUT_PRICE_CENTS_PER_MTOK"]);
+  const envOutputPrice = parsePrice(process.env["DEV_OPENAI_OUTPUT_PRICE_CENTS_PER_MTOK"]);
 
   const data: Record<string, unknown> = { apiKey: writeKey, enabled: true };
   const filled: string[] = [];
   if (envModel && existing.model === "") {
-    data.model = envModel;
+    data["model"] = envModel;
     filled.push("model");
   }
   if (envBaseUrl && existing.baseUrl === "") {
-    data.baseUrl = envBaseUrl;
+    data["baseUrl"] = envBaseUrl;
     filled.push("baseUrl");
   }
   if (envInputPrice !== null && existing.inputPriceCentsPerMtok === null) {
-    data.inputPriceCentsPerMtok = envInputPrice;
+    data["inputPriceCentsPerMtok"] = envInputPrice;
     filled.push("inputPriceCentsPerMtok");
   }
   if (envOutputPrice !== null && existing.outputPriceCentsPerMtok === null) {
-    data.outputPriceCentsPerMtok = envOutputPrice;
+    data["outputPriceCentsPerMtok"] = envOutputPrice;
     filled.push("outputPriceCentsPerMtok");
   }
 
@@ -140,8 +140,8 @@ function parsePrice(raw: string | undefined): number | null {
 }
 
 async function seedGithubOAuth(db: PrismaClient): Promise<void> {
-  const clientId = process.env.DEV_GITHUB_CLIENT_ID;
-  const clientSecret = process.env.DEV_GITHUB_CLIENT_SECRET;
+  const clientId = process.env["DEV_GITHUB_CLIENT_ID"];
+  const clientSecret = process.env["DEV_GITHUB_CLIENT_SECRET"];
   if (!clientId || !clientSecret) {
     console.warn(
       "[seed-dev] DEV_GITHUB_CLIENT_ID / DEV_GITHUB_CLIENT_SECRET not set — skipping GitHub OAuth seed.",
@@ -189,8 +189,8 @@ async function seedGithubOAuth(db: PrismaClient): Promise<void> {
 }
 
 async function seedAzureDevOpsOAuth(db: PrismaClient): Promise<void> {
-  const clientId = process.env.DEV_AZURE_DEVOPS_CLIENT_ID;
-  const clientSecret = process.env.DEV_AZURE_DEVOPS_CLIENT_SECRET;
+  const clientId = process.env["DEV_AZURE_DEVOPS_CLIENT_ID"];
+  const clientSecret = process.env["DEV_AZURE_DEVOPS_CLIENT_SECRET"];
   if (!clientId || !clientSecret) {
     console.warn(
       "[seed-dev] DEV_AZURE_DEVOPS_CLIENT_ID / DEV_AZURE_DEVOPS_CLIENT_SECRET not set — skipping Azure DevOps OAuth seed.",
@@ -198,7 +198,7 @@ async function seedAzureDevOpsOAuth(db: PrismaClient): Promise<void> {
     return;
   }
 
-  const tenant = process.env.DEV_AZURE_DEVOPS_TENANT_ID?.trim() ?? "";
+  const tenant = process.env["DEV_AZURE_DEVOPS_TENANT_ID"]?.trim() ?? "";
   const existing = await db.oauthProviderConfig.findFirst({ where: { kind: "azure_devops" } });
   const writeSecret = encryptSecret(clientSecret);
 

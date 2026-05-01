@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc-client";
 import { cn } from "@/lib/utils";
 import { Input } from "@/ui/primitives/input";
 import { Label } from "@/ui/primitives/label";
+import { ScrollArea } from "@/ui/primitives/scroll-area";
 
 type Bucket = {
   date: string;
@@ -56,7 +57,7 @@ export function AnalyticsPanel(
   const isPending = props.scope === "project" ? projectQuery.isPending : globalQuery.isPending;
   const error = props.scope === "project" ? projectQuery.error : globalQuery.error;
 
-  const peakCost = useMemo(() => {
+  const peakCost = (() => {
     if (!data) return 0;
     let p = 0;
     for (const b of data.buckets) {
@@ -64,12 +65,12 @@ export function AnalyticsPanel(
       if (total > p) p = total;
     }
     return p;
-  }, [data]);
+  })();
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs text-muted-foreground">Window:</span>
+        <span className="text-muted-foreground text-xs">Window:</span>
         {PRESETS.map((p) => (
           <button
             key={p.days}
@@ -86,7 +87,7 @@ export function AnalyticsPanel(
           </button>
         ))}
         <div className="ml-auto flex items-center gap-2">
-          <Label htmlFor={customDaysId} className="text-xs text-muted-foreground">
+          <Label htmlFor={customDaysId} className="text-muted-foreground text-xs">
             Custom (days):
           </Label>
           <Input
@@ -107,8 +108,8 @@ export function AnalyticsPanel(
         </div>
       </div>
 
-      {isPending ? <p className="text-sm text-muted-foreground-faint">Loading…</p> : null}
-      {error ? <p className="text-xs text-destructive">{error.message}</p> : null}
+      {isPending ? <p className="text-muted-foreground/70 text-sm">Loading…</p> : null}
+      {error ? <p className="text-destructive text-xs">{error.message}</p> : null}
 
       {data ? (
         <>
@@ -160,18 +161,18 @@ function TotalsStrip({
   ];
   return (
     <div className="flex flex-col gap-2">
-      <div className="text-xs text-muted-foreground">
+      <div className="text-muted-foreground text-xs">
         {data.from} → {data.to} (UTC)
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {stats.map((s) => (
           <div key={s.label} className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            <div className="text-[10px] text-muted-foreground uppercase tracking-wide">
               {s.label}
             </div>
-            <div className="mt-1 font-mono text-lg text-foreground">{s.value}</div>
+            <div className="mt-1 font-mono text-foreground text-lg">{s.value}</div>
             {s.sub ? (
-              <div className="mt-0.5 text-[10px] text-muted-foreground-faint">{s.sub}</div>
+              <div className="mt-0.5 text-[10px] text-muted-foreground/70">{s.sub}</div>
             ) : null}
           </div>
         ))}
@@ -209,7 +210,7 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
     return () => ro.disconnect();
   }, []);
 
-  const trend = useMemo(() => buildTrend(buckets), [buckets]);
+  const trend = buildTrend(buckets);
 
   if (buckets.length === 0 || !trend) return null;
 
@@ -273,13 +274,13 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
   return (
     <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
-        <h4 className="text-sm font-medium text-foreground">Trends</h4>
-        <div className="flex flex-wrap items-center gap-3 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+        <h4 className="font-medium text-foreground text-sm">Trends</h4>
+        <div className="flex flex-wrap items-center gap-3 font-mono text-[10px] text-muted-foreground uppercase tracking-wide">
           <LegendDot color="bg-primary" label="Chat spend" />
-          <LegendDot color="bg-warning" label="Guardrail spend" />
+          <LegendDot color="bg-chart-1" label="Guardrail spend" />
           <LegendDot color="bg-primary/50" label="7-day avg" dashed />
           <LegendDot color="bg-muted-foreground" label="Tokens in" />
-          <LegendDot color="bg-muted-foreground-faint" label="Tokens out" />
+          <LegendDot color="bg-muted-foreground/70" label="Tokens out" />
         </div>
       </div>
       <svg
@@ -338,7 +339,7 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
         {/* guardrail spend (separate line, same y-axis) */}
         <polyline
           points={guardrailCostLine}
-          className="fill-none stroke-warning"
+          className="fill-none stroke-chart-1"
           strokeWidth={1.5}
           strokeLinejoin="round"
           strokeLinecap="round"
@@ -362,7 +363,7 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
         />
         <polyline
           points={tokensOutLine}
-          className="fill-none stroke-muted-foreground-faint"
+          className="fill-none stroke-muted-foreground/70"
           strokeWidth={1.25}
           strokeDasharray="2 3"
           strokeLinejoin="round"
@@ -374,7 +375,7 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
             key={b.date}
             x={xAt(i)}
             y={padTop + innerH + 14}
-            className="fill-muted-foreground-faint font-mono text-[9px]"
+            className="fill-muted-foreground/70 font-mono text-[9px]"
             textAnchor="middle"
           >
             {shortDate(b.date)}
@@ -388,7 +389,7 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
               x2={xAt(hover)}
               y1={padTop}
               y2={padTop + innerH}
-              className="stroke-muted-foreground-faint"
+              className="stroke-muted-foreground/70"
               strokeWidth={1}
               strokeDasharray="2 2"
             />
@@ -397,7 +398,7 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
               cx={xAt(hover)}
               cy={yCost(hovered.guardrailCostCents)}
               r={3}
-              className="fill-warning"
+              className="fill-chart-1"
             />
             <circle
               cx={xAt(hover)}
@@ -409,7 +410,7 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
               cx={xAt(hover)}
               cy={yTokens(hovered.tokensOut)}
               r={2.5}
-              className="fill-muted-foreground-faint"
+              className="fill-muted-foreground/70"
             />
           </g>
         ) : null}
@@ -528,10 +529,10 @@ function BarChart({ buckets, peakCost }: { buckets: Bucket[]; peakCost: number }
   return (
     <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
       <div className="mb-2 flex items-baseline justify-between">
-        <h4 className="text-sm font-medium text-foreground">Daily spend</h4>
-        <div className="flex items-center gap-3 text-[10px] uppercase tracking-wide text-muted-foreground">
+        <h4 className="font-medium text-foreground text-sm">Daily spend</h4>
+        <div className="flex items-center gap-3 text-[10px] text-muted-foreground uppercase tracking-wide">
           <LegendDot color="bg-primary/70" label="Chat" />
-          <LegendDot color="bg-warning/80" label="Guardrail" />
+          <LegendDot color="bg-chart-1/80" label="Guardrail" />
           <span>peak ${(peak / 100).toFixed(2)}</span>
         </div>
       </div>
@@ -548,7 +549,7 @@ function BarChart({ buckets, peakCost }: { buckets: Bucket[]; peakCost: number }
               title={`${b.date}: chat $${(b.costCents / 100).toFixed(3)} · guardrail $${(b.guardrailCostCents / 100).toFixed(3)} · ${b.conversations} conv`}
             >
               <div
-                className="w-full bg-warning/80 transition-colors group-hover:bg-warning"
+                className="w-full bg-chart-1/80 transition-colors group-hover:bg-chart-1"
                 style={{ height: `${guardShare}%` }}
               />
               <div
@@ -559,7 +560,7 @@ function BarChart({ buckets, peakCost }: { buckets: Bucket[]; peakCost: number }
           );
         })}
       </div>
-      <div className="mt-2 flex justify-between font-mono text-[10px] text-muted-foreground-faint">
+      <div className="mt-2 flex justify-between font-mono text-[10px] text-muted-foreground/70">
         <span>{buckets[0]?.date}</span>
         <span>{buckets[buckets.length - 1]?.date}</span>
       </div>
@@ -570,13 +571,13 @@ function BarChart({ buckets, peakCost }: { buckets: Bucket[]; peakCost: number }
 function DataTable({ buckets }: { buckets: Bucket[] }) {
   return (
     <details className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-      <summary className="cursor-pointer select-none text-sm text-foreground">
+      <summary className="cursor-pointer select-none text-foreground text-sm">
         By day (table)
       </summary>
-      <div className="mt-3 max-h-72 overflow-auto">
+      <ScrollArea className="mt-3 max-h-72">
         <table className="w-full text-xs">
           <thead>
-            <tr className="text-left font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+            <tr className="text-left font-mono text-[10px] text-muted-foreground uppercase tracking-wide">
               <th className="pb-2">Date</th>
               <th className="pb-2 text-right">Conv</th>
               <th className="pb-2 text-right">Tokens in</th>
@@ -592,7 +593,7 @@ function DataTable({ buckets }: { buckets: Bucket[] }) {
               const totalOut = b.tokensOut + b.guardrailTokensOut;
               const totalCost = b.costCents + b.guardrailCostCents;
               return (
-                <tr key={b.date} className="border-t border-border">
+                <tr key={b.date} className="border-border border-t">
                   <td className="py-1 font-mono text-foreground">{b.date}</td>
                   <td className="py-1 text-right text-muted-foreground">{b.conversations}</td>
                   <td className="py-1 text-right text-muted-foreground">
@@ -604,7 +605,7 @@ function DataTable({ buckets }: { buckets: Bucket[] }) {
                   <td className="py-1 text-right text-foreground">
                     ${(b.costCents / 100).toFixed(3)}
                   </td>
-                  <td className="py-1 text-right text-warning">
+                  <td className="py-1 text-right text-chart-1">
                     ${(b.guardrailCostCents / 100).toFixed(3)}
                   </td>
                   <td className="py-1 text-right font-medium text-foreground">
@@ -615,7 +616,7 @@ function DataTable({ buckets }: { buckets: Bucket[] }) {
             })}
           </tbody>
         </table>
-      </div>
+      </ScrollArea>
     </details>
   );
 }

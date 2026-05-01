@@ -1,4 +1,5 @@
 "use client";
+import type { Route } from "next";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useMemo, useState } from "react";
 import type { StateBucket } from "@/core/types";
@@ -88,7 +89,7 @@ export function ViewBar({ projectSlug }: Props) {
       next.set("bucket", patch.bucket);
     }
     const qs = next.toString();
-    router.replace(`/projects/${projectSlug}/items${qs ? `?${qs}` : ""}`);
+    router.replace(`/projects/${projectSlug}/items${qs ? `?${qs}` : ""}` as Route);
   }
 
   function onCreate(e: FormEvent<HTMLFormElement>) {
@@ -110,7 +111,7 @@ export function ViewBar({ projectSlug }: Props) {
     <section className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-3 text-sm shadow-sm">
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">
-          <span className="text-xs uppercase tracking-wide text-muted-foreground-faint">View</span>
+          <span className="text-muted-foreground/70 text-xs uppercase tracking-wide">View</span>
           <Select
             value={activeViewId === "" ? NO_VIEW : activeViewId}
             onValueChange={(next) => navigateWith({ viewId: next === NO_VIEW ? undefined : next })}

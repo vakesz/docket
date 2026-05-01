@@ -19,7 +19,7 @@
  */
 
 import { ProviderError } from "@/core/provider";
-import type { ItemState, TransitionIntent } from "@/core/types";
+import { canonicalIntentsFor, type ItemState, type TransitionIntent } from "@/core/types";
 
 export type GithubIssueState = "open" | "closed";
 export type GithubStateReason = "completed" | "not_planned" | "reopened" | null;
@@ -163,3 +163,21 @@ export const REACHABLE_CANONICAL_STATES: readonly ItemState[] = [
   "resolved",
   "closed",
 ];
+
+/**
+ * Intents the UI should expose for a GitHub item in `state`.
+ *
+ * GitHub has no distinct "paused" representation — `pause` and `start_work`
+ * both map to "open with no soft labels", which is the same shape the
+ * canonical `active` state translates back to. So `pause` from `active`
+ * would stage a proposal whose plan equals the current state and produce
+ * no observable change after confirm. Drop it. `new` is unreachable on
+ * GitHub (see `toCanonicalState`), so its branch is moot but kept in
+ * sync with the canonical mapping for completeness.
+ */
+export function availableIntentsForState(state: ItemState): readonly TransitionIntent[] {
+  const canonical = canonicalIntentsFor(state);
+  if (state === "active") return canonical.filter((i) => i !== "pause");
+  if (state === "new") return canonical.filter((i) => i !== "start_work");
+  return canonical;
+}

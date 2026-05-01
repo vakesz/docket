@@ -19,8 +19,10 @@ export default async function ProjectLayout({
   children: ReactNode;
   params: Promise<{ projectSlug: string }>;
 }) {
-  await requireSetupComplete();
-  const session = await auth();
+  // requireSetupComplete and auth are both single indexed DB lookups with
+  // no dependency between them — fan them out so the layout's first await
+  // batches both round-trips instead of stacking them.
+  const [, session] = await Promise.all([requireSetupComplete(), auth()]);
   if (!session?.user) {
     redirect("/");
   }
@@ -60,7 +62,7 @@ export default async function ProjectLayout({
   }));
 
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground">
+    <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
       <WorkspaceProviders>
         <TopBar
           projects={projectOptions}

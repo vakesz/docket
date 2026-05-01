@@ -19,20 +19,20 @@ export function SuggestActionButton({
   kind,
   state,
   title,
-  bodyMd,
+  body,
   commentCount,
 }: {
   kind: ItemKind | null;
   state: ItemState | null;
   title: string;
-  bodyMd: string | null;
+  body: string | null;
   commentCount: number;
 }) {
   const { requestOpenWithSeed, seedPending } = useChatPaneController();
 
   const onClick = () => {
     if (seedPending) return;
-    requestOpenWithSeed(buildSuggestSeed({ kind, state, title, bodyMd, commentCount }));
+    requestOpenWithSeed(buildSuggestSeed({ kind, state, title, body, commentCount }));
   };
 
   return (

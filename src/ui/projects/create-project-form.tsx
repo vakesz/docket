@@ -116,7 +116,7 @@ export function CreateProjectForm({ defaultMakeDefault = true, onCreated }: Prop
   }
 
   if (kinds.isPending) {
-    return <p className="text-sm text-muted-foreground-faint">Loading providers…</p>;
+    return <p className="text-muted-foreground/70 text-sm">Loading providers…</p>;
   }
   if (kinds.error) {
     return (
@@ -127,7 +127,7 @@ export function CreateProjectForm({ defaultMakeDefault = true, onCreated }: Prop
   }
   if (specs.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">
+      <p className="text-muted-foreground text-sm">
         No providers registered. Configure one under Settings → OAuth providers first.
       </p>
     );
@@ -138,10 +138,10 @@ export function CreateProjectForm({ defaultMakeDefault = true, onCreated }: Prop
       onSubmit={onSubmit}
       className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-6 text-sm shadow-sm"
     >
-      <h2 className="text-base font-medium text-foreground">Add project</h2>
+      <h2 className="font-medium text-base text-foreground">Add project</h2>
 
       <div className="flex flex-col gap-1">
-        <Label htmlFor={nameId} className="text-xs text-muted-foreground">
+        <Label htmlFor={nameId} className="text-muted-foreground text-xs">
           Display name
         </Label>
         <Input
@@ -154,7 +154,7 @@ export function CreateProjectForm({ defaultMakeDefault = true, onCreated }: Prop
       </div>
 
       <div className="flex flex-col gap-1">
-        <Label htmlFor={descriptionId} className="text-xs text-muted-foreground">
+        <Label htmlFor={descriptionId} className="text-muted-foreground text-xs">
           Description (optional)
         </Label>
         <Input
@@ -165,7 +165,7 @@ export function CreateProjectForm({ defaultMakeDefault = true, onCreated }: Prop
       </div>
 
       <div className="flex flex-col gap-1">
-        <Label htmlFor={providerId} className="text-xs text-muted-foreground">
+        <Label htmlFor={providerId} className="text-muted-foreground text-xs">
           Provider
         </Label>
         <Select value={activeKind} onValueChange={setProviderKind}>
@@ -197,7 +197,7 @@ export function CreateProjectForm({ defaultMakeDefault = true, onCreated }: Prop
         </div>
       ) : null}
 
-      <div className="inline-flex items-center gap-2 text-sm text-foreground">
+      <div className="inline-flex items-center gap-2 text-foreground text-sm">
         <Switch id={makeDefaultId} checked={makeDefault} onCheckedChange={setMakeDefault} />
         <Label htmlFor={makeDefaultId}>Set as my default project</Label>
       </div>
@@ -238,7 +238,7 @@ function ScopeField({
   const id = useId();
   return (
     <div className="flex min-w-[12rem] flex-1 flex-col gap-1">
-      <Label htmlFor={id} className="text-xs text-muted-foreground">
+      <Label htmlFor={id} className="text-muted-foreground text-xs">
         {field.label}
       </Label>
       <Input
@@ -249,7 +249,7 @@ function ScopeField({
         onChange={(e) => onChange(e.target.value)}
         placeholder={field.placeholder}
       />
-      {field.help ? <p className="text-xs text-muted-foreground">{field.help}</p> : null}
+      {field.help ? <p className="text-muted-foreground text-xs">{field.help}</p> : null}
     </div>
   );
 }

@@ -50,17 +50,20 @@ const sanitizeSchema = {
     ...defaultSchema.attributes,
     "*": [...(defaultSchema.attributes?.["*"] ?? []), "align", "id", "title"],
     a: [
-      ...(defaultSchema.attributes?.a ?? []),
+      ...(defaultSchema.attributes?.["a"] ?? []),
       ["target", "_blank"],
       ["rel", "noopener", "noreferrer"],
     ],
-    img: [...(defaultSchema.attributes?.img ?? []), "width", "height", "loading"],
+    img: [...(defaultSchema.attributes?.["img"] ?? []), "width", "height", "loading"],
     video: ["src", "controls", "width", "height", "poster"],
     source: ["src", "type", "media", "srcset"],
     details: ["open"],
-    code: [...(defaultSchema.attributes?.code ?? []), ["className", /^hljs(-|$)/, /^language-/]],
-    span: [...(defaultSchema.attributes?.span ?? []), ["className", /^hljs-/]],
-    pre: [...(defaultSchema.attributes?.pre ?? []), "className"],
+    code: [
+      ...(defaultSchema.attributes?.["code"] ?? []),
+      ["className", /^hljs(-|$)/, /^language-/],
+    ],
+    span: [...(defaultSchema.attributes?.["span"] ?? []), ["className", /^hljs-/]],
+    pre: [...(defaultSchema.attributes?.["pre"] ?? []), "className"],
   },
 };
 
@@ -80,10 +83,10 @@ export const Markdown = memo(function Markdown({
   className?: string;
 }) {
   if (!source?.trim()) {
-    return <p className="text-sm italic text-muted-foreground-faint">(no content)</p>;
+    return <p className="text-muted-foreground/70 text-sm italic">(no content)</p>;
   }
   return (
-    <div className={cn("docket-md break-words text-sm text-foreground", className)}>
+    <div className={cn("docket-md wrap-break-word text-foreground text-sm", className)}>
       <ReactMarkdown
         remarkPlugins={REMARK_PLUGINS}
         rehypePlugins={REHYPE_PLUGINS}

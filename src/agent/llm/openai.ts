@@ -146,13 +146,13 @@ export class OpenAiAdapter implements LlmAdapter {
         const type = evt.type ?? "";
 
         if (type === "response.output_text.delta") {
-          const delta = (evt.delta as string | undefined) ?? "";
+          const delta = (evt["delta"] as string | undefined) ?? "";
           if (delta) yield { kind: "text_delta", delta };
           continue;
         }
 
         if (type === "response.output_item.added") {
-          const item = evt.item as
+          const item = evt["item"] as
             | { type?: string; id?: string; call_id?: string; name?: string }
             | undefined;
           if (item?.type === "function_call" && item.call_id && item.name) {
@@ -162,18 +162,18 @@ export class OpenAiAdapter implements LlmAdapter {
         }
 
         if (type === "response.function_call_arguments.delta") {
-          const itemId = (evt.item_id as string | undefined) ?? "";
-          const delta = (evt.delta as string | undefined) ?? "";
+          const itemId = (evt["item_id"] as string | undefined) ?? "";
+          const delta = (evt["delta"] as string | undefined) ?? "";
           const slot = pending.get(itemId);
           if (slot) slot.argsBuf += delta;
           continue;
         }
 
         if (type === "response.function_call_arguments.done") {
-          const itemId = (evt.item_id as string | undefined) ?? "";
+          const itemId = (evt["item_id"] as string | undefined) ?? "";
           const slot = pending.get(itemId);
           if (!slot) continue;
-          const callId = (evt.call_id as string | undefined) ?? itemId;
+          const callId = (evt["call_id"] as string | undefined) ?? itemId;
           let parsed: Record<string, unknown> = {};
           try {
             parsed = slot.argsBuf ? (JSON.parse(slot.argsBuf) as Record<string, unknown>) : {};
@@ -188,7 +188,7 @@ export class OpenAiAdapter implements LlmAdapter {
 
         if (type === "response.completed") {
           const usage = (
-            evt.response as
+            evt["response"] as
               | { usage?: { input_tokens?: number; output_tokens?: number } }
               | undefined
           )?.usage;
@@ -209,7 +209,7 @@ export class OpenAiAdapter implements LlmAdapter {
 
         if (type === "response.error" || type === "error") {
           const message =
-            (evt.error as { message?: string } | undefined)?.message ?? "OpenAI stream error";
+            (evt["error"] as { message?: string } | undefined)?.message ?? "OpenAI stream error";
           logger.error(
             {
               adapter: this.kind,
@@ -264,7 +264,7 @@ function toResponsesInput(messages: readonly import("@/agent/llm/types").LlmMess
   // We emit the explicit `type: "message"` + content-parts form rather than
   // the bare `{ role, content }` shorthand — api.openai.com infers the type,
   // but Azure AI Foundry's stricter validator rejects items without one.
-  const out: Array<Record<string, unknown>> = [];
+  const out: Record<string, unknown>[] = [];
   for (const m of messages) {
     if (m.role === "system") {
       out.push({

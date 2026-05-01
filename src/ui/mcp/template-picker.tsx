@@ -59,13 +59,13 @@ export function McpTemplatePicker({
       <div className="flex items-center justify-between gap-2">
         <span className="flex min-w-0 items-center gap-2">
           <TemplateIcon template={t} />
-          <span className="truncate text-sm font-medium text-foreground">{t.label}</span>
+          <span className="truncate font-medium text-foreground text-sm">{t.label}</span>
         </span>
         <Badge variant="secondary" className="uppercase tracking-wide">
           {authBadge(t)}
         </Badge>
       </div>
-      <p className="text-xs text-muted-foreground">{t.description}</p>
+      <p className="text-muted-foreground text-xs">{t.description}</p>
       <div className="flex items-center justify-between gap-2">
         <a
           href={t.docsUrl}
@@ -91,8 +91,8 @@ export function McpTemplatePicker({
   return (
     <section className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-foreground">Add from template</h3>
-        <span className="text-xs text-muted-foreground">
+        <h3 className="font-medium text-foreground text-sm">Add from template</h3>
+        <span className="text-muted-foreground text-xs">
           Off by default — fill in credentials to enable.
         </span>
       </div>
@@ -106,7 +106,7 @@ export function McpTemplatePicker({
       )}
       <button
         type="button"
-        className="self-start text-xs text-muted-foreground underline"
+        className="self-start text-muted-foreground text-xs underline"
         onClick={() => setShowMore((prev) => !prev)}
       >
         {showMore ? "Show fewer" : `Show ${more.length} more`}

@@ -1,14 +1,18 @@
 "use client";
 
 import { ExternalLink, Wrench } from "lucide-react";
-import { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { GROUPS, SECTIONS, type SectionKey } from "@/ui/settings/sections";
 
-// `process.env.NODE_ENV` is inlined at build time by Next, so this
+// `process.env["NODE_ENV"]` is inlined at build time by Next, so this
 // constant drops out of the client bundle entirely in production — the
 // dev-tools section never ships to end users.
-const IS_DEV = process.env.NODE_ENV !== "production";
+const IS_DEV = process.env["NODE_ENV"] !== "production";
+
+const GROUPED = GROUPS.map((g) => ({
+  ...g,
+  sections: SECTIONS.filter((s) => s.group === g.key),
+}));
 
 export function SettingsSidebar({
   active,
@@ -19,20 +23,11 @@ export function SettingsSidebar({
   onSelect: (key: SectionKey) => void;
   projectSlug: string | null;
 }) {
-  const grouped = useMemo(
-    () =>
-      GROUPS.map((g) => ({
-        ...g,
-        sections: SECTIONS.filter((s) => s.group === g.key),
-      })),
-    [],
-  );
-
   return (
     <nav className="flex flex-col gap-4">
-      {grouped.map((group) => (
+      {GROUPED.map((group) => (
         <div key={group.key} className="flex flex-col gap-1">
-          <div className="px-3 pb-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+          <div className="px-3 pb-1 font-medium font-mono text-[10px] text-muted-foreground uppercase tracking-[0.18em]">
             {group.label}
           </div>
           {group.sections.map((section) => {
@@ -65,14 +60,14 @@ export function SettingsSidebar({
 
       {IS_DEV ? (
         <div className="flex flex-col gap-1">
-          <div className="px-3 pb-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+          <div className="px-3 pb-1 font-medium font-mono text-[10px] text-muted-foreground uppercase tracking-[0.18em]">
             Dev tools
           </div>
           <a
             href="/setup-preview"
             target="_blank"
             rel="noreferrer"
-            className="flex items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-muted"
+            className="flex items-center gap-3 rounded-xl px-3 py-2 text-left text-foreground text-sm transition-colors hover:bg-muted"
           >
             <Wrench className="h-4 w-4 shrink-0" />
             <span className="flex-1 truncate font-medium">Setup wizard preview</span>

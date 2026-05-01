@@ -23,6 +23,7 @@ import {
   SETTINGS_CATALOG,
   type SettingKey,
   type SettingScope,
+  type SettingValue,
 } from "@/server/settings/catalog";
 import { loadGlobalSetting } from "@/server/settings/effective";
 import {
@@ -45,33 +46,68 @@ import {
  * `setup.complete` is excluded from the global union — it's a sticky
  * bootstrap flag, not a router-writable setting.
  */
-function scopedUpdateOptions(scope: SettingScope) {
-  return SETTING_KEYS.filter(
-    (k) => SETTINGS_CATALOG[k].scope === scope && k !== "setup.complete",
-  ).map((k) =>
-    z.object({
-      key: z.literal(k),
-      value: SETTINGS_CATALOG[k].schema as z.ZodTypeAny,
-    }),
-  );
-}
+/**
+ * Mapped-type-derived discriminated union over `(key, value)` pairs for one
+ * scope. The runtime schema is built dynamically from the catalog (so adding
+ * a setting needs zero router edits), but the TS type is reconstructed here
+ * so callers narrow on `key` and the per-key value type without `as never`.
+ */
+type ScopedKey<S extends SettingScope> = {
+  [K in SettingKey]: (typeof SETTINGS_CATALOG)[K]["scope"] extends S ? K : never;
+}[SettingKey];
+
+type WritableScopedKey<S extends SettingScope> = Exclude<ScopedKey<S>, "setup.complete">;
+
+type ScopedUpdateInput<S extends SettingScope> = {
+  [K in WritableScopedKey<S>]: { key: K; value: SettingValue<K> };
+}[WritableScopedKey<S>];
+
+export type UserSettingUpdate = ScopedUpdateInput<"user">;
+export type GlobalSettingUpdate = ScopedUpdateInput<"global">;
+export type ProjectSettingUpdate = { projectSlug: string } & ScopedUpdateInput<"project">;
 
 type UpdateOption = z.ZodObject<{ key: z.ZodLiteral<SettingKey>; value: z.ZodTypeAny }>;
-type UpdateOptions = readonly [UpdateOption, ...UpdateOption[]];
 
-const UserUpdateInput = z.discriminatedUnion(
-  "key",
-  scopedUpdateOptions("user") as unknown as UpdateOptions,
-);
+/**
+ * Build the per-scope `{ key, value }` discriminated-union schema. The cast
+ * on the `discriminatedUnion` result is the one inherent bridge between the
+ * dynamically-built runtime tuple and the statically-mapped `ScopedUpdateInput<S>`
+ * type — Zod can't see through `SettingKey` → catalog-scope filtering.
+ */
+function buildScopedUpdateSchema<S extends SettingScope>(
+  scope: S,
+): z.ZodType<ScopedUpdateInput<S>> {
+  const [first, ...rest] = SETTING_KEYS.filter(
+    (k) => SETTINGS_CATALOG[k].scope === scope && k !== "setup.complete",
+  ).map(
+    (k): UpdateOption =>
+      z.object({
+        key: z.literal(k),
+        value: SETTINGS_CATALOG[k].schema as z.ZodTypeAny,
+      }),
+  );
+  if (!first) {
+    throw new Error(`buildScopedUpdateSchema: no writable keys for scope '${scope}'`);
+  }
+  // The runtime union enumerates every catalog key for the scope, but the
+  // generic `S` parameter is opaque to TS at this point — it can't prove the
+  // dynamic key list matches `WritableScopedKey<S>`. The unknown bridge is
+  // confined to this one helper; callers see a precise per-scope type.
+  return z.discriminatedUnion("key", [first, ...rest]) as unknown as z.ZodType<
+    ScopedUpdateInput<S>
+  >;
+}
 
-const GlobalUpdateInput = z.discriminatedUnion(
-  "key",
-  scopedUpdateOptions("global") as unknown as UpdateOptions,
-);
-
+const UserUpdateInput = buildScopedUpdateSchema("user");
+const GlobalUpdateInput = buildScopedUpdateSchema("global");
+// `projectSlugSchema.and(...)` returns a `ZodIntersection` whose output
+// inference loses the discriminated-union arm because `.and()` on a
+// `ZodType<T>` doesn't propagate `T` through the intersection's output.
+// One cast on the result is the minimum bridge — the runtime parse still
+// validates both sides; only the TS view is being patched.
 const ProjectUpdateInput = projectSlugSchema.and(
-  z.discriminatedUnion("key", scopedUpdateOptions("project") as unknown as UpdateOptions),
-);
+  buildScopedUpdateSchema("project"),
+) as z.ZodType<ProjectSettingUpdate>;
 
 function scopedKeys(scope: SettingScope): SettingKey[] {
   return SETTING_KEYS.filter((k) => SETTINGS_CATALOG[k].scope === scope && k !== "setup.complete");
@@ -123,7 +159,7 @@ export const settingsRouter = router({
     }));
   }),
 
-  update: protectedProcedure.input(UserUpdateInput).mutation(async ({ ctx, input }) => {
+  update: mutationProcedure.input(UserUpdateInput).mutation(async ({ ctx, input }) => {
     const userId = ctx.userId;
     const encoded = JSON.stringify(input.value);
     // Prisma's `upsert` won't accept `null` in a compound-unique `where`,
@@ -141,7 +177,7 @@ export const settingsRouter = router({
     });
   }),
 
-  reset: protectedProcedure.input(UserResetInput).mutation(async ({ ctx, input }) => {
+  reset: mutationProcedure.input(UserResetInput).mutation(async ({ ctx, input }) => {
     const userId = ctx.userId;
     const def = getSettingDef(input.key);
     await ctx.db.setting.deleteMany({

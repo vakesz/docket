@@ -1,7 +1,8 @@
 import { Clock, ExternalLink, GitBranch, Tag, User, UserX } from "lucide-react";
 import Link from "next/link";
-import { type ItemState, isItemKind, isItemState } from "@/core/types";
-import { displayTag, formatKind, formatRelative, providerProfileUrl } from "@/lib/format";
+import { canonicalIntentsFor, isItemKind, isItemState, type TransitionIntent } from "@/core/types";
+import { displayTag, formatKind, formatRelative } from "@/lib/format";
+import { getProviderSpec } from "@/server/provider-registry";
 import { ChatToggleButton } from "@/ui/items/chat-toggle-button";
 import { CommentAvatar } from "@/ui/items/comment-avatar";
 import { CommentComposer } from "@/ui/items/comment-composer";
@@ -15,12 +16,13 @@ import { StatePill } from "@/ui/items/state-pill";
 import { SuggestActionButton } from "@/ui/items/suggest-action-button";
 import { TransitionActions } from "@/ui/items/transition-actions";
 import { Markdown } from "@/ui/markdown/markdown";
+import { ScrollArea } from "@/ui/primitives/scroll-area";
 
 type Comment = {
   id: string;
   providerCommentId: string;
   author: string | null;
-  bodyMd: string;
+  body: string;
   reactions: unknown;
   createdAt: Date;
 };
@@ -38,7 +40,7 @@ type DetailItem = {
   parentNumber: string | null;
   tags: string[];
   url: string | null;
-  descriptionMd: string | null;
+  description: string | null;
   reactions: unknown;
   createdAt: Date | null;
   updatedAt: Date;
@@ -73,20 +75,27 @@ export function DetailPane({
   showHeaderReactions: boolean;
   showCommentReactions: boolean;
 }) {
-  const authorProfileUrl = providerProfileUrl(providerKind, item.author);
-  const assigneeProfileUrl = providerProfileUrl(providerKind, item.assignee);
+  const spec = providerKind ? getProviderSpec(providerKind) : null;
+  const profileFor = (identity: string | null): string | null =>
+    identity && spec?.profileUrl ? spec.profileUrl(identity) : null;
+  const authorProfileUrl = profileFor(item.author);
+  const assigneeProfileUrl = profileFor(item.assignee);
+  const transitionIntents = ((): readonly TransitionIntent[] => {
+    if (!isItemState(item.state)) return [];
+    return spec ? spec.availableIntents(item.state) : canonicalIntentsFor(item.state);
+  })();
   return (
-    <div className="flex h-full flex-col overflow-auto bg-background">
+    <ScrollArea className="h-full bg-background">
       <RecentRecorder projectSlug={projectSlug} itemNumber={item.itemNumber} />
-      <header className="flex flex-col gap-3 border-b border-border p-4">
+      <header className="flex flex-col gap-3 border-border border-b p-4">
         {/* Row 1: chips left, utility cluster + primary CTAs right */}
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="text-xs uppercase tracking-wide text-muted-foreground">
+          <span className="text-muted-foreground text-xs uppercase tracking-wide">
             {formatKind(item.kind)}
           </span>
           <StatePill state={item.state} />
           <CopyIdButton value={item.providerItemId} />
-          <span className="ml-auto inline-flex items-center gap-1 text-muted-foreground-faint">
+          <span className="ml-auto inline-flex items-center gap-1 text-muted-foreground/70">
             <span className="font-mono text-[10px]">Updated</span>
             <FreshnessStamp updatedAt={item.updatedAt} thresholdDays={staleThresholdDays} />
           </span>
@@ -99,7 +108,7 @@ export function DetailPane({
               kind={isItemKind(item.kind) ? item.kind : null}
               state={isItemState(item.state) ? item.state : null}
               title={item.title}
-              bodyMd={item.descriptionMd}
+              body={item.description}
               commentCount={item.comments.length}
             />
             <ChatToggleButton />
@@ -108,10 +117,10 @@ export function DetailPane({
 
         {/* Rows 2 + 3: title and meta — meta sits tight under the title (mt-1) */}
         <div className="flex flex-col gap-1">
-          <h1 className="text-lg font-semibold leading-snug text-foreground">{item.title}</h1>
+          <h1 className="font-semibold text-foreground text-lg leading-snug">{item.title}</h1>
 
           {/* inline meta line — icons replace dl labels, missing fields omitted */}
-          <ul className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          <ul className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground text-xs">
             {item.author ? (
               <li className="inline-flex items-center gap-1">
                 <User aria-hidden="true" className="size-3" />
@@ -163,7 +172,7 @@ export function DetailPane({
               ) : (
                 <>
                   <UserX aria-hidden="true" className="size-3" />
-                  <span className="italic text-muted-foreground-faint">unassigned</span>
+                  <span className="text-muted-foreground/70 italic">unassigned</span>
                 </>
               )}
             </li>
@@ -214,25 +223,25 @@ export function DetailPane({
 
         {/* Actions and reactions groups — each labelled with a small heading
             so the header reads title-block / actions-block / reactions-block. */}
-        <div className="flex flex-col gap-3 border-t border-border pt-3">
+        <div className="flex flex-col gap-3 border-border border-t pt-3">
           <div className="flex flex-col gap-1.5">
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-              <h3 className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              <h3 className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
                 Actions
               </h3>
-              <span className="text-[11px] italic text-muted-foreground-faint">
+              <span className="text-[11px] text-muted-foreground/70 italic">
                 will require approval
               </span>
             </div>
             <TransitionActions
               projectSlug={projectSlug}
               providerItemId={item.providerItemId}
-              state={item.state as ItemState}
+              intents={transitionIntents}
             />
           </div>
           {capabilities.supportedReactions.length > 0 && showHeaderReactions ? (
             <div className="flex flex-col gap-1.5">
-              <h3 className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              <h3 className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
                 Reactions
               </h3>
               <ReactionRow
@@ -249,29 +258,29 @@ export function DetailPane({
       </header>
 
       <section className="flex flex-col gap-3 p-4">
-        <h2 className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+        <h2 className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">
           Description
         </h2>
-        {item.descriptionMd ? (
-          <Markdown source={item.descriptionMd} />
+        {item.description ? (
+          <Markdown source={item.description} />
         ) : (
-          <p className="text-sm italic text-muted-foreground-faint">(no description)</p>
+          <p className="text-muted-foreground/70 text-sm italic">(no description)</p>
         )}
       </section>
 
-      <section className="flex flex-col gap-3 border-t border-border p-4">
-        <h2 className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+      <section className="flex flex-col gap-3 border-border border-t p-4">
+        <h2 className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">
           Comments ({item.comments.length})
         </h2>
         {item.comments.length === 0 ? (
-          <p className="text-sm italic text-muted-foreground-faint">No comments cached.</p>
+          <p className="text-muted-foreground/70 text-sm italic">No comments cached.</p>
         ) : (
           <ul className="flex flex-col gap-3">
             {item.comments.map((c) => {
-              const commentAuthorProfileUrl = providerProfileUrl(providerKind, c.author);
+              const commentAuthorProfileUrl = profileFor(c.author);
               return (
                 <li key={c.id} className="rounded border border-border p-3">
-                  <div className="mb-3 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                  <div className="mb-3 flex items-center justify-between gap-2 text-muted-foreground text-xs">
                     <span className="inline-flex items-center gap-2">
                       {c.author ? (
                         <CommentAvatar
@@ -305,10 +314,10 @@ export function DetailPane({
                       {formatRelative(c.createdAt)}
                     </time>
                   </div>
-                  <Markdown source={c.bodyMd} />
+                  <Markdown source={c.body} />
                   {capabilities.supportedReactions.length > 0 && showCommentReactions ? (
                     <div className="mt-2 flex flex-col gap-1.5">
-                      <h3 className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                      <h3 className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
                         Reactions
                       </h3>
                       <ReactionRow
@@ -328,9 +337,9 @@ export function DetailPane({
         )}
       </section>
 
-      <section className="border-t border-border p-4">
+      <section className="border-border border-t p-4">
         <CommentComposer projectSlug={projectSlug} providerItemId={item.providerItemId} />
       </section>
-    </div>
+    </ScrollArea>
   );
 }

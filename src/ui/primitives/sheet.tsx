@@ -29,7 +29,7 @@ function SheetOverlay({
     <SheetPrimitive.Overlay
       data-slot="sheet-overlay"
       className={cn(
-        "fixed inset-0 z-50 bg-foreground/30 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
+        "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0 fixed inset-0 z-50 bg-foreground/30 data-[state=closed]:animate-out data-[state=open]:animate-in supports-backdrop-filter:backdrop-blur-xs",
         className,
       )}
       {...props}
@@ -38,12 +38,12 @@ function SheetOverlay({
 }
 
 const sideClasses: Record<"top" | "right" | "bottom" | "left", string> = {
-  top: "inset-x-0 top-0 h-auto border-b data-open:slide-in-from-top data-closed:slide-out-to-top",
+  top: "inset-x-0 top-0 h-auto border-b data-[state=open]:slide-in-from-top data-[state=closed]:slide-out-to-top",
   bottom:
-    "inset-x-0 bottom-0 h-auto border-t data-open:slide-in-from-bottom data-closed:slide-out-to-bottom",
-  left: "inset-y-0 left-0 h-full w-72 max-w-[85vw] border-r data-open:slide-in-from-left data-closed:slide-out-to-left",
+    "inset-x-0 bottom-0 h-auto border-t data-[state=open]:slide-in-from-bottom data-[state=closed]:slide-out-to-bottom",
+  left: "inset-y-0 left-0 h-full w-72 max-w-[85vw] border-r data-[state=open]:slide-in-from-left data-[state=closed]:slide-out-to-left",
   right:
-    "inset-y-0 right-0 h-full w-72 max-w-[85vw] border-l data-open:slide-in-from-right data-closed:slide-out-to-right",
+    "inset-y-0 right-0 h-full w-72 max-w-[85vw] border-l data-[state=open]:slide-in-from-right data-[state=closed]:slide-out-to-right",
 };
 
 function SheetContent({
@@ -62,7 +62,7 @@ function SheetContent({
       <SheetPrimitive.Content
         data-slot="sheet-content"
         className={cn(
-          "fixed z-50 flex flex-col gap-4 bg-card text-card-foreground shadow-xl transition ease-in-out data-open:animate-in data-open:duration-200 data-closed:animate-out data-closed:duration-150",
+          "fixed z-50 flex flex-col gap-4 bg-card text-card-foreground shadow-xl transition ease-in-out data-[state=closed]:animate-out data-[state=open]:animate-in data-[state=closed]:duration-150 data-[state=open]:duration-200",
           sideClasses[side],
           className,
         )}
@@ -97,7 +97,7 @@ function SheetTitle({ className, ...props }: React.ComponentProps<typeof SheetPr
   return (
     <SheetPrimitive.Title
       data-slot="sheet-title"
-      className={cn("text-base font-medium text-foreground", className)}
+      className={cn("font-medium text-base text-foreground", className)}
       {...props}
     />
   );
@@ -110,7 +110,7 @@ function SheetDescription({
   return (
     <SheetPrimitive.Description
       data-slot="sheet-description"
-      className={cn("text-sm text-muted-foreground", className)}
+      className={cn("text-muted-foreground text-sm", className)}
       {...props}
     />
   );

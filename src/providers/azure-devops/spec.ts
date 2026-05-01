@@ -32,6 +32,7 @@ import type { Item } from "@/core/types";
 import { asPlainObject } from "@/lib/json";
 import { azureDevOpsAvatarFetcher } from "@/providers/azure-devops/avatar";
 import { AzureDevOpsProvider } from "@/providers/azure-devops/provider";
+import { availableIntentsForState } from "@/providers/azure-devops/state-map";
 
 /**
  * Azure DevOps work item ids are bare integers, scoped per organization. The
@@ -43,8 +44,8 @@ const itemNumberCodec: ProviderItemNumberCodec = {
 };
 
 const labelTemplate: LabelTemplate = (config) => {
-  const orgUrl = typeof config.orgUrl === "string" ? config.orgUrl.trim() : "";
-  const project = typeof config.project === "string" ? config.project.trim() : "";
+  const orgUrl = typeof config["orgUrl"] === "string" ? config["orgUrl"].trim() : "";
+  const project = typeof config["project"] === "string" ? config["project"].trim() : "";
   if (!orgUrl || !project) return "";
   // Strip protocol + dev.azure.com to keep labels short: "contoso/web".
   const host = orgUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
@@ -53,7 +54,7 @@ const labelTemplate: LabelTemplate = (config) => {
 };
 
 function fieldsOf(item: Item): Record<string, unknown> | null {
-  const raw = item.providerRaw?.fields;
+  const raw = item.providerRaw?.["fields"];
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   return asPlainObject(raw);
 }
@@ -129,12 +130,12 @@ export const azureDevOpsSpec = {
   // any project rows already storing the full URL form.
   normalizeConfig: (raw) => {
     const orgRaw =
-      typeof raw.organization === "string" && raw.organization.trim()
-        ? raw.organization.trim()
-        : typeof raw.orgUrl === "string"
-          ? raw.orgUrl.trim()
+      typeof raw["organization"] === "string" && raw["organization"].trim()
+        ? raw["organization"].trim()
+        : typeof raw["orgUrl"] === "string"
+          ? raw["orgUrl"].trim()
           : "";
-    const project = typeof raw.project === "string" ? raw.project.trim() : "";
+    const project = typeof raw["project"] === "string" ? raw["project"].trim() : "";
     if (!orgRaw) throw new Error("Azure DevOps: 'organization' is required");
     if (!project) throw new Error("Azure DevOps: 'project' is required");
     const orgUrl = /^https?:\/\//.test(orgRaw)
@@ -156,7 +157,9 @@ export const azureDevOpsSpec = {
     ciStatus: false,
     pullRequestDiffs: false,
     linkedItems: true,
+    creatableKinds: ["epic", "feature", "story", "task", "bug"],
   },
+  availableIntents: availableIntentsForState,
   oauth: {
     defaultLabel: "Azure DevOps",
     defaultScopes: "499b84ac-1321-427f-aa17-267ca6975798/.default offline_access",

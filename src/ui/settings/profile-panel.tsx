@@ -1,5 +1,6 @@
 "use client";
 import { useId } from "react";
+import { useSettingsMap } from "@/lib/settings-client";
 import { trpc } from "@/lib/trpc-client";
 import { NumberField } from "@/ui/forms/number-field";
 import { Alert, AlertDescription } from "@/ui/primitives/alert";
@@ -21,19 +22,17 @@ import { ThemePicker } from "@/ui/shell/theme-picker";
  */
 export function ProfilePanel() {
   const utils = trpc.useUtils();
-  const list = trpc.settings.list.useQuery();
+  const settings = useSettingsMap();
   const update = trpc.settings.update.useMutation({
     onSuccess: async () => {
       await utils.settings.list.invalidate();
     },
   });
 
-  const timezoneRaw = list.data?.find((r) => r.key === "display.timezone")?.value;
-  const timezone = typeof timezoneRaw === "string" ? timezoneRaw : "";
-  const autoRefreshRaw = list.data?.find((r) => r.key === "ui.auto-refresh-seconds")?.value;
-  const autoRefreshSeconds = typeof autoRefreshRaw === "number" ? autoRefreshRaw : 0;
+  const timezone = settings.str("display.timezone", "");
+  const autoRefreshSeconds = settings.num("ui.auto-refresh-seconds", 0);
   const autoRefreshMinutes = Math.round(autoRefreshSeconds / 60);
-  const disabled = list.isPending || update.isPending;
+  const disabled = settings.list.isPending || update.isPending;
 
   const themeId = useId();
   const tzId = useId();
@@ -43,11 +42,11 @@ export function ProfilePanel() {
     <div className="flex flex-col gap-6">
       <DefaultProjectPicker />
 
-      <div className="flex flex-col gap-1 border-t border-border pt-6">
-        <Label htmlFor={themeId} className="text-sm font-medium text-foreground">
+      <div className="flex flex-col gap-1 border-border border-t pt-6">
+        <Label htmlFor={themeId} className="font-medium text-foreground text-sm">
           Theme
         </Label>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-muted-foreground text-xs">
           Color scheme for this browser. Adaptive variants follow your OS&rsquo;s light/dark
           preference; a fixed theme overrides it.
         </p>
@@ -56,11 +55,11 @@ export function ProfilePanel() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-1 border-t border-border pt-6">
-        <Label htmlFor={tzId} className="text-sm font-medium text-foreground">
+      <div className="flex flex-col gap-1 border-border border-t pt-6">
+        <Label htmlFor={tzId} className="font-medium text-foreground text-sm">
           Display time zone
         </Label>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-muted-foreground text-xs">
           Used for relative dates and the staleness tint window. Pick &ldquo;Browser local&rdquo; to
           follow whatever zone the browser reports.
         </p>
@@ -68,7 +67,7 @@ export function ProfilePanel() {
           id={tzId}
           value={timezone}
           disabled={disabled}
-          onChange={(next) => update.mutate({ key: "display.timezone" as never, value: next })}
+          onChange={(next) => update.mutate({ key: "display.timezone", value: next })}
         />
         {update.error ? (
           <Alert variant="destructive">
@@ -77,11 +76,11 @@ export function ProfilePanel() {
         ) : null}
       </div>
 
-      <div className="flex flex-col gap-1 border-t border-border pt-6">
-        <Label htmlFor={refreshId} className="text-sm font-medium text-foreground">
+      <div className="flex flex-col gap-1 border-border border-t pt-6">
+        <Label htmlFor={refreshId} className="font-medium text-foreground text-sm">
           Background sync interval (minutes)
         </Label>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-muted-foreground text-xs">
           While a project is open, sync from the provider every N minutes and refetch dashboard list
           views (LLM providers, OAuth providers, and similar) on the same cadence. The footer's
           "synced X ago" tracks each sync. 0 disables — the manual sync button still works. Maximum
@@ -93,10 +92,8 @@ export function ProfilePanel() {
           max={60}
           step={1}
           value={autoRefreshMinutes}
-          disabled={list.isPending}
-          onCommit={(next) =>
-            update.mutate({ key: "ui.auto-refresh-seconds" as never, value: next * 60 })
-          }
+          disabled={disabled}
+          onCommit={(next) => update.mutate({ key: "ui.auto-refresh-seconds", value: next * 60 })}
           className="max-w-[8rem]"
         />
         {update.error ? (

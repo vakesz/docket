@@ -64,7 +64,7 @@ export function StepGithub({
       }
     >
       <div className="flex flex-col gap-1">
-        <Label htmlFor={labelId} className="text-xs text-muted-foreground">
+        <Label htmlFor={labelId} className="text-muted-foreground text-xs">
           Display label
         </Label>
         <Input
@@ -75,14 +75,14 @@ export function StepGithub({
           autoComplete="off"
           required={state.enabled}
         />
-        <p className="text-xs text-muted-foreground-faint">
+        <p className="text-muted-foreground/70 text-xs">
           Shown on the sign-in button. Useful when running multiple GitHub Enterprise instances.
         </p>
       </div>
 
       <div className="flex gap-3">
         <div className="flex flex-1 flex-col gap-1">
-          <Label htmlFor={clientIdId} className="text-xs text-muted-foreground">
+          <Label htmlFor={clientIdId} className="text-muted-foreground text-xs">
             Client ID
           </Label>
           <Input
@@ -94,13 +94,13 @@ export function StepGithub({
             autoComplete="off"
             required={state.enabled}
           />
-          <p className="text-xs text-muted-foreground-faint">
+          <p className="text-muted-foreground/70 text-xs">
             20 chars, starts with <code className="font-mono">Iv1.</code> (legacy) or{" "}
             <code className="font-mono">Iv23li</code> (new apps).
           </p>
         </div>
         <div className="flex flex-1 flex-col gap-1">
-          <Label htmlFor={clientSecretId} className="text-xs text-muted-foreground">
+          <Label htmlFor={clientSecretId} className="text-muted-foreground text-xs">
             Client secret
           </Label>
           <Input
@@ -113,19 +113,19 @@ export function StepGithub({
             autoComplete="off"
             required={state.enabled}
           />
-          <p className="text-xs text-muted-foreground-faint">
+          <p className="text-muted-foreground/70 text-xs">
             40-char hex string from the OAuth App page. Stored AES-GCM encrypted.
           </p>
         </div>
       </div>
 
       <details className="flex flex-col gap-3">
-        <summary className="cursor-pointer select-none text-xs font-medium text-muted-foreground hover:text-foreground">
+        <summary className="cursor-pointer select-none font-medium text-muted-foreground text-xs hover:text-foreground">
           Advanced
         </summary>
         <div className="mt-3 flex flex-col gap-3">
           <div className="flex flex-col gap-1">
-            <Label htmlFor={scopesId} className="text-xs text-muted-foreground">
+            <Label htmlFor={scopesId} className="text-muted-foreground text-xs">
               Scopes (space-separated)
             </Label>
             <Input
@@ -135,12 +135,12 @@ export function StepGithub({
               className="font-mono"
               autoComplete="off"
             />
-            <p className="text-xs text-muted-foreground-faint">
+            <p className="text-muted-foreground/70 text-xs">
               Default covers sign-in + repo access. Trim if you only need read access.
             </p>
           </div>
           <div className="flex flex-col gap-1">
-            <Label htmlFor={baseUrlId} className="text-xs text-muted-foreground">
+            <Label htmlFor={baseUrlId} className="text-muted-foreground text-xs">
               Enterprise base URL
             </Label>
             <Input
@@ -150,7 +150,7 @@ export function StepGithub({
               placeholder="https://github.example.com"
               autoComplete="off"
             />
-            <p className="text-xs text-muted-foreground-faint">
+            <p className="text-muted-foreground/70 text-xs">
               Leave blank for github.com. Only fill in for GitHub Enterprise Server.
             </p>
           </div>
