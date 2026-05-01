@@ -696,7 +696,7 @@ async function markMessageFlagged(db: Database, messageId: string, reason: strin
  * UI surfaces both.
  */
 function refusalText(reason: string): string {
-  if (reason.startsWith("llm-judge: off-topic") || reason.startsWith("pattern: off-topic")) {
+  if (reason.startsWith("llm-judge: off-topic")) {
     return "Sorry — I can only help with software work-item topics. Try asking about a ticket, PR, or code question.";
   }
   if (reason.includes("prompt injection") || reason.includes("injection")) {

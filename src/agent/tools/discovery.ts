@@ -211,7 +211,7 @@ export const searchCodeTool: ToolFactory = (ctx) => ({
   def: {
     name: "search_code",
     description:
-      "Search the project's repository for code matching `query`. Returns file paths and URLs only (no snippets). Use this to find call sites, definitions, or files mentioning a symbol when the user asks 'where is X used?'. Provider-specific search syntax (GitHub allows `path:`, `language:`, etc).",
+      "Search the project's repository for code matching `query`. Returns file paths and URLs only (no snippets). Use this to find call sites, definitions, or files mentioning a symbol when the user asks 'where is X used?', or to confirm a fix landed on a referenced symbol. Provider-specific search syntax — on GitHub, scope with `repo:owner/name <symbol>` (derive `owner/name` from the item's repositoryUrl) and refine with `path:`, `language:`, etc.",
     parameters: zodToJsonSchema(
       z.object({
         query: z.string().min(1).max(200),
