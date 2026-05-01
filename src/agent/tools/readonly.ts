@@ -151,7 +151,7 @@ export const getPullRequestTool: ToolFactory = (ctx) => ({
   def: {
     name: "get_pull_request",
     description:
-      "Fetch live pull-request detail (title, body markdown, state, files, reviews) from the project's provider. Provider-specific id format passed as `pull_request_id` (e.g. 'owner/repo#123' on GitHub).",
+      "Fetch live pull-request detail (title, body markdown, state, files, reviews) from the project's provider. The id format is provider-defined; pass exactly the string the project's provider uses (find_related_pull_requests / search_pull_requests return ids in that format).",
     parameters: zodToJsonSchema(z.object({ pull_request_id: z.string().min(1) })),
   },
   // Foreign content lives in title, body, and each review's body. Refs,

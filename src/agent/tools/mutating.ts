@@ -177,7 +177,7 @@ export const proposeNewItemTool: ToolFactory = (ctx) => ({
   def: {
     name: "propose_new_item",
     description:
-      "Stage creation of a new item. Pass `kind` (epic | feature | story | task | bug) plus a flat set of fields: `title` (required), `description` (markdown), `parent_id`, `assignee`, `tags`. When splitting an existing item into smaller pieces, set `parent_id` to the current item's id so the provider wires the parent-child link natively (GitHub sub-issue, Azure DevOps parent link). After the human confirms the children, re-engage and stage one propose_description_patch on the parent that adds a '## Split into' section listing the new children.",
+      "Stage creation of a new item. Pass `kind` (epic | feature | story | task | bug) plus a flat set of fields: `title` (required), `description` (markdown), `parent_id`, `assignee`, `tags`. When splitting an existing item into smaller pieces, set `parent_id` to the current item's id so the provider wires the parent-child link natively (the binding is provider-defined — sub-issue, parent link, or equivalent). After the human confirms the children, re-engage and stage one propose_description_patch on the parent that adds a '## Split into' section listing the new children.",
     parameters: zodToJsonSchema(
       z.object({
         kind: ItemKindEnum,

@@ -21,7 +21,6 @@ import { z } from "zod";
 import {
   archiveConversation,
   createConversation,
-  getConversation,
   listConversations,
   ownsConversation,
 } from "@/server/conversations/storage";
@@ -76,9 +75,16 @@ export const conversationsRouter = router({
   }),
 
   get: projectScopedProcedure.input(ConversationRef).query(async ({ ctx, input }) => {
-    await ensureOwn(ctx, input.conversationId, ctx.projectId);
     return assertFound(
-      await getConversation(ctx.db, input.conversationId),
+      await ctx.db.conversation.findFirst({
+        where: { id: input.conversationId, projectId: ctx.projectId, userId: ctx.userId },
+        include: {
+          messages: {
+            where: { compacted: false },
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          },
+        },
+      }),
       "conversation not found",
     );
   }),

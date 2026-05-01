@@ -8,6 +8,7 @@
  */
 
 import "server-only";
+import { cache } from "react";
 import type { ProjectId, UserId } from "@/core/types";
 import type { Project } from "@/db/generated/client";
 import type { db as Db } from "@/server/db";
@@ -33,8 +34,15 @@ export type AuthorizedProject = Omit<Project, "id" | "ownerUserId"> & {
  * Lookup is by `slug` (the URL-facing identifier) rather than the surrogate
  * CUID — every caller sources its identifier from the route params or wire
  * input.
+ *
+ * Wrapped in React's `cache()` so a single batched tRPC request (which can
+ * fan out into many `projectScopedProcedure` calls sharing one slug+userId)
+ * collapses to one DB lookup. The cache scope is the server request — no
+ * cross-request bleed.
  */
-export async function projectForUser(
+export const projectForUser = cache(_projectForUser);
+
+async function _projectForUser(
   db: Database,
   projectSlug: string,
   userId: UserId,

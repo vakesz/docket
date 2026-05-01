@@ -98,18 +98,34 @@ async function main() {
       }
     }
 
+    // CONCURRENTLY so building these on a populated DB doesn't take an
+    // exclusive write lock on `Setting` / `Item`. CONCURRENTLY can't run
+    // inside a transaction, but `$executeRawUnsafe` issues each statement
+    // as its own simple-protocol command — no implicit transaction. Idempotent:
+    // IF NOT EXISTS skips the build when the index is already present.
+    //
     // Global scope: at most one row per key with both FKs null.
-    await db.$executeRaw`CREATE UNIQUE INDEX IF NOT EXISTS "Setting_key_global_key" ON "Setting" ("key") WHERE "userId" IS NULL AND "projectId" IS NULL;`;
+    await db.$executeRawUnsafe(
+      `CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS "Setting_key_global_key" ON "Setting" ("key") WHERE "userId" IS NULL AND "projectId" IS NULL`,
+    );
 
     // User scope: at most one row per (key, userId) with projectId null.
-    await db.$executeRaw`CREATE UNIQUE INDEX IF NOT EXISTS "Setting_key_userId_key" ON "Setting" ("key", "userId") WHERE "userId" IS NOT NULL AND "projectId" IS NULL;`;
+    await db.$executeRawUnsafe(
+      `CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS "Setting_key_userId_key" ON "Setting" ("key", "userId") WHERE "userId" IS NOT NULL AND "projectId" IS NULL`,
+    );
 
     // Project scope: at most one row per (key, projectId) with userId null.
-    await db.$executeRaw`CREATE UNIQUE INDEX IF NOT EXISTS "Setting_key_projectId_key" ON "Setting" ("key", "projectId") WHERE "userId" IS NULL AND "projectId" IS NOT NULL;`;
+    await db.$executeRawUnsafe(
+      `CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS "Setting_key_projectId_key" ON "Setting" ("key", "projectId") WHERE "userId" IS NULL AND "projectId" IS NOT NULL`,
+    );
 
     // GIN trgm indexes for ILIKE search on Item title + description.
-    await db.$executeRaw`CREATE INDEX IF NOT EXISTS "Item_title_trgm_idx" ON "Item" USING GIN ("title" gin_trgm_ops);`;
-    await db.$executeRaw`CREATE INDEX IF NOT EXISTS "Item_description_trgm_idx" ON "Item" USING GIN ("description" gin_trgm_ops);`;
+    await db.$executeRawUnsafe(
+      `CREATE INDEX CONCURRENTLY IF NOT EXISTS "Item_title_trgm_idx" ON "Item" USING GIN ("title" gin_trgm_ops)`,
+    );
+    await db.$executeRawUnsafe(
+      `CREATE INDEX CONCURRENTLY IF NOT EXISTS "Item_description_trgm_idx" ON "Item" USING GIN ("description" gin_trgm_ops)`,
+    );
 
     // Backfill: legacy `azure_devops` rows stored the Entra tenant id in
     // `baseUrl` because the metadata column didn't exist yet. Move those

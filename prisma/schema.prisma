@@ -180,7 +180,9 @@ model LlmProvider {
   conversationOverrides        Conversation[] @relation("ConversationLlmOverride")
 
   @@index([kind])
-  @@index([role])
+  // [role, isDefault] also serves single-column lookups on `role` because
+  // PostgreSQL B-tree indexes can be probed by a leading-column subset of
+  // their key. The standalone @@index([role]) was redundant.
   @@index([role, isDefault])
 }
 

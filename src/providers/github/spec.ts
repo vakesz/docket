@@ -104,6 +104,7 @@ export const githubSpec = {
     defaultScopes: "read:user user:email repo",
     baseUrlPlaceholder: "GitHub Enterprise base URL (leave blank for github.com)",
     baseUrlHelpKey: "github_enterprise",
+    auxSlot: "baseUrl",
   },
   profileUrl: githubProfileUrl,
   avatarFetcher: githubAvatarFetcher,

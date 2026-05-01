@@ -104,14 +104,20 @@ export const llmProvidersRouter = router({
    * per role.
    */
   create: mutationProcedure.input(CreateLlmProviderInput).mutation(async ({ ctx, input }) => {
-    if (input.isDefault) {
-      await ctx.db.llmProvider.updateMany({
-        where: { role: input.role, isDefault: true },
-        data: { isDefault: false },
+    // Fold the default-clear and create into one tx so a crash between them
+    // can't leave the role with two `isDefault = true` rows (or none, if the
+    // create itself fails). Roles share the same `(isDefault = true)` slot
+    // independently — chat and guardrail defaults do not interfere.
+    const created = await ctx.db.$transaction(async (tx) => {
+      if (input.isDefault) {
+        await tx.llmProvider.updateMany({
+          where: { role: input.role, isDefault: true },
+          data: { isDefault: false },
+        });
+      }
+      return tx.llmProvider.create({
+        data: { ...input, apiKey: encryptSecret(input.apiKey) },
       });
-    }
-    const created = await ctx.db.llmProvider.create({
-      data: { ...input, apiKey: encryptSecret(input.apiKey) },
     });
     logger.info(
       {

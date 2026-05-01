@@ -145,7 +145,7 @@ export const getPullRequestDiffTool: ToolFactory = (ctx) => ({
   def: {
     name: "get_pull_request_diff",
     description:
-      "Fetch the per-file unified diff for a pull request. Use this when reviewing a PR's content — get_pull_request gives metadata, this gives the actual code changes. Provider-specific id format passed as `pull_request_id` (e.g. 'owner/repo#123' on GitHub).",
+      "Fetch the per-file unified diff for a pull request. Use this when reviewing a PR's content — get_pull_request gives metadata, this gives the actual code changes. The id format is provider-defined; pass exactly the string the project's provider uses (find_related_pull_requests / search_pull_requests return ids in that format).",
     parameters: zodToJsonSchema(z.object({ pull_request_id: z.string().min(1) })),
   },
   // The patch text is the foreign code payload. Paths and counts are
@@ -211,7 +211,7 @@ export const searchCodeTool: ToolFactory = (ctx) => ({
   def: {
     name: "search_code",
     description:
-      "Search the project's repository for code matching `query`. Returns file paths and URLs only (no snippets). Use this to find call sites, definitions, or files mentioning a symbol when the user asks 'where is X used?', or to confirm a fix landed on a referenced symbol. Provider-specific search syntax — on GitHub, scope with `repo:owner/name <symbol>` (derive `owner/name` from the item's repositoryUrl) and refine with `path:`, `language:`, etc.",
+      "Search the project's repository for code matching `query`. Returns file paths and URLs only (no snippets). Use this to find call sites, definitions, or files mentioning a symbol when the user asks 'where is X used?', or to confirm a fix landed on a referenced symbol. Search syntax is provider-defined — most providers accept the bare symbol; some support scoping qualifiers (e.g. repo / path / language filters) when given an item's repositoryUrl. If a query returns nothing, try the bare symbol with no qualifiers before giving up.",
     parameters: zodToJsonSchema(
       z.object({
         query: z.string().min(1).max(200),

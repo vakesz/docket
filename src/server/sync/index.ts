@@ -418,7 +418,12 @@ async function processChunk(
     upserted += created.count;
   }
   if (toUpdate.length > 0) {
-    await db.$transaction(
+    // Each item update is independent — a partial failure leaves the cache
+    // out of date for that row, which the next sync cycle reconciles. The
+    // previous $transaction wrapper serialized the writes inside Postgres
+    // for no benefit; Promise.all hands them all to the pg pool and lets it
+    // pipeline. MAX_INFLIGHT_CHUNKS keeps overall fan-out bounded.
+    await Promise.all(
       toUpdate.map(({ providerItemId, row }) =>
         db.item.update({
           where: { projectId_providerItemId: { projectId, providerItemId } },
@@ -566,7 +571,12 @@ export async function reconcileComments(
       body: row.body,
     });
   }
-  const ops: Promise<unknown>[] = [];
+  // Split into "new rows" (one createMany) and "changed rows" (per-row
+  // updates in parallel). Avoids N upserts on the typical first-sync case
+  // where every comment is new.
+  const inserts: Prisma.CommentCreateManyInput[] = [];
+  const updates: Promise<unknown>[] = [];
+  let touched = 0;
   for (const { itemSurrogate, comments } of nonEmpty) {
     const existing = byItem.get(itemSurrogate);
     for (const c of comments) {
@@ -579,40 +589,48 @@ export async function reconcileComments(
         const prevMs = prev.providerUpdatedAt?.getTime() ?? null;
         const incMs = incomingPu?.getTime() ?? null;
         if (prevMs === incMs && prev.body === c.body) continue;
-      }
-      ops.push(
-        db.comment.upsert({
-          where: {
-            itemId_providerCommentId: {
-              itemId: itemSurrogate,
-              providerCommentId: c.id,
+        updates.push(
+          db.comment.update({
+            where: {
+              itemId_providerCommentId: {
+                itemId: itemSurrogate,
+                providerCommentId: c.id,
+              },
             },
-          },
-          create: {
-            itemId: itemSurrogate,
-            providerCommentId: c.id,
-            author: c.author,
-            body: c.body,
-            createdAt: c.createdAt,
-            providerUpdatedAt: incomingPu,
-            edited: c.edited ?? false,
-            reactions,
-          },
-          update: {
-            author: c.author,
-            body: c.body,
-            createdAt: c.createdAt,
-            providerUpdatedAt: incomingPu,
-            edited: c.edited ?? false,
-            reactions,
-          },
-        }),
-      );
+            data: {
+              author: c.author,
+              body: c.body,
+              createdAt: c.createdAt,
+              providerUpdatedAt: incomingPu,
+              edited: c.edited ?? false,
+              reactions,
+            },
+          }),
+        );
+        touched++;
+      } else {
+        inserts.push({
+          itemId: itemSurrogate,
+          providerCommentId: c.id,
+          author: c.author,
+          body: c.body,
+          createdAt: c.createdAt,
+          providerUpdatedAt: incomingPu,
+          edited: c.edited ?? false,
+          reactions,
+        });
+        touched++;
+      }
     }
   }
-  if (ops.length === 0) return 0;
-  await Promise.all(ops);
-  return ops.length;
+  if (touched === 0) return 0;
+  await Promise.all([
+    inserts.length > 0
+      ? db.comment.createMany({ data: inserts, skipDuplicates: true })
+      : Promise.resolve(),
+    ...updates,
+  ]);
+  return touched;
 }
 
 async function upsertItems(
@@ -866,15 +884,19 @@ async function runSync(
       };
       await persistProgress();
 
-      const archive = await db.item.updateMany({
-        where: {
-          projectId: project.id,
-          providerItemId: { notIn: Array.from(seenIds) },
-          archived: false,
-        },
-        data: { archived: true },
-      });
-      archived = archive.count;
+      // Raw SQL with `<> ALL($1::text[])` so the parameter list stays a
+      // single array regardless of `seenIds` cardinality — Prisma's `notIn`
+      // can fan out to N positional parameters and trip Postgres's 65K
+      // limit on full syncs of large repos.
+      const seenArr = Array.from(seenIds);
+      const archive = await db.$executeRaw`
+        UPDATE "Item"
+        SET "archived" = true
+        WHERE "projectId" = ${project.id}
+          AND "archived" = false
+          AND "providerItemId" <> ALL(${seenArr}::text[])
+      `;
+      archived = Number(archive);
     }
 
     phase = "cursor";

@@ -28,7 +28,7 @@ export const findRelatedPullRequestsTool: ToolFactory = (ctx) => ({
           .min(1)
           .optional()
           .describe(
-            "Cached item id, e.g. 'owner/repo#42' on GitHub. Defaults to the conversation's anchored item.",
+            "Cached item id in the project provider's id format (find_related_items returns ids in that shape). Defaults to the conversation's anchored item.",
           ),
       }),
     ),

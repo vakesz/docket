@@ -23,16 +23,13 @@ export default async function SetupRequiredPage() {
   }
 
   const baseUrl = publicBaseUrl();
-  const githubExisting = await db.oauthProviderConfig.findFirst({ where: { kind: "github" } });
-  const azureDevopsExisting = await db.oauthProviderConfig.findFirst({
-    where: { kind: "azure_devops" },
-  });
-  const openaiChatExisting = await db.llmProvider.findFirst({
-    where: { kind: "openai", role: "chat" },
-  });
-  const openaiGuardrailExisting = await db.llmProvider.findFirst({
-    where: { kind: "openai", role: "guardrail" },
-  });
+  const [githubExisting, azureDevopsExisting, openaiChatExisting, openaiGuardrailExisting] =
+    await Promise.all([
+      db.oauthProviderConfig.findFirst({ where: { kind: "github" } }),
+      db.oauthProviderConfig.findFirst({ where: { kind: "azure_devops" } }),
+      db.llmProvider.findFirst({ where: { kind: "openai", role: "chat" } }),
+      db.llmProvider.findFirst({ where: { kind: "openai", role: "guardrail" } }),
+    ]);
 
   return (
     <main className="h-full overflow-y-auto bg-background text-foreground">

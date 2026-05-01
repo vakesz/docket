@@ -166,6 +166,7 @@ export const azureDevOpsSpec = {
     defaultScopes: "499b84ac-1321-427f-aa17-267ca6975798/.default offline_access",
     baseUrlPlaceholder: "Entra tenant id (leave blank for `common` / multi-tenant)",
     baseUrlHelpKey: "azure_devops_tenant",
+    auxSlot: "metadataTenant",
   },
   profileUrl: null,
   avatarFetcher: azureDevOpsAvatarFetcher,

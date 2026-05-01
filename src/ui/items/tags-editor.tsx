@@ -2,7 +2,7 @@
 
 import { Plus, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { displayTag } from "@/lib/format";
 import { trpc } from "@/lib/trpc-client";
 import { cn } from "@/lib/utils";
@@ -41,18 +41,9 @@ export function TagsEditor({
   const utils = trpc.useUtils();
   const inputId = useId();
 
-  const reservedSet = useMemo(
-    () => new Set(stateEncodingTags.map((t) => t.toLowerCase())),
-    [stateEncodingTags],
-  );
-  const reservedFromCurrent = useMemo(
-    () => currentTags.filter((t) => reservedSet.has(t.toLowerCase())),
-    [currentTags, reservedSet],
-  );
-  const editableInitial = useMemo(
-    () => currentTags.filter((t) => !reservedSet.has(t.toLowerCase())),
-    [currentTags, reservedSet],
-  );
+  const reservedSet = new Set(stateEncodingTags.map((t) => t.toLowerCase()));
+  const reservedFromCurrent = currentTags.filter((t) => reservedSet.has(t.toLowerCase()));
+  const editableInitial = currentTags.filter((t) => !reservedSet.has(t.toLowerCase()));
 
   const [draft, setDraft] = useState<readonly string[]>(editableInitial);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -62,25 +53,17 @@ export function TagsEditor({
 
   // Re-baseline whenever the item's tags change (sync, refresh, or the proposal
   // landed and `router.refresh()` brought new props down).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: editableInitial is recomputed every render; depend on the source array.
   useEffect(() => {
     setDraft(editableInitial);
     setError(null);
-  }, [editableInitial]);
+  }, [currentTags, stateEncodingTags]);
 
-  const draftSetLower = useMemo(() => new Set(draft.map((t) => t.toLowerCase())), [draft]);
-  const initialSetLower = useMemo(
-    () => new Set(editableInitial.map((t) => t.toLowerCase())),
-    [editableInitial],
-  );
+  const draftSetLower = new Set(draft.map((t) => t.toLowerCase()));
+  const initialSetLower = new Set(editableInitial.map((t) => t.toLowerCase()));
 
-  const added = useMemo(
-    () => draft.filter((t) => !initialSetLower.has(t.toLowerCase())),
-    [draft, initialSetLower],
-  );
-  const removed = useMemo(
-    () => editableInitial.filter((t) => !draftSetLower.has(t.toLowerCase())),
-    [editableInitial, draftSetLower],
-  );
+  const added = draft.filter((t) => !initialSetLower.has(t.toLowerCase()));
+  const removed = editableInitial.filter((t) => !draftSetLower.has(t.toLowerCase()));
   const dirty = added.length > 0 || removed.length > 0;
 
   const projectTagsQuery = trpc.items.listProjectTags.useQuery(
@@ -113,16 +96,13 @@ export function TagsEditor({
   const trimmed = query.trim();
   const trimmedLower = trimmed.toLowerCase();
   const isReservedQuery = reservedSet.has(trimmedLower);
-  const projectSuggestions = useMemo(() => {
-    const all = projectTagsQuery.data ?? [];
-    return all.filter((tag) => {
-      const lower = tag.toLowerCase();
-      if (draftSetLower.has(lower)) return false;
-      if (reservedSet.has(lower)) return false;
-      if (!trimmedLower) return true;
-      return lower.includes(trimmedLower);
-    });
-  }, [projectTagsQuery.data, draftSetLower, reservedSet, trimmedLower]);
+  const projectSuggestions = (projectTagsQuery.data ?? []).filter((tag) => {
+    const lower = tag.toLowerCase();
+    if (draftSetLower.has(lower)) return false;
+    if (reservedSet.has(lower)) return false;
+    if (!trimmedLower) return true;
+    return lower.includes(trimmedLower);
+  });
 
   const exactMatch =
     trimmedLower.length > 0 && draftSetLower.has(trimmedLower)

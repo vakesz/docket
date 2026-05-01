@@ -2,7 +2,6 @@
 
 import "./markdown.css";
 import type { ComponentProps } from "react";
-import { memo } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
@@ -75,13 +74,7 @@ const COMPONENTS = {
   a: AnchorRenderer,
 };
 
-export const Markdown = memo(function Markdown({
-  source,
-  className,
-}: {
-  source: string;
-  className?: string;
-}) {
+export function Markdown({ source, className }: { source: string; className?: string }) {
   if (!source?.trim()) {
     return <p className="text-muted-foreground/70 text-sm italic">(no content)</p>;
   }
@@ -96,7 +89,7 @@ export const Markdown = memo(function Markdown({
       </ReactMarkdown>
     </div>
   );
-});
+}
 
 function AnchorRenderer({ href, ...rest }: ComponentProps<"a">) {
   const isExternal = !!href && /^https?:\/\//i.test(href);

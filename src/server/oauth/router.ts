@@ -1,9 +1,10 @@
 import "server-only";
 import { z } from "zod";
+import type { OauthAuxSlot } from "@/core/provider";
 import type { Prisma } from "@/db/generated/client";
 import { asPlainObject } from "@/lib/json";
 import { logger } from "@/server/logger";
-import { listProviderSpecs } from "@/server/provider-registry";
+import { getProviderSpec, listProviderSpecs } from "@/server/provider-registry";
 import { encryptSecret } from "@/server/secrets/encryption";
 import { mutationProcedure, protectedProcedure, router } from "@/server/trpc";
 
@@ -62,13 +63,12 @@ const UpdateOauthProviderInput = z.object({
 
 /**
  * Per-kind dispatch for the form's free-form "Base URL / tenant" input. The
- * single field on the form maps to one storage slot, and the slot differs by
- * kind: GitHub Enterprise repurposes the OAuth endpoint (`baseUrl`); Azure
- * DevOps uses the Entra tenant id (`metadata.tenant`).
+ * single field on the form maps to one storage slot; each provider's spec
+ * declares which slot via `oauth.auxSlot`. Kinds without an OAuth spec entry
+ * default to `baseUrl` so legacy / forward-compatible rows still display.
  */
-type OauthAuxSlot = "baseUrl" | "metadataTenant";
 function auxFor(kind: string): OauthAuxSlot {
-  return kind === "azure_devops" ? "metadataTenant" : "baseUrl";
+  return getProviderSpec(kind)?.oauth?.auxSlot ?? "baseUrl";
 }
 
 /**

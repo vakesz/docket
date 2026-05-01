@@ -298,6 +298,22 @@ export const GROUPING_STRATEGIES = ["by_kind", "by_state_bucket"] as const;
 export type GroupingStrategy = (typeof GROUPING_STRATEGIES)[number];
 
 /**
+ * Where the form's free-form "Base URL / tenant" input is persisted.
+ *
+ * `"baseUrl"`     — write straight into the `OauthProviderConfig.baseUrl`
+ *                   column. GitHub Enterprise uses this slot to override
+ *                   the OAuth endpoint.
+ * `"metadataTenant"` — store under `metadata.tenant` in the JSONB column,
+ *                      and clear `baseUrl`. Azure DevOps uses this slot for
+ *                      the Entra tenant id.
+ *
+ * The router reads this off the registry instead of hardcoding `if (kind ===
+ * "azure_devops")` so adding a new tenant-style provider is one new spec
+ * entry — no router edit.
+ */
+export type OauthAuxSlot = "baseUrl" | "metadataTenant";
+
+/**
  * OAuth-side metadata for a provider type that supports sign-in.
  *
  * Populated on `ProviderSpec.oauth` when the provider has a NextAuth
@@ -311,12 +327,15 @@ export type GroupingStrategy = (typeof GROUPING_STRATEGIES)[number];
  * - `baseUrlHelpKey` lets surfaces render a long-form help string keyed
  *   off the spec rather than re-encoding `if (kind === ...)` chains. Empty
  *   string means "no special help — generic baseUrl explanation only."
+ * - `auxSlot` names the storage slot the form's "Base URL / tenant" field
+ *   writes to (see `OauthAuxSlot`).
  */
 export type ProviderOauthMetadata = {
   defaultLabel: string;
   defaultScopes: string;
   baseUrlPlaceholder: string;
   baseUrlHelpKey: string;
+  auxSlot: OauthAuxSlot;
 };
 
 /**
