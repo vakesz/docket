@@ -4,7 +4,7 @@
  * `PUBLIC_BASE_URL` is the deployment-time hint operators set when the app
  * sits behind a reverse proxy or CDN — it should be the URL a logged-in user
  * actually types in their browser. The dev fallback is `http://localhost:<PORT>`,
- * matching `bun run dev`.
+ * matching `pnpm dev`.
  *
  * Used for: OAuth callback URLs (settings panel), metadataBase in the root
  * layout, and the tRPC client URL when running on the server.
