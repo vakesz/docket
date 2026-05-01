@@ -117,6 +117,18 @@ export function planForIntent(intent: TransitionIntent): GithubTransitionPlan {
         labelsToAdd: [LABEL_WONTFIX],
         labelsToRemove: [LABEL_BLOCKED, LABEL_NEEDS_INFO],
       };
+    // GitHub Issues has no first-class "duplicate" state; it shares the
+    // closed/not_planned shape with `close_wontfix`. The canonical
+    // distinction lives on the proposal kind + the comment body that
+    // references the canonical ticket. Soft labels are stripped — duplicate
+    // closure should not retain `wontfix`/`blocked`/`needs-info`.
+    case "close_duplicate":
+      return {
+        state: "closed",
+        stateReason: "not_planned",
+        labelsToAdd: [],
+        labelsToRemove: SOFT_LABELS,
+      };
     case "reopen":
       return {
         state: "open",

@@ -9,9 +9,17 @@
  * Lives in its own file so revising wording is one diff and the prompt
  * cache invariant stays intact (this is post-prefix user content, never
  * concatenated into the byte-stable system prefix).
+ *
+ * The instructional middle (`DEFAULT_SUGGEST_ACTION_BULLETS`) is the part
+ * operators can override from Deployment → Prompts. Dynamic interpolation
+ * (title, kind/state hints, body excerpt, comment-count heads-up) stays
+ * in code so the override stays simple — just prose, no template syntax.
  */
 
+import { DEFAULT_SUGGEST_ACTION_BULLETS } from "@/agent/prompt";
 import type { ItemKind, ItemState } from "@/core/types";
+
+export { DEFAULT_SUGGEST_ACTION_BULLETS };
 
 export const SUGGEST_NEXT_ACTION_SENTINEL = "<!-- docket:seed:suggest-next-action -->";
 
@@ -48,26 +56,28 @@ export function buildSuggestSeed(args: {
   title: string;
   body: string | null;
   commentCount: number;
+  /**
+   * Operator-editable instructional middle. Falls back to the bundled
+   * default when null/empty (e.g. the global setting hasn't been
+   * fetched yet, or the operator left the field blank).
+   */
+  actionBullets?: string | null;
 }): string {
-  const { kind, state, title, body: rawBody, commentCount } = args;
+  const { kind, state, title, body: rawBody, commentCount, actionBullets } = args;
   const kindHint = kind ? KIND_HINTS[kind] : null;
   const stateHint = state ? STATE_HINTS[state] : null;
   const body = excerpt(rawBody);
+  const bullets =
+    actionBullets && actionBullets.trim().length > 0
+      ? actionBullets
+      : DEFAULT_SUGGEST_ACTION_BULLETS;
 
   const lines = [
     SUGGEST_NEXT_ACTION_SENTINEL,
     "",
     `What's the next concrete action on "${title}"?${kindHint ? ` (${kindHint})` : ""}${stateHint ? ` — ${stateHint}.` : ""}`,
     "",
-    "Call get_item first; the excerpt below is just a hint, not the full body. Then pick one and stage it (or explain why none apply):",
-    "- propose_transition (start_work / needs_info / close_done / …) when the evidence supports it. State-encoding labels (`blocked`, `needs-info`, `wontfix`) belong here, NOT on propose_item_tags. For close_done on a bug, identify the fix PR first — find_related_pull_requests, then search_pull_requests on title keywords if matches is empty — and read its diff via get_pull_request_diff before drafting the comment.",
-    "- propose_item_tags when a USER-FACING label change is unambiguous (e.g. ready-for-work, area:billing). Don't pass state-encoding labels here — the executor preserves those on its own. Sample a few similar items via list_items first to learn the project's actual vocabulary — don't invent labels.",
-    "- propose_comment with a substantive update (status, fix reference, decision, answered question, small fenced code snippet). Never an echo of the description.",
-    "- propose_description_patch to fill repro / AC / env gaps. Pass only the new top-level content; the system preserves the previous version automatically.",
-    "- propose_new_item to split when the item conflates concerns. Set parent_id to this item's id so the parent-child link is native; spell out WHY the split helps.",
-    "- propose_memory_write to capture a non-obvious project convention you noticed (one per reply; narrow title; update an existing entry rather than creating a duplicate).",
-    "- ask_user_question when you genuinely need info to decide.",
-    "- Or: say nothing meaningful applies, and stop. Don't stage an echo proposal.",
+    bullets,
     "",
   ];
 

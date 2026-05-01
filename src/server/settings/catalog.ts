@@ -17,6 +17,11 @@
 import "server-only";
 import { z } from "zod";
 import { GUARDRAIL_KINDS } from "@/agent/guardrail/types";
+import {
+  DEFAULT_KIND_PROMPTS,
+  DEFAULT_SUGGEST_ACTION_BULLETS,
+  DEFAULT_SYSTEM_BASE,
+} from "@/agent/prompt";
 
 export const SETTING_SCOPES = ["user", "project", "global"] as const;
 export type SettingScope = (typeof SETTING_SCOPES)[number];
@@ -88,6 +93,33 @@ const GuardrailKindSchema = z.enum(GUARDRAIL_KINDS);
 // that still allows "read → think → answer"; 30 is well past where extra
 // rounds stop helping a stuck model and start risking SSE/proxy timeouts.
 const MaxToolRoundsSchema = z.number().int().min(3).max(30);
+
+// Per-snippet line cap for assistant code examples. The post-processor
+// in `src/agent/post/code-snippet-cap.ts` trims any block past this and
+// stamps a language-aware "truncated" marker. 1 is the floor (so the
+// guardrail can still emit a single-line snippet); 40 is a generous
+// upper bound — beyond that, recommendations should call out the
+// approach in prose, not paste a wall of code.
+const CodeExamplesMaxLinesSchema = z.number().int().min(1).max(40);
+// Per-reply hard cap on fenced code blocks. 0 is "disabled" (no
+// snippets at all, equivalent to flipping `code-examples.enabled` off);
+// 4 is the upper bound — recommendations needing more snippets are
+// almost always trying to write a patch, which is out of scope for
+// docket: it's a recommendation engine, not a coding agent.
+const CodeExamplesMaxSnippetsSchema = z.number().int().min(0).max(4);
+// Percentage cap on the duplicate-detection token similarity threshold.
+// Below 50, false positives dominate ("fix"/"update" alone match
+// hundreds of tickets); above 95, the bar is so tight that only literal
+// title duplicates pass. 70 is the chosen default.
+const DuplicateSimilarityThresholdSchema = z.number().int().min(50).max(95);
+
+// Editable agent system prompt + kind-specific prefixes. Empty strings
+// fall back to the source defaults at load time (see `loadPrompts` in
+// `src/agent/prompt-loader.ts`) so an admin who clears the field doesn't
+// strand the model. 16 KB is generous — the source defaults sit below
+// 5 KB; padding leaves room for per-deployment additions without bumping
+// it again later.
+const PromptStringSchema = z.string().max(16_000);
 
 // UI-origin auto-accept floor. These kinds always auto-confirm when staged
 // from the UI (origin === "ui") — they're not gated by the per-project
@@ -338,6 +370,69 @@ export const SETTINGS_CATALOG = {
     description:
       "When the monthly cap is reached: 'warn' lets the turn proceed but surfaces a banner; 'block' refuses agent turns until the cap is raised or the calendar month rolls over.",
   },
+  "prompt.system-base": {
+    key: "prompt.system-base",
+    scope: "global",
+    schema: PromptStringSchema,
+    default: DEFAULT_SYSTEM_BASE,
+    label: "Agent system prompt",
+    description:
+      "The base instructions every agent turn opens with. Persona, mutation tool guidance, memory check, recommendation modes, honesty rules. Bytes-stable across turns — editing it invalidates the prompt cache once, then it stabilises again. Leave empty to fall back to the bundled default.",
+  },
+  "prompt.kind.epic": {
+    key: "prompt.kind.epic",
+    scope: "global",
+    schema: PromptStringSchema,
+    default: DEFAULT_KIND_PROMPTS.epic,
+    label: "Kind prompt — epic",
+    description:
+      "Appended to the system prompt when the active conversation is anchored on an EPIC. Empty falls back to the bundled default.",
+  },
+  "prompt.kind.feature": {
+    key: "prompt.kind.feature",
+    scope: "global",
+    schema: PromptStringSchema,
+    default: DEFAULT_KIND_PROMPTS.feature,
+    label: "Kind prompt — feature",
+    description:
+      "Appended to the system prompt when the active conversation is anchored on a FEATURE. Empty falls back to the bundled default.",
+  },
+  "prompt.kind.story": {
+    key: "prompt.kind.story",
+    scope: "global",
+    schema: PromptStringSchema,
+    default: DEFAULT_KIND_PROMPTS.story,
+    label: "Kind prompt — story",
+    description:
+      "Appended to the system prompt when the active conversation is anchored on a STORY. Empty falls back to the bundled default.",
+  },
+  "prompt.kind.task": {
+    key: "prompt.kind.task",
+    scope: "global",
+    schema: PromptStringSchema,
+    default: DEFAULT_KIND_PROMPTS.task,
+    label: "Kind prompt — task",
+    description:
+      "Appended to the system prompt when the active conversation is anchored on a TASK. Empty falls back to the bundled default.",
+  },
+  "prompt.kind.bug": {
+    key: "prompt.kind.bug",
+    scope: "global",
+    schema: PromptStringSchema,
+    default: DEFAULT_KIND_PROMPTS.bug,
+    label: "Kind prompt — bug",
+    description:
+      "Appended to the system prompt when the active conversation is anchored on a BUG. Empty falls back to the bundled default.",
+  },
+  "prompt.suggest-next-action": {
+    key: "prompt.suggest-next-action",
+    scope: "global",
+    schema: PromptStringSchema,
+    default: DEFAULT_SUGGEST_ACTION_BULLETS,
+    label: "Suggest next action — instructions",
+    description:
+      "Instructional middle of the seed message the chat pane fires when a user clicks the 'Suggest next action' button on the item detail header. The seed builder wraps this in dynamic context (title, kind/state hints, body excerpt). Empty falls back to the bundled default.",
+  },
   "web-fetch.enabled": {
     key: "web-fetch.enabled",
     scope: "project",
@@ -418,6 +513,60 @@ export const SETTINGS_CATALOG = {
     label: "Output safety check",
     description:
       "When on, the assistant's final reply is classified for harmful content (hate, harassment, threats, sexual). Adds one extra round-trip per turn on the guardrail model. Output is never blocked mid-stream — flagged messages get a banner.",
+  },
+  "recommendations.likely-resolved.enabled": {
+    key: "recommendations.likely-resolved.enabled",
+    scope: "project",
+    schema: BoolSchema,
+    default: true,
+    label: "Likely-resolved recommendations",
+    description:
+      "When on, the agent may surface tickets whose underlying issue appears to be fixed in code (a merged PR references the item, the description doesn't already cite it) and stage close_done plus a comment linking the resolving change. When off, the existing close_done evaluation language in the prompt still applies but the agent no longer volunteers resolution detection.",
+  },
+  "recommendations.duplicate-detection.enabled": {
+    key: "recommendations.duplicate-detection.enabled",
+    scope: "project",
+    schema: BoolSchema,
+    default: true,
+    label: "Duplicate-detection recommendations",
+    description:
+      "When on, the agent may suggest duplicate / strongly-related tickets within this project. Suggestions still need evidence beyond title overlap (similarity threshold, tag/repo overlap, or an explicit cross-reference). When off, the agent does not volunteer duplicate suggestions but the user can still ask for them explicitly.",
+  },
+  "recommendations.code-examples.enabled": {
+    key: "recommendations.code-examples.enabled",
+    scope: "project",
+    schema: BoolSchema,
+    default: true,
+    label: "Allow short code snippets in replies",
+    description:
+      "When on, the agent may include short fenced code snippets (one-line guards, config tweaks, type narrowings) in chat replies and proposal bodies. When off, every fenced block is replaced by a one-line italic placeholder before reaching the user.",
+  },
+  "recommendations.code-examples.max-lines": {
+    key: "recommendations.code-examples.max-lines",
+    scope: "project",
+    schema: CodeExamplesMaxLinesSchema,
+    default: 20,
+    label: "Code snippet — max lines per block",
+    description:
+      "Hard cap on the number of lines per fenced code block. Blocks exceeding the cap are trimmed by the post-processor and a language-aware 'truncated by docket' comment is appended. Range 1–40.",
+  },
+  "recommendations.code-examples.max-snippets-per-reply": {
+    key: "recommendations.code-examples.max-snippets-per-reply",
+    scope: "project",
+    schema: CodeExamplesMaxSnippetsSchema,
+    default: 2,
+    label: "Code snippet — max blocks per reply",
+    description:
+      "Hard cap on the number of fenced code blocks in a single assistant reply or proposal body. Blocks past the cap are removed entirely. 0 is equivalent to disabling code examples.",
+  },
+  "recommendations.duplicate-detection.similarity-threshold": {
+    key: "recommendations.duplicate-detection.similarity-threshold",
+    scope: "project",
+    schema: DuplicateSimilarityThresholdSchema,
+    default: 70,
+    label: "Duplicate detection — similarity threshold (%)",
+    description:
+      "Percentage similarity (Jaccard over title + description tokens) below which the agent must NOT propose a duplicate-closing action. The agent may still mention possible relatedness in chat without staging a proposal. Range 50–95.",
   },
   "proposals.auto-accept-extra-kinds": {
     key: "proposals.auto-accept-extra-kinds",

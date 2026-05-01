@@ -30,7 +30,10 @@ import { selectGuardrailFor } from "@/agent/guardrail/registry";
 import type { GuardrailUsage } from "@/agent/guardrail/types";
 import { extractUntrustedFields } from "@/agent/guardrail/types";
 import type { LlmAdapter, LlmEvent, LlmMessage, LlmToolCall } from "@/agent/llm/types";
+import { capCodeSnippets } from "@/agent/post/code-snippet-cap";
+import { loadCodeSnippetCapOptions } from "@/agent/post/load-options";
 import { buildSystemPrefix } from "@/agent/prompt";
+import { loadPrompts } from "@/agent/prompt-loader";
 import { buildToolRegistry } from "@/agent/tools/registry";
 import type { AgentTool, ToolContext } from "@/agent/tools/types";
 import { asProjectId, type ItemKind, type ProjectId, type UserId } from "@/core/types";
@@ -249,9 +252,11 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
   //    across turns for the prompt cache to hit. One DB roundtrip pulls
   //    every Item field we need (summary text + kind + providerItemId).
   const itemContext = await loadItemContext(db, conv);
+  const prompts = await loadPrompts(db);
   const systemPrefix = buildSystemPrefix({
     itemKind: itemContext.kind,
     itemSummary: itemContext.summary,
+    prompts,
   });
 
   const toolCtx: ToolContext = {
@@ -262,6 +267,11 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
     providerItemId: itemContext.providerItemId,
   };
   const tools = await buildToolRegistry(toolCtx, { readOnly });
+
+  // Load the project's code-snippet caps once per turn. Edits during a
+  // long session take effect on the next turn, never mid-stream — the
+  // cap runs on the assembled buffer, after the deltas have streamed.
+  const codeSnippetCapOptions = await loadCodeSnippetCapOptions(db, projectId);
 
   const toolByName = new Map<string, AgentTool>();
   for (const t of tools) toolByName.set(t.def.name, t);
@@ -376,8 +386,14 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
       "agent: LLM round done",
     );
 
-    // No tool calls → assistant is finished. Persist + emit final events.
+    // No tool calls → assistant is finished. Apply the deterministic
+    // code-snippet cap on the assembled buffer (post-processor runs
+    // after streaming so deltas on the wire stay untouched), then
+    // persist the trimmed text. The output guardrail check below scans
+    // the same trimmed text.
     if (assistantToolCalls.length === 0) {
+      const capped = capCodeSnippets(assistantBuffer, codeSnippetCapOptions);
+      assistantBuffer = capped.text;
       finalAssistantRow = await persistAssistantTurn(
         db,
         conversationId,

@@ -5,6 +5,7 @@ import { Alert, AlertDescription } from "@/ui/primitives/alert";
 import { Badge } from "@/ui/primitives/badge";
 import { Button } from "@/ui/primitives/button";
 import { CreateProjectForm } from "@/ui/projects/create-project-form";
+import { ProjectSyncControls } from "@/ui/settings/project-sync-controls";
 
 type ProjectRow = {
   id: string;
@@ -72,55 +73,58 @@ export function ProjectsPanel() {
               return (
                 <li
                   key={p.id}
-                  className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between"
+                  className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm"
                 >
-                  <div className="flex flex-col gap-1">
-                    <div className="flex flex-wrap items-baseline gap-2">
-                      <span className="font-medium text-foreground">{p.name}</span>
-                      <Badge variant="outline" className="uppercase tracking-wide">
-                        {p.providerKind.replace("_", " ")}
-                      </Badge>
-                      {isDefault ? (
-                        <Badge className="uppercase tracking-wide">default</Badge>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-1">
+                      <div className="flex flex-wrap items-baseline gap-2">
+                        <span className="font-medium text-foreground">{p.name}</span>
+                        <Badge variant="outline" className="uppercase tracking-wide">
+                          {p.providerKind.replace("_", " ")}
+                        </Badge>
+                        {isDefault ? (
+                          <Badge className="uppercase tracking-wide">default</Badge>
+                        ) : null}
+                      </div>
+                      {label ? (
+                        <p className="font-mono text-muted-foreground text-xs">{label}</p>
+                      ) : null}
+                      {p.description ? (
+                        <p className="text-muted-foreground text-xs">{p.description}</p>
                       ) : null}
                     </div>
-                    {label ? (
-                      <p className="font-mono text-muted-foreground text-xs">{label}</p>
-                    ) : null}
-                    {p.description ? (
-                      <p className="text-muted-foreground text-xs">{p.description}</p>
-                    ) : null}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {!isDefault ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      {!isDefault ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="xs"
+                          disabled={setDefault.isPending}
+                          onClick={() => setDefault.mutate({ projectSlug: p.slug })}
+                        >
+                          Set default
+                        </Button>
+                      ) : null}
                       <Button
                         type="button"
-                        variant="outline"
+                        variant="destructive"
                         size="xs"
-                        disabled={setDefault.isPending}
-                        onClick={() => setDefault.mutate({ projectSlug: p.slug })}
+                        disabled={archive.isPending}
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              `Archive "${p.name}"? It will disappear from project lists. The data stays in the database.`,
+                            )
+                          ) {
+                            archive.mutate({ projectSlug: p.slug });
+                          }
+                        }}
                       >
-                        Set default
+                        Archive
                       </Button>
-                    ) : null}
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="xs"
-                      disabled={archive.isPending}
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            `Archive "${p.name}"? It will disappear from project lists. The data stays in the database.`,
-                          )
-                        ) {
-                          archive.mutate({ projectSlug: p.slug });
-                        }
-                      }}
-                    >
-                      Archive
-                    </Button>
+                    </div>
                   </div>
+                  <ProjectSyncControls projectSlug={p.slug} />
                 </li>
               );
             })}

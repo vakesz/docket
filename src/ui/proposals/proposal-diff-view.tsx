@@ -1,3 +1,4 @@
+import { formatIntent, formatState } from "@/lib/format";
 import type { ProposalDiff } from "@/server/proposals/diff";
 import { Badge } from "@/ui/primitives/badge";
 
@@ -11,9 +12,9 @@ export function ProposalDiffView({ diff }: { diff: ProposalDiff }) {
             <span className="text-muted-foreground">({diff.itemId})</span>
           </Field>
           <Field label="Transition">
-            <Pill>{diff.before}</Pill>
+            <Pill>{formatState(diff.before)}</Pill>
             <span className="text-muted-foreground">→</span>
-            <Pill tone="primary">{diff.intent}</Pill>
+            <Pill tone="primary">{formatIntent(diff.intent)}</Pill>
           </Field>
         </div>
       );

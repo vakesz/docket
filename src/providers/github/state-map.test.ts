@@ -91,4 +91,19 @@ describe("github state-map", () => {
     expect(merged).toContain(LABEL_WONTFIX);
     expect(merged).not.toContain(LABEL_BLOCKED);
   });
+
+  it("close_duplicate closes the issue and strips soft labels without stamping wontfix", () => {
+    const plan = planForIntent("close_duplicate");
+    expect(plan.state).toBe("closed");
+    const merged = mergeLabels([LABEL_BLOCKED, "scope:billing"], plan);
+    expect(merged).not.toContain(LABEL_BLOCKED);
+    expect(merged).not.toContain(LABEL_WONTFIX);
+    expect(merged).not.toContain(LABEL_NEEDS_INFO);
+    expect(merged).toContain("scope:billing");
+    const canonical = toCanonicalState(
+      { state: plan.state, stateReason: plan.stateReason },
+      merged,
+    );
+    expect(canonical).toBe("closed");
+  });
 });

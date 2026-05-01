@@ -20,7 +20,9 @@ import { ProfilePanel } from "@/ui/settings/profile-panel";
 import { ProjectItemsPanel } from "@/ui/settings/project-items-panel";
 import { ProjectLlmPanel } from "@/ui/settings/project-llm-panel";
 import { ProjectsPanel } from "@/ui/settings/projects-panel";
+import { PromptsPanel } from "@/ui/settings/prompts-panel";
 import { ReadOnlyModePanel } from "@/ui/settings/read-only-mode-panel";
+import { RecommendationsPanel } from "@/ui/settings/recommendations-panel";
 import {
   readPersistedSection,
   SECTION_STORAGE_KEY,
@@ -28,7 +30,6 @@ import {
   type SectionKey,
 } from "@/ui/settings/sections";
 import { SettingsSidebar } from "@/ui/settings/settings-sidebar";
-import { SyncPanel } from "@/ui/settings/sync-panel";
 import { WebFetchPanel } from "@/ui/settings/web-fetch-panel";
 import { useRegisterSidebarMount, useSidebarDrawer } from "@/ui/shell/sidebar-drawer-context";
 import { SourcesPane } from "@/ui/sources/sources-pane";
@@ -182,8 +183,8 @@ function SectionContent({
       return projectSlug ? <GuardrailPanel projectSlug={projectSlug} /> : null;
     case "project-auto-accept":
       return projectSlug ? <AutoAcceptPanel projectSlug={projectSlug} /> : null;
-    case "project-sync":
-      return projectSlug ? <SyncPanel projectSlug={projectSlug} /> : null;
+    case "project-recommendations":
+      return projectSlug ? <RecommendationsPanel projectSlug={projectSlug} /> : null;
     case "project-analytics":
       return projectSlug ? <AnalyticsPanel scope="project" projectSlug={projectSlug} /> : null;
     case "project-members":
@@ -210,6 +211,8 @@ function SectionContent({
       return <LlmProvidersPanel />;
     case "oauth-providers":
       return <OauthProvidersPanel publicBase={publicBase} />;
+    case "prompts":
+      return <PromptsPanel />;
     case "read-only-mode":
       return <ReadOnlyModePanel />;
   }

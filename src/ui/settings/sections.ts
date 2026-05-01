@@ -9,14 +9,15 @@ import {
   FolderPlus,
   Globe,
   KeyRound,
+  Lightbulb,
   ListOrdered,
   MessageSquare,
   Power,
-  RefreshCw,
   ScrollText,
   ServerCog,
   Shield,
   ShieldCheck,
+  Sparkles,
   UserRound,
   Users,
 } from "lucide-react";
@@ -29,7 +30,7 @@ export type SectionKey =
   | "project-web-fetch"
   | "project-guardrail"
   | "project-auto-accept"
-  | "project-sync"
+  | "project-recommendations"
   | "project-analytics"
   | "project-members"
   | "project-export"
@@ -43,6 +44,7 @@ export type SectionKey =
   | "global-analytics"
   | "llm-providers"
   | "oauth-providers"
+  | "prompts"
   | "read-only-mode";
 
 export type SectionGroup = "project" | "you" | "deployment";
@@ -119,11 +121,11 @@ export const SECTIONS: SectionMeta[] = [
     needsProject: true,
   },
   {
-    key: "project-sync",
-    label: "Sync",
+    key: "project-recommendations",
+    label: "Recommendations",
     description:
-      "Refresh the cached items from the provider, or run a full walk to reconcile archived items.",
-    icon: RefreshCw,
+      "Toggle the agent's recommendation modes (likely-resolved, duplicate detection) and tune the code-snippet caps the post-processor enforces.",
+    icon: Lightbulb,
     group: "project",
     needsProject: true,
   },
@@ -225,6 +227,14 @@ export const SECTIONS: SectionMeta[] = [
     label: "OAuth providers",
     description: "Sign-in providers — NextAuth rebuilds its provider list per request from these.",
     icon: KeyRound,
+    group: "deployment",
+  },
+  {
+    key: "prompts",
+    label: "Agent prompts",
+    description:
+      "System prompt and per-kind prefixes the agent loads on every turn. Empty fields fall back to the bundled defaults.",
+    icon: Sparkles,
     group: "deployment",
   },
   {

@@ -119,6 +119,12 @@ export function planForIntent(intent: TransitionIntent): TransitionPlan {
         tagsToAdd: [TAG_WONTFIX],
         tagsToRemove: [TAG_BLOCKED, TAG_NEEDS_INFO],
       };
+    // Agile has no first-class "duplicate" reason on the state field; we
+    // reuse `Closed` and let the comment body name the canonical item. Soft
+    // tags are stripped on close so the row doesn't end up tagged
+    // `wontfix`/`blocked`/`needs-info` after a duplicate-close.
+    case "close_duplicate":
+      return { state: "Closed", tagsToAdd: [], tagsToRemove: SOFT_TAGS };
     case "reopen":
       return { state: "Active", tagsToAdd: [], tagsToRemove: SOFT_TAGS };
     default: {

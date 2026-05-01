@@ -66,7 +66,7 @@ export const proposeTransitionTool: ToolFactory = (ctx) => ({
   def: {
     name: "propose_transition",
     description:
-      "Stage a state transition on the active item. Pass the transition name in `intent` (one of: start_work | pause | block | needs_info | close_done | close_wontfix | reopen). Defaults to the conversation's anchored item; pass `item_id` only to act on a different item. Returns a proposal id — the human still confirms in the UI.",
+      "Stage a state transition on the active item. Pass the transition name in `intent` (one of: start_work | pause | block | needs_info | close_done | close_wontfix | close_duplicate | reopen). Defaults to the conversation's anchored item; pass `item_id` only to act on a different item. Use `close_duplicate` when an item has been superseded by another in the same project — pair it with a propose_comment that names the canonical item. Returns a proposal id — the human still confirms in the UI.",
     parameters: zodToJsonSchema(
       z.object({
         item_id: z.string().min(1).optional(),

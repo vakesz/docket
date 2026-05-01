@@ -16,6 +16,8 @@
 
 import "server-only";
 import { TRPCError } from "@trpc/server";
+import { capCodeSnippets } from "@/agent/post/code-snippet-cap";
+import { loadCodeSnippetCapOptions } from "@/agent/post/load-options";
 import type {
   CommentAddProposal,
   DescriptionPatchProposal,
@@ -34,6 +36,7 @@ import type { db as Db } from "@/server/db";
 import { assertFound } from "@/server/errors";
 import { snapshotFromRow } from "@/server/proposals/item-snapshot";
 import { proposalPayloadSchema } from "@/server/proposals/schema";
+import { jaccardSimilarity } from "@/server/recommendations/similarity";
 
 /**
  * Caller context for proposal builders. `origin` distinguishes a human button
@@ -69,25 +72,6 @@ async function persist(
       advisory,
     },
   });
-}
-
-/**
- * Tokenize for Jaccard: lowercase, split on non-word, drop tokens shorter
- * than 3 chars to keep stop-words from anchoring the score.
- */
-function tokenize(s: string): Set<string> {
-  const matches = s.toLowerCase().match(/[a-z0-9]+/g) ?? [];
-  return new Set(matches.filter((t) => t.length >= 3));
-}
-
-function jaccardSimilarity(a: string, b: string): number {
-  const ta = tokenize(a);
-  const tb = tokenize(b);
-  if (ta.size === 0 || tb.size === 0) return 0;
-  let inter = 0;
-  for (const t of ta) if (tb.has(t)) inter += 1;
-  const union = ta.size + tb.size - inter;
-  return union === 0 ? 0 : inter / union;
 }
 
 const COMMENT_ECHO_THRESHOLD = 0.6;
@@ -165,8 +149,13 @@ export async function proposeDescriptionPatch(
       message: "description_patch is a no-op (description unchanged)",
     });
   }
+  // Apply the project's code-snippet cap to the new top-level content
+  // BEFORE we tack on the "Previous version" footer — the previous body
+  // is verbatim history and should not be re-trimmed every patch.
+  const capOptions = await loadCodeSnippetCapOptions(ctx.db, ctx.projectId);
+  const capped = capCodeSnippets(args.newDescription, capOptions).text;
   const merged = appendPreviousVersionFooter(
-    args.newDescription,
+    capped,
     item.description,
     item.author,
     item.updatedAt ?? item.createdAt,
@@ -188,17 +177,25 @@ export async function proposeComment(
   }
   const row = await loadCachedItem(ctx, args.providerItemId);
   const item = snapshotFromRow(row);
+  const capOptions = await loadCodeSnippetCapOptions(ctx.db, ctx.projectId);
+  const cappedBody = capCodeSnippets(args.body, capOptions).text;
+  if (!cappedBody.trim()) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "comment body is empty after the project's code-snippet policy was applied",
+    });
+  }
   const draft: Omit<CommentAddProposal, "id"> = {
     kind: "comment_add",
     item,
-    body: args.body,
+    body: cappedBody,
   };
   // Advisory: flag a comment that closely echoes the item description. This
   // does NOT block staging — the human can still confirm — it just surfaces
   // a banner in the confirm dialog so the human notices an "agent is
   // restating the body" failure mode before approving.
   let advisory: string | null = null;
-  const sim = jaccardSimilarity(args.body, item.description);
+  const sim = jaccardSimilarity(cappedBody, item.description);
   if (sim >= COMMENT_ECHO_THRESHOLD) {
     advisory = `This comment shares ${Math.round(sim * 100)}% of its words with the item description. Confirm only if it adds new information.`;
   }

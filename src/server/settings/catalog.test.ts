@@ -109,4 +109,58 @@ describe("settings catalog", () => {
       expect(decodeSettingValue(key, JSON.stringify(true))).toBe(true);
     }
   });
+
+  it("recommendation boolean toggles default on, project-scoped, and round-trip", () => {
+    for (const key of [
+      "recommendations.likely-resolved.enabled",
+      "recommendations.duplicate-detection.enabled",
+      "recommendations.code-examples.enabled",
+    ] as const) {
+      const def = getSettingDef(key);
+      expect(def.scope).toBe("project");
+      expect(def.default).toBe(true);
+      expect(decodeSettingValue(key, null)).toBe(true);
+      expect(decodeSettingValue(key, JSON.stringify(false))).toBe(false);
+      // Non-boolean values fall back to the default rather than blowing up.
+      expect(decodeSettingValue(key, JSON.stringify("yes"))).toBe(true);
+    }
+  });
+
+  it("recommendations.code-examples.max-lines accepts 1..40 and rejects 0 / >40", () => {
+    const key = "recommendations.code-examples.max-lines";
+    expect(getSettingDef(key).scope).toBe("project");
+    expect(decodeSettingValue(key, null)).toBe(20);
+    expect(decodeSettingValue(key, JSON.stringify(1))).toBe(1);
+    expect(decodeSettingValue(key, JSON.stringify(40))).toBe(40);
+    // Out-of-range falls back to the default.
+    expect(decodeSettingValue(key, JSON.stringify(0))).toBe(20);
+    expect(decodeSettingValue(key, JSON.stringify(41))).toBe(20);
+    expect(decodeSettingValue(key, JSON.stringify(2.5))).toBe(20);
+    expect(() => encodeSettingValue(key, 0 as never)).toThrow();
+    expect(() => encodeSettingValue(key, 41 as never)).toThrow();
+  });
+
+  it("recommendations.code-examples.max-snippets-per-reply accepts 0..4", () => {
+    const key = "recommendations.code-examples.max-snippets-per-reply";
+    expect(getSettingDef(key).scope).toBe("project");
+    expect(decodeSettingValue(key, null)).toBe(2);
+    expect(decodeSettingValue(key, JSON.stringify(0))).toBe(0);
+    expect(decodeSettingValue(key, JSON.stringify(4))).toBe(4);
+    expect(decodeSettingValue(key, JSON.stringify(5))).toBe(2);
+    expect(decodeSettingValue(key, JSON.stringify(-1))).toBe(2);
+    expect(() => encodeSettingValue(key, -1 as never)).toThrow();
+    expect(() => encodeSettingValue(key, 5 as never)).toThrow();
+  });
+
+  it("recommendations.duplicate-detection.similarity-threshold accepts 50..95", () => {
+    const key = "recommendations.duplicate-detection.similarity-threshold";
+    expect(getSettingDef(key).scope).toBe("project");
+    expect(decodeSettingValue(key, null)).toBe(70);
+    expect(decodeSettingValue(key, JSON.stringify(50))).toBe(50);
+    expect(decodeSettingValue(key, JSON.stringify(95))).toBe(95);
+    expect(decodeSettingValue(key, JSON.stringify(49))).toBe(70);
+    expect(decodeSettingValue(key, JSON.stringify(96))).toBe(70);
+    expect(() => encodeSettingValue(key, 49 as never)).toThrow();
+    expect(() => encodeSettingValue(key, 96 as never)).toThrow();
+  });
 });

@@ -62,6 +62,7 @@ const INTENT_LABELS: Record<TransitionIntent, string> = {
   needs_info: "Needs info",
   close_done: "Close (done)",
   close_wontfix: "Close (won't fix)",
+  close_duplicate: "Close as duplicate",
   reopen: "Reopen",
 };
 

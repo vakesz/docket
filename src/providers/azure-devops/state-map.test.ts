@@ -56,6 +56,7 @@ describe("azure-devops state-map", () => {
       "needs_info",
       "close_done",
       "close_wontfix",
+      "close_duplicate",
       "reopen",
     ];
     for (const intent of supported) {
@@ -65,6 +66,15 @@ describe("azure-devops state-map", () => {
       const canonical = mapState("task", plan.state ?? "Active", tags);
       expect(REACHABLE_CANONICAL_STATES).toContain(canonical);
     }
+  });
+
+  it("close_duplicate maps to Closed and strips soft tags", () => {
+    const plan = planForIntent("close_duplicate");
+    expect(plan.state).toBe("Closed");
+    const merged = mergeTags([TAG_BLOCKED, "scope:billing"], plan);
+    expect(merged).not.toContain(TAG_BLOCKED);
+    expect(merged).not.toContain(TAG_WONTFIX);
+    expect(merged).toContain("scope:billing");
   });
 
   it("every TransitionIntent is mapped — no silent fall-through", () => {

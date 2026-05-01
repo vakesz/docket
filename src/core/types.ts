@@ -55,6 +55,7 @@ export const TRANSITION_INTENTS = [
   "needs_info",
   "close_done",
   "close_wontfix",
+  "close_duplicate",
   "reopen",
 ] as const;
 export type TransitionIntent = (typeof TRANSITION_INTENTS)[number];
@@ -74,13 +75,20 @@ export function isTransitionIntent(value: string): value is TransitionIntent {
 export function canonicalIntentsFor(state: ItemState): readonly TransitionIntent[] {
   switch (state) {
     case "new":
-      return ["start_work", "block", "needs_info", "close_done", "close_wontfix"];
+      return [
+        "start_work",
+        "block",
+        "needs_info",
+        "close_done",
+        "close_wontfix",
+        "close_duplicate",
+      ];
     case "active":
-      return ["pause", "block", "needs_info", "close_done", "close_wontfix"];
+      return ["pause", "block", "needs_info", "close_done", "close_wontfix", "close_duplicate"];
     case "blocked":
-      return ["start_work", "needs_info", "close_done", "close_wontfix"];
+      return ["start_work", "needs_info", "close_done", "close_wontfix", "close_duplicate"];
     case "needs_info":
-      return ["start_work", "block", "close_done", "close_wontfix"];
+      return ["start_work", "block", "close_done", "close_wontfix", "close_duplicate"];
     case "resolved":
     case "closed":
       return ["reopen"];

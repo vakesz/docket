@@ -19,7 +19,6 @@ const SECTION_KEYS = [
   "project-llm",
   "project-web-fetch",
   "project-auto-accept",
-  "project-sync",
   "project-analytics",
   "project-members",
   "project-export",

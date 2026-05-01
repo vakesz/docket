@@ -2,6 +2,7 @@
 
 import { Sparkles } from "lucide-react";
 import type { ItemKind, ItemState } from "@/core/types";
+import { trpc } from "@/lib/trpc-client";
 import { useChatPaneController } from "@/ui/conversations/chat-pane-context";
 import { buildSuggestSeed } from "@/ui/items/suggest-seeds";
 import { Button } from "@/ui/primitives/button";
@@ -29,10 +30,17 @@ export function SuggestActionButton({
   commentCount: number;
 }) {
   const { requestOpenWithSeed, seedPending } = useChatPaneController();
+  const globals = trpc.settings.globalList.useQuery();
+  const actionBullets = (() => {
+    const row = globals.data?.find((r) => r.key === "prompt.suggest-next-action");
+    return typeof row?.value === "string" ? row.value : null;
+  })();
 
   const onClick = () => {
     if (seedPending) return;
-    requestOpenWithSeed(buildSuggestSeed({ kind, state, title, body, commentCount }));
+    requestOpenWithSeed(
+      buildSuggestSeed({ kind, state, title, body, commentCount, actionBullets }),
+    );
   };
 
   return (
