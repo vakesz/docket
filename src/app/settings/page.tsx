@@ -18,7 +18,7 @@ const SECTION_KEYS = [
   "mcp",
   "project-llm",
   "project-web-fetch",
-  "project-auto-accept",
+  "project-agent-behavior",
   "project-analytics",
   "project-members",
   "project-export",

@@ -5,8 +5,8 @@ import { McpPane } from "@/ui/mcp/mcp-pane";
 import { MemoryPane } from "@/ui/memory/memory-pane";
 import { ScrollArea } from "@/ui/primitives/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/ui/primitives/sheet";
+import { AgentBehaviorPanel } from "@/ui/settings/agent-behavior-panel";
 import { AnalyticsPanel } from "@/ui/settings/analytics-panel";
-import { AutoAcceptPanel } from "@/ui/settings/auto-accept-panel";
 import { BudgetAuditPanel } from "@/ui/settings/budget-audit-panel";
 import { ChatDisplayPanel } from "@/ui/settings/chat-display-panel";
 import { ExportPanel } from "@/ui/settings/export-panel";
@@ -22,7 +22,6 @@ import { ProjectLlmPanel } from "@/ui/settings/project-llm-panel";
 import { ProjectsPanel } from "@/ui/settings/projects-panel";
 import { PromptsPanel } from "@/ui/settings/prompts-panel";
 import { ReadOnlyModePanel } from "@/ui/settings/read-only-mode-panel";
-import { RecommendationsPanel } from "@/ui/settings/recommendations-panel";
 import {
   readPersistedSection,
   SECTION_STORAGE_KEY,
@@ -181,10 +180,8 @@ function SectionContent({
       return projectSlug ? <WebFetchPanel projectSlug={projectSlug} /> : null;
     case "project-guardrail":
       return projectSlug ? <GuardrailPanel projectSlug={projectSlug} /> : null;
-    case "project-auto-accept":
-      return projectSlug ? <AutoAcceptPanel projectSlug={projectSlug} /> : null;
-    case "project-recommendations":
-      return projectSlug ? <RecommendationsPanel projectSlug={projectSlug} /> : null;
+    case "project-agent-behavior":
+      return projectSlug ? <AgentBehaviorPanel projectSlug={projectSlug} /> : null;
     case "project-analytics":
       return projectSlug ? <AnalyticsPanel scope="project" projectSlug={projectSlug} /> : null;
     case "project-members":

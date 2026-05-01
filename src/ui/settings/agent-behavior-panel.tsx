@@ -8,11 +8,29 @@ import { Label } from "@/ui/primitives/label";
 import { Switch } from "@/ui/primitives/switch";
 
 /**
- * Per-project knobs for the recommendation modes the agent can volunteer:
- * likely-resolved detection, duplicate detection, and the code-snippet caps
- * the deterministic post-processor enforces on every reply / staged body.
+ * Unified per-project pane for the two knob groups that gate agent
+ * proposal behavior:
+ *   - Recommendation modes — which volunteer-modes the agent runs
+ *     (likely-resolved, duplicate detection, short code snippets) plus
+ *     the deterministic post-processor's caps.
+ *   - Auto-accept extras — which local-DB proposal kinds skip the
+ *     human-in-the-loop confirm step on top of the architectural floor
+ *     (UI-origin comments and reactions always auto-confirm).
+ *
+ * Each subsection seeds and saves independently so a sibling save can't
+ * clobber an in-progress edit on the other half.
  */
-export function RecommendationsPanel({ projectSlug }: { projectSlug: string }) {
+export function AgentBehaviorPanel({ projectSlug }: { projectSlug: string }) {
+  return (
+    <div className="flex flex-col gap-10">
+      <RecommendationsSection projectSlug={projectSlug} />
+      <div aria-hidden="true" className="h-px bg-border" />
+      <AutoAcceptSection projectSlug={projectSlug} />
+    </div>
+  );
+}
+
+function RecommendationsSection({ projectSlug }: { projectSlug: string }) {
   const utils = trpc.useUtils();
   const projectSettings = trpc.settings.projectList.useQuery({ projectSlug });
 
@@ -30,8 +48,6 @@ export function RecommendationsPanel({ projectSlug }: { projectSlug: string }) {
   const maxSnippetsId = useId();
   const thresholdId = useId();
 
-  // Seed once per project — a sibling save's invalidation would otherwise
-  // clobber the user's in-progress edits.
   const seededForRef = useRef<string | null>(null);
   useEffect(() => {
     if (seededForRef.current === projectSlug) return;
@@ -106,6 +122,14 @@ export function RecommendationsPanel({ projectSlug }: { projectSlug: string }) {
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-6">
+      <header className="flex flex-col gap-1">
+        <h3 className="font-medium text-base text-foreground">Recommendation modes</h3>
+        <p className="text-muted-foreground text-xs">
+          Toggle the agent's recommendation modes and tune the code-snippet caps the post-processor
+          enforces.
+        </p>
+      </header>
+
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-2 text-foreground text-sm">
           <Switch
@@ -247,5 +271,143 @@ export function RecommendationsPanel({ projectSlug }: { projectSlug: string }) {
         {save.isSuccess ? <span className="text-muted-foreground text-xs">Saved.</span> : null}
       </div>
     </form>
+  );
+}
+
+type AutoAcceptKind = {
+  key: "memory_write" | "memory_delete";
+  label: string;
+  hint: string;
+};
+
+const AUTO_ACCEPT_KINDS: readonly AutoAcceptKind[] = [
+  {
+    key: "memory_write",
+    label: "Memory writes (create / update)",
+    hint: "Agent-staged additions to project memory land immediately. Local DB only — no provider write.",
+  },
+  {
+    key: "memory_delete",
+    label: "Memory deletes",
+    hint: "Removes a memory entry without a tap. Local DB only — no provider write.",
+  },
+];
+
+function AutoAcceptSection({ projectSlug }: { projectSlug: string }) {
+  const utils = trpc.useUtils();
+  const projectSettings = trpc.settings.projectList.useQuery({ projectSlug });
+
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const seededForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (seededForRef.current === projectSlug) return;
+    if (!projectSettings.data) return;
+    const row = projectSettings.data.find((r) => r.key === "proposals.auto-accept-extra-kinds");
+    setSelected(Array.isArray(row?.value) ? new Set(row.value as string[]) : new Set<string>());
+    seededForRef.current = projectSlug;
+  }, [projectSettings.data, projectSlug]);
+
+  const save = trpc.settings.projectUpdate.useMutation({
+    onSuccess: async () => {
+      await utils.settings.projectList.invalidate({ projectSlug });
+    },
+  });
+
+  const isDirty = (() => {
+    const row = projectSettings.data?.find((r) => r.key === "proposals.auto-accept-extra-kinds");
+    const stored = Array.isArray(row?.value) ? new Set(row.value as string[]) : new Set<string>();
+    if (stored.size !== selected.size) return true;
+    for (const k of stored) if (!selected.has(k)) return true;
+    return false;
+  })();
+
+  const toggle = (key: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const onSave = async () => {
+    await save.mutateAsync({
+      projectSlug,
+      key: "proposals.auto-accept-extra-kinds",
+      value: Array.from(selected),
+    });
+  };
+
+  if (projectSettings.isPending) {
+    return <p className="text-muted-foreground/70 text-sm">Loading…</p>;
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <header className="flex flex-col gap-1">
+        <h3 className="font-medium text-base text-foreground">Auto-accept</h3>
+        <p className="text-muted-foreground text-xs">
+          UI-origin comments and reactions always auto-confirm — that's the architectural floor, not
+          a toggle. The switches below opt this project into auto-accept for additional local-DB
+          kinds on top. Provider-touching kinds (state changes, descriptions, labels/tags, assignee
+          changes, new items) always require explicit human review. Agent-staged proposals never
+          auto-confirm regardless. Read-only mode always wins.
+        </p>
+      </header>
+
+      <ul className="flex flex-col gap-4">
+        {AUTO_ACCEPT_KINDS.map((k) => (
+          <AutoAcceptRow
+            key={k.key}
+            kind={k}
+            checked={selected.has(k.key)}
+            disabled={save.isPending}
+            onToggle={() => toggle(k.key)}
+          />
+        ))}
+      </ul>
+
+      <div className="flex items-center gap-3">
+        <Button type="button" onClick={onSave} disabled={save.isPending || !isDirty}>
+          {save.isPending ? "Saving…" : "Save auto-accept policy"}
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={save.isPending}
+          onClick={() => setSelected(new Set())}
+        >
+          Disable all
+        </Button>
+        {save.error ? <span className="text-destructive text-xs">{save.error.message}</span> : null}
+        {save.isSuccess && !isDirty ? (
+          <span className="text-muted-foreground text-xs">Saved.</span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function AutoAcceptRow({
+  kind,
+  checked,
+  disabled,
+  onToggle,
+}: {
+  kind: AutoAcceptKind;
+  checked: boolean;
+  disabled: boolean;
+  onToggle: () => void;
+}) {
+  const id = useId();
+  return (
+    <li className="flex flex-col gap-1">
+      <div className="flex items-center gap-2 text-foreground text-sm">
+        <Switch id={id} checked={checked} disabled={disabled} onCheckedChange={onToggle} />
+        <Label htmlFor={id}>{kind.label}</Label>
+      </div>
+      <p className="ml-6 text-muted-foreground text-xs">{kind.hint}</p>
+    </li>
   );
 }

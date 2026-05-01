@@ -9,14 +9,13 @@ import {
   FolderPlus,
   Globe,
   KeyRound,
-  Lightbulb,
   ListOrdered,
   MessageSquare,
   Power,
   ScrollText,
   ServerCog,
-  Shield,
   ShieldCheck,
+  Sliders,
   Sparkles,
   UserRound,
   Users,
@@ -29,8 +28,7 @@ export type SectionKey =
   | "project-llm"
   | "project-web-fetch"
   | "project-guardrail"
-  | "project-auto-accept"
-  | "project-recommendations"
+  | "project-agent-behavior"
   | "project-analytics"
   | "project-members"
   | "project-export"
@@ -112,20 +110,11 @@ export const SECTIONS: SectionMeta[] = [
     needsProject: true,
   },
   {
-    key: "project-auto-accept",
-    label: "Auto-accept",
+    key: "project-agent-behavior",
+    label: "Agent behavior",
     description:
-      "Skip the human-in-the-loop confirm step for low-stakes proposal kinds. Off by default.",
-    icon: Shield,
-    group: "project",
-    needsProject: true,
-  },
-  {
-    key: "project-recommendations",
-    label: "Recommendations",
-    description:
-      "Toggle the agent's recommendation modes (likely-resolved, duplicate detection) and tune the code-snippet caps the post-processor enforces.",
-    icon: Lightbulb,
+      "Recommendation modes (likely-resolved, duplicate detection, code snippets), the code-snippet caps the post-processor enforces, and which low-stakes proposal kinds skip the human confirm step.",
+    icon: Sliders,
     group: "project",
     needsProject: true,
   },
