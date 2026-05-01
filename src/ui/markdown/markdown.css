@@ -121,6 +121,7 @@
   }
   .docket-md pre {
     margin: 0.5em 0;
+    max-width: 100%;
     overflow-x: auto;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);

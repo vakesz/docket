@@ -1,12 +1,13 @@
 "use client";
 
-import { ChevronDown, X } from "lucide-react";
-import { useRef, useState } from "react";
+import { ChevronDown, Maximize2, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc-client";
 import { cn } from "@/lib/utils";
 import { Alert, AlertDescription } from "@/ui/primitives/alert";
 import { Badge } from "@/ui/primitives/badge";
 import { Button } from "@/ui/primitives/button";
+import { ProposalDialog } from "@/ui/proposals/proposal-dialog";
 import { ProposalDiffView } from "@/ui/proposals/proposal-diff-view";
 
 const KIND_LABELS: Record<string, string> = {
@@ -44,6 +45,7 @@ export function ProposalCard({
   onDismiss: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [popoutOpen, setPopoutOpen] = useState(false);
   const utils = trpc.useUtils();
 
   const query = trpc.proposals.get.useQuery(
@@ -60,6 +62,21 @@ export function ProposalCard({
     autoAppliedRef.current = r.status === "confirmed" && r.executedAt !== null;
   }
   const autoApplied = autoAppliedRef.current ?? false;
+
+  // Cross-source dismiss: when the proposal is confirmed/rejected via the
+  // popout dialog (or any other surface), our local mutation hooks never
+  // fire, so the card has to dismiss itself by watching the query's row
+  // status. Guard against the auto-applied case — those rows arrive
+  // already-terminal and should stay mounted so the user can audit them.
+  const observedStatus = query.data?.row.status ?? null;
+  const observedExecuted = query.data?.row.executedAt ?? null;
+  const terminalStatus =
+    observedStatus === "rejected" || (observedStatus === "confirmed" && observedExecuted !== null);
+  useEffect(() => {
+    if (autoApplied) return;
+    if (!terminalStatus) return;
+    onDismiss();
+  }, [autoApplied, terminalStatus, onDismiss]);
 
   const confirm = trpc.proposals.confirm.useMutation({
     onSuccess: async (result) => {
@@ -170,6 +187,16 @@ export function ProposalCard({
           </Badge>
         ) : null}
 
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          onClick={() => setPopoutOpen(true)}
+          aria-label="Open in larger view"
+          title="Open in larger view"
+        >
+          <Maximize2 />
+        </Button>
+
         {isPending ? (
           <div className="flex items-center gap-2">
             <Button
@@ -224,6 +251,12 @@ export function ProposalCard({
           </Alert>
         </div>
       ) : null}
+
+      <ProposalDialog
+        projectSlug={projectSlug}
+        proposalId={popoutOpen ? proposalId : null}
+        onClose={() => setPopoutOpen(false)}
+      />
     </section>
   );
 }

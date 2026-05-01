@@ -86,7 +86,7 @@ export const Markdown = memo(function Markdown({
     return <p className="text-muted-foreground/70 text-sm italic">(no content)</p>;
   }
   return (
-    <div className={cn("docket-md wrap-break-word text-foreground text-sm", className)}>
+    <div className={cn("docket-md wrap-break-word min-w-0 text-foreground text-sm", className)}>
       <ReactMarkdown
         remarkPlugins={REMARK_PLUGINS}
         rehypePlugins={REHYPE_PLUGINS}

@@ -1,12 +1,13 @@
 import { formatIntent, formatState } from "@/lib/format";
 import type { ProposalDiff } from "@/server/proposals/diff";
+import { MarkdownLazy } from "@/ui/markdown/markdown-lazy";
 import { Badge } from "@/ui/primitives/badge";
 
 export function ProposalDiffView({ diff }: { diff: ProposalDiff }) {
   switch (diff.kind) {
     case "state_change":
       return (
-        <div className="flex flex-col gap-3 text-sm">
+        <div className="flex min-w-0 flex-col gap-3 text-sm">
           <Field label="Item">
             <span className="font-medium">{diff.itemTitle}</span>{" "}
             <span className="text-muted-foreground">({diff.itemId})</span>
@@ -21,32 +22,32 @@ export function ProposalDiffView({ diff }: { diff: ProposalDiff }) {
 
     case "description_patch":
       return (
-        <div className="flex flex-col gap-3 text-sm">
+        <div className="flex min-w-0 flex-col gap-3 text-sm">
           <Field label="Item">
             <span className="font-medium">{diff.itemTitle}</span>{" "}
             <span className="text-muted-foreground">({diff.itemId})</span>
           </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <DiffBlock label="Before" tone="muted" body={diff.before} />
-            <DiffBlock label="After" tone="primary" body={diff.after} />
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <DiffBlock label="Before" tone="muted" body={diff.before} markdown />
+            <DiffBlock label="After" tone="primary" body={diff.after} markdown />
           </div>
         </div>
       );
 
     case "comment_add":
       return (
-        <div className="flex flex-col gap-3 text-sm">
+        <div className="flex min-w-0 flex-col gap-3 text-sm">
           <Field label="Item">
             <span className="font-medium">{diff.itemTitle}</span>{" "}
             <span className="text-muted-foreground">({diff.itemId})</span>
           </Field>
-          <DiffBlock label="New comment" tone="primary" body={diff.body} />
+          <DiffBlock label="New comment" tone="primary" body={diff.body} markdown />
         </div>
       );
 
     case "tags_change":
       return (
-        <div className="flex flex-col gap-3 text-sm">
+        <div className="flex min-w-0 flex-col gap-3 text-sm">
           <Field label="Item">
             <span className="font-medium">{diff.itemTitle}</span>{" "}
             <span className="text-muted-foreground">({diff.itemId})</span>
@@ -87,7 +88,7 @@ export function ProposalDiffView({ diff }: { diff: ProposalDiff }) {
 
     case "item_create":
       return (
-        <div className="flex flex-col gap-3 text-sm">
+        <div className="flex min-w-0 flex-col gap-3 text-sm">
           <Field label="Kind">
             <Pill>{diff.itemKind}</Pill>
           </Field>
@@ -105,14 +106,14 @@ export function ProposalDiffView({ diff }: { diff: ProposalDiff }) {
             </Field>
           ) : null}
           {diff.description ? (
-            <DiffBlock label="Description" tone="primary" body={diff.description} />
+            <DiffBlock label="Description" tone="primary" body={diff.description} markdown />
           ) : null}
         </div>
       );
 
     case "attachment_upload":
       return (
-        <div className="flex flex-col gap-3 text-sm">
+        <div className="flex min-w-0 flex-col gap-3 text-sm">
           <Field label="Item">
             <span className="font-medium">{diff.itemTitle}</span>{" "}
             <span className="text-muted-foreground">({diff.itemId})</span>
@@ -128,24 +129,24 @@ export function ProposalDiffView({ diff }: { diff: ProposalDiff }) {
 
     case "memory_write":
       return (
-        <div className="flex flex-col gap-3 text-sm">
+        <div className="flex min-w-0 flex-col gap-3 text-sm">
           <Field label={diff.memoryId ? "Update memory" : "Create memory"}>
             <span className="font-medium">{diff.title}</span>
           </Field>
           {diff.memoryId ? (
-            <div className="grid grid-cols-2 gap-3">
-              <DiffBlock label="Before" tone="muted" body={diff.previousBody} />
-              <DiffBlock label="After" tone="primary" body={diff.body} />
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <DiffBlock label="Before" tone="muted" body={diff.previousBody} markdown />
+              <DiffBlock label="After" tone="primary" body={diff.body} markdown />
             </div>
           ) : (
-            <DiffBlock label="Body" tone="primary" body={diff.body} />
+            <DiffBlock label="Body" tone="primary" body={diff.body} markdown />
           )}
         </div>
       );
 
     case "memory_delete":
       return (
-        <div className="flex flex-col gap-3 text-sm">
+        <div className="flex min-w-0 flex-col gap-3 text-sm">
           <Field label="Delete memory">
             <span className="font-medium">{diff.title}</span>{" "}
             <span className="text-muted-foreground">({diff.memoryId})</span>
@@ -193,16 +194,25 @@ function DiffBlock({
   label,
   body,
   tone,
+  markdown = false,
 }: {
   label: string;
   body: string;
   tone: "muted" | "primary";
+  markdown?: boolean;
 }) {
   const border = tone === "primary" ? "border-primary/30" : "border-border";
+  const isEmpty = body.trim().length === 0;
   return (
     <div className={`flex min-w-0 flex-col gap-1 rounded-md border ${border} p-2`}>
       <span className="text-muted-foreground text-xs uppercase tracking-wide">{label}</span>
-      <pre className="whitespace-pre-wrap break-words text-xs">{body || "(empty)"}</pre>
+      {isEmpty ? (
+        <span className="text-muted-foreground/70 text-xs italic">(empty)</span>
+      ) : markdown ? (
+        <MarkdownLazy source={body} className="text-xs" />
+      ) : (
+        <pre className="whitespace-pre-wrap break-words text-xs">{body}</pre>
+      )}
     </div>
   );
 }

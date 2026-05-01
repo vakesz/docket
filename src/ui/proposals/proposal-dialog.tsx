@@ -56,6 +56,7 @@ export function ProposalDialog({
         utils.items.list.invalidate(),
         utils.items.get.invalidate(),
         utils.proposals.list.invalidate(),
+        utils.proposals.get.invalidate({ projectSlug, proposalId: data.id }),
       ]);
       // router.refresh() schedules a server-component re-render; running it
       // through a transition keeps the dialog dismissal feeling instant.
@@ -65,8 +66,11 @@ export function ProposalDialog({
   });
 
   const reject = trpc.proposals.reject.useMutation({
-    onSuccess: async () => {
-      await utils.proposals.list.invalidate();
+    onSuccess: async (data) => {
+      await Promise.all([
+        utils.proposals.list.invalidate(),
+        utils.proposals.get.invalidate({ projectSlug, proposalId: data.id }),
+      ]);
       onClose();
     },
   });
@@ -112,7 +116,7 @@ export function ProposalDialog({
         if (!next && !busy) onClose();
       }}
     >
-      <DialogContent className="sm:max-w-2xl" showCloseButton={false}>
+      <DialogContent className="max-h-[85vh] overflow-auto sm:max-w-4xl" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>Confirm proposal</DialogTitle>
           <DialogDescription>
@@ -120,7 +124,7 @@ export function ProposalDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="min-h-[6rem]">
+        <div className="min-h-[6rem] min-w-0">
           {query.isPending ? (
             <p className="text-muted-foreground text-sm">Loading proposal…</p>
           ) : query.data?.isEmpty ? (
