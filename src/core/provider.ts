@@ -390,6 +390,19 @@ export type ProviderCapabilities = {
   /** Provider surfaces explicit linked-item references (cross-refs,
    *  relations). When false, `Item.linkedItemIds` is always empty. */
   linkedItems: boolean;
+  /**
+   * Canonical item kinds this provider can create. The first entry is the
+   * default the create form lands on; surfaces hide the kind selector when
+   * the list is length 1. Must be non-empty — every provider has to declare
+   * at least one creatable kind (the create form needs a default).
+   *
+   * Kinds reachable through sync but NOT in this list are still rendered
+   * read-only in the cache; this is strictly about what `createItem` can
+   * meaningfully translate. GitHub, which has no native kind concept, lists
+   * `["task"]` because every issue rounds-trips back as `"task"` via
+   * `inferKind`. Azure DevOps under the Agile template lists the full set.
+   */
+  creatableKinds: readonly ItemKind[];
 };
 
 export type ProviderSpec = {

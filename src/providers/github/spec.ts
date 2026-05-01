@@ -92,6 +92,7 @@ export const githubSpec = {
     ciStatus: true,
     pullRequestDiffs: true,
     linkedItems: true,
+    creatableKinds: ["task"],
   },
   availableIntents: availableIntentsForState,
   oauth: {

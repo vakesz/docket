@@ -157,6 +157,7 @@ export const azureDevOpsSpec = {
     ciStatus: false,
     pullRequestDiffs: false,
     linkedItems: true,
+    creatableKinds: ["epic", "feature", "story", "task", "bug"],
   },
   availableIntents: availableIntentsForState,
   oauth: {
