@@ -275,7 +275,7 @@ export function SetupWizardForm({
             />
 
             {!oauthSatisfied ? (
-              <Alert variant="destructive">
+              <Alert variant="warning">
                 <AlertDescription>
                   At least one sign-in provider must be enabled and filled in to continue.
                 </AlertDescription>
