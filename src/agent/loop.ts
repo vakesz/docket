@@ -433,17 +433,36 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
           );
         }
       }
-      logger.debug(
-        {
-          ...baseCtx,
-          round: rounds,
-          callId: call.id,
-          name: call.name,
-          ok: dispatchOk,
-          toolMs: Date.now() - toolStartedAt,
-        },
-        "agent: tool call",
-      );
+      // Tools that catch internally and return `fail()` don't throw — without
+      // the explicit envelope check we'd render a ✗ outcome as ✓ in the UI
+      // and miss every guarded provider error in the logs.
+      const resultEnvelope = result as { ok?: unknown; error?: unknown };
+      if (dispatchOk && resultEnvelope?.ok === false) {
+        dispatchOk = false;
+        logger.warn(
+          {
+            ...baseCtx,
+            round: rounds,
+            callId: call.id,
+            name: call.name,
+            toolMs: Date.now() - toolStartedAt,
+            toolError: typeof resultEnvelope.error === "string" ? resultEnvelope.error : undefined,
+          },
+          "agent: tool returned failure",
+        );
+      } else {
+        logger.debug(
+          {
+            ...baseCtx,
+            round: rounds,
+            callId: call.id,
+            name: call.name,
+            ok: dispatchOk,
+            toolMs: Date.now() - toolStartedAt,
+          },
+          "agent: tool call",
+        );
+      }
 
       // Guardrail tool-result scan. Runs on the structured payload before
       // it's re-fed to the model — a `block` substitutes a refusal stub

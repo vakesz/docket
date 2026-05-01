@@ -8,8 +8,8 @@
  * without colliding.
  *
  * Servers that fail to connect or list tools are *skipped*, not fatal —
- * a typo in one URL shouldn't take the whole agent down. We log a
- * `console.warn` so the operator sees something in the server log and
+ * a typo in one URL shouldn't take the whole agent down. We log via the
+ * structured logger so the operator sees something in the server log and
  * can fix the config; the agent loop keeps the rest of the registry
  * intact.
  */
@@ -18,6 +18,8 @@ import "server-only";
 import { callMcpTool, listMcpTools, type McpServer } from "@/agent/mcp/client";
 import type { AgentTool, ToolContext } from "@/agent/tools/types";
 import { fail, ok } from "@/agent/tools/types";
+import { errFields } from "@/server/log-fields";
+import { logger } from "@/server/logger";
 import { decodeHeaders } from "@/server/mcp/headers-codec";
 import { ensureFreshAccessToken } from "@/server/mcp/oauth/refresh";
 
@@ -87,10 +89,15 @@ export async function mcpTools(ctx: ToolContext): Promise<AgentTool[]> {
         const schemas = await listMcpTools(server);
         return schemas.map((schema) => adaptTool(server, schema));
       } catch (err) {
-        console.warn(
-          `[mcp] failed to list tools on '${server.name}' (${server.url}): ${
-            err instanceof Error ? err.message : String(err)
-          }`,
+        logger.warn(
+          {
+            projectId: ctx.projectId,
+            mcpServerId: server.id,
+            mcpServerName: server.name,
+            mcpServerUrl: server.url,
+            ...errFields(err),
+          },
+          "mcp: list tools failed; skipping server",
         );
         return [];
       }

@@ -26,6 +26,7 @@
 
 import "server-only";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { logger } from "@/server/logger";
 
 const PREFIX = "enc:v1:";
 const ALGO = "aes-256-gcm";
@@ -92,9 +93,7 @@ export function encryptSecret(plaintext: string): string {
   const key = loadKey();
   if (!key) {
     if (!_warnedPlaintext) {
-      console.warn(
-        "secrets.encryptSecret: SECRETS_KEY unset — storing secret in plaintext (dev only)",
-      );
+      logger.warn({}, "secrets: SECRETS_KEY unset — storing secret in plaintext (dev only)");
       _warnedPlaintext = true;
     }
     return plaintext;

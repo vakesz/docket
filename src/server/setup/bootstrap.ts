@@ -2,6 +2,7 @@ import "server-only";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import type { db as Db } from "@/server/db";
+import { logger } from "@/server/logger";
 import { encryptSecret } from "@/server/secrets/encryption";
 import { getSetupStatus, type SetupStatus } from "@/server/setup/status";
 
@@ -122,6 +123,15 @@ export async function applyBootstrap(
     });
   }
 
+  logger.info(
+    {
+      github: input.github !== null,
+      azureDevops: input.azureDevops !== null,
+      llmCount: input.llms.length,
+    },
+    "setup: bootstrap start",
+  );
+
   if (input.github) {
     const existing = await db.oauthProviderConfig.findFirst({ where: { kind: "github" } });
     if (!existing) {
@@ -136,6 +146,9 @@ export async function applyBootstrap(
           enabled: true,
         },
       });
+      logger.info({ kind: "github" }, "setup: oauth provider created");
+    } else {
+      logger.info({ kind: "github" }, "setup: oauth provider already exists; skipping");
     }
   }
 
@@ -155,6 +168,9 @@ export async function applyBootstrap(
           enabled: true,
         },
       });
+      logger.info({ kind: "azure_devops" }, "setup: oauth provider created");
+    } else {
+      logger.info({ kind: "azure_devops" }, "setup: oauth provider already exists; skipping");
     }
   }
 
@@ -165,7 +181,13 @@ export async function applyBootstrap(
     const existing = await db.llmProvider.findFirst({
       where: { kind: "openai", role: llm.role },
     });
-    if (existing) continue;
+    if (existing) {
+      logger.info(
+        { kind: "openai", role: llm.role },
+        "setup: llm provider already exists; skipping",
+      );
+      continue;
+    }
     // First row of this role in the deployment becomes its `isDefault`,
     // so the chat / guardrail resolvers have something to dispatch to
     // without further admin work. Roles default independently.
@@ -188,9 +210,15 @@ export async function applyBootstrap(
         enabled: true,
       },
     });
+    logger.info(
+      { kind: "openai", role: llm.role, isDefault: anyForRole === 0 },
+      "setup: llm provider created",
+    );
   }
 
   // Re-read so the sticky bit flips in the same DB session and the
   // caller can `router.refresh()` straight into a redirect.
-  return getSetupStatus(db);
+  const after = await getSetupStatus(db);
+  logger.info({ complete: after.complete }, "setup: bootstrap complete");
+  return after;
 }

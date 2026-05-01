@@ -35,7 +35,7 @@ export default async function SetupRequiredPage() {
   });
 
   return (
-    <main className="min-h-screen bg-background text-foreground">
+    <main className="h-full overflow-y-auto bg-background text-foreground">
       <SetupWizardForm
         publicBaseUrl={baseUrl}
         hasGithub={Boolean(githubExisting)}

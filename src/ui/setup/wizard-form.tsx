@@ -213,13 +213,13 @@ export function SetupWizardForm({
   return (
     <form
       onSubmit={onSubmit}
-      className="flex min-h-screen w-full flex-col items-stretch px-8 pt-10 pb-12"
+      className="flex min-h-full w-full flex-col items-stretch px-8 pt-10 pb-12"
     >
       <div className="mx-auto w-full max-w-2xl">
         <WizardStepper steps={steps} activeIndex={activeIndex} />
       </div>
 
-      <div className="mx-auto flex w-full max-w-2xl flex-1 items-center justify-center py-8">
+      <div className="justify-center-safe mx-auto flex w-full max-w-2xl flex-1 items-center py-8">
         {!started ? (
           <WizardWelcome onStart={() => setStarted(true)} />
         ) : page === "oauth" ? (

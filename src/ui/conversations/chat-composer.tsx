@@ -79,11 +79,7 @@ export function ChatComposer({
           }
         }}
         rows={3}
-        placeholder={
-          sendOnEnter
-            ? "Ask the agent… (⏎ to send, ⇧⏎ for newline)"
-            : "Ask the agent… (⇧⏎ to send, ⏎ for newline)"
-        }
+        placeholder={sendOnEnter ? "Ask the agent… (Enter to send)" : "Ask the agent… (Shift+Enter to send)"}
         className="resize-none"
       />
       <div className={cn("mt-1 flex items-center justify-between gap-2", META_LABEL_FAINT)}>

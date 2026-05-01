@@ -160,7 +160,7 @@ export function LlmProviderForm(props: Props) {
             control={form.control}
             name="kind"
             render={({ field }) => (
-              <FormItem className="w-40">
+              <FormItem className="w-60 shrink-0">
                 <FormLabel>Kind</FormLabel>
                 <Select value={field.value} onValueChange={field.onChange}>
                   <FormControl>
@@ -185,7 +185,7 @@ export function LlmProviderForm(props: Props) {
             control={form.control}
             name="role"
             render={({ field }) => (
-              <FormItem className="w-40">
+              <FormItem className="w-36 shrink-0">
                 <FormLabel>Role</FormLabel>
                 <Select
                   value={field.value}
