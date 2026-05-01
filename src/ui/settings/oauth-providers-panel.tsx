@@ -1,7 +1,6 @@
 "use client";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc-client";
-import { useAutoRefreshIntervalMs } from "@/lib/use-auto-refresh";
 import { Badge } from "@/ui/primitives/badge";
 import { Separator } from "@/ui/primitives/separator";
 import { OauthProviderActions } from "@/ui/settings/oauth-provider-actions";
@@ -13,8 +12,7 @@ function callbackUrl(kind: string, base: string): string {
 
 /** OAuth-providers section, mounted inside the unified settings page. */
 export function OauthProvidersPanel({ publicBase }: { publicBase: string }) {
-  const refetchInterval = useAutoRefreshIntervalMs();
-  const list = trpc.oauthProviders.list.useQuery(undefined, { refetchInterval });
+  const list = trpc.oauthProviders.list.useQuery();
   const [editingId, setEditingId] = useState<string | null>(null);
 
   if (list.isPending) {

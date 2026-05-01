@@ -122,7 +122,7 @@ export const SECTIONS: SectionMeta[] = [
     key: "project-items",
     label: "Items defaults",
     description:
-      "Project-level defaults for the items list — currently the staleness threshold (members can override theirs under Profile → Item detail).",
+      "Project-level defaults for the items list — staleness threshold (members can override theirs under Profile → Item detail) and the server-side sync interval.",
     icon: Clock,
     group: "project",
     needsProject: true,
@@ -163,7 +163,7 @@ export const SECTIONS: SectionMeta[] = [
   {
     key: "profile",
     label: "Profile",
-    description: "Identity, theme, time zone, and dashboard polling.",
+    description: "Identity, theme, and time zone.",
     icon: UserRound,
     group: "you",
   },

@@ -84,7 +84,11 @@ export function BacklogPane({
 
   const recentNumbers = useRecentItemNumbers(projectSlug);
 
-  const data = items.data ?? [];
+  // Defer the data swap so a refetch (server-side sync just landed) doesn't
+  // commit the new 200-row list synchronously and starve click handlers.
+  // The deferred value falls one render behind items.data; clicks during
+  // the swap still go through promptly.
+  const data = useDeferredValue(items.data ?? []);
 
   const recentItems: ListItem[] = (() => {
     if (recentNumbers.length === 0) return [];

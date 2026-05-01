@@ -79,11 +79,12 @@ const AuditRetentionSchema = z.number().int().min(0).max(3650);
 // 0 = no cap; positive integers enforce a monthly spend cap in cents.
 const MonthlyCostCapSchema = z.number().int().min(0).max(10_000_000);
 const CostCapActionSchema = z.enum(["block", "warn"]);
-// 0 = disabled; otherwise a polling interval in seconds. Capped at 1 hour
-// so a stray "999999" can't pin a tab on `setInterval`. The settings UI
-// presents this as minutes; the stored unit stays in seconds so
-// `useAutoRefreshIntervalMs` only has one ×1000 conversion.
-const AutoRefreshSecondsSchema = z.number().int().min(0).max(3600);
+// 0 = disabled (no scheduled sync; manual "Sync now" still works);
+// otherwise the server-side scheduler runs an incremental sync against
+// the project's provider every N seconds. Capped at 1 hour so a typo
+// can't strand a project at "sync once a day". The settings UI presents
+// this as minutes; the stored unit stays in seconds.
+const SyncIntervalSecondsSchema = z.number().int().min(0).max(3600);
 // Allowlist of fully-qualified hostnames the web_fetch tool may target.
 // Empty list = no allowlist (any non-SSRF host is reachable). Hosts are
 // matched case-insensitively against the URL's hostname only — no path /
@@ -366,14 +367,14 @@ export const SETTINGS_CATALOG = {
     description:
       "Hard ceiling on the sum of `Conversation.costCents` accrued in the current calendar month (UTC). 0 disables the cap. Cap is checked before each agent turn and against the action below.",
   },
-  "ui.auto-refresh-seconds": {
-    key: "ui.auto-refresh-seconds",
-    scope: "user",
-    schema: AutoRefreshSecondsSchema,
-    default: 0,
-    label: "Background sync interval (seconds)",
+  "sync.interval-seconds": {
+    key: "sync.interval-seconds",
+    scope: "project",
+    schema: SyncIntervalSecondsSchema,
+    default: 300,
+    label: "Sync interval (seconds)",
     description:
-      "While you have a project open, run an incremental sync against the provider every N seconds and refetch settings dashboards (LLM/OAuth providers) on the same cadence. The footer's 'synced X ago' tracks each sync. 0 disables — the manual sync button in the footer still works. A catch-up sync also fires on tab focus when the cached cursor is older than one interval. Maximum 3600 (one hour). Surfaced to users as minutes in the settings UI; ≥ 120 seconds recommended.",
+      "The server-side scheduler runs an incremental sync against this project's provider every N seconds. 0 disables the scheduler — the manual 'Sync now' button in the footer still works. Maximum 3600 (one hour); ≥ 120 seconds recommended. Surfaced as minutes in the settings UI.",
   },
   "llm.cost-cap-action": {
     key: "llm.cost-cap-action",

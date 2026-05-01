@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatRelative } from "@/lib/format";
 import { trpc } from "@/lib/trpc-client";
-import { useAutoRefreshIntervalMs } from "@/lib/use-auto-refresh";
-import { useBackgroundSync } from "@/lib/use-background-sync";
 import { cn } from "@/lib/utils";
 import { ProposalDialog } from "@/ui/proposals/proposal-dialog";
 import { PaletteHint } from "@/ui/shell/palette-hint";
 import { SyncButton } from "@/ui/shell/sync-button";
+
+const SYNC_STATUS_IDLE_INTERVAL_MS = 10_000;
+const SYNC_STATUS_RUNNING_INTERVAL_MS = 1_500;
 
 /**
  * Compact status bar pinned to the bottom of the workspace. Carries
@@ -17,12 +18,11 @@ import { SyncButton } from "@/ui/shell/sync-button";
  * switcher owns that, and individual settings sections show their own
  * project chip).
  *
- * Sync stays here as a labeled control alongside `synced X ago` for
- * discoverability, while the topbar mounts a glyph-only twin so refresh
- * is reachable from anywhere without scanning the footer.
- *
- * The footer also hosts `useBackgroundSync` — same lifetime as the layout
- * chrome, both layouts mount one footer, no separate wrapper needed.
+ * Sync runs on the server (`src/server/sync/scheduler.ts`); the footer
+ * just polls `items.syncStatus` and, when the cursor advances, locally
+ * invalidates `items.list` so the backlog pane refetches once per real
+ * sync instead of per-tab per-tick. Manual "Sync now" still goes through
+ * `items.runSync` via the button to its right.
  */
 export function StatusFooter({
   projectSlug,
@@ -36,20 +36,15 @@ export function StatusFooter({
   const [online, setOnline] = useState(true);
   const [, setTick] = useState(0);
 
-  const refetchInterval = useAutoRefreshIntervalMs();
+  const utils = trpc.useUtils();
   const syncStatus = trpc.items.syncStatus.useQuery(
     { projectSlug: projectSlug ?? "" },
     {
       enabled: !!projectSlug,
-      // While a sync is running, poll fast so the footer text actually
-      // reflects what's happening; otherwise fall back to the user's
-      // auto-refresh cadence (or off).
       refetchInterval: (query) =>
         query.state.data?.progress?.status === "running"
-          ? 1_500
-          : refetchInterval === false
-            ? false
-            : refetchInterval,
+          ? SYNC_STATUS_RUNNING_INTERVAL_MS
+          : SYNC_STATUS_IDLE_INTERVAL_MS,
       staleTime: 0,
     },
   );
@@ -57,7 +52,22 @@ export function StatusFooter({
   const syncProgress = syncStatus.data?.progress ?? null;
   const syncing = syncProgress?.status === "running";
 
-  useBackgroundSync(projectSlug, readOnly);
+  // When the cursor advances (server-side sync just finished), invalidate
+  // the list once so every mounted backlog pane refetches in step. Scoped
+  // to this project so detail-pane queries on others stay warm.
+  const lastSeenRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!projectSlug || !lastSyncAt) return;
+    const stamp = new Date(lastSyncAt).toISOString();
+    if (lastSeenRef.current === null) {
+      lastSeenRef.current = stamp;
+      return;
+    }
+    if (lastSeenRef.current !== stamp) {
+      lastSeenRef.current = stamp;
+      void utils.items.list.invalidate({ projectSlug });
+    }
+  }, [lastSyncAt, projectSlug, utils.items.list]);
 
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);

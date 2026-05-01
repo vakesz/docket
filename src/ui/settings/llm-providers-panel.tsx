@@ -1,7 +1,6 @@
 "use client";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc-client";
-import { useAutoRefreshIntervalMs } from "@/lib/use-auto-refresh";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/primitives/alert";
 import { Badge } from "@/ui/primitives/badge";
 import { Separator } from "@/ui/primitives/separator";
@@ -34,8 +33,7 @@ type Row = {
  * which one is being created.
  */
 export function LlmProvidersPanel() {
-  const refetchInterval = useAutoRefreshIntervalMs();
-  const list = trpc.llmProviders.list.useQuery(undefined, { refetchInterval });
+  const list = trpc.llmProviders.list.useQuery();
   const [editingId, setEditingId] = useState<string | null>(null);
 
   if (list.isPending) {

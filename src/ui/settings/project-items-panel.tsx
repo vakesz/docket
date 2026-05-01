@@ -9,11 +9,15 @@ import { Label } from "@/ui/primitives/label";
 import { Switch } from "@/ui/primitives/switch";
 
 const STALE_KEY = "items.stale-after-days";
+const SYNC_INTERVAL_KEY = "sync.interval-seconds";
+
+const DEFAULT_SYNC_INTERVAL_SECONDS = 300;
 
 /**
- * Project-level defaults for the items list — currently the staleness
- * threshold. Each member sees this value unless they set their own
- * override under Profile → Item detail.
+ * Project-level defaults for the items list — staleness threshold and the
+ * server-side background-sync cadence. Each member sees these values
+ * unless they set a personal staleness override under Profile → Item
+ * detail.
  */
 export function ProjectItemsPanel({ projectSlug }: { projectSlug: string }) {
   const utils = trpc.useUtils();
@@ -30,9 +34,15 @@ export function ProjectItemsPanel({ projectSlug }: { projectSlug: string }) {
   const [lastPositive, setLastPositive] = useState<number>(
     value > 0 ? value : DEFAULT_STALE_THRESHOLD_DAYS,
   );
+
+  const syncRaw = list.data?.find((r) => r.key === SYNC_INTERVAL_KEY)?.value;
+  const syncSeconds = typeof syncRaw === "number" ? syncRaw : DEFAULT_SYNC_INTERVAL_SECONDS;
+  const syncMinutes = Math.round(syncSeconds / 60);
+
   const disabled = list.isPending || update.isPending;
   const indicatorId = useId();
   const thresholdId = useId();
+  const syncId = useId();
 
   const onToggleIndicator = (next: boolean) => {
     update.mutate({
@@ -47,6 +57,12 @@ export function ProjectItemsPanel({ projectSlug }: { projectSlug: string }) {
     const clamped = Math.min(Math.trunc(next), 3650);
     setLastPositive(clamped);
     update.mutate({ projectSlug, key: STALE_KEY, value: clamped });
+  };
+
+  const onChangeSyncMinutes = (next: number) => {
+    if (!Number.isFinite(next) || next < 0) return;
+    const clamped = Math.min(Math.trunc(next), 60);
+    update.mutate({ projectSlug, key: SYNC_INTERVAL_KEY, value: clamped * 60 });
   };
 
   return (
@@ -100,6 +116,27 @@ export function ProjectItemsPanel({ projectSlug }: { projectSlug: string }) {
             />
           </div>
         ) : null}
+      </section>
+
+      <section className="flex flex-col gap-3 border-border border-t pt-6">
+        <header className="flex flex-col gap-1">
+          <h3 className="font-medium text-foreground text-sm">Sync interval (minutes)</h3>
+          <p className="text-muted-foreground text-xs">
+            How often the server runs an incremental sync for this project. 0 disables the scheduler
+            — the manual &ldquo;Sync now&rdquo; button still works. Maximum 60 (one hour); ≥ 2
+            minutes recommended.
+          </p>
+        </header>
+        <NumberField
+          id={syncId}
+          min={0}
+          max={60}
+          step={1}
+          value={syncMinutes}
+          disabled={disabled}
+          onCommit={onChangeSyncMinutes}
+          className="max-w-[8rem]"
+        />
       </section>
 
       {update.error ? (

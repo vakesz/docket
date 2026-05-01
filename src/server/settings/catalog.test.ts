@@ -152,6 +152,20 @@ describe("settings catalog", () => {
     expect(() => encodeSettingValue(key, 5 as never)).toThrow();
   });
 
+  it("sync.interval-seconds is project-scoped, defaults to 300, accepts 0..3600", () => {
+    const key = "sync.interval-seconds";
+    expect(getSettingDef(key).scope).toBe("project");
+    expect(decodeSettingValue(key, null)).toBe(300);
+    expect(decodeSettingValue(key, JSON.stringify(0))).toBe(0);
+    expect(decodeSettingValue(key, JSON.stringify(120))).toBe(120);
+    expect(decodeSettingValue(key, JSON.stringify(3600))).toBe(3600);
+    expect(decodeSettingValue(key, JSON.stringify(-1))).toBe(300);
+    expect(decodeSettingValue(key, JSON.stringify(3601))).toBe(300);
+    expect(decodeSettingValue(key, JSON.stringify(2.5))).toBe(300);
+    expect(() => encodeSettingValue(key, -1 as never)).toThrow();
+    expect(() => encodeSettingValue(key, 3601 as never)).toThrow();
+  });
+
   it("recommendations.duplicate-detection.similarity-threshold accepts 50..95", () => {
     const key = "recommendations.duplicate-detection.similarity-threshold";
     expect(getSettingDef(key).scope).toBe("project");

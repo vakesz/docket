@@ -11,6 +11,7 @@ import { logger } from "@/server/logger";
 import { type AuthorizedProject, projectForUser } from "@/server/projects/access";
 import type { SettingKey, SettingValue } from "@/server/settings/catalog";
 import { loadGlobalSetting } from "@/server/settings/effective";
+import { ensureSchedulerRunning } from "@/server/sync/scheduler";
 
 export { assertFound };
 
@@ -29,6 +30,10 @@ export type Context = {
 
 export async function createContext(): Promise<Context> {
   const session = (await auth()) as Session | null;
+  // Lazy-start the server-side sync scheduler on first authenticated
+  // request. Idempotent; safe to call here. Skipped during `next build`
+  // because that flow doesn't construct authenticated tRPC contexts.
+  if (session?.user) ensureSchedulerRunning();
   return {
     session,
     db,
