@@ -42,7 +42,16 @@ export function ProposalDialog({
   );
 
   const confirm = trpc.proposals.confirm.useMutation({
-    onSuccess: async () => {
+    onSuccess: async (data) => {
+      // The executor returns the row in its terminal state. Provider failures
+      // revert to `pending` with `errorMessage` set so the user can retry —
+      // keep the dialog open in that case so the error is visible. Refresh
+      // the cached row so `query.data.row.errorMessage` flows into the
+      // inline alert below.
+      if (data.status === "pending" && data.errorMessage !== null) {
+        await utils.proposals.get.invalidate({ projectSlug, proposalId: data.id });
+        return;
+      }
       await Promise.all([
         utils.items.list.invalidate(),
         utils.items.get.invalidate(),
@@ -85,8 +94,16 @@ export function ProposalDialog({
   }, [proposalId, projectSlug, query.data?.isEmpty]);
 
   const busy = confirm.isPending || reject.isPending;
+  // Provider failures surface on the row itself (executor reverts to `pending`
+  // with `errorMessage` set). Mutation errors only fire on transport / auth /
+  // validation failures, which is why both sources need to feed this banner.
+  const providerError = query.data?.row.errorMessage ?? null;
   const errorMessage =
-    query.error?.message ?? confirm.error?.message ?? reject.error?.message ?? null;
+    providerError ??
+    query.error?.message ??
+    confirm.error?.message ??
+    reject.error?.message ??
+    null;
 
   return (
     <Dialog

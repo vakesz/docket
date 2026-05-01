@@ -57,8 +57,7 @@ export function ProposalCard({
   const autoAppliedRef = useRef<boolean | null>(null);
   if (autoAppliedRef.current === null && query.data) {
     const r = query.data.row;
-    autoAppliedRef.current =
-      r.status === "confirmed" && r.executedAt !== null && r.errorMessage === null;
+    autoAppliedRef.current = r.status === "confirmed" && r.executedAt !== null;
   }
   const autoApplied = autoAppliedRef.current ?? false;
 
@@ -117,16 +116,19 @@ export function ProposalCard({
   const { row, diff } = query.data;
   const kindLabel = KIND_LABELS[row.kind] ?? row.kind;
   const isPending = row.status === "pending";
-  const isFailed = row.status === "confirmed" && row.errorMessage !== null;
-  const isSuccess =
-    row.status === "confirmed" && row.executedAt !== null && row.errorMessage === null;
+  // A proposal whose previous confirm attempt failed is reverted to `pending`
+  // by the executor with `errorMessage` set, so the user can retry from the
+  // same Confirm/Reject buttons. The pill flips to "Failed — retry?" so the
+  // banner-style error block is paired with a clear status.
+  const isFailed = isPending && row.errorMessage !== null;
+  const isSuccess = row.status === "confirmed" && row.executedAt !== null;
   const isRejected = row.status === "rejected";
 
   let pill: { variant: "success" | "destructive" | "secondary"; text: string } | null = null;
   if (isSuccess) {
     pill = { variant: "success", text: autoApplied ? "Auto-applied" : "Confirmed" };
   } else if (isFailed) {
-    pill = { variant: "destructive", text: "Failed" };
+    pill = { variant: "destructive", text: "Failed — retry?" };
   } else if (isRejected) {
     pill = { variant: "secondary", text: "Rejected" };
   }

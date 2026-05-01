@@ -19,7 +19,6 @@ import { ITEM_KINDS, TRANSITION_INTENTS } from "@/core/types";
 const itemSnapshotSchema = z
   .object({
     id: z.string(),
-    providerItemId: z.string(),
     title: z.string(),
     state: z.string(),
   })

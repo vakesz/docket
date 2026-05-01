@@ -111,7 +111,7 @@ const result = await confirmProposal(
 
 Available proposal builders in `src/server/proposals/builders.ts`: `proposeTransition`, `proposeDescriptionPatch`, `proposeComment`, `proposeTagsChange`, `proposeReactionToggle`, `proposeNewItem`, `proposeMemoryWrite`, `proposeMemoryDelete`. The executor dispatches each `kind` to the matching provider method (or to a memory writer for memory proposals) and refreshes the cached `Item` row from the response. Builders may also attach an `advisory` string ("comment echoes description", etc.) that the confirm dialog surfaces above the diff.
 
-**Origin-aware auto-confirm.** Every proposal carries an `origin` field (`"ui"` | `"agent"`) stamped at stage time. `maybeAutoAccept` (`src/server/proposals/executor.ts`) only auto-confirms `origin === "ui"` rows whose `kind` is on the project's `proposals.auto-accept-kinds` list AND on the hardcoded `AUTO_ACCEPT_ELIGIBLE_KINDS` allowlist (`src/server/settings/catalog.ts`). Agent-staged proposals always wait for human confirmation regardless of policy — `confirmProposal` itself refuses `source: "auto"` on a non-`ui` row as defense in depth. Default project policy auto-accepts `comment_add` and `reaction_toggle` for UI-origin rows.
+**Origin-aware auto-confirm.** Every proposal carries an `origin` field (`"ui"` | `"agent"`) stamped at stage time. `maybeAutoAccept` (`src/server/proposals/executor.ts`) auto-confirms UI-origin rows on two paths: (1) the architectural **floor** — `comment_add` and `reaction_toggle` always auto-confirm from the UI, no policy lookup (`AUTO_ACCEPT_FLOOR_KINDS` in `src/server/settings/catalog.ts`); (2) **extras** — kinds the project explicitly opted into via `proposals.auto-accept-extra-kinds`, restricted to local-DB kinds (`memory_write`, `memory_delete`). Provider-touching kinds beyond the floor (state changes, descriptions, tags, assignee changes, new items) always require explicit human review. Agent-staged proposals always wait for human confirmation regardless of either path — `confirmProposal` itself refuses `source: "auto"` on a non-`ui` row as defense in depth. Read-only mode wins on both paths.
 
 Surfaces:
 
@@ -170,6 +170,8 @@ Aspirational direction (consistent with current refactors, not a hard rule):
 - Per-project admin (memory, sources, MCP fleet, saved views, default LLM) lives in shared services so server components and tRPC clients can't drift.
 
 > **Adding a new provider?** See **[docs/ADDING_A_PROVIDER.md](docs/ADDING_A_PROVIDER.md)** for the full authoring walkthrough — package layout, the `WorkItemProvider` interface, `ProviderSpec` fields, NextAuth wiring via `auth-build.ts`, registration in `provider-registry.ts`, and the testing checklist.
+>
+> **Adding a new LLM vendor?** See **[docs/ADDING_AN_LLM.md](docs/ADDING_AN_LLM.md)** for the adapter walkthrough — `LlmAdapter` interface, the SDK quarantine enforced by `no-llm-vendor-leak.test.ts`, `LLM_KINDS` registration, the chat/guardrail role split, and the testing checklist.
 
 ## Global Invariants
 

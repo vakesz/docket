@@ -15,8 +15,10 @@
  *   4. Refresh the cached `Item` row from the response, stamp
  *      `confirmedAt` / `executedAt`, return the updated proposal row
  *
- * On failure, the proposal stays in `confirmed` state with `errorMessage`
- * set so the user can inspect what happened and retry.
+ * On failure, the proposal is reverted to `pending` with `errorMessage`
+ * set so the user can inspect what happened and retry from the same UI.
+ * `errorMessage` is cleared on the next optimistic flip, so a successful
+ * retry leaves no stale error behind.
  */
 
 import "server-only";
@@ -35,7 +37,10 @@ import { errFields } from "@/server/log-fields";
 import { logger } from "@/server/logger";
 import { hydrateProposal } from "@/server/proposals/builders";
 import { buildProviderForUser } from "@/server/providers/build";
-import { AUTO_ACCEPT_ELIGIBLE_KINDS_LIST } from "@/server/settings/catalog";
+import {
+  AUTO_ACCEPT_EXTRA_ELIGIBLE_KINDS_LIST,
+  AUTO_ACCEPT_FLOOR_KINDS_LIST,
+} from "@/server/settings/catalog";
 import { loadGlobalSetting, loadProjectSetting } from "@/server/settings/effective";
 import { reconcileComments, toItemRow } from "@/server/sync";
 
@@ -167,9 +172,13 @@ export async function confirmProposal(
   );
 
   const confirmedAt = new Date();
+  // Optimistic flip locks out concurrent confirms while the provider call is
+  // in flight. We also clear `errorMessage` so a retry after a transient
+  // provider failure doesn't carry the previous attempt's error forward
+  // after succeeding.
   await ctx.db.proposal.update({
     where: { id: row.id },
-    data: { status: "confirmed", confirmedAt },
+    data: { status: "confirmed", confirmedAt, errorMessage: null },
   });
 
   try {
@@ -327,9 +336,12 @@ export async function confirmProposal(
     return updated;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    // Revert status to `pending` so the user can retry from the same UI —
+    // `loadPending` only accepts pending rows, so leaving status at
+    // `confirmed` here would have permanently locked the proposal out.
     const failed = await ctx.db.proposal.update({
       where: { id: row.id },
-      data: { errorMessage: message },
+      data: { status: "pending", confirmedAt: null, errorMessage: message },
     });
     await recordAudit(ctx, failAction, asProposalId(row.id), {
       kind: row.kind,
@@ -351,21 +363,26 @@ export async function confirmProposal(
 }
 
 /**
- * Bridge from "proposal staged" to "proposal applied" when the project's
- * auto-accept policy includes this kind. Read-only mode short-circuits — the
- * row stays pending so the human can inspect it once the freeze lifts.
+ * Bridge from "proposal staged" to "proposal applied" when a UI-origin row
+ * qualifies for auto-confirm. Two paths:
+ *   - Floor: comment_add and reaction_toggle always auto-confirm from the
+ *     UI. The architecture promise — typing a comment in the frontend lands
+ *     directly — is unconditional, not policy-gated.
+ *   - Extras: kinds the project opted into via `proposals.auto-accept-extra-kinds`
+ *     (memory writes/deletes only — provider-touching kinds aren't eligible).
+ *
+ * Read-only mode wins on both paths: the row stays pending so the human can
+ * inspect it once the freeze lifts.
  *
  * Returns the row in its terminal state: still pending if not eligible /
- * read-only / disabled, otherwise the post-confirmProposal row (which may be
- * `confirmed` with `executedAt` set, or `confirmed` with `errorMessage` set if
- * the provider call failed).
+ * read-only, otherwise the post-confirmProposal row.
  *
  * Defense in depth:
- *   - Origin gate: agent-staged rows never auto-confirm, regardless of the
- *     policy. Only the human (origin === "ui") can opt into auto-accept.
- *   - The catalog validator already restricts the policy to Tier-A kinds,
- *     but the AUTO_ACCEPT_ELIGIBLE_KINDS_LIST gate here is load-bearing —
- *     if a stored row ever drifts to an ineligible kind we simply ignore it.
+ *   - Origin gate: agent-staged rows never auto-confirm. Only origin === "ui"
+ *     reaches either path.
+ *   - The catalog validator already restricts the extras list to Tier-A
+ *     local-DB kinds, but the eligible-list gate here is load-bearing — if a
+ *     stored row ever drifts to an ineligible kind we simply ignore it.
  */
 export async function maybeAutoAccept(
   ctx: ExecutorContext,
@@ -373,13 +390,19 @@ export async function maybeAutoAccept(
 ): Promise<ProposalRow> {
   if (row.status !== "pending") return row;
   if (row.origin !== "ui") return row;
-  if (!AUTO_ACCEPT_ELIGIBLE_KINDS_LIST.includes(row.kind)) return row;
-  const [policy, readOnly] = await Promise.all([
-    loadProjectSetting(ctx.db, ctx.projectId, "proposals.auto-accept-kinds"),
-    loadGlobalSetting(ctx.db, "app.read-only"),
-  ]);
+  const isFloor = AUTO_ACCEPT_FLOOR_KINDS_LIST.includes(row.kind);
+  const isExtraEligible = AUTO_ACCEPT_EXTRA_ELIGIBLE_KINDS_LIST.includes(row.kind);
+  if (!isFloor && !isExtraEligible) return row;
+  const readOnly = await loadGlobalSetting(ctx.db, "app.read-only");
   if (readOnly) return row;
-  if (!(policy as readonly string[]).includes(row.kind)) return row;
+  if (!isFloor) {
+    const extras = await loadProjectSetting(
+      ctx.db,
+      ctx.projectId,
+      "proposals.auto-accept-extra-kinds",
+    );
+    if (!(extras as readonly string[]).includes(row.kind)) return row;
+  }
   return confirmProposal(ctx, asProposalId(row.id), { source: "auto" });
 }
 

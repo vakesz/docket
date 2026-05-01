@@ -89,26 +89,25 @@ const GuardrailKindSchema = z.enum(GUARDRAIL_KINDS);
 // rounds stop helping a stuck model and start risking SSE/proxy timeouts.
 const MaxToolRoundsSchema = z.number().int().min(3).max(30);
 
-// Hardcoded eligibility list for auto-accept. The kinds here are restricted
-// to those the user can low-risk emit through the UI as direct interactions:
-// memory writes/deletes (local DB only, no provider blast radius), comment
-// adds and reaction toggles (Tier-A enrichment — additive, easy to delete
-// from the provider side, never silent state changes). Everything else —
-// state transitions, description rewrites, item creation, tag/label edits,
-// assignee changes — is deliberately NOT eligible. Origin-aware: the executor
-// also gates on `Proposal.origin === "ui"` so agent-staged proposals never
-// auto-confirm regardless of the policy. Adding a kind here is a security
-// review event.
-const AUTO_ACCEPT_ELIGIBLE_KINDS = [
-  "memory_write",
-  "memory_delete",
-  "comment_add",
-  "reaction_toggle",
-] as const;
-export const AUTO_ACCEPT_ELIGIBLE_KINDS_LIST: readonly string[] = AUTO_ACCEPT_ELIGIBLE_KINDS;
-const AutoAcceptKindsSchema = z
-  .array(z.enum(AUTO_ACCEPT_ELIGIBLE_KINDS))
-  .max(AUTO_ACCEPT_ELIGIBLE_KINDS.length);
+// UI-origin auto-accept floor. These kinds always auto-confirm when staged
+// from the UI (origin === "ui") — they're not gated by the per-project
+// policy, only by read-only mode. Tier-A enrichment: additive, reversible,
+// no silent state changes. Agent-staged rows still always wait for a human
+// regardless. Adding a kind here is a security review event.
+export const AUTO_ACCEPT_FLOOR_KINDS = ["comment_add", "reaction_toggle"] as const;
+export const AUTO_ACCEPT_FLOOR_KINDS_LIST: readonly string[] = AUTO_ACCEPT_FLOOR_KINDS;
+
+// Opt-in kinds the project may add on top of the floor. Memory writes/deletes
+// are local-DB only (no provider blast radius) so they're safe to auto-accept
+// when the project explicitly opts in. Provider-touching kinds (state changes,
+// descriptions, tags, item creation, assignee changes) are deliberately NOT
+// eligible and never make this list.
+const AUTO_ACCEPT_EXTRA_ELIGIBLE_KINDS = ["memory_write", "memory_delete"] as const;
+export const AUTO_ACCEPT_EXTRA_ELIGIBLE_KINDS_LIST: readonly string[] =
+  AUTO_ACCEPT_EXTRA_ELIGIBLE_KINDS;
+const AutoAcceptExtraKindsSchema = z
+  .array(z.enum(AUTO_ACCEPT_EXTRA_ELIGIBLE_KINDS))
+  .max(AUTO_ACCEPT_EXTRA_ELIGIBLE_KINDS.length);
 
 // Theme is intentionally browser-local (see `src/lib/theme.ts` +
 // ThemePicker in the top bar) — same pattern main uses. Keeping it out
@@ -420,14 +419,14 @@ export const SETTINGS_CATALOG = {
     description:
       "When on, the assistant's final reply is classified for harmful content (hate, harassment, threats, sexual). Adds one extra round-trip per turn on the guardrail model. Output is never blocked mid-stream — flagged messages get a banner.",
   },
-  "proposals.auto-accept-kinds": {
-    key: "proposals.auto-accept-kinds",
+  "proposals.auto-accept-extra-kinds": {
+    key: "proposals.auto-accept-extra-kinds",
     scope: "project",
-    schema: AutoAcceptKindsSchema,
-    default: ["comment_add", "reaction_toggle"] as string[],
-    label: "Auto-accept proposals (per kind)",
+    schema: AutoAcceptExtraKindsSchema,
+    default: [] as string[],
+    label: "Auto-accept proposals — extra kinds",
     description:
-      "Proposal kinds that confirm automatically without a human tap when the user originates them in the UI. Eligible: memory writes/deletes (local DB only) and Tier-A enrichment (comment_add, reaction_toggle — additive, reversible). State changes, descriptions, labels/tags, assignee changes, and new items always require explicit review. Agent-staged proposals never auto-confirm regardless of this list. Read-only mode still wins.",
+      "Additional proposal kinds that confirm automatically without a human tap when the user originates them in the UI. UI-origin comments and reactions always auto-confirm regardless of this setting (Tier-A enrichment — additive, reversible). This list opts in extra local-DB kinds (memory writes/deletes); provider-touching kinds (state changes, descriptions, tags, assignee changes, new items) always require explicit review. Agent-staged proposals never auto-confirm regardless. Read-only mode still wins.",
   },
 } as const satisfies Record<string, SettingDef<z.ZodTypeAny>>;
 

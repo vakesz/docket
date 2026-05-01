@@ -86,7 +86,7 @@ pnpm exec prisma studio        # browse the DB
 | **GitHub** | OAuth | Issues + PRs. Backlog grouped by state bucket. PR-link discovery. Enterprise via `baseUrl`. |
 | **Azure DevOps** | OAuth via Microsoft Entra ID | Work items grouped Epic → Feature → Story → Task → Bug. Markdown ↔ HTML round-trip. |
 
-Adding a new provider (Jira, Linear, …) is an isolated `src/providers/<name>/` package plus two registry entries. LLM vendors follow the same pattern with a new adapter in `src/agent/llm/`. Full walkthrough: [docs/ADDING_A_PROVIDER.md](docs/ADDING_A_PROVIDER.md).
+Adding a new provider (Jira, Linear, …) is an isolated `src/providers/<name>/` package plus two registry entries. LLM vendors follow the same pattern with a new adapter in `src/agent/llm/`. Walkthroughs: [docs/ADDING_A_PROVIDER.md](docs/ADDING_A_PROVIDER.md), [docs/ADDING_AN_LLM.md](docs/ADDING_AN_LLM.md).
 
 ---
 
@@ -109,7 +109,7 @@ Adding a new provider (Jira, Linear, …) is an isolated `src/providers/<name>/`
 
 ### Proposals & Mutations
 - **Proposal-first** — every write stages a `Proposal`, renders a side-by-side diff, and requires an explicit confirm. No fast lane for any origin (UI, agent, or HTTP).
-- **Auto-accept policy** — UI-origin `comment_add` and `reaction_toggle` auto-confirm by default; agent proposals always wait for a human regardless of policy.
+- **Auto-accept floor** — UI-origin `comment_add` and `reaction_toggle` always auto-confirm (no policy gate); per-project `proposals.auto-accept-extra-kinds` opts in additional local-DB kinds on top. Agent proposals always wait for a human regardless.
 - **Project memory & sources** — durable facts and reference docs per project. Agent reads; humans write.
 - **MCP fleet** — per-project HTTP MCP servers; tools namespaced `${server}__${tool}`, rebuilt on project switch, stripped in read-only mode.
 - **Inbound-change injection** — external edits during an active chat arrive as synthetic system messages so the model doesn't reason over stale state.

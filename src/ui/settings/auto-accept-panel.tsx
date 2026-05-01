@@ -7,13 +7,15 @@ import { Label } from "@/ui/primitives/label";
 import { Switch } from "@/ui/primitives/switch";
 
 /**
- * Per-project auto-accept policy.
+ * Per-project auto-accept policy — extras only.
  *
- * Lets the user opt-in to skipping the human-in-the-loop confirmation step
- * for low-stakes proposal kinds. Tier C kinds (state changes, description
- * rewrites, comments, item creation) are deliberately not surfaced — they
- * have non-recoverable user-visible blast radius and the catalog validator
- * rejects them server-side regardless.
+ * UI-origin comments and reactions always auto-confirm; that's the
+ * architectural floor (`AUTO_ACCEPT_FLOOR_KINDS` in the settings catalog),
+ * not a setting. This panel exposes the *additional* kinds the project may
+ * opt in on top: memory writes and deletes, which are local-DB only.
+ * Provider-touching kinds (state changes, descriptions, tags, item creation,
+ * assignee changes) are deliberately not surfaced — they always require
+ * explicit human review and the catalog validator rejects them server-side.
  */
 
 type AutoAcceptKind = {
@@ -49,7 +51,7 @@ export function AutoAcceptPanel({ projectSlug }: { projectSlug: string }) {
   useEffect(() => {
     if (seededForRef.current === projectSlug) return;
     if (!projectSettings.data) return;
-    const row = projectSettings.data.find((r) => r.key === "proposals.auto-accept-kinds");
+    const row = projectSettings.data.find((r) => r.key === "proposals.auto-accept-extra-kinds");
     setSelected(Array.isArray(row?.value) ? new Set(row.value as string[]) : new Set<string>());
     seededForRef.current = projectSlug;
   }, [projectSettings.data, projectSlug]);
@@ -61,7 +63,7 @@ export function AutoAcceptPanel({ projectSlug }: { projectSlug: string }) {
   });
 
   const isDirty = (() => {
-    const row = projectSettings.data?.find((r) => r.key === "proposals.auto-accept-kinds");
+    const row = projectSettings.data?.find((r) => r.key === "proposals.auto-accept-extra-kinds");
     const stored = Array.isArray(row?.value) ? new Set(row.value as string[]) : new Set<string>();
     if (stored.size !== selected.size) return true;
     for (const k of stored) if (!selected.has(k)) return true;
@@ -80,7 +82,7 @@ export function AutoAcceptPanel({ projectSlug }: { projectSlug: string }) {
   const onSave = async () => {
     await save.mutateAsync({
       projectSlug,
-      key: "proposals.auto-accept-kinds",
+      key: "proposals.auto-accept-extra-kinds",
       value: Array.from(selected),
     });
   };
@@ -92,10 +94,11 @@ export function AutoAcceptPanel({ projectSlug }: { projectSlug: string }) {
   return (
     <div className="flex flex-col gap-6">
       <p className="text-muted-foreground text-xs">
-        Off by default. Each toggle skips the confirm step for proposals of that kind on this
-        project. Only memory writes/deletes are eligible — anything that touches the provider (state
-        changes, descriptions, comments, labels/tags, assignee changes, new items) always requires
-        explicit human review. Read-only mode always wins.
+        UI-origin comments and reactions always auto-confirm — that's the architectural floor, not a
+        toggle. The switches below opt this project into auto-accept for additional local-DB kinds
+        on top. Provider-touching kinds (state changes, descriptions, labels/tags, assignee changes,
+        new items) always require explicit human review. Agent-staged proposals never auto-confirm
+        regardless. Read-only mode always wins.
       </p>
 
       <ul className="flex flex-col gap-4">

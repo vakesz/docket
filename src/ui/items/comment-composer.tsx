@@ -10,10 +10,9 @@ import { ProposalDialog } from "@/ui/proposals/proposal-dialog";
 
 /**
  * "Add comment" composer rendered at the bottom of the detail pane. Stages
- * a `comment_add` proposal. UI-origin comment proposals auto-confirm by
- * default (`proposals.auto-accept-kinds` ships with `comment_add` enabled),
- * so the typical flow is "type → submit → comment lands". The dialog only
- * opens when the project has opted out of auto-accept for comments.
+ * a `comment_add` proposal, which is part of the UI-origin auto-accept floor
+ * — typing → submit → comment lands, no extra tap. The dialog only opens if
+ * the system is in read-only mode (then the row stays pending for review).
  */
 export function CommentComposer({
   projectSlug,
