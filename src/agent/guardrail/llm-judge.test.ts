@@ -1,51 +1,46 @@
 /**
- * LLM-judge behavioural tests with a mocked OpenAI client.
+ * LLM-judge behavioural tests with a stub `JudgeClient`.
  *
  * These pin the prompt-engineering choices that step 3 of the guardrail
  * redesign hardened: three-class verdict (safe / suspicious / injection),
  * self-consistency on injection (one positive isn't enough to block), and
  * no `tool=NAME` leak in the classifier's user message.
+ *
+ * Vendor-neutrality is part of the contract — the guardrail talks only to
+ * `JudgeClient`. Concrete OpenAI / Anthropic clients live alongside their
+ * chat adapters; their unit tests exercise the SDK plumbing separately.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type {
+  JudgeClassifyArgs,
+  JudgeClassifyResult,
+  JudgeClient,
+} from "@/agent/guardrail/judge-client";
+import { LlmJudgeGuardrail } from "@/agent/guardrail/llm-judge";
 
-const calls = vi.hoisted(() => ({
-  /** Each entry is one captured `chat.completions.create` request. */
-  requests: [] as Array<{ system: string; user: string; model: string }>,
+type CapturedRequest = { system: string; user: string; model: string };
+
+const calls = {
+  /** Each entry is one captured `JudgeClient.classify` request. */
+  requests: [] as CapturedRequest[],
   /** Verdicts to return in order. Pop one per call; reject on overrun. */
   verdicts: [] as string[],
-}));
+};
 
-vi.mock("openai", () => ({
-  default: class MockOpenAI {
-    chat = {
-      completions: {
-        create: async (params: {
-          model: string;
-          messages: Array<{ role: string; content: string }>;
-        }) => {
-          const next = calls.verdicts.shift();
-          if (next === undefined) {
-            throw new Error(
-              `mock OpenAI ran out of queued verdicts (got ${calls.requests.length} calls)`,
-            );
-          }
-          calls.requests.push({
-            model: params.model,
-            system: params.messages[0]?.content ?? "",
-            user: params.messages[1]?.content ?? "",
-          });
-          return {
-            choices: [{ message: { content: next } }],
-            usage: { prompt_tokens: 100, completion_tokens: 1 },
-          };
-        },
-      },
-    };
-  },
-}));
-
-const { LlmJudgeGuardrail } = await import("@/agent/guardrail/llm-judge");
+class StubJudgeClient implements JudgeClient {
+  readonly model = "stub-judge";
+  async classify(args: JudgeClassifyArgs): Promise<JudgeClassifyResult> {
+    const next = calls.verdicts.shift();
+    if (next === undefined) {
+      throw new Error(
+        `stub JudgeClient ran out of queued verdicts (got ${calls.requests.length} calls)`,
+      );
+    }
+    calls.requests.push({ model: this.model, system: args.system, user: args.user });
+    return { text: next, usage: { tokensIn: 100, tokensOut: 1 } };
+  }
+}
 
 beforeEach(() => {
   calls.requests = [];
@@ -60,8 +55,7 @@ afterEach(() => {
 
 function makeJudge(overrides: Partial<ConstructorParameters<typeof LlmJudgeGuardrail>[0]> = {}) {
   return new LlmJudgeGuardrail({
-    apiKey: "sk-test",
-    model: "gpt-5-nano",
+    client: new StubJudgeClient(),
     blockOnInjection: true,
     ...overrides,
   });

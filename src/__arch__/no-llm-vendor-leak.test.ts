@@ -25,10 +25,11 @@ const SKIP_DIRS = new Set(["node_modules", "generated"]);
 type Quarantine = {
   sdk: string;
   /**
-   * Files allowed to import the quarantined SDK. The chat adapter
-   * (`agent/llm/openai.ts`) and the guardrail LLM-judge
-   * (`agent/guardrail/llm-judge.ts`) both legitimately need the openai
-   * SDK; everything else must go through the vendor-neutral interface.
+   * Files allowed to import the quarantined SDK. Each vendor SDK lives
+   * in exactly one adapter file under `src/agent/llm/<kind>.ts`. The
+   * guardrail's `LlmJudgeGuardrail` talks to a vendor-neutral
+   * `JudgeClient` interface — its concrete implementations (one per
+   * vendor) live alongside the chat adapter in the same file.
    */
   allowedFiles: readonly string[];
   matcher: RegExp;
@@ -37,13 +38,17 @@ type Quarantine = {
 const QUARANTINES: Quarantine[] = [
   {
     sdk: "openai",
-    allowedFiles: [
-      join("src", "agent", "llm", "openai.ts"),
-      join("src", "agent", "guardrail", "llm-judge.ts"),
-    ],
+    allowedFiles: [join("src", "agent", "llm", "openai.ts")],
     // Match the bare "openai" package (and submodules) but not "openai-foo".
     matcher:
       /from\s+["']openai(?:\/[^"']+)?["']|require\(\s*["']openai(?:\/[^"']+)?["']\s*\)|import\(\s*["']openai(?:\/[^"']+)?["']\s*\)/,
+  },
+  {
+    sdk: "@anthropic-ai/sdk",
+    allowedFiles: [join("src", "agent", "llm", "anthropic.ts")],
+    // Match `@anthropic-ai/sdk` and any submodule path but only that package.
+    matcher:
+      /from\s+["']@anthropic-ai\/sdk(?:\/[^"']+)?["']|require\(\s*["']@anthropic-ai\/sdk(?:\/[^"']+)?["']\s*\)|import\(\s*["']@anthropic-ai\/sdk(?:\/[^"']+)?["']\s*\)/,
   },
 ];
 

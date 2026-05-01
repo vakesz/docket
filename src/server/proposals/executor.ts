@@ -167,7 +167,10 @@ export async function confirmProposal(
 
   phase = "provider_build";
   const project = assertFound(
-    await ctx.db.project.findUnique({ where: { id: ctx.projectId } }),
+    await ctx.db.project.findUnique({
+      where: { id: ctx.projectId },
+      select: { id: true, providerKind: true, providerScope: true, name: true },
+    }),
     "project not found",
   );
 

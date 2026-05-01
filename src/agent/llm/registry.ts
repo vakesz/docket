@@ -17,6 +17,7 @@
  */
 
 import "server-only";
+import { AnthropicAdapter } from "@/agent/llm/anthropic";
 import { OpenAiAdapter } from "@/agent/llm/openai";
 import type { LlmAdapter } from "@/agent/llm/types";
 import type { LlmProvider, Project } from "@/db/generated/client";
@@ -58,7 +59,7 @@ export async function selectAdapterFor(db: Database, ctx: AdapterContext): Promi
  * level; this constant just lets the error path report what the registry
  * actually supports without grepping the file.
  */
-const SUPPORTED_KINDS = ["openai"] as const;
+const SUPPORTED_KINDS = ["openai", "anthropic"] as const;
 
 export function buildAdapter(
   row: LlmProvider,
@@ -70,6 +71,18 @@ export function buildAdapter(
   switch (row.kind) {
     case "openai":
       return new OpenAiAdapter({
+        apiKey,
+        label: row.label,
+        ...(row.model ? { model: row.model } : {}),
+        ...(row.baseUrl ? { baseUrl: row.baseUrl } : {}),
+        ...(opts.defaultTemperature !== undefined && opts.defaultTemperature !== null
+          ? { defaultTemperature: opts.defaultTemperature }
+          : {}),
+        inputPriceCentsPerMtok: row.inputPriceCentsPerMtok?.toNumber() ?? null,
+        outputPriceCentsPerMtok: row.outputPriceCentsPerMtok?.toNumber() ?? null,
+      });
+    case "anthropic":
+      return new AnthropicAdapter({
         apiKey,
         label: row.label,
         ...(row.model ? { model: row.model } : {}),

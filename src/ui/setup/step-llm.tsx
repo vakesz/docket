@@ -1,6 +1,7 @@
 "use client";
 
 import { useId } from "react";
+import { LLM_KIND_LABELS, LLM_KIND_META, LLM_KINDS, type LlmKind } from "@/agent/llm/types";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/primitives/alert";
 import { Button } from "@/ui/primitives/button";
 import { Input } from "@/ui/primitives/input";
@@ -14,21 +15,12 @@ import {
 } from "@/ui/primitives/select";
 import { ProviderToggle } from "@/ui/setup/provider-toggle";
 
-const OPENAI_MODEL_SUGGESTIONS = [
-  "gpt-5",
-  "gpt-5-mini",
-  "gpt-5-nano",
-  "gpt-4o",
-  "gpt-4o-mini",
-  "gpt-4.1",
-  "gpt-4.1-mini",
-] as const;
+export type LlmRole = "chat" | "guardrail";
 
-export type OpenaiRole = "chat" | "guardrail";
-
-export type OpenaiStepState = {
+export type LlmStepState = {
   enabled: boolean;
-  role: OpenaiRole;
+  kind: LlmKind;
+  role: LlmRole;
   label: string;
   apiKey: string;
   model: string;
@@ -37,9 +29,10 @@ export type OpenaiStepState = {
   outputPrice: string;
 };
 
-export type OpenaiStepHandlers = {
+export type LlmStepHandlers = {
   setEnabled: (next: boolean) => void;
-  setRole: (next: OpenaiRole) => void;
+  setKind: (next: LlmKind) => void;
+  setRole: (next: LlmRole) => void;
   setLabel: (next: string) => void;
   setApiKey: (next: string) => void;
   setModel: (next: string) => void;
@@ -48,19 +41,25 @@ export type OpenaiStepHandlers = {
   setOutputPrice: (next: string) => void;
 };
 
-export function StepOpenai({
+/**
+ * Generic LLM step. The wizard renders one of these per "draft" — drafts
+ * can be added/removed via the wizard's "+ Add another LLM" affordance.
+ * All vendor-specific copy comes from `LLM_KIND_META`; the kind picker is
+ * hidden when `LLM_KINDS` only contains one entry.
+ */
+export function StepLlm({
   state,
   handlers,
   alreadyConfigured,
   index,
   onRemove,
 }: {
-  state: OpenaiStepState;
-  handlers: OpenaiStepHandlers;
+  state: LlmStepState;
+  handlers: LlmStepHandlers;
   /**
-   * Whether the deployment already has a row for this draft's current role.
-   * The toggle goes disabled+`configured` when true so the operator can
-   * tell that submitting again won't create a duplicate.
+   * Whether the deployment already has a row for this draft's current
+   * (kind, role). The toggle goes disabled+`configured` when true so the
+   * operator can tell that submitting again won't create a duplicate.
    */
   alreadyConfigured: boolean;
   /** 1-based index used in the section title when more than one draft is present. */
@@ -68,8 +67,10 @@ export function StepOpenai({
   /** Optional remove button shown next to the toggle. Hidden when there's only one draft. */
   onRemove?: () => void;
 }) {
+  const meta = LLM_KIND_META[state.kind];
   const heading =
-    typeof index === "number" ? `OpenAI provider #${index}` : "OpenAI (or OpenAI-compatible)";
+    typeof index === "number" ? `LLM provider #${index}` : LLM_KIND_LABELS[state.kind];
+  const kindId = useId();
   const roleId = useId();
   const labelInputId = useId();
   const apiKeyId = useId();
@@ -92,30 +93,39 @@ export function StepOpenai({
           : "Chat row — feeds the agent loop."
       }
     >
-      <Alert variant="warning">
-        <AlertTitle>Adding an Azure AI Foundry model</AlertTitle>
-        <AlertDescription>
-          <p>
-            Use the project&rsquo;s OpenAI v1 endpoint as the Base URL — the path must end with{" "}
-            <code className="rounded bg-card px-1 py-0.5 font-mono text-foreground">
-              /openai/v1/
-            </code>
-            . Set <span className="font-medium">Model</span> to the deployment name shown in Foundry
-            &rarr; Model deployments (for example <code className="font-mono">gpt-5</code>).
-          </p>
-          <p className="mt-2">Template:</p>
-          <code className="mt-1 block break-all rounded bg-card px-2 py-1 font-mono text-[0.7rem] text-foreground leading-snug">
-            https://&lt;resource&gt;.services.ai.azure.com/api/projects/&lt;project&gt;/openai/v1/
-          </code>
-        </AlertDescription>
-      </Alert>
+      {meta.foundryHint ? (
+        <Alert variant="warning">
+          <AlertTitle>{meta.foundryHint.title}</AlertTitle>
+          <AlertDescription>{meta.foundryHint.body}</AlertDescription>
+        </Alert>
+      ) : null}
 
       <div className="flex gap-3">
+        {LLM_KINDS.length > 1 ? (
+          <div className="flex w-40 flex-col gap-1">
+            <Label htmlFor={kindId} className="text-muted-foreground text-xs">
+              Kind
+            </Label>
+            <Select value={state.kind} onValueChange={(next) => handlers.setKind(next as LlmKind)}>
+              <SelectTrigger id={kindId} className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LLM_KINDS.map((k) => (
+                  <SelectItem key={k} value={k}>
+                    {LLM_KIND_LABELS[k]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
+
         <div className="flex w-40 flex-col gap-1">
           <Label htmlFor={roleId} className="text-muted-foreground text-xs">
             Role
           </Label>
-          <Select value={state.role} onValueChange={(next) => handlers.setRole(next as OpenaiRole)}>
+          <Select value={state.role} onValueChange={(next) => handlers.setRole(next as LlmRole)}>
             <SelectTrigger id={roleId} className="w-full">
               <SelectValue />
             </SelectTrigger>
@@ -124,10 +134,8 @@ export function StepOpenai({
               <SelectItem value="guardrail">Guardrail</SelectItem>
             </SelectContent>
           </Select>
-          <p className="text-muted-foreground/70 text-xs">
-            Stamped at create — switch in /settings means delete + recreate.
-          </p>
         </div>
+
         <div className="flex flex-1 flex-col gap-1">
           <Label htmlFor={labelInputId} className="text-muted-foreground text-xs">
             Display label
@@ -136,13 +144,14 @@ export function StepOpenai({
             id={labelInputId}
             value={state.label}
             onChange={(e) => handlers.setLabel(e.target.value)}
-            placeholder={state.role === "guardrail" ? "OpenAI guardrail" : "OpenAI"}
+            placeholder={
+              state.role === "guardrail"
+                ? meta.defaultLabelByRole.guardrail
+                : meta.defaultLabelByRole.chat
+            }
             autoComplete="off"
             required={state.enabled}
           />
-          <p className="text-muted-foreground/70 text-xs">
-            Shown in the model picker. Useful if you'll add multiple OpenAI-compatible endpoints.
-          </p>
         </div>
       </div>
 
@@ -155,14 +164,13 @@ export function StepOpenai({
           type="password"
           value={state.apiKey}
           onChange={(e) => handlers.setApiKey(e.target.value)}
-          placeholder="sk-proj-aBc1234567890dEfGhIjKlMnOpQrStUvWxYz"
+          placeholder={meta.apiKeyPlaceholder}
           className="font-mono"
           autoComplete="off"
           required={state.enabled}
         />
         <p className="text-muted-foreground/70 text-xs">
-          OpenAI keys start with <code className="font-mono">sk-</code> /{" "}
-          <code className="font-mono">sk-proj-</code>. Stored AES-GCM encrypted.
+          {meta.apiKeyHelp} Stored AES-GCM encrypted.
         </p>
       </div>
 
@@ -175,21 +183,25 @@ export function StepOpenai({
             id={modelId}
             value={state.model}
             onChange={(e) => handlers.setModel(e.target.value)}
-            placeholder={state.role === "guardrail" ? "gpt-5-nano" : "gpt-5"}
+            placeholder={
+              state.role === "guardrail"
+                ? meta.defaultModelByRole.guardrail
+                : meta.defaultModelByRole.chat
+            }
             list={modelListId}
             className="font-mono"
             autoComplete="off"
             required={state.enabled}
           />
           <datalist id={modelListId}>
-            {OPENAI_MODEL_SUGGESTIONS.map((m) => (
+            {meta.modelSuggestions.map((m) => (
               <option key={m} value={m} />
             ))}
           </datalist>
           <p className="text-muted-foreground/70 text-xs">
             {state.role === "guardrail"
               ? "Pick a small / cheap model — guardrail runs on every turn."
-              : "Pick a suggestion or type any deployment name (Azure Foundry users — paste your deployment id)."}
+              : meta.modelHelp}
           </p>
         </div>
         <div className="flex flex-1 flex-col gap-1">
@@ -200,12 +212,10 @@ export function StepOpenai({
             id={baseUrlId}
             value={state.baseUrl}
             onChange={(e) => handlers.setBaseUrl(e.target.value)}
-            placeholder="https://api.openai.com/v1"
+            placeholder={meta.baseUrlPlaceholder}
             autoComplete="off"
           />
-          <p className="text-muted-foreground/70 text-xs">
-            Blank uses OpenAI's public endpoint. Set for Azure OpenAI / Foundry / Ollama / a proxy.
-          </p>
+          <p className="text-muted-foreground/70 text-xs">{meta.baseUrlHelp}</p>
         </div>
       </div>
 

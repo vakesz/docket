@@ -1,16 +1,17 @@
 /**
- * Per-provider sign-in logo registry. Each provider package owns its own
- * `logo.tsx` (currentColor SVG, no server deps) so adding a third provider
- * is one new logo file plus one entry here — no UI surface needs to know
- * about specific kinds.
+ * Per-provider sign-in logo lookup.
  *
- * Returns `null` for unknown kinds so the sign-in button falls back to
- * label-only — same forgiving shape as `auth-build.ts`.
+ * Each provider package owns its own `logo.tsx` (currentColor SVG, no
+ * server deps) and registers it on its `ProviderSpec.logo`. This wrapper
+ * reads from the shared registry so adding a third provider is one new
+ * logo file plus one new spec entry — no central switch to edit.
+ *
+ * Returns `null` for unknown kinds, or for kinds whose spec didn't
+ * register a logo, so the sign-in button degrades to label-only.
  */
 
 import type { JSX } from "react";
-import { AzureDevOpsLogo } from "@/providers/azure-devops/logo";
-import { GitHubLogo } from "@/providers/github/logo";
+import { getProviderSpec } from "@/server/provider-registry";
 
 export function ProviderLogo({
   kind,
@@ -19,13 +20,8 @@ export function ProviderLogo({
   kind: string;
   className?: string;
 }): JSX.Element | null {
-  const logoProps = className !== undefined ? { className } : {};
-  switch (kind) {
-    case "github":
-      return <GitHubLogo {...logoProps} />;
-    case "azure_devops":
-      return <AzureDevOpsLogo {...logoProps} />;
-    default:
-      return null;
-  }
+  const spec = getProviderSpec(kind);
+  if (!spec?.logo) return null;
+  const Logo = spec.logo;
+  return className !== undefined ? <Logo className={className} /> : <Logo />;
 }

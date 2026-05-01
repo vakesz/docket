@@ -2,7 +2,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { LLM_KIND_LABELS, LLM_KINDS, type LlmKind } from "@/agent/llm/types";
+import { LLM_KIND_LABELS, LLM_KIND_META, LLM_KINDS, type LlmKind } from "@/agent/llm/types";
 import { formatPriceCentsAsDollars, parsePriceDollarsToCents } from "@/lib/pricing";
 import { trpc } from "@/lib/trpc-client";
 import { Alert, AlertDescription } from "@/ui/primitives/alert";
@@ -80,11 +80,12 @@ export function LlmProviderForm(props: Props) {
   const utils = trpc.useUtils();
   const isEdit = props.mode === "edit";
 
+  const fallbackKind: Kind = LLM_KINDS[0];
   const initialKind: Kind = isEdit
     ? (LLM_KINDS as readonly string[]).includes(props.initial.kind)
       ? (props.initial.kind as Kind)
-      : "openai"
-    : "openai";
+      : fallbackKind
+    : fallbackKind;
   const initialRole: Role = isEdit ? props.initial.role : "chat";
 
   const create = trpc.llmProviders.create.useMutation({
@@ -122,6 +123,8 @@ export function LlmProviderForm(props: Props) {
   });
 
   const role = form.watch("role");
+  const watchKind = form.watch("kind");
+  const meta = LLM_KIND_META[watchKind];
 
   function onSubmit(values: FormValues) {
     if (!isEdit && values.apiKey.trim() === "") {
@@ -220,10 +223,7 @@ export function LlmProviderForm(props: Props) {
               <FormItem className="flex-1">
                 <FormLabel>Label</FormLabel>
                 <FormControl>
-                  <Input
-                    {...field}
-                    placeholder={role === "guardrail" ? "OpenAI guardrail" : "OpenAI prod"}
-                  />
+                  <Input {...field} placeholder={meta.defaultLabelByRole[role]} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -235,7 +235,7 @@ export function LlmProviderForm(props: Props) {
           <p className="-mt-2 text-muted-foreground text-xs">
             {role === "chat"
               ? "Chat rows feed the agent loop. The conversation LLM picker only sees chat rows."
-              : "Guardrail rows feed the prompt-injection / topic-scope / output-safety classifier. They run alongside chat — never as the chat model. A small / cheap model is recommended (e.g. gpt-5-nano)."}
+              : `Guardrail rows feed the prompt-injection / topic-scope / output-safety classifier. They run alongside chat — never as the chat model. A small / cheap model is recommended (e.g. ${meta.defaultModelByRole.guardrail}).`}
           </p>
         ) : null}
 
@@ -250,20 +250,14 @@ export function LlmProviderForm(props: Props) {
                   {...field}
                   type="password"
                   autoComplete="off"
-                  placeholder="sk-..."
+                  placeholder={meta.apiKeyPlaceholder}
                   className="font-mono"
                 />
               </FormControl>
               <FormDescription className="text-xs">
-                {isEdit ? (
-                  "Stored encrypted at rest. Only fill this in to rotate the key."
-                ) : (
-                  <>
-                    Stored encrypted at rest. Format depends on the vendor (OpenAI starts with{" "}
-                    <code className="rounded bg-muted px-1 py-0.5 font-mono">sk-</code>, Anthropic
-                    with <code className="rounded bg-muted px-1 py-0.5 font-mono">sk-ant-</code>).
-                  </>
-                )}
+                {isEdit
+                  ? "Stored encrypted at rest. Only fill this in to rotate the key."
+                  : `Stored encrypted at rest. ${meta.apiKeyHelp}`}
               </FormDescription>
               <FormMessage />
             </FormItem>
@@ -278,21 +272,12 @@ export function LlmProviderForm(props: Props) {
               <FormItem className="flex-1">
                 <FormLabel>{isEdit ? "Model" : "Model (optional)"}</FormLabel>
                 <FormControl>
-                  <Input {...field} placeholder="gpt-5" />
+                  <Input {...field} placeholder={meta.defaultModelByRole[role]} />
                 </FormControl>
                 <FormDescription className="text-xs">
-                  {isEdit ? (
-                    "Optional override. Empty lets the adapter pick its default."
-                  ) : (
-                    <>
-                      Optional override (e.g.{" "}
-                      <code className="rounded bg-muted px-1 py-0.5 font-mono">gpt-5</code>,{" "}
-                      <code className="rounded bg-muted px-1 py-0.5 font-mono">
-                        claude-sonnet-4-6
-                      </code>
-                      ). Empty lets the adapter pick its default.
-                    </>
-                  )}
+                  {isEdit
+                    ? "Optional override. Empty lets the adapter pick its default."
+                    : `Optional override. Empty lets the adapter pick its default (e.g. ${meta.defaultModelByRole.chat}).`}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -306,12 +291,9 @@ export function LlmProviderForm(props: Props) {
               <FormItem className="flex-1">
                 <FormLabel>{isEdit ? "Base URL" : "Base URL (optional)"}</FormLabel>
                 <FormControl>
-                  <Input {...field} placeholder="https://api.openai.com/v1" />
+                  <Input {...field} placeholder={meta.baseUrlPlaceholder} />
                 </FormControl>
-                <FormDescription className="text-xs">
-                  Only set for non-vanilla endpoints — Azure OpenAI, an internal proxy, or a
-                  self-hosted Ollama. Blank uses the vendor's public endpoint.
-                </FormDescription>
+                <FormDescription className="text-xs">{meta.baseUrlHelp}</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -347,17 +329,8 @@ export function LlmProviderForm(props: Props) {
           />
         </div>
         <p className="-mt-2 text-muted-foreground text-xs">
-          USD per million tokens — paste the vendor's published rate as-is
-          {isEdit
-            ? ". Leave blank if unknown — turns will then be logged with no cost and budget tracking will undercount."
-            : " (e.g. OpenAI gpt-4.1 is "}
-          {!isEdit ? (
-            <>
-              <code className="font-mono">2.00</code> in / <code className="font-mono">8.00</code>{" "}
-              out). Leave blank if unknown — turns will then be logged with no cost and budget
-              tracking will undercount.
-            </>
-          ) : null}
+          USD per million tokens — paste the vendor's published rate as-is. Leave blank if unknown —
+          turns will then be logged with no cost and budget tracking will undercount.
         </p>
 
         {!isEdit ? (

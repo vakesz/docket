@@ -19,10 +19,15 @@
 
 import "server-only";
 import { CompositeGuardrail } from "@/agent/guardrail/composite";
+import type { JudgeClient } from "@/agent/guardrail/judge-client";
+import { loadJudgePrompts } from "@/agent/guardrail/judge-prompts-loader";
 import { LlmJudgeGuardrail } from "@/agent/guardrail/llm-judge";
 import { NoopGuardrail } from "@/agent/guardrail/noop";
 import { PatternGuardrail } from "@/agent/guardrail/pattern";
 import type { Guardrail, GuardrailKind } from "@/agent/guardrail/types";
+import { AnthropicJudgeClient } from "@/agent/llm/anthropic";
+import { OpenAiJudgeClient } from "@/agent/llm/openai";
+import type { LlmKind } from "@/agent/llm/types";
 import type { LlmProvider, Project } from "@/db/generated/client";
 import type { db as Db } from "@/server/db";
 import { logger } from "@/server/logger";
@@ -92,12 +97,19 @@ async function tryBuildLlmJudge(
     );
     return null;
   }
-  const apiKey = decryptSecret(row.apiKey);
+  const client = buildJudgeClient(row);
+  if (!client) {
+    logger.warn(
+      { projectId: ctx.project.id, providerId: row.id, kind: row.kind, label: row.label },
+      "guardrail: no JudgeClient registered for provider kind; falling back to pattern",
+    );
+    return null;
+  }
+  const prompts = await loadJudgePrompts(db);
   return new LlmJudgeGuardrail({
-    apiKey,
+    client,
     label: row.label,
-    model: row.model,
-    ...(row.baseUrl ? { baseUrl: row.baseUrl } : {}),
+    prompts,
     scopeCheckEnabled: ctx.settings.scopeCheckEnabled,
     outputCheckEnabled: ctx.settings.outputCheckEnabled,
     blockOffTopic: ctx.settings.blockOffTopic,
@@ -105,6 +117,39 @@ async function tryBuildLlmJudge(
     inputPriceCentsPerMtok: decimalToNumber(row.inputPriceCentsPerMtok),
     outputPriceCentsPerMtok: decimalToNumber(row.outputPriceCentsPerMtok),
   });
+}
+
+/**
+ * Build the vendor-specific `JudgeClient` for a guardrail provider row. The
+ * dispatch mirrors the chat-side `selectAdapterFor`: every `LlmKind` lives
+ * in its own adapter file under `src/agent/llm/<kind>.ts`, and the arch
+ * test `llm-kinds-have-adapters.test.ts` keeps this switch in lockstep with
+ * the `LLM_KINDS` tuple. Returning `null` means the operator wired a kind
+ * we haven't shipped a JudgeClient for yet — the registry falls back to
+ * pattern in that case.
+ */
+function buildJudgeClient(row: LlmProvider): JudgeClient | null {
+  const apiKey = decryptSecret(row.apiKey);
+  const kind = row.kind as LlmKind;
+  switch (kind) {
+    case "openai":
+      return new OpenAiJudgeClient({
+        apiKey,
+        model: row.model,
+        ...(row.baseUrl ? { baseUrl: row.baseUrl } : {}),
+      });
+    case "anthropic":
+      return new AnthropicJudgeClient({
+        apiKey,
+        model: row.model,
+        ...(row.baseUrl ? { baseUrl: row.baseUrl } : {}),
+      });
+    default: {
+      const exhaustive: never = kind;
+      void exhaustive;
+      return null;
+    }
+  }
 }
 
 function decimalToNumber(value: LlmProvider["inputPriceCentsPerMtok"]): number | null {

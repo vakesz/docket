@@ -1,64 +1,77 @@
 "use client";
 
 import { useId } from "react";
+import type { ProviderOauthMetadata } from "@/core/provider";
 import { Input } from "@/ui/primitives/input";
 import { Label } from "@/ui/primitives/label";
 import { ProviderToggle } from "@/ui/setup/provider-toggle";
 
-export type AzdoStepState = {
+export type OauthStepState = {
   enabled: boolean;
   label: string;
   clientId: string;
   clientSecret: string;
   scopes: string;
-  tenantId: string;
+  /** Provider-specific aux value — base URL or tenant id, dispatched via spec.oauth.auxSlot. */
+  aux: string;
 };
 
-export type AzdoStepHandlers = {
+export type OauthStepHandlers = {
   setEnabled: (next: boolean) => void;
   setLabel: (next: string) => void;
   setClientId: (next: string) => void;
   setClientSecret: (next: string) => void;
   setScopes: (next: string) => void;
-  setTenantId: (next: string) => void;
+  setAux: (next: string) => void;
 };
 
-export function StepAzdo({
+/**
+ * Generic OAuth step. The wizard renders one of these per registered
+ * OAuth-capable provider. All provider-specific copy comes from the
+ * `ProviderOauthMetadata` block on the spec — no `if (kind === ...)`
+ * branches. Adding a new OAuth provider is one new spec entry plus one
+ * new entry in the wizard's `oauthSpecs` prop.
+ */
+export function StepOauth({
+  displayName,
+  oauth,
   state,
   handlers,
   alreadyConfigured,
   callbackUrl,
 }: {
-  state: AzdoStepState;
-  handlers: AzdoStepHandlers;
+  displayName: string;
+  oauth: ProviderOauthMetadata;
+  state: OauthStepState;
+  handlers: OauthStepHandlers;
   alreadyConfigured: boolean;
   callbackUrl: string;
 }) {
   const labelId = useId();
   const clientIdId = useId();
   const clientSecretId = useId();
-  const tenantIdId = useId();
   const scopesId = useId();
+  const auxId = useId();
 
   return (
     <ProviderToggle
-      label="Azure DevOps"
+      label={displayName}
       checked={state.enabled}
       disabled={alreadyConfigured}
       alreadyConfigured={alreadyConfigured}
       onChange={handlers.setEnabled}
       help={
         <>
-          Register an Entra app at{" "}
+          Register at{" "}
           <a
             className="underline underline-offset-2"
-            href="https://entra.microsoft.com"
+            href={oauth.registrationUrl}
             target="_blank"
             rel="noreferrer"
           >
-            entra.microsoft.com
+            {oauth.registrationLabel}
           </a>
-          . Add a Web redirect URI:{" "}
+          . Set the redirect URL to:{" "}
           <code className="rounded bg-muted px-1 py-0.5 font-mono">{callbackUrl}</code>
         </>
       }
@@ -71,7 +84,7 @@ export function StepAzdo({
           id={labelId}
           value={state.label}
           onChange={(e) => handlers.setLabel(e.target.value)}
-          placeholder="Azure DevOps"
+          placeholder={oauth.defaultLabel}
           autoComplete="off"
           required={state.enabled}
         />
@@ -80,7 +93,7 @@ export function StepAzdo({
       <div className="flex gap-3">
         <div className="flex flex-1 flex-col gap-1">
           <Label htmlFor={clientIdId} className="text-muted-foreground text-xs">
-            Application (client) ID
+            Client ID
           </Label>
           <Input
             id={clientIdId}
@@ -90,47 +103,42 @@ export function StepAzdo({
             autoComplete="off"
             required={state.enabled}
           />
-          <p className="text-muted-foreground/70 text-xs">UUID shown on the app's Overview page.</p>
         </div>
         <div className="flex flex-1 flex-col gap-1">
           <Label htmlFor={clientSecretId} className="text-muted-foreground text-xs">
-            Client secret value
+            Client secret
           </Label>
           <Input
             id={clientSecretId}
             type="password"
             value={state.clientSecret}
             onChange={(e) => handlers.setClientSecret(e.target.value)}
-            placeholder="A1bC~2dEfGhIjKlMnOp.QrStUvWxYz0123456789"
             className="font-mono"
             autoComplete="off"
             required={state.enabled}
           />
-          <p className="text-muted-foreground/70 text-xs">
-            Use the <em>value</em>, not the secret id. ~40 chars, may include{" "}
-            <code className="font-mono">~</code>, <code className="font-mono">-</code>,{" "}
-            <code className="font-mono">.</code>.
-          </p>
+          <p className="text-muted-foreground/70 text-xs">Stored AES-GCM encrypted.</p>
         </div>
       </div>
 
-      <div className="flex flex-col gap-1">
-        <Label htmlFor={tenantIdId} className="text-muted-foreground text-xs">
-          Directory (tenant) ID
-        </Label>
-        <Input
-          id={tenantIdId}
-          value={state.tenantId}
-          onChange={(e) => handlers.setTenantId(e.target.value)}
-          className="font-mono"
-          autoComplete="off"
-          required={state.enabled}
-        />
-        <p className="text-muted-foreground/70 text-xs">
-          UUID. Found on the Entra tenant overview page; required so the OAuth endpoints resolve
-          correctly.
-        </p>
-      </div>
+      {oauth.auxRequired ? (
+        <div className="flex flex-col gap-1">
+          <Label htmlFor={auxId} className="text-muted-foreground text-xs">
+            {oauth.auxLabel}
+          </Label>
+          <Input
+            id={auxId}
+            type={oauth.auxKind === "url" ? "url" : "text"}
+            value={state.aux}
+            onChange={(e) => handlers.setAux(e.target.value)}
+            placeholder={oauth.auxPlaceholder}
+            className="font-mono"
+            autoComplete="off"
+            required={state.enabled}
+          />
+          <p className="text-muted-foreground/70 text-xs">{oauth.auxHelp}</p>
+        </div>
+      ) : null}
 
       <details className="flex flex-col gap-3">
         <summary className="cursor-pointer select-none font-medium text-muted-foreground text-xs hover:text-foreground">
@@ -149,9 +157,26 @@ export function StepAzdo({
               autoComplete="off"
             />
             <p className="text-muted-foreground/70 text-xs">
-              Default is the AzDO v6 work-items scope plus offline access for refresh tokens.
+              Default covers the provider's standard sign-in + read scopes.
             </p>
           </div>
+
+          {!oauth.auxRequired ? (
+            <div className="flex flex-col gap-1">
+              <Label htmlFor={auxId} className="text-muted-foreground text-xs">
+                {oauth.auxLabel}
+              </Label>
+              <Input
+                id={auxId}
+                type={oauth.auxKind === "url" ? "url" : "text"}
+                value={state.aux}
+                onChange={(e) => handlers.setAux(e.target.value)}
+                placeholder={oauth.auxPlaceholder}
+                autoComplete="off"
+              />
+              <p className="text-muted-foreground/70 text-xs">{oauth.auxHelp}</p>
+            </div>
+          ) : null}
         </div>
       </details>
     </ProviderToggle>

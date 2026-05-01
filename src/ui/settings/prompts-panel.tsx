@@ -29,9 +29,12 @@ type PromptKey =
   | "prompt.kind.story"
   | "prompt.kind.task"
   | "prompt.kind.bug"
-  | "prompt.suggest-next-action";
+  | "prompt.suggest-next-action"
+  | "prompt.guardrail.injection"
+  | "prompt.guardrail.scope"
+  | "prompt.guardrail.output-safety";
 
-type PromptGroup = "system" | "kind" | "seed";
+type PromptGroup = "system" | "kind" | "seed" | "guardrail";
 
 type FieldDef = {
   key: PromptKey;
@@ -99,12 +102,37 @@ const FIELDS: readonly FieldDef[] = [
     hint: "Instructional middle of the seed message the chat pane fires when a user clicks 'Suggest next action' on the item header. The seed builder wraps this in dynamic context (title, kind/state hints, body excerpt, comment count). Empty falls back to the bundled default.",
     rows: 18,
   },
+  {
+    key: "prompt.guardrail.injection",
+    group: "guardrail",
+    navLabel: "Tool-result injection",
+    label: "Guardrail prompt — tool-result injection check",
+    hint: "System prompt the LLM-judge uses when classifying tool output as safe / suspicious / injection. Must keep the three label tokens reachable so the judge's verdict match still works. Empty falls back to the bundled default.",
+    rows: 18,
+  },
+  {
+    key: "prompt.guardrail.scope",
+    group: "guardrail",
+    navLabel: "Input scope",
+    label: "Guardrail prompt — input scope check",
+    hint: "System prompt the LLM-judge uses when classifying user messages as on-topic / off-topic. Must keep the two label tokens reachable. Empty falls back to the bundled default.",
+    rows: 18,
+  },
+  {
+    key: "prompt.guardrail.output-safety",
+    group: "guardrail",
+    navLabel: "Output safety",
+    label: "Guardrail prompt — output safety check",
+    hint: "System prompt the LLM-judge uses when classifying the assistant's final reply as safe / unsafe. Must keep the two label tokens reachable. Empty falls back to the bundled default.",
+    rows: 8,
+  },
 ];
 
 const GROUPS: { key: PromptGroup; label: string }[] = [
   { key: "system", label: "System" },
   { key: "kind", label: "Per-kind prefixes" },
   { key: "seed", label: "Seeds" },
+  { key: "guardrail", label: "Guardrail (LLM judge)" },
 ];
 
 export function PromptsPanel() {
@@ -293,5 +321,8 @@ function emptyDrafts(): Record<PromptKey, string> {
     "prompt.kind.task": "",
     "prompt.kind.bug": "",
     "prompt.suggest-next-action": "",
+    "prompt.guardrail.injection": "",
+    "prompt.guardrail.scope": "",
+    "prompt.guardrail.output-safety": "",
   };
 }

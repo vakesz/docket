@@ -8,6 +8,7 @@
  * import these types and implement them; the arch test forbids the reverse.
  */
 
+import type { ComponentType } from "react";
 import type {
   ChangedItem,
   CIStatus,
@@ -322,20 +323,33 @@ export type OauthAuxSlot = "baseUrl" | "metadataTenant";
  * pre-fill the OAuth-creds form, the bootstrap wizard, and the seed script.
  *
  * - `defaultLabel` / `defaultScopes` are the values that land in fresh rows.
- * - `baseUrlPlaceholder` is the human-readable hint for the optional
- *   per-row `baseUrl` column. Empty placeholder hides the field's hint.
- * - `baseUrlHelpKey` lets surfaces render a long-form help string keyed
- *   off the spec rather than re-encoding `if (kind === ...)` chains. Empty
- *   string means "no special help — generic baseUrl explanation only."
- * - `auxSlot` names the storage slot the form's "Base URL / tenant" field
- *   writes to (see `OauthAuxSlot`).
+ * - `nextAuthProviderId` is the string the NextAuth callback URL ends in
+ *   (`/api/auth/callback/<id>`). Lets surfaces compute callback URLs without
+ *   a `if (kind === ...)` chain.
+ * - `aux*` describe the single auxiliary input every OAuth-form renders
+ *   alongside the (clientId, clientSecret, scopes) trio. Encodes whatever
+ *   provider-specific extra the row needs (GitHub Enterprise base URL,
+ *   AzDO tenant id) so the wizard doesn't fork per provider.
+ * - `auxSlot` names the storage slot the aux input writes to (see
+ *   `OauthAuxSlot`). When `auxSlot` is `"baseUrl"`, an empty input clears
+ *   the column; with `"metadataTenant"`, an empty input is a validation
+ *   error if `auxRequired` is true.
+ * - `registrationLabel` / `registrationUrl` render as a "Register an app at
+ *   …" link above the form, so the operator finds the right console page
+ *   without leaving the wizard.
  */
 export type ProviderOauthMetadata = {
   defaultLabel: string;
   defaultScopes: string;
-  baseUrlPlaceholder: string;
-  baseUrlHelpKey: string;
+  nextAuthProviderId: string;
+  auxLabel: string;
+  auxRequired: boolean;
+  auxKind: "url" | "string";
+  auxPlaceholder: string;
+  auxHelp: string;
   auxSlot: OauthAuxSlot;
+  registrationLabel: string;
+  registrationUrl: string;
 };
 
 /**
@@ -516,4 +530,14 @@ export type ProviderSpec = {
    * during the OAuth callback regardless of this field.
    */
   avatarFetcher: ProviderAvatarFetcher | null;
+  /**
+   * Brand logo rendered next to the provider's display name on sign-in
+   * buttons and the setup wizard. Each provider package owns its own
+   * `logo.tsx` (currentColor SVG, no server deps) and assigns it here, so
+   * adding a third provider is one new logo file plus one new spec entry —
+   * no central switch to edit. `null` means the surface falls back to a
+   * label-only rendering. Type is the React component value, kept as a
+   * type-only import so `core/` doesn't pull React at runtime.
+   */
+  logo: ComponentType<{ className?: string }> | null;
 };

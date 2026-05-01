@@ -16,6 +16,11 @@
 
 import "server-only";
 import { z } from "zod";
+import {
+  DEFAULT_INJECTION_SYSTEM,
+  DEFAULT_OUTPUT_SAFETY_SYSTEM,
+  DEFAULT_SCOPE_SYSTEM,
+} from "@/agent/guardrail/judge-prompts";
 import { GUARDRAIL_KINDS } from "@/agent/guardrail/types";
 import {
   DEFAULT_KIND_PROMPTS,
@@ -441,6 +446,33 @@ export const SETTINGS_CATALOG = {
     label: "Suggest next action — instructions",
     description:
       "Instructional middle of the seed message the chat pane fires when a user clicks the 'Suggest next action' button on the item detail header. The seed builder wraps this in dynamic context (title, kind/state hints, body excerpt). Empty falls back to the bundled default.",
+  },
+  "prompt.guardrail.injection": {
+    key: "prompt.guardrail.injection",
+    scope: "global",
+    schema: PromptStringSchema,
+    default: DEFAULT_INJECTION_SYSTEM,
+    label: "Guardrail prompt — tool-result injection check",
+    description:
+      "System prompt the LLM-judge guardrail uses when classifying tool output as safe / suspicious / injection. Must keep the three label tokens reachable so the judge's verdict match still works. Empty falls back to the bundled default.",
+  },
+  "prompt.guardrail.scope": {
+    key: "prompt.guardrail.scope",
+    scope: "global",
+    schema: PromptStringSchema,
+    default: DEFAULT_SCOPE_SYSTEM,
+    label: "Guardrail prompt — input scope check",
+    description:
+      "System prompt the LLM-judge guardrail uses when classifying user messages as on-topic / off-topic. Must keep the two label tokens reachable. Empty falls back to the bundled default.",
+  },
+  "prompt.guardrail.output-safety": {
+    key: "prompt.guardrail.output-safety",
+    scope: "global",
+    schema: PromptStringSchema,
+    default: DEFAULT_OUTPUT_SAFETY_SYSTEM,
+    label: "Guardrail prompt — output safety check",
+    description:
+      "System prompt the LLM-judge guardrail uses when classifying the assistant's final reply as safe / unsafe. Must keep the two label tokens reachable. Empty falls back to the bundled default.",
   },
   "web-fetch.enabled": {
     key: "web-fetch.enabled",

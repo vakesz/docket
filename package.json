@@ -23,6 +23,7 @@
     "check": "pnpm lint && pnpm typecheck && pnpm test"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.92.0",
     "@auth/prisma-adapter": "2.11.2",
     "@hookform/resolvers": "^5.2.2",
     "@modelcontextprotocol/sdk": "^1.29.0",

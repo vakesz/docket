@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { publicBaseUrl } from "@/lib/public-base-url";
+import { listProviderSpecs } from "@/server/provider-registry";
 import { SetupWizardForm } from "@/ui/setup/wizard-form";
 
 /**
@@ -9,16 +10,23 @@ import { SetupWizardForm } from "@/ui/setup/wizard-form";
  * wizard from the live route requires nuking the OAuth rows + the
  * Setting between every render.
  *
- * This route renders the same `<SetupWizardForm>` with all `has*` flags
- * set to `false` (every section visible). Clicking around through the
- * OAuth and LLM pages leaves the DB untouched; only "Finish setup" runs
- * the bootstrap mutation, so just don't click it.
+ * This route renders the same `<SetupWizardForm>` with empty `existing*`
+ * maps so every section is visible. Clicking around leaves the DB untouched;
+ * only "Finish setup" runs the bootstrap mutation, so just don't click it.
  */
 export default function SetupPreviewPage() {
   if (process.env["NODE_ENV"] === "production") {
     notFound();
   }
   const baseUrl = publicBaseUrl();
+  const oauthSpecs = listProviderSpecs().filter(
+    (spec): spec is typeof spec & { oauth: NonNullable<typeof spec.oauth> } => spec.oauth !== null,
+  );
+  const oauthCards = oauthSpecs.map((spec) => ({
+    typeId: spec.typeId,
+    displayName: spec.displayName,
+    oauth: spec.oauth,
+  }));
   return (
     <main className="relative h-full overflow-y-auto bg-background text-foreground">
       <p className="fixed top-2 left-1/2 z-10 -translate-x-1/2 rounded-md border border-border bg-muted px-3 py-1.5 text-muted-foreground text-xs shadow-sm">
@@ -26,10 +34,9 @@ export default function SetupPreviewPage() {
       </p>
       <SetupWizardForm
         publicBaseUrl={baseUrl}
-        hasGithub={false}
-        hasAzureDevops={false}
-        hasOpenaiChat={false}
-        hasOpenaiGuardrail={false}
+        oauthCards={oauthCards}
+        existingOauth={{}}
+        existingLlm={{}}
         previewMode
       />
     </main>

@@ -19,6 +19,11 @@
 
 import OpenAI from "openai";
 import type {
+  JudgeClassifyArgs,
+  JudgeClassifyResult,
+  JudgeClient,
+} from "@/agent/guardrail/judge-client";
+import type {
   LlmAdapter,
   LlmEvent,
   LlmRequest,
@@ -254,6 +259,89 @@ export class OpenAiAdapter implements LlmAdapter {
       content: typeof result === "string" ? result : JSON.stringify(result),
     };
   }
+}
+
+/**
+ * Single-shot single-token classifier client used by `LlmJudgeGuardrail`.
+ *
+ * Reasoning models (`gpt-5*`, `o1*`, `o3*`, `o4*`) burn invisible reasoning
+ * tokens before producing a verdict. A tight cap means they spend the whole
+ * budget thinking and return an empty string, which the guardrail would
+ * silently allow. Two-pronged fix: pin `reasoning_effort: "minimal"` so the
+ * budget actually reaches the verdict, and bump the cap so even a
+ * misconfigured deployment that doesn't honor the effort hint still has
+ * room for one token. Non-reasoning models keep `temperature: 0` for
+ * deterministic verdicts.
+ */
+export type OpenAiJudgeClientConfig = {
+  apiKey: string;
+  model: string;
+  baseUrl?: string;
+};
+
+const REASONING_OUTPUT_CAP = 256;
+const NON_REASONING_OUTPUT_CAP = 16;
+
+export class OpenAiJudgeClient implements JudgeClient {
+  readonly model: string;
+  private readonly client: OpenAI;
+
+  constructor(config: OpenAiJudgeClientConfig) {
+    this.model = config.model;
+    this.client = new OpenAI({
+      apiKey: config.apiKey,
+      ...(config.baseUrl ? { baseURL: config.baseUrl } : {}),
+    });
+  }
+
+  async classify(args: JudgeClassifyArgs): Promise<JudgeClassifyResult> {
+    const reasoning = isReasoningModel(this.model);
+    // The OpenAI SDK types `reasoning_effort` only on the responses-API
+    // params shape; chat.completions accepts the same key for gpt-5* /
+    // o-series models even though the published type doesn't surface it.
+    type ChatParams = OpenAI.Chat.ChatCompletionCreateParamsNonStreaming & {
+      reasoning_effort?: "minimal" | "low" | "medium" | "high";
+    };
+    const params: ChatParams = {
+      model: this.model,
+      messages: [
+        { role: "system", content: args.system },
+        { role: "user", content: args.user },
+      ],
+      max_completion_tokens: reasoning ? REASONING_OUTPUT_CAP : NON_REASONING_OUTPUT_CAP,
+      stream: false,
+    };
+    if (reasoning) {
+      params.reasoning_effort = "minimal";
+    } else {
+      params.temperature = 0;
+    }
+    const resp = await this.client.chat.completions.create(
+      params,
+      args.signal ? { signal: args.signal } : undefined,
+    );
+    const text = resp.choices?.[0]?.message?.content ?? "";
+    const usageRaw = resp.usage;
+    if (usageRaw) {
+      const tokensIn = usageRaw.prompt_tokens ?? 0;
+      const tokensOut = usageRaw.completion_tokens ?? 0;
+      if (tokensIn > 0 || tokensOut > 0) {
+        return { text, usage: { tokensIn, tokensOut } };
+      }
+    }
+    return { text };
+  }
+}
+
+/**
+ * Reasoning-model detector for chat-completions param shape. Matches
+ * `gpt-5*` and the `o*` reasoning families. The list is conservative —
+ * adding a model that requires `max_completion_tokens` only here costs
+ * nothing; missing one re-introduces the silent-allow bug.
+ */
+function isReasoningModel(model: string): boolean {
+  const m = model.toLowerCase();
+  return /^(gpt-5|o1|o3|o4)\b/.test(m);
 }
 
 function toResponsesInput(messages: readonly import("@/agent/llm/types").LlmMessage[]) {

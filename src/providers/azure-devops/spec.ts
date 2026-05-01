@@ -31,6 +31,7 @@ import type {
 import type { Item } from "@/core/types";
 import { asPlainObject } from "@/lib/json";
 import { azureDevOpsAvatarFetcher } from "@/providers/azure-devops/avatar";
+import { AzureDevOpsLogo } from "@/providers/azure-devops/logo";
 import { AzureDevOpsProvider } from "@/providers/azure-devops/provider";
 import { availableIntentsForState, STATE_ENCODING_TAGS } from "@/providers/azure-devops/state-map";
 
@@ -164,10 +165,18 @@ export const azureDevOpsSpec = {
   oauth: {
     defaultLabel: "Azure DevOps",
     defaultScopes: "499b84ac-1321-427f-aa17-267ca6975798/.default offline_access",
-    baseUrlPlaceholder: "Entra tenant id (leave blank for `common` / multi-tenant)",
-    baseUrlHelpKey: "azure_devops_tenant",
+    nextAuthProviderId: "azure_devops",
+    auxLabel: "Directory (tenant) ID",
+    auxRequired: true,
+    auxKind: "string",
+    auxPlaceholder: "00000000-0000-0000-0000-000000000000",
+    auxHelp:
+      "UUID. Found on the Entra tenant overview page; required so the OAuth endpoints resolve correctly.",
     auxSlot: "metadataTenant",
+    registrationLabel: "entra.microsoft.com",
+    registrationUrl: "https://entra.microsoft.com",
   },
   profileUrl: null,
   avatarFetcher: azureDevOpsAvatarFetcher,
+  logo: AzureDevOpsLogo,
 } satisfies ProviderSpec;

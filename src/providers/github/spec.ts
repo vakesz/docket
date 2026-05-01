@@ -14,6 +14,7 @@
 
 import type { LabelTemplate, ProviderItemNumberCodec, ProviderSpec } from "@/core/provider";
 import { githubAvatarFetcher } from "@/providers/github/avatar";
+import { GitHubLogo } from "@/providers/github/logo";
 import { githubProfileUrl } from "@/providers/github/profile";
 import { GitHubProvider } from "@/providers/github/provider";
 import { GITHUB_REACTION_KINDS } from "@/providers/github/reactions";
@@ -102,10 +103,17 @@ export const githubSpec = {
   oauth: {
     defaultLabel: "GitHub",
     defaultScopes: "read:user user:email repo",
-    baseUrlPlaceholder: "GitHub Enterprise base URL (leave blank for github.com)",
-    baseUrlHelpKey: "github_enterprise",
+    nextAuthProviderId: "github",
+    auxLabel: "Enterprise base URL",
+    auxRequired: false,
+    auxKind: "url",
+    auxPlaceholder: "https://github.example.com",
+    auxHelp: "Leave blank for github.com. Only fill in for GitHub Enterprise Server.",
     auxSlot: "baseUrl",
+    registrationLabel: "github.com/settings/developers",
+    registrationUrl: "https://github.com/settings/developers",
   },
   profileUrl: githubProfileUrl,
   avatarFetcher: githubAvatarFetcher,
+  logo: GitHubLogo,
 } satisfies ProviderSpec;

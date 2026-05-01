@@ -10,7 +10,14 @@ import { applyBootstrap, BootstrapInput } from "@/server/setup/bootstrap";
 type Database = Parameters<typeof applyBootstrap>[0];
 
 const state = {
-  oauthRows: [] as Array<{ id: string; kind: string; clientId: string; clientSecret: string }>,
+  oauthRows: [] as Array<{
+    id: string;
+    kind: string;
+    clientId: string;
+    clientSecret: string;
+    baseUrl: string;
+    metadata: Record<string, unknown>;
+  }>,
   llmRows: [] as Array<{
     id: string;
     kind: string;
@@ -32,7 +39,13 @@ function makeDb(): Database {
       create: async ({
         data,
       }: {
-        data: { kind: string; clientId: string; clientSecret: string };
+        data: {
+          kind: string;
+          clientId: string;
+          clientSecret: string;
+          baseUrl?: string;
+          metadata?: Record<string, unknown>;
+        };
       }) => {
         state.oauthCreated += 1;
         const row = {
@@ -40,6 +53,8 @@ function makeDb(): Database {
           kind: data.kind,
           clientId: data.clientId,
           clientSecret: data.clientSecret,
+          baseUrl: data.baseUrl ?? "",
+          metadata: data.metadata ?? {},
         };
         state.oauthRows.push(row);
         return row;
@@ -98,9 +113,14 @@ describe("applyBootstrap", () => {
     const result = await applyBootstrap(
       makeDb(),
       BootstrapInput.parse({
-        github: { clientId: "Iv1.abc", clientSecret: "secret", baseUrl: "" },
-        azureDevops: null,
-        llms: [],
+        oauthProviders: [
+          {
+            typeId: "github",
+            label: "GitHub",
+            clientId: "Iv1.abc",
+            clientSecret: "secret",
+          },
+        ],
       }),
     );
     expect(result).toEqual({ complete: true, hasLlm: false, hasOauth: true });
@@ -115,17 +135,29 @@ describe("applyBootstrap", () => {
     const result = await applyBootstrap(
       makeDb(),
       BootstrapInput.parse({
-        github: { clientId: "Iv1.abc", clientSecret: "gh-secret", baseUrl: "" },
-        azureDevops: {
-          clientId: "azdo-app",
-          clientSecret: "azdo-secret",
-          tenantId: "00000000-0000-0000-0000-000000000000",
-        },
-        llms: [{ role: "chat", apiKey: "sk-test", model: "gpt-5", baseUrl: "" }],
+        oauthProviders: [
+          {
+            typeId: "github",
+            label: "GitHub",
+            clientId: "Iv1.abc",
+            clientSecret: "gh-secret",
+          },
+          {
+            typeId: "azure_devops",
+            label: "Azure DevOps",
+            clientId: "azdo-app",
+            clientSecret: "azdo-secret",
+            aux: "00000000-0000-0000-0000-000000000000",
+          },
+        ],
+        llms: [{ role: "chat", apiKey: "sk-test", model: "gpt-5" }],
       }),
     );
     expect(result).toEqual({ complete: true, hasLlm: true, hasOauth: true });
     expect(state.oauthRows.map((r) => r.kind).sort()).toEqual(["azure_devops", "github"]);
+    const azdo = state.oauthRows.find((r) => r.kind === "azure_devops");
+    expect(azdo?.metadata).toEqual({ tenant: "00000000-0000-0000-0000-000000000000" });
+    expect(azdo?.baseUrl).toBe("");
     expect(state.llmRows[0]).toMatchObject({ kind: "openai", role: "chat", isDefault: true });
     expect(state.llmRows[0]?.apiKey).toBe("ENC(sk-test)");
   });
@@ -134,11 +166,17 @@ describe("applyBootstrap", () => {
     await applyBootstrap(
       makeDb(),
       BootstrapInput.parse({
-        github: { clientId: "Iv1.abc", clientSecret: "secret", baseUrl: "" },
-        azureDevops: null,
+        oauthProviders: [
+          {
+            typeId: "github",
+            label: "GitHub",
+            clientId: "Iv1.abc",
+            clientSecret: "secret",
+          },
+        ],
         llms: [
-          { role: "chat", apiKey: "sk-chat", model: "gpt-5", baseUrl: "" },
-          { role: "guardrail", apiKey: "sk-guard", model: "gpt-5-nano", baseUrl: "" },
+          { role: "chat", apiKey: "sk-chat", model: "gpt-5" },
+          { role: "guardrail", apiKey: "sk-guard", model: "gpt-5-nano" },
         ],
       }),
     );
@@ -149,12 +187,11 @@ describe("applyBootstrap", () => {
     expect(guardrail).toMatchObject({ kind: "openai", role: "guardrail", isDefault: true });
   });
 
-  it("BootstrapInput rejects when neither OAuth section is provided", () => {
+  it("BootstrapInput rejects when no OAuth provider is supplied", () => {
     expect(() =>
       BootstrapInput.parse({
-        github: null,
-        azureDevops: null,
-        llms: [{ role: "chat", apiKey: "sk-test", model: "", baseUrl: "" }],
+        oauthProviders: [],
+        llms: [{ role: "chat", apiKey: "sk-test" }],
       }),
     ).toThrow();
   });
@@ -162,11 +199,28 @@ describe("applyBootstrap", () => {
   it("BootstrapInput rejects duplicate (kind, role) entries in llms", () => {
     expect(() =>
       BootstrapInput.parse({
-        github: { clientId: "Iv1.abc", clientSecret: "secret", baseUrl: "" },
-        azureDevops: null,
+        oauthProviders: [
+          {
+            typeId: "github",
+            label: "GitHub",
+            clientId: "Iv1.abc",
+            clientSecret: "secret",
+          },
+        ],
         llms: [
-          { role: "chat", apiKey: "sk-a", model: "", baseUrl: "" },
-          { role: "chat", apiKey: "sk-b", model: "", baseUrl: "" },
+          { role: "chat", apiKey: "sk-a" },
+          { role: "chat", apiKey: "sk-b" },
+        ],
+      }),
+    ).toThrow();
+  });
+
+  it("BootstrapInput rejects duplicate OAuth typeIds", () => {
+    expect(() =>
+      BootstrapInput.parse({
+        oauthProviders: [
+          { typeId: "github", label: "A", clientId: "x", clientSecret: "y" },
+          { typeId: "github", label: "B", clientId: "x", clientSecret: "y" },
         ],
       }),
     ).toThrow();
@@ -178,22 +232,51 @@ describe("applyBootstrap", () => {
       applyBootstrap(
         makeDb(),
         BootstrapInput.parse({
-          github: { clientId: "Iv1.abc", clientSecret: "secret", baseUrl: "" },
-          azureDevops: null,
-          llms: [],
+          oauthProviders: [
+            {
+              typeId: "github",
+              label: "GitHub",
+              clientId: "Iv1.abc",
+              clientSecret: "secret",
+            },
+          ],
         }),
       ),
     ).rejects.toMatchObject({ code: "CONFLICT" });
     expect(state.oauthRows).toHaveLength(0);
   });
 
+  it("rejects when an Azure DevOps tenant id is missing", async () => {
+    await expect(
+      applyBootstrap(
+        makeDb(),
+        BootstrapInput.parse({
+          oauthProviders: [
+            {
+              typeId: "azure_devops",
+              label: "Azure DevOps",
+              clientId: "x",
+              clientSecret: "y",
+            },
+          ],
+        }),
+      ),
+    ).rejects.toBeInstanceOf(TRPCError);
+  });
+
   it("first LLM row of its role gets isDefault=true", async () => {
     await applyBootstrap(
       makeDb(),
       BootstrapInput.parse({
-        github: { clientId: "Iv1.abc", clientSecret: "secret", baseUrl: "" },
-        azureDevops: null,
-        llms: [{ role: "chat", apiKey: "sk-test", model: "", baseUrl: "" }],
+        oauthProviders: [
+          {
+            typeId: "github",
+            label: "GitHub",
+            clientId: "Iv1.abc",
+            clientSecret: "secret",
+          },
+        ],
+        llms: [{ role: "chat", apiKey: "sk-test" }],
       }),
     );
     expect(state.llmRows[0]?.isDefault).toBe(true);
@@ -205,9 +288,14 @@ describe("applyBootstrap", () => {
       applyBootstrap(
         makeDb(),
         BootstrapInput.parse({
-          github: { clientId: "Iv1.abc", clientSecret: "secret", baseUrl: "" },
-          azureDevops: null,
-          llms: [],
+          oauthProviders: [
+            {
+              typeId: "github",
+              label: "GitHub",
+              clientId: "Iv1.abc",
+              clientSecret: "secret",
+            },
+          ],
         }),
       ),
     ).rejects.toBeInstanceOf(TRPCError);

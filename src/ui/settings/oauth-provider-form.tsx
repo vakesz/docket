@@ -26,13 +26,17 @@ import {
 type OauthDefaults = {
   defaultLabel: string;
   defaultScopes: string;
-  baseUrlPlaceholder: string;
+  auxLabel: string;
+  auxPlaceholder: string;
+  auxHelp: string;
 };
 
 const FALLBACK_DEFAULTS: OauthDefaults = {
   defaultLabel: "",
   defaultScopes: "",
-  baseUrlPlaceholder: "Optional override",
+  auxLabel: "Base URL / tenant (optional)",
+  auxPlaceholder: "Optional override",
+  auxHelp: "Provider-specific aux value (base URL or tenant id).",
 };
 
 export type OauthProviderFormInitial = {
@@ -113,6 +117,7 @@ export function OauthProviderForm(props: Props) {
   });
 
   const watchKind = form.watch("kind");
+  const auxMeta = defaultsByKind.get(watchKind) ?? FALLBACK_DEFAULTS;
 
   function onKindChange(next: string) {
     form.setValue("kind", next);
@@ -150,7 +155,6 @@ export function OauthProviderForm(props: Props) {
 
   const pending = mode === "edit" ? update.isPending : create.isPending;
   const error = (mode === "edit" ? update.error : create.error)?.message;
-  const baseUrlHint = (defaultsByKind.get(watchKind) ?? FALLBACK_DEFAULTS).baseUrlPlaceholder;
 
   return (
     <Form {...form}>
@@ -277,19 +281,11 @@ export function OauthProviderForm(props: Props) {
           name="baseUrl"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Base URL / tenant (optional)</FormLabel>
+              <FormLabel>{auxMeta.auxLabel}</FormLabel>
               <FormControl>
-                <Input {...field} placeholder={baseUrlHint} />
+                <Input {...field} placeholder={auxMeta.auxPlaceholder} />
               </FormControl>
-              <FormDescription className="text-xs">
-                GitHub Enterprise base URL (e.g.{" "}
-                <code className="rounded bg-muted px-1 py-0.5 font-mono">
-                  https://github.example.com
-                </code>
-                ), or the Entra tenant id for Azure DevOps. Blank ={" "}
-                <code className="rounded bg-muted px-1 py-0.5 font-mono">github.com</code> /
-                multi-tenant <code className="rounded bg-muted px-1 py-0.5 font-mono">common</code>.
-              </FormDescription>
+              <FormDescription className="text-xs">{auxMeta.auxHelp}</FormDescription>
               <FormMessage />
             </FormItem>
           )}

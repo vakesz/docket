@@ -79,7 +79,7 @@ This is the single most important rule:
 guardrail LLM-judge if it shares the SDK).**
 
 The arch test `src/__arch__/no-llm-vendor-leak.test.ts` enforces it. The
-quarantine list reads:
+quarantine list reads (one entry per SDK):
 
 ```ts
 const QUARANTINES: Quarantine[] = [
@@ -90,6 +90,11 @@ const QUARANTINES: Quarantine[] = [
       join("src", "agent", "guardrail", "llm-judge.ts"),
     ],
     matcher: /from\s+["']openai…/,
+  },
+  {
+    sdk: "@anthropic-ai/sdk",
+    allowedFiles: [join("src", "agent", "llm", "anthropic.ts")],
+    matcher: /from\s+["']@anthropic-ai\/sdk…/,
   },
 ];
 ```
@@ -265,11 +270,24 @@ Every `LlmProvider` row carries a `role`: either `"chat"` or
   When the guardrail kind is `llm-judge` or `composite` and no guardrail
   provider row resolves, the pipeline falls back to `pattern` and logs.
 
-The same kind dispatch applies to both — `buildAdapter` is the single
-source of truth, and the LLM-judge calls into the same adapter layer
-under the hood. Adding a vendor automatically makes it available in both
-chat and guardrail roles. Operators decide via the role column on each
-row which deployment uses which model.
+The chat path (`buildAdapter`) dispatches on `kind`, so adding a vendor
+to that switch makes it instantly usable as a chat row. The guardrail
+path is **not** unified yet: `LlmJudgeGuardrail` (`src/agent/guardrail/llm-judge.ts`)
+imports the OpenAI SDK directly and ignores `row.kind`. That's fine for
+OpenAI-compatible endpoints (Azure Foundry, Ollama, vLLM, OpenRouter,
+LiteLLM) — the OpenAI SDK against a compatible base URL just works.
+Vendors whose wire format differs (Anthropic Messages API, Bedrock
+native, Vertex's `generateContent`) need an extra step before they can
+serve as guardrail rows: extend `llm-judge.ts` to dispatch on
+`row.kind`, or build a sibling guardrail adapter and update
+`tryBuildLlmJudge` to pick between them. The arch test in
+`no-llm-vendor-leak.test.ts` permits `llm-judge.ts` to import the OpenAI
+SDK only — pull in another vendor SDK there and you'll need to
+allow-list it in that test too.
+
+Until that extension lands, treat a non-OpenAI-compatible vendor as a
+chat-role-only adapter and pin a different guardrail row (or use the
+`pattern` kind, which needs no provider row).
 
 ---
 
