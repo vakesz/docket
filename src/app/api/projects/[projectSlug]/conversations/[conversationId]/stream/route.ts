@@ -169,6 +169,20 @@ export async function POST(req: Request, context: RouteContext): Promise<Respons
           closed = true;
         }
       };
+      // Eagerly tear down the controller on client disconnect so subsequent
+      // `enqueue`s no-op immediately even before `runTurn` reaches its next
+      // yield point. `runTurn` itself receives `req.signal` and should bail
+      // at the next checkpoint; this ensures the consumer side stops here.
+      const onAbort = () => {
+        if (closed) return;
+        closed = true;
+        try {
+          controller.close();
+        } catch {
+          // Already torn down; nothing to do.
+        }
+      };
+      req.signal.addEventListener("abort", onAbort, { once: true });
       let terminal: "done" | "error" | "aborted" = "aborted";
       let lastErrorMessage: string | undefined;
       try {
@@ -214,6 +228,7 @@ export async function POST(req: Request, context: RouteContext): Promise<Respons
           send({ kind: "error", message: lastErrorMessage });
         }
       } finally {
+        req.signal.removeEventListener("abort", onAbort);
         if (!closed) {
           try {
             controller.close();
@@ -243,6 +258,9 @@ export async function POST(req: Request, context: RouteContext): Promise<Respons
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
+      // Disable nginx-style proxy buffering. Without this, intermediaries
+      // hold the response until close, defeating the SSE delta UX entirely.
+      "X-Accel-Buffering": "no",
     },
   });
 }

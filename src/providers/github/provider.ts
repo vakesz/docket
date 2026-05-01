@@ -9,7 +9,7 @@
 
 import { Octokit } from "@octokit/rest";
 import type { ReactionTarget, WorkItemProvider } from "@/core/provider";
-import { ProviderAuthError, ProviderError, ProviderUnreachableError } from "@/core/provider";
+import { ProviderAuthError, ProviderError, wrapProviderError } from "@/core/provider";
 import type {
   ChangedItem,
   CIStatus,
@@ -185,18 +185,7 @@ function derivePRState(state: string | null | undefined, mergedAt: string | null
 }
 
 function wrapOctokitError(err: unknown): never {
-  const status = (err as { status?: number } | null)?.status;
-  const message = err instanceof Error ? err.message : String(err);
-  if (status === 401 || status === 403) {
-    throw new ProviderAuthError(`GitHub auth rejected: ${message}`);
-  }
-  if (status && status >= 500) {
-    throw new ProviderUnreachableError(`GitHub upstream error: ${message}`);
-  }
-  if (err instanceof Error && /fetch failed|ENOTFOUND|ECONNREFUSED/i.test(err.message)) {
-    throw new ProviderUnreachableError(`GitHub unreachable: ${message}`);
-  }
-  throw new ProviderError(message);
+  wrapProviderError(err, "GitHub");
 }
 
 export class GitHubProvider implements WorkItemProvider {

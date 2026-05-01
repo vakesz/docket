@@ -1,6 +1,5 @@
 "use client";
 import { useState } from "react";
-import { nextAuthCallbackPath } from "@/lib/next-auth-provider-id";
 import { trpc } from "@/lib/trpc-client";
 import { useAutoRefreshIntervalMs } from "@/lib/use-auto-refresh";
 import { Badge } from "@/ui/primitives/badge";
@@ -9,7 +8,7 @@ import { OauthProviderActions } from "@/ui/settings/oauth-provider-actions";
 import { OauthProviderForm } from "@/ui/settings/oauth-provider-form";
 
 function callbackUrl(kind: string, base: string): string {
-  return `${base.replace(/\/$/, "")}${nextAuthCallbackPath(kind)}`;
+  return `${base.replace(/\/$/, "")}/api/auth/callback/${kind}`;
 }
 
 /** OAuth-providers section, mounted inside the unified settings page. */

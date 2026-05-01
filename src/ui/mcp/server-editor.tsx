@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { trpc } from "@/lib/trpc-client";
 import { Alert, AlertDescription } from "@/ui/primitives/alert";
 import { Button } from "@/ui/primitives/button";
@@ -62,14 +62,6 @@ export function McpServerEditor({
     Object.keys(row.headersJson).length === 0 ? "" : JSON.stringify(row.headersJson, null, 2),
   );
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setUrl(row.url);
-    setFieldValues(initFieldValues(initialTemplate, row.headersJson));
-    setRawJson(
-      Object.keys(row.headersJson).length === 0 ? "" : JSON.stringify(row.headersJson, null, 2),
-    );
-  }, [row, initialTemplate]);
 
   const template = findTemplateByUrl(url) ?? initialTemplate;
   const showStructured = !advanced && template !== undefined;

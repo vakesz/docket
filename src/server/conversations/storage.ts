@@ -118,8 +118,13 @@ export async function archiveConversation(
 /**
  * Find every active (non-archived) conversation for a given item — the
  * inbound-changes module fans out to all of them when an external write
- * lands.
+ * lands. Capped to bound the per-sync fan-out: a chatty item with hundreds
+ * of open conversations would otherwise stamp a system message into every
+ * one of them on each external write. The newest are returned first, so
+ * the cap drops the long-stale conversations rather than the active ones.
  */
+const ACTIVE_CONVERSATIONS_PER_ITEM_CAP = 50;
+
 export async function activeConversationsForItem(
   db: Database,
   projectId: string,
@@ -127,5 +132,7 @@ export async function activeConversationsForItem(
 ): Promise<Conversation[]> {
   return db.conversation.findMany({
     where: { projectId, itemId, archivedAt: null },
+    orderBy: [{ startedAt: "desc" }],
+    take: ACTIVE_CONVERSATIONS_PER_ITEM_CAP,
   });
 }

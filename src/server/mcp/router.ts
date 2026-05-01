@@ -48,7 +48,11 @@ const UpdateInput = ServerRef.extend({
   url: z.string().url().max(500).optional(),
   headersJson: HeadersJson.optional(),
   enabled: z.boolean().optional(),
-});
+}).refine(
+  (input) =>
+    input.url !== undefined || input.headersJson !== undefined || input.enabled !== undefined,
+  { message: "at least one field (url, headersJson, enabled) must be supplied" },
+);
 
 type ConfigRow = {
   id: string;

@@ -505,7 +505,10 @@ model Conversation {
 
   @@index([projectId, archivedAt])
   @@index([userId, archivedAt])
-  @@index([itemId])
+  // Compound index for `activeConversationsForItem` (sync hot path) — the
+  // archived predicate would otherwise force a heap scan on top of a
+  // single-column itemId lookup once the table grows.
+  @@index([itemId, archivedAt])
   // Budget rollup + analytics aggregate filter by `startedAt` across every
   // project (`where: { startedAt: { gte: since } }`); without this index the
   // monthly spend query falls back to a full scan once the table grows.

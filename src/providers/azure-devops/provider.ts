@@ -30,7 +30,7 @@ import {
 } from "azure-devops-node-api/interfaces/WorkItemTrackingInterfaces.js";
 import type { IWorkItemTrackingApi } from "azure-devops-node-api/WorkItemTrackingApi.js";
 import type { WorkItemProvider } from "@/core/provider";
-import { ProviderAuthError, ProviderError, ProviderUnreachableError } from "@/core/provider";
+import { ProviderAuthError, ProviderError, wrapProviderError } from "@/core/provider";
 import type {
   ChangedItem,
   Comment,
@@ -106,18 +106,7 @@ function readConfig(raw: Record<string, unknown>): Config {
 }
 
 function wrapError(err: unknown): never {
-  const status = (err as { statusCode?: number; status?: number } | null)?.statusCode ?? null;
-  const message = err instanceof Error ? err.message : String(err);
-  if (status === 401 || status === 403) {
-    throw new ProviderAuthError(`Azure DevOps auth rejected: ${message}`);
-  }
-  if (status !== null && status >= 500) {
-    throw new ProviderUnreachableError(`Azure DevOps upstream error: ${message}`);
-  }
-  if (err instanceof Error && /fetch failed|ENOTFOUND|ECONNREFUSED|ETIMEDOUT/i.test(err.message)) {
-    throw new ProviderUnreachableError(`Azure DevOps unreachable: ${message}`);
-  }
-  throw new ProviderError(message);
+  wrapProviderError(err, "Azure DevOps");
 }
 
 function parseTags(raw: unknown): string[] {

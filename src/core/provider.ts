@@ -81,6 +81,34 @@ export class ProviderAuthError extends ProviderError {
 }
 
 /**
+ * Translate a thrown error from a provider HTTP client into the canonical
+ * `ProviderError` subclass. Centralised so every provider classifies the same
+ * way: 401/403 → auth, 5xx → unreachable, network/DNS/timeout → unreachable,
+ * everything else → generic. `label` prefixes the message so logs and the UI
+ * show which provider raised it. Always throws — typed `never` so callers
+ * read as `wrapProviderError(err, "GitHub")` in a `catch` block.
+ */
+const NETWORK_ERROR_RE = /fetch failed|ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN/i;
+
+export function wrapProviderError(err: unknown, label: string): never {
+  const status =
+    (err as { statusCode?: number; status?: number } | null)?.statusCode ??
+    (err as { status?: number } | null)?.status ??
+    null;
+  const message = err instanceof Error ? err.message : String(err);
+  if (status === 401 || status === 403) {
+    throw new ProviderAuthError(`${label} auth rejected: ${message}`);
+  }
+  if (typeof status === "number" && status >= 500) {
+    throw new ProviderUnreachableError(`${label} upstream error: ${message}`);
+  }
+  if (err instanceof Error && NETWORK_ERROR_RE.test(err.message)) {
+    throw new ProviderUnreachableError(`${label} unreachable: ${message}`);
+  }
+  throw new ProviderError(message);
+}
+
+/**
  * Provider-agnostic interface for work-item systems.
  *
  * All canonical-model instances returned from here have provider-specific

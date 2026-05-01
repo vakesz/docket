@@ -44,13 +44,22 @@ const CreateInput = projectSlugSchema.extend({
   isDefault: z.boolean().default(false),
 });
 
-const UpdateInput = projectSlugSchema.extend({
-  viewId: z.string().min(1),
-  name: z.string().min(1).max(80).optional(),
-  stateBucket: StateBucketEnum.optional(),
-  assignees: AssigneeList.optional(),
-  axes: AxesMap.optional(),
-});
+const UpdateInput = projectSlugSchema
+  .extend({
+    viewId: z.string().min(1),
+    name: z.string().min(1).max(80).optional(),
+    stateBucket: StateBucketEnum.optional(),
+    assignees: AssigneeList.optional(),
+    axes: AxesMap.optional(),
+  })
+  .refine(
+    (input) =>
+      input.name !== undefined ||
+      input.stateBucket !== undefined ||
+      input.assignees !== undefined ||
+      input.axes !== undefined,
+    { message: "at least one field (name, stateBucket, assignees, axes) must be supplied" },
+  );
 
 export const viewsRouter = router({
   list: projectScopedProcedure.input(projectSlugSchema).query(async ({ ctx }) => {

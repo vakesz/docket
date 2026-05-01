@@ -226,7 +226,11 @@ export function McpPane({ projectSlug }: { projectSlug: string }) {
                   </div>
                 </div>
                 {isEditing && (
+                  // Keying by server id remounts the editor on row switch, so
+                  // local form state can't leak across servers and the editor
+                  // doesn't need a defensive useEffect to re-sync from props.
                   <McpServerEditor
+                    key={s.id}
                     projectSlug={projectSlug}
                     row={{
                       id: s.id,

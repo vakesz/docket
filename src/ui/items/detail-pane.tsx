@@ -1,7 +1,7 @@
 import { Clock, ExternalLink, GitBranch, Tag, User, UserX } from "lucide-react";
 import Link from "next/link";
 import { canonicalIntentsFor, isItemKind, isItemState, type TransitionIntent } from "@/core/types";
-import { displayTag, formatKind, formatRelative, providerProfileUrl } from "@/lib/format";
+import { displayTag, formatKind, formatRelative } from "@/lib/format";
 import { getProviderSpec } from "@/server/provider-registry";
 import { ChatToggleButton } from "@/ui/items/chat-toggle-button";
 import { CommentAvatar } from "@/ui/items/comment-avatar";
@@ -75,11 +75,13 @@ export function DetailPane({
   showHeaderReactions: boolean;
   showCommentReactions: boolean;
 }) {
-  const authorProfileUrl = providerProfileUrl(providerKind, item.author);
-  const assigneeProfileUrl = providerProfileUrl(providerKind, item.assignee);
+  const spec = providerKind ? getProviderSpec(providerKind) : null;
+  const profileFor = (identity: string | null): string | null =>
+    identity && spec?.profileUrl ? spec.profileUrl(identity) : null;
+  const authorProfileUrl = profileFor(item.author);
+  const assigneeProfileUrl = profileFor(item.assignee);
   const transitionIntents = ((): readonly TransitionIntent[] => {
     if (!isItemState(item.state)) return [];
-    const spec = providerKind ? getProviderSpec(providerKind) : null;
     return spec ? spec.availableIntents(item.state) : canonicalIntentsFor(item.state);
   })();
   return (
@@ -275,7 +277,7 @@ export function DetailPane({
         ) : (
           <ul className="flex flex-col gap-3">
             {item.comments.map((c) => {
-              const commentAuthorProfileUrl = providerProfileUrl(providerKind, c.author);
+              const commentAuthorProfileUrl = profileFor(c.author);
               return (
                 <li key={c.id} className="rounded border border-border p-3">
                   <div className="mb-3 flex items-center justify-between gap-2 text-xs text-muted-foreground">

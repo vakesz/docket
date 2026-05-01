@@ -13,12 +13,15 @@
  * lose ids the user might want back when they raise it.
  */
 
-import { useEffect, useState } from "react";
-import { RECENT_LIMIT_MAX, readRecentEnabled, readRecentLimit } from "@/lib/ui-prefs";
+import {
+  RECENT_LIMIT_MAX,
+  readRecentEnabled,
+  readRecentLimit,
+  useLocalPref,
+} from "@/lib/ui-prefs";
 
 const STORAGE_KEY = "docket.recentItems";
 const RECENT_EVENT = "docket:recent-items";
-const PREF_EVENT = "docket:uiprefs";
 
 type Store = Record<string, string[]>;
 
@@ -64,32 +67,18 @@ export function recordRecentItem(projectSlug: string, itemNumber: string): void 
   writeStore(store);
 }
 
+const RECENT_EVENTS: readonly string[] = [RECENT_EVENT];
+
 export function useRecentItemNumbers(projectSlug: string): string[] {
-  const [numbers, setNumbers] = useState<string[]>([]);
-
-  useEffect(() => {
-    const sync = () => {
-      if (!readRecentEnabled()) {
-        setNumbers([]);
-        return;
-      }
+  return useLocalPref<string[]>(
+    () => {
+      if (!readRecentEnabled()) return [];
       const limit = readRecentLimit();
-      if (limit === 0) {
-        setNumbers([]);
-        return;
-      }
-      setNumbers((readStore()[projectSlug] ?? []).slice(0, limit));
-    };
-    sync();
-    window.addEventListener("storage", sync);
-    window.addEventListener(RECENT_EVENT, sync);
-    window.addEventListener(PREF_EVENT, sync);
-    return () => {
-      window.removeEventListener("storage", sync);
-      window.removeEventListener(RECENT_EVENT, sync);
-      window.removeEventListener(PREF_EVENT, sync);
-    };
-  }, [projectSlug]);
-
-  return numbers;
+      if (limit === 0) return [];
+      return (readStore()[projectSlug] ?? []).slice(0, limit);
+    },
+    [],
+    RECENT_EVENTS,
+    projectSlug,
+  );
 }

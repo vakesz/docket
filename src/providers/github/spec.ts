@@ -91,7 +91,10 @@ export const githubSpec = {
     supportedReactions: GITHUB_REACTION_KINDS,
     ciStatus: true,
     pullRequestDiffs: true,
-    linkedItems: true,
+    // GitHub provider does not currently scan issue/PR bodies for cross-refs;
+    // `Item.linkedItemIds` is always returned empty. Keep this false until
+    // the timeline / cross-reference scan lands.
+    linkedItems: false,
     creatableKinds: ["task"],
   },
   availableIntents: availableIntentsForState,

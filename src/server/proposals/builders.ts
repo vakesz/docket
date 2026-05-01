@@ -33,6 +33,7 @@ import type { Prisma, Proposal as ProposalRow } from "@/db/generated/client";
 import type { db as Db } from "@/server/db";
 import { assertFound } from "@/server/errors";
 import { snapshotFromRow } from "@/server/proposals/item-snapshot";
+import { proposalPayloadSchema } from "@/server/proposals/schema";
 
 /**
  * Caller context for proposal builders. `origin` distinguishes a human button
@@ -48,13 +49,6 @@ type ProposalContext = {
   origin: ProposalOrigin;
 };
 
-function payloadOf(proposal: Proposal): Record<string, unknown> {
-  // Strip the surrogate id from the persisted payload; the row's own id is
-  // canonical. Re-attached by `hydrateProposal` on load.
-  const { id: _id, ...rest } = proposal;
-  return rest as unknown as Record<string, unknown>;
-}
-
 async function persist(
   ctx: ProposalContext,
   draft: Omit<Proposal, "id">,
@@ -68,7 +62,9 @@ async function persist(
       kind: draft.kind,
       origin: ctx.origin,
       providerItemId,
-      payload: payloadOf({ id: "", ...draft } as Proposal) as Prisma.InputJsonValue,
+      // The row's own surrogate id is canonical; the payload omits it and
+      // `hydrateProposal` re-attaches `row.id` on load.
+      payload: draft as unknown as Prisma.InputJsonValue,
       status: "pending",
       advisory,
     },
@@ -363,18 +359,24 @@ export async function proposeMemoryDelete(
  * Re-attach the row's surrogate id to its persisted payload, returning a
  * runtime `Proposal` discriminator the executor / diff renderer can use.
  *
- * Throws if the persisted `kind` doesn't match the payload — that would
- * mean the row is corrupt (someone wrote a payload by hand).
+ * The persisted JSON is parsed against `proposalPayloadSchema` (a
+ * discriminated union over `kind`) so a corrupt row — bad shape, missing
+ * field, mismatched discriminator — fails fast at hydration instead of
+ * crashing inside the executor downstream. Cross-checks `row.kind` against
+ * the payload discriminator as defence in depth.
  */
 export function hydrateProposal(row: ProposalRow): Proposal {
   if (!row.payload || typeof row.payload !== "object") {
     throw new Error(`Proposal ${row.id}: empty or non-object payload`);
   }
-  const payload = row.payload as Record<string, unknown>;
-  if (payload.kind !== row.kind) {
+  const parsed = proposalPayloadSchema.safeParse(row.payload);
+  if (!parsed.success) {
+    throw new Error(`Proposal ${row.id}: invalid payload — ${parsed.error.message}`);
+  }
+  if (parsed.data.kind !== row.kind) {
     throw new Error(
-      `Proposal ${row.id}: row.kind='${row.kind}' but payload.kind='${String(payload.kind)}'`,
+      `Proposal ${row.id}: row.kind='${row.kind}' but payload.kind='${parsed.data.kind}'`,
     );
   }
-  return { ...payload, id: row.id } as Proposal;
+  return { ...parsed.data, id: row.id } as Proposal;
 }

@@ -5,7 +5,6 @@ import type { BacklogBucket, Item, ItemKind, ItemState, StateBucket } from "@/co
 import { BACKLOG_BUCKETS } from "@/core/types";
 import { applyViewFilter, STATE_BUCKET_MEMBERS, type ViewFilter } from "@/core/view-filter";
 import type { Prisma, Item as PrismaItem } from "@/db/generated/client";
-import { mostRecent } from "@/lib/format";
 import { asPlainObject } from "@/lib/json";
 import { injectExternalChange, materialDiff } from "@/server/inbound-changes/inject";
 import { getProviderSpec } from "@/server/provider-registry";
@@ -458,7 +457,10 @@ export const itemsRouter = router({
       watermark: cursor?.watermark ?? null,
       lastFullSyncAt: cursor?.lastFullSyncAt ?? null,
       lastSyncAt: cursor
-        ? mostRecent([cursor.watermark, cursor.lastFullSyncAt, cursor.updatedAt])
+        ? [cursor.watermark, cursor.lastFullSyncAt, cursor.updatedAt].reduce<Date | null>(
+            (best, d) => (d && (!best || d.getTime() > best.getTime()) ? d : best),
+            null,
+          )
         : null,
       progress: progress
         ? {

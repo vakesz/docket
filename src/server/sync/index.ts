@@ -718,15 +718,28 @@ async function bumpCursor(
   });
 }
 
-export async function runIncrementalSync(
+/**
+ * One sync run. Both modes share the same envelope (progress journal,
+ * baseCtx, error reporting); only three things differ:
+ *
+ *   - `mode: "incremental"` reads `SyncCursor.watermark` and asks the
+ *     provider for changes after it; cursor bump leaves `lastFullSyncAt`
+ *     alone (passed as `null` to `bumpCursor`).
+ *   - `mode: "full"` ignores the watermark, then archives every cached row
+ *     not seen during the walk and stamps `lastFullSyncAt = syncedAt`.
+ *
+ * Keeping the orchestration in one place means future cross-cutting
+ * concerns (tracing, retry, watch hooks) only land in one spot.
+ */
+async function runSync(
   db: typeof Db,
   project: ProjectArg,
   userId: string,
+  mode: SyncMode,
 ): Promise<SyncResult> {
   const syncId = randomUUID();
   const startedAt = Date.now();
   const runStartedAt = new Date(startedAt);
-  const mode: SyncMode = "incremental";
   const baseCtx = {
     syncId,
     mode,
@@ -762,16 +775,19 @@ export async function runIncrementalSync(
     await persistProgress();
 
     const provider = await buildProviderForUser(db, project, userId);
-    const cursor = await db.syncCursor.findUnique({
-      where: { projectId: project.id },
-    });
-    const watermark = cursor?.watermark ?? null;
     const syncedAt = new Date();
+    const watermark =
+      mode === "incremental"
+        ? ((await db.syncCursor.findUnique({ where: { projectId: project.id } }))?.watermark ?? null)
+        : null;
 
-    progress = { ...progress, watermark };
-    await persistProgress();
-
-    logger.info({ ...baseCtx, watermark: watermark?.toISOString() ?? null }, "sync: start");
+    if (mode === "incremental") {
+      progress = { ...progress, watermark };
+      await persistProgress();
+      logger.info({ ...baseCtx, watermark: watermark?.toISOString() ?? null }, "sync: start");
+    } else {
+      logger.info(baseCtx, "sync: start");
+    }
 
     phase = "persist";
     progress = { ...progress, phase };
@@ -779,6 +795,7 @@ export async function runIncrementalSync(
 
     const {
       upserted,
+      seenIds,
       latestUpdatedAt,
       inboundConversations,
       commentsReconciled,
@@ -800,14 +817,46 @@ export async function runIncrementalSync(
           upserted: chunkProgress.upserted,
           inboundConversations: chunkProgress.inboundConversations,
           commentsReconciled: chunkProgress.commentsReconciled,
-          watermark: chunkProgress.latestUpdatedAt ?? watermark,
+          watermark:
+            mode === "incremental"
+              ? (chunkProgress.latestUpdatedAt ?? watermark)
+              : chunkProgress.latestUpdatedAt,
         };
         await persistProgress();
       },
     );
 
+    const newWatermark = mode === "incremental" ? (latestUpdatedAt ?? watermark) : latestUpdatedAt;
+
+    let archived = 0;
+    if (mode === "full") {
+      // Archive any cached row not seen in the full walk. Excluding already-
+      // archived rows keeps the update count meaningful.
+      phase = "archive";
+      progress = {
+        ...progress,
+        phase,
+        chunksCompleted: chunks,
+        itemsSeen,
+        upserted,
+        inboundConversations,
+        commentsReconciled,
+        watermark: newWatermark,
+      };
+      await persistProgress();
+
+      const archive = await db.item.updateMany({
+        where: {
+          projectId: project.id,
+          providerItemId: { notIn: Array.from(seenIds) },
+          archived: false,
+        },
+        data: { archived: true },
+      });
+      archived = archive.count;
+    }
+
     phase = "cursor";
-    const newWatermark = latestUpdatedAt ?? watermark;
     progress = {
       ...progress,
       phase,
@@ -816,19 +865,20 @@ export async function runIncrementalSync(
       upserted,
       inboundConversations,
       commentsReconciled,
+      archived,
       watermark: newWatermark,
     };
     await persistProgress();
 
-    await bumpCursor(db, project.id, newWatermark, null);
+    await bumpCursor(db, project.id, newWatermark, mode === "full" ? syncedAt : null);
 
     progress = {
       ...progress,
       status: "done",
       phase,
       finishedAt: new Date(),
+      archived,
       watermark: newWatermark,
-      archived: 0,
       error: null,
     };
     await persistProgress();
@@ -837,7 +887,7 @@ export async function runIncrementalSync(
       {
         ...baseCtx,
         upserted,
-        archived: 0,
+        archived,
         chunks,
         itemsSeen,
         inboundConversations,
@@ -849,7 +899,7 @@ export async function runIncrementalSync(
     );
     return {
       upserted,
-      archived: 0,
+      archived,
       watermark: newWatermark,
       inboundConversations,
     };
@@ -876,173 +926,18 @@ export async function runIncrementalSync(
   }
 }
 
-export async function runFullSync(
+export function runIncrementalSync(
   db: typeof Db,
   project: ProjectArg,
   userId: string,
 ): Promise<SyncResult> {
-  const syncId = randomUUID();
-  const startedAt = Date.now();
-  const runStartedAt = new Date(startedAt);
-  const mode: SyncMode = "full";
-  const baseCtx = {
-    syncId,
-    mode,
-    projectId: project.id,
-    providerKind: project.providerKind,
-    userId,
-  };
-  let phase: SyncPhase = "stream";
-  let progress: SyncProgressSnapshot = {
-    runId: syncId,
-    mode,
-    status: "running",
-    phase,
-    startedAt: runStartedAt,
-    updatedAt: runStartedAt,
-    finishedAt: null,
-    chunksCompleted: 0,
-    itemsSeen: 0,
-    upserted: 0,
-    archived: 0,
-    inboundConversations: 0,
-    commentsReconciled: 0,
-    watermark: null,
-    error: null,
-  };
+  return runSync(db, project, userId, "incremental");
+}
 
-  const persistProgress = async () => {
-    progress = { ...progress, updatedAt: new Date() };
-    await upsertProgress(db, project.id, progress);
-  };
-
-  try {
-    await persistProgress();
-
-    const provider = await buildProviderForUser(db, project, userId);
-    const syncedAt = new Date();
-
-    logger.info(baseCtx, "sync: start");
-
-    phase = "persist";
-    progress = { ...progress, phase };
-    await persistProgress();
-
-    const {
-      upserted,
-      seenIds,
-      latestUpdatedAt,
-      inboundConversations,
-      commentsReconciled,
-      chunks,
-      itemsSeen,
-    } = await upsertItems(
-      db,
-      project.id,
-      project.providerKind,
-      provider.listChangesSince(null),
-      syncedAt,
-      syncId,
-      async (chunkProgress) => {
-        progress = {
-          ...progress,
-          phase: "persist",
-          chunksCompleted: chunkProgress.chunks,
-          itemsSeen: chunkProgress.itemsSeen,
-          upserted: chunkProgress.upserted,
-          inboundConversations: chunkProgress.inboundConversations,
-          commentsReconciled: chunkProgress.commentsReconciled,
-          watermark: chunkProgress.latestUpdatedAt,
-        };
-        await persistProgress();
-      },
-    );
-
-    // Archive any cached row not seen in the full walk. Excluding already-
-    // archived rows keeps the update count meaningful.
-    phase = "archive";
-    progress = {
-      ...progress,
-      phase,
-      chunksCompleted: chunks,
-      itemsSeen,
-      upserted,
-      inboundConversations,
-      commentsReconciled,
-      watermark: latestUpdatedAt,
-    };
-    await persistProgress();
-
-    const archive = await db.item.updateMany({
-      where: {
-        projectId: project.id,
-        providerItemId: { notIn: Array.from(seenIds) },
-        archived: false,
-      },
-      data: { archived: true },
-    });
-
-    phase = "cursor";
-    progress = {
-      ...progress,
-      phase,
-      archived: archive.count,
-      watermark: latestUpdatedAt,
-    };
-    await persistProgress();
-
-    await bumpCursor(db, project.id, latestUpdatedAt, syncedAt);
-
-    progress = {
-      ...progress,
-      status: "done",
-      phase,
-      finishedAt: new Date(),
-      archived: archive.count,
-      watermark: latestUpdatedAt,
-      error: null,
-    };
-    await persistProgress();
-
-    logger.info(
-      {
-        ...baseCtx,
-        upserted,
-        archived: archive.count,
-        chunks,
-        itemsSeen,
-        inboundConversations,
-        commentsReconciled,
-        newWatermark: latestUpdatedAt?.toISOString() ?? null,
-        durationMs: Date.now() - startedAt,
-      },
-      "sync: done",
-    );
-    return {
-      upserted,
-      archived: archive.count,
-      watermark: latestUpdatedAt,
-      inboundConversations,
-    };
-  } catch (err) {
-    progress = {
-      ...progress,
-      status: "failed",
-      phase,
-      finishedAt: new Date(),
-      error: err instanceof Error ? err.message : String(err),
-    };
-    await persistProgress();
-
-    logger.error(
-      {
-        ...baseCtx,
-        phase,
-        durationMs: Date.now() - startedAt,
-        ...errFields(err),
-      },
-      "sync: failed",
-    );
-    throw err;
-  }
+export function runFullSync(
+  db: typeof Db,
+  project: ProjectArg,
+  userId: string,
+): Promise<SyncResult> {
+  return runSync(db, project, userId, "full");
 }
