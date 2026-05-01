@@ -393,7 +393,7 @@ export function ItemsListPanel({ projectSlug }: { projectSlug: string | null }) 
             </Label>
           </div>
           {overrideOn ? (
-            <p className="inline-flex items-start gap-1.5 text-xs text-warning">
+            <p className="inline-flex items-start gap-1.5 text-xs text-primary">
               <AlertTriangle aria-hidden className="mt-0.5 size-3 shrink-0" />
               <span>
                 Not recommended — your override replaces the project default for every project you

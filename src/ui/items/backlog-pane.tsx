@@ -7,6 +7,7 @@ import { useRecentItemNumbers } from "@/lib/recent-items";
 import { trpc } from "@/lib/trpc-client";
 import { ASSIGNEE_UNASSIGNED, FilterBar } from "@/ui/items/filter-bar";
 import { EmptyMessage, ItemRow, type ListItem, PinnedRow } from "@/ui/items/item-row";
+import { ScrollArea } from "@/ui/primitives/scroll-area";
 
 const META_LABEL_FAINT = "text-xs uppercase tracking-wide text-muted-foreground/70";
 
@@ -259,7 +260,7 @@ export function BacklogPane({
         </div>
       )}
 
-      <div className="flex-1 overflow-auto">
+      <ScrollArea className="min-h-0 flex-1">
         {items.isPending ? (
           <EmptyMessage text="Loading…" />
         ) : items.error ? (
@@ -279,7 +280,7 @@ export function BacklogPane({
             />
           ))
         )}
-      </div>
+      </ScrollArea>
     </div>
   );
 }

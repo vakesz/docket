@@ -5,6 +5,7 @@ import { trpc } from "@/lib/trpc-client";
 import { cn } from "@/lib/utils";
 import { Input } from "@/ui/primitives/input";
 import { Label } from "@/ui/primitives/label";
+import { ScrollArea } from "@/ui/primitives/scroll-area";
 
 type Bucket = {
   date: string;
@@ -276,7 +277,7 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
         <h4 className="text-sm font-medium text-foreground">Trends</h4>
         <div className="flex flex-wrap items-center gap-3 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
           <LegendDot color="bg-primary" label="Chat spend" />
-          <LegendDot color="bg-warning" label="Guardrail spend" />
+          <LegendDot color="bg-chart-1" label="Guardrail spend" />
           <LegendDot color="bg-primary/50" label="7-day avg" dashed />
           <LegendDot color="bg-muted-foreground" label="Tokens in" />
           <LegendDot color="bg-muted-foreground/70" label="Tokens out" />
@@ -338,7 +339,7 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
         {/* guardrail spend (separate line, same y-axis) */}
         <polyline
           points={guardrailCostLine}
-          className="fill-none stroke-warning"
+          className="fill-none stroke-chart-1"
           strokeWidth={1.5}
           strokeLinejoin="round"
           strokeLinecap="round"
@@ -397,7 +398,7 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
               cx={xAt(hover)}
               cy={yCost(hovered.guardrailCostCents)}
               r={3}
-              className="fill-warning"
+              className="fill-chart-1"
             />
             <circle
               cx={xAt(hover)}
@@ -531,7 +532,7 @@ function BarChart({ buckets, peakCost }: { buckets: Bucket[]; peakCost: number }
         <h4 className="text-sm font-medium text-foreground">Daily spend</h4>
         <div className="flex items-center gap-3 text-[10px] uppercase tracking-wide text-muted-foreground">
           <LegendDot color="bg-primary/70" label="Chat" />
-          <LegendDot color="bg-warning/80" label="Guardrail" />
+          <LegendDot color="bg-chart-1/80" label="Guardrail" />
           <span>peak ${(peak / 100).toFixed(2)}</span>
         </div>
       </div>
@@ -548,7 +549,7 @@ function BarChart({ buckets, peakCost }: { buckets: Bucket[]; peakCost: number }
               title={`${b.date}: chat $${(b.costCents / 100).toFixed(3)} · guardrail $${(b.guardrailCostCents / 100).toFixed(3)} · ${b.conversations} conv`}
             >
               <div
-                className="w-full bg-warning/80 transition-colors group-hover:bg-warning"
+                className="w-full bg-chart-1/80 transition-colors group-hover:bg-chart-1"
                 style={{ height: `${guardShare}%` }}
               />
               <div
@@ -573,7 +574,7 @@ function DataTable({ buckets }: { buckets: Bucket[] }) {
       <summary className="cursor-pointer select-none text-sm text-foreground">
         By day (table)
       </summary>
-      <div className="mt-3 max-h-72 overflow-auto">
+      <ScrollArea className="mt-3 max-h-72">
         <table className="w-full text-xs">
           <thead>
             <tr className="text-left font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
@@ -604,7 +605,7 @@ function DataTable({ buckets }: { buckets: Bucket[] }) {
                   <td className="py-1 text-right text-foreground">
                     ${(b.costCents / 100).toFixed(3)}
                   </td>
-                  <td className="py-1 text-right text-warning">
+                  <td className="py-1 text-right text-chart-1">
                     ${(b.guardrailCostCents / 100).toFixed(3)}
                   </td>
                   <td className="py-1 text-right font-medium text-foreground">
@@ -615,7 +616,7 @@ function DataTable({ buckets }: { buckets: Bucket[] }) {
             })}
           </tbody>
         </table>
-      </div>
+      </ScrollArea>
     </details>
   );
 }

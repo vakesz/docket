@@ -42,7 +42,7 @@ export function ProviderToggle({
           <span className="flex items-baseline gap-2">
             <span className="font-medium text-foreground">{label}</span>
             {alreadyConfigured ? (
-              <span className="text-xs uppercase tracking-wide text-success">configured</span>
+              <span className="text-xs uppercase tracking-wide text-primary">configured</span>
             ) : null}
           </span>
           {help ? <span className="text-xs font-normal text-muted-foreground">{help}</span> : null}

@@ -39,8 +39,8 @@ export function ToolCallRow({
   const preview = argsPreview || fallbackPreview;
 
   const errored = ok === false;
-  const palette = errored ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning";
-  const hoverBg = errored ? "hover:bg-destructive/15" : "hover:bg-warning/15";
+  const palette = errored ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary";
+  const hoverBg = errored ? "hover:bg-destructive/15" : "hover:bg-primary/15";
 
   const prettyArgs = args ? safeStringify(args) : null;
 

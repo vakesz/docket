@@ -16,6 +16,7 @@ import { StatePill } from "@/ui/items/state-pill";
 import { SuggestActionButton } from "@/ui/items/suggest-action-button";
 import { TransitionActions } from "@/ui/items/transition-actions";
 import { Markdown } from "@/ui/markdown/markdown";
+import { ScrollArea } from "@/ui/primitives/scroll-area";
 
 type Comment = {
   id: string;
@@ -82,7 +83,7 @@ export function DetailPane({
     return spec ? spec.availableIntents(item.state) : canonicalIntentsFor(item.state);
   })();
   return (
-    <div className="flex h-full flex-col overflow-auto bg-background">
+    <ScrollArea className="h-full bg-background">
       <RecentRecorder projectSlug={projectSlug} itemNumber={item.itemNumber} />
       <header className="flex flex-col gap-3 border-b border-border p-4">
         {/* Row 1: chips left, utility cluster + primary CTAs right */}
@@ -337,6 +338,6 @@ export function DetailPane({
       <section className="border-t border-border p-4">
         <CommentComposer projectSlug={projectSlug} providerItemId={item.providerItemId} />
       </section>
-    </div>
+    </ScrollArea>
   );
 }

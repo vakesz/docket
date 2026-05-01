@@ -15,6 +15,7 @@ import { buildRenderUnits, type PersistedMessage } from "@/ui/conversations/tran
 import { useChatStream } from "@/ui/conversations/use-chat-stream";
 import { extractSeedKind } from "@/ui/items/suggest-seeds";
 import { Alert, AlertDescription } from "@/ui/primitives/alert";
+import { ScrollArea } from "@/ui/primitives/scroll-area";
 import { Textarea } from "@/ui/primitives/textarea";
 import { ProposalCard } from "@/ui/proposals/proposal-card";
 
@@ -288,7 +289,7 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
         </div>
       </header>
 
-      <div ref={scrollRef} className="relative flex-1 overflow-auto px-3 py-3">
+      <ScrollArea viewportRef={scrollRef} className="relative flex-1" viewportClassName="px-3 py-3">
         {!conversationId && messages.length === 0 && !hasStreamingActivity ? (
           <p className="text-sm italic text-muted-foreground/70">
             No conversation yet. Send a message to start one.
@@ -384,7 +385,7 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
             )}
           </>
         )}
-      </div>
+      </ScrollArea>
 
       <form
         onSubmit={(e) => {

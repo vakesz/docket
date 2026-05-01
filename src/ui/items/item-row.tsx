@@ -59,8 +59,8 @@ export function ItemRow({
           "flex w-full flex-col gap-1 px-3 py-2 text-left transition-colors",
           "hover:bg-muted",
           selected && "bg-muted",
-          tone === "warning" && "bg-warning/10 hover:bg-warning/15",
-          tone === "stale" && "bg-stale/10 hover:bg-stale/15",
+          tone === "warning" && "bg-primary/10 hover:bg-primary/15",
+          tone === "stale" && "bg-primary/20 hover:bg-primary/25",
         )}
       >
         <div className="flex items-center gap-2 text-xs">

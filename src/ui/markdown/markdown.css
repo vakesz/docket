@@ -101,7 +101,7 @@
     font-weight: 500;
   }
   .docket-md mark {
-    background-color: color-mix(in oklab, var(--warning) 25%, transparent);
+    background-color: color-mix(in oklab, var(--primary) 25%, transparent);
     color: inherit;
     padding: 0 0.15em;
   }
@@ -134,9 +134,10 @@
     line-height: 1.55;
   }
 
-  /* Highlight.js token colors keyed off semantic tokens so syntax highlighting
-   * follows the active theme. Values reuse warning/danger/success/accent/fg-*
-   * to stay within the existing palette — themes don't need to opt in. */
+  /* Highlight.js token colors keyed off the globals.css palette so syntax
+   * highlighting follows the active theme without requiring a separate
+   * status palette. Strings/addition pull --chart-2 to contrast with the
+   * primary/chart-1 family used for keywords and numeric literals. */
   .hljs {
     color: var(--foreground);
     background: transparent;
@@ -157,14 +158,14 @@
   .hljs-attr,
   .hljs-template-variable,
   .hljs-variable {
-    color: var(--success);
+    color: var(--chart-2);
   }
   .hljs-number,
   .hljs-literal,
   .hljs-built_in,
   .hljs-bullet,
   .hljs-symbol {
-    color: var(--warning);
+    color: var(--chart-1);
   }
   .hljs-title,
   .hljs-section,
@@ -176,7 +177,7 @@
   }
   .hljs-type,
   .hljs-class .hljs-title {
-    color: var(--warning);
+    color: var(--chart-1);
     font-weight: 600;
   }
   .hljs-tag,
@@ -187,7 +188,7 @@
     color: var(--destructive);
   }
   .hljs-addition {
-    color: var(--success);
+    color: var(--chart-2);
   }
   .hljs-emphasis {
     font-style: italic;

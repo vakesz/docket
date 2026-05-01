@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { McpPane } from "@/ui/mcp/mcp-pane";
 import { MemoryPane } from "@/ui/memory/memory-pane";
+import { ScrollArea } from "@/ui/primitives/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/ui/primitives/sheet";
 import { AnalyticsPanel } from "@/ui/settings/analytics-panel";
 import { AutoAcceptPanel } from "@/ui/settings/auto-accept-panel";
@@ -105,9 +106,12 @@ export function SettingsShell({ publicBase, project, initialSection }: Props) {
 
   return (
     <div className="grid min-h-0 w-full flex-1 grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)]">
-      <aside className="hidden min-h-0 overflow-auto border-border bg-card/80 px-3 py-4 lg:block lg:border-r">
+      <ScrollArea
+        className="hidden min-h-0 border-border bg-card/80 lg:block lg:border-r"
+        viewportClassName="px-3 py-4"
+      >
         <SettingsSidebar active={active} onSelect={handleSelect} projectSlug={projectSlug} />
-      </aside>
+      </ScrollArea>
 
       <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
         <SheetContent side="left" className="px-0 py-0 lg:hidden">
@@ -116,13 +120,13 @@ export function SettingsShell({ publicBase, project, initialSection }: Props) {
               Settings
             </SheetTitle>
           </SheetHeader>
-          <div className="flex-1 overflow-auto px-3 pb-4">
+          <ScrollArea className="flex-1" viewportClassName="px-3 pb-4">
             <SettingsSidebar active={active} onSelect={handleSelect} projectSlug={projectSlug} />
-          </div>
+          </ScrollArea>
         </SheetContent>
       </Sheet>
 
-      <section className="min-h-0 overflow-auto">
+      <ScrollArea className="min-h-0">
         <header className="border-b border-border bg-card/70 px-4 py-4 backdrop-blur sm:px-6">
           <div className="flex flex-wrap items-baseline gap-2">
             <h2 className="text-lg font-semibold text-foreground">{activeMeta.label}</h2>
@@ -149,7 +153,7 @@ export function SettingsShell({ publicBase, project, initialSection }: Props) {
             <SectionContent active={active} projectSlug={projectSlug} publicBase={publicBase} />
           )}
         </div>
-      </section>
+      </ScrollArea>
     </div>
   );
 }
