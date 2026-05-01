@@ -20,7 +20,12 @@
  */
 
 import { ProviderError } from "@/core/provider";
-import type { ItemKind, ItemState, TransitionIntent } from "@/core/types";
+import {
+  canonicalIntentsFor,
+  type ItemKind,
+  type ItemState,
+  type TransitionIntent,
+} from "@/core/types";
 
 export const KIND_BY_WIT: Readonly<Record<string, ItemKind>> = {
   Epic: "epic",
@@ -150,3 +155,12 @@ export const REACHABLE_CANONICAL_STATES: readonly ItemState[] = [
   "resolved",
   "closed",
 ];
+
+/**
+ * Intents the UI should expose for an AzDO item in `state`. The Agile
+ * template represents every canonical intent as a real state or tag
+ * change, so the canonical list applies as-is.
+ */
+export function availableIntentsForState(state: ItemState): readonly TransitionIntent[] {
+  return canonicalIntentsFor(state);
+}

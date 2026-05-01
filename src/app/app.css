@@ -1,0 +1,17 @@
+/*
+ * Local additions on top of globals.css.
+ *
+ * globals.css is the tweakcn paste target — it must match the exact shape
+ * the theme generator emits, so anything we add (custom-variant presets,
+ * webfont loaders, extra @layer rules) lives here instead. layout.tsx
+ * imports globals.css first, then this file, so these rules layer on top.
+ *
+ * - shadcn/tailwind.css supplies the `data-open` / `data-closed` /
+ *   `data-checked` / etc. custom variants the Origin-style primitives use.
+ * - The Google Fonts import loads the families that globals.css's
+ *   `--font-sans` / `--font-mono` reference. If you paste a theme that
+ *   names different families, update the URL below to match.
+ */
+
+@import "shadcn/tailwind.css";
+@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@300..700&family=Geist+Mono:wght@400..600&display=swap");

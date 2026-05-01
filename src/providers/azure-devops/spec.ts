@@ -32,6 +32,7 @@ import type { Item } from "@/core/types";
 import { asPlainObject } from "@/lib/json";
 import { azureDevOpsAvatarFetcher } from "@/providers/azure-devops/avatar";
 import { AzureDevOpsProvider } from "@/providers/azure-devops/provider";
+import { availableIntentsForState } from "@/providers/azure-devops/state-map";
 
 /**
  * Azure DevOps work item ids are bare integers, scoped per organization. The
@@ -157,6 +158,7 @@ export const azureDevOpsSpec = {
     pullRequestDiffs: false,
     linkedItems: true,
   },
+  availableIntents: availableIntentsForState,
   oauth: {
     defaultLabel: "Azure DevOps",
     defaultScopes: "499b84ac-1321-427f-aa17-267ca6975798/.default offline_access",

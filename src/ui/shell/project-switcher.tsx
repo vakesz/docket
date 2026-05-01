@@ -66,7 +66,7 @@ export function ProjectSwitcher({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         className={cn(
-          "inline-flex max-w-[14rem] items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-xs text-foreground",
+          "inline-flex max-w-56 items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-xs text-foreground",
           "hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         )}
         aria-label="Switch project"

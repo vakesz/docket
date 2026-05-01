@@ -46,6 +46,30 @@ export function isTransitionIntent(value: string): value is TransitionIntent {
   return (TRANSITION_INTENTS as readonly string[]).includes(value);
 }
 
+/**
+ * Canonical "intents that move an item out of where it is" per state.
+ *
+ * Used as the upper bound for what a provider's UI can offer. Providers
+ * that can't represent every intent against every state (e.g. GitHub has
+ * no distinct "paused" vs "active" open state) trim further in their own
+ * `availableIntents` implementation.
+ */
+export function canonicalIntentsFor(state: ItemState): readonly TransitionIntent[] {
+  switch (state) {
+    case "new":
+      return ["start_work", "block", "needs_info", "close_done", "close_wontfix"];
+    case "active":
+      return ["pause", "block", "needs_info", "close_done", "close_wontfix"];
+    case "blocked":
+      return ["start_work", "needs_info", "close_done", "close_wontfix"];
+    case "needs_info":
+      return ["start_work", "block", "close_done", "close_wontfix"];
+    case "resolved":
+    case "closed":
+      return ["reopen"];
+  }
+}
+
 export const STATE_BUCKETS = ["open", "closed", "all"] as const;
 export type StateBucket = (typeof STATE_BUCKETS)[number];
 

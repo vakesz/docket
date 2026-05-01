@@ -198,6 +198,7 @@ Aspirational direction (consistent with current refactors, not a hard rule):
 - **TypeScript strict** is on. New code carries real types — no `any` placeholders, no `// @ts-expect-error` without a justification comment.
 - **Prefer editing existing files.** Default to no comments; only write a comment when the WHY is non-obvious (a hidden constraint, a workaround for a specific bug, an invariant a future reader would otherwise miss). Don't explain WHAT the code does — well-named identifiers already do that.
 - **No `Co-Authored-By: Claude` trailers** on commit messages. No emojis in source unless the user requests them.
+- **`src/app/globals.css` is paste-only territory.** It must match the exact shape tweakcn (or any other shadcn theme generator) emits — `@import "tailwindcss"`, `@custom-variant dark`, `:root` / `.dark` token blocks, `@theme inline`, and the base `@layer`. Anything else (custom-variant presets, webfont loaders, extra layers) goes in `src/app/app.css`, which `layout.tsx` imports right after `globals.css`. After pasting a new theme, double-check `--font-sans` / `--font-mono` family names still match what `app.css`'s Google Fonts URL loads.
 
 ## When in doubt
 

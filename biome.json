@@ -15,7 +15,8 @@
       "!**/build",
       "!**/coverage",
       "!**/prisma/migrations",
-      "!**/src/db/generated"
+      "!**/src/db/generated",
+      "!src/app/globals.css"
     ]
   },
   "formatter": {

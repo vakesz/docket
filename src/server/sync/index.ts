@@ -37,6 +37,45 @@ import { logger } from "@/server/logger";
 import { buildProviderForUser } from "@/server/providers/build";
 
 type SyncPhase = "stream" | "persist" | "archive" | "cursor";
+type SyncMode = "incremental" | "full";
+
+export type SyncProgressStatus = "running" | "done" | "failed";
+
+export type SyncProgressSnapshot = {
+  runId: string;
+  mode: SyncMode;
+  status: SyncProgressStatus;
+  phase: SyncPhase;
+  startedAt: Date;
+  updatedAt: Date;
+  finishedAt: Date | null;
+  chunksCompleted: number;
+  itemsSeen: number;
+  upserted: number;
+  archived: number;
+  inboundConversations: number;
+  commentsReconciled: number;
+  watermark: Date | null;
+  error: string | null;
+};
+
+type PersistedSyncProgressSnapshot = {
+  runId: string;
+  mode: SyncMode;
+  status: SyncProgressStatus;
+  phase: SyncPhase;
+  startedAt: string;
+  updatedAt: string;
+  finishedAt: string | null;
+  chunksCompleted: number;
+  itemsSeen: number;
+  upserted: number;
+  archived: number;
+  inboundConversations: number;
+  commentsReconciled: number;
+  watermark: string | null;
+  error: string | null;
+};
 
 type ProjectArg = Parameters<typeof buildProviderForUser>[1];
 
@@ -48,6 +87,8 @@ export type SyncResult = {
   inboundConversations: number;
 };
 
+const SYNC_PROGRESS_KEY = "sync.progress";
+const STALE_SYNC_PROGRESS_MS = 15 * 60 * 1000;
 const CHUNK_SIZE = 200;
 /**
  * Cap on concurrent chunk-persist tasks. With this > 1, fetching the next
@@ -56,6 +97,199 @@ const CHUNK_SIZE = 200;
  * disjoint chunks; 2 is enough to hide one round-trip behind the other.
  */
 const MAX_INFLIGHT_CHUNKS = 2;
+
+function isSyncPhase(value: unknown): value is SyncPhase {
+  return value === "stream" || value === "persist" || value === "archive" || value === "cursor";
+}
+
+function isSyncMode(value: unknown): value is SyncMode {
+  return value === "incremental" || value === "full";
+}
+
+function isSyncProgressStatus(value: unknown): value is SyncProgressStatus {
+  return value === "running" || value === "done" || value === "failed";
+}
+
+function toDate(value: unknown): Date | null {
+  if (typeof value !== "string") return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function encodeProgress(snapshot: SyncProgressSnapshot): string {
+  const persisted: PersistedSyncProgressSnapshot = {
+    runId: snapshot.runId,
+    mode: snapshot.mode,
+    status: snapshot.status,
+    phase: snapshot.phase,
+    startedAt: snapshot.startedAt.toISOString(),
+    updatedAt: snapshot.updatedAt.toISOString(),
+    finishedAt: snapshot.finishedAt ? snapshot.finishedAt.toISOString() : null,
+    chunksCompleted: snapshot.chunksCompleted,
+    itemsSeen: snapshot.itemsSeen,
+    upserted: snapshot.upserted,
+    archived: snapshot.archived,
+    inboundConversations: snapshot.inboundConversations,
+    commentsReconciled: snapshot.commentsReconciled,
+    watermark: snapshot.watermark ? snapshot.watermark.toISOString() : null,
+    error: snapshot.error,
+  };
+  return JSON.stringify(persisted);
+}
+
+function decodeProgress(raw: string | null): SyncProgressSnapshot | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (!isSyncMode(parsed.mode)) return null;
+    if (!isSyncProgressStatus(parsed.status)) return null;
+    if (!isSyncPhase(parsed.phase)) return null;
+    if (typeof parsed.runId !== "string" || parsed.runId.length === 0) return null;
+    const startedAt = toDate(parsed.startedAt);
+    const updatedAt = toDate(parsed.updatedAt);
+    const finishedAt = parsed.finishedAt === null ? null : toDate(parsed.finishedAt);
+    const watermark = parsed.watermark === null ? null : toDate(parsed.watermark);
+    if (!startedAt || !updatedAt) return null;
+    if (parsed.finishedAt !== null && !finishedAt) return null;
+    if (parsed.watermark !== null && !watermark) return null;
+
+    const readInt = (key: keyof PersistedSyncProgressSnapshot) => {
+      const value = parsed[key];
+      return typeof value === "number" && Number.isFinite(value)
+        ? Math.max(0, Math.floor(value))
+        : 0;
+    };
+
+    return {
+      runId: parsed.runId,
+      mode: parsed.mode,
+      status: parsed.status,
+      phase: parsed.phase,
+      startedAt,
+      updatedAt,
+      finishedAt,
+      chunksCompleted: readInt("chunksCompleted"),
+      itemsSeen: readInt("itemsSeen"),
+      upserted: readInt("upserted"),
+      archived: readInt("archived"),
+      inboundConversations: readInt("inboundConversations"),
+      commentsReconciled: readInt("commentsReconciled"),
+      watermark,
+      error: typeof parsed.error === "string" ? parsed.error : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function upsertProgress(
+  db: typeof Db,
+  projectId: string,
+  snapshot: SyncProgressSnapshot,
+): Promise<void> {
+  // Resolves the existing row to either a no-op (existing belongs to a
+  // strictly newer run) or an update; returns true if no row was found.
+  // Same runId always passes: own-row writes (chunk updates, self-heal)
+  // never trip the guard. Older/undecodable rows get taken over so a
+  // brand-new run can replace a finished one.
+  const tryUpdate = async (): Promise<boolean> => {
+    const existing = await db.setting.findFirst({
+      where: {
+        key: SYNC_PROGRESS_KEY,
+        scope: "project",
+        projectId,
+        userId: null,
+      },
+      orderBy: { updatedAt: "desc" },
+      select: { id: true, value: true },
+    });
+    if (!existing) return false;
+    const current = decodeProgress(existing.value);
+    if (
+      current &&
+      current.runId !== snapshot.runId &&
+      current.startedAt.getTime() > snapshot.startedAt.getTime()
+    ) {
+      return true;
+    }
+    await db.setting.update({
+      where: { id: existing.id },
+      data: { value: encodeProgress(snapshot) },
+    });
+    return true;
+  };
+
+  if (await tryUpdate()) return;
+
+  try {
+    await db.setting.create({
+      data: {
+        key: SYNC_PROGRESS_KEY,
+        scope: "project",
+        projectId,
+        value: encodeProgress(snapshot),
+      },
+    });
+  } catch (err) {
+    // The partial unique on (key, projectId) for project-scope rows means
+    // a concurrent first-write can race in between our findFirst and
+    // create. Re-resolve through the update path so this run's progress
+    // still lands.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      await tryUpdate();
+      return;
+    }
+    throw err;
+  }
+}
+
+export async function loadSyncProgress(
+  db: typeof Db,
+  projectId: string,
+): Promise<SyncProgressSnapshot | null> {
+  const row = await db.setting.findFirst({
+    where: {
+      key: SYNC_PROGRESS_KEY,
+      scope: "project",
+      projectId,
+      userId: null,
+    },
+    orderBy: { updatedAt: "desc" },
+    select: { value: true },
+  });
+  const snapshot = decodeProgress(row?.value ?? null);
+  if (!snapshot) return null;
+
+  if (
+    snapshot.status === "running" &&
+    Date.now() - snapshot.updatedAt.getTime() > STALE_SYNC_PROGRESS_MS
+  ) {
+    const failed: SyncProgressSnapshot = {
+      ...snapshot,
+      status: "failed",
+      finishedAt: snapshot.finishedAt ?? new Date(),
+      updatedAt: new Date(),
+      error: snapshot.error ?? "Sync appears stale (no progress heartbeat).",
+    };
+    await upsertProgress(db, projectId, failed);
+    return failed;
+  }
+
+  return snapshot;
+}
+
+export function toSyncProgressLabel(phase: SyncPhase): string {
+  switch (phase) {
+    case "stream":
+      return "Streaming provider pages";
+    case "persist":
+      return "Persisting batches";
+    case "archive":
+      return "Archiving missing cached rows";
+    case "cursor":
+      return "Updating sync cursor";
+  }
+}
 
 export function toItemRow(canonical: CanonicalItem, projectId: string, syncedAt: Date) {
   // The plural assignee column always reflects the singular: providers
@@ -103,6 +337,15 @@ type ChunkResult = {
   commentsReconciled: number;
 };
 
+type UpsertProgressSnapshot = {
+  upserted: number;
+  inboundConversations: number;
+  commentsReconciled: number;
+  chunks: number;
+  itemsSeen: number;
+  latestUpdatedAt: Date | null;
+};
+
 /**
  * Persist a chunk of bundled changes (item + optional comments): bulk-load
  * existing item rows, split into create/update sets, then write each set
@@ -135,7 +378,10 @@ async function processChunk(
   const cachedMap = new Map(cachedRows.map((r) => [r.providerItemId, r]));
 
   const toCreate: ReturnType<typeof toItemRow>[] = [];
-  const toUpdate: { providerItemId: string; row: ReturnType<typeof toItemRow> }[] = [];
+  const toUpdate: {
+    providerItemId: string;
+    row: ReturnType<typeof toItemRow>;
+  }[] = [];
   const changedExisting: {
     itemId: string;
     providerItemId: string;
@@ -165,7 +411,10 @@ async function processChunk(
   if (toCreate.length > 0) {
     // skipDuplicates guards against a concurrent insert sneaking in
     // between the findMany above and this createMany.
-    const created = await db.item.createMany({ data: toCreate, skipDuplicates: true });
+    const created = await db.item.createMany({
+      data: toCreate,
+      skipDuplicates: true,
+    });
     upserted += created.count;
   }
   if (toUpdate.length > 0) {
@@ -353,6 +602,7 @@ async function upsertItems(
   bundles: AsyncIterable<ChangedItem>,
   syncedAt: Date,
   syncId: string,
+  onProgress?: (snapshot: UpsertProgressSnapshot) => Promise<void> | void,
 ): Promise<{
   upserted: number;
   seenIds: Set<string>;
@@ -379,10 +629,20 @@ async function upsertItems(
       syncId,
       chunkIndex,
       providerKind,
-    }).then((r) => {
+    }).then(async (r) => {
       upserted += r.upserted;
       inboundConversations += r.inboundConversations;
       commentsReconciled += r.commentsReconciled;
+      if (onProgress) {
+        await onProgress({
+          upserted,
+          inboundConversations,
+          commentsReconciled,
+          chunks,
+          itemsSeen: seenIds.size,
+          latestUpdatedAt,
+        });
+      }
     });
     const tracked = task.finally(() => {
       inflight.delete(tracked);
@@ -465,23 +725,58 @@ export async function runIncrementalSync(
 ): Promise<SyncResult> {
   const syncId = randomUUID();
   const startedAt = Date.now();
+  const runStartedAt = new Date(startedAt);
+  const mode: SyncMode = "incremental";
   const baseCtx = {
     syncId,
-    mode: "incremental" as const,
+    mode,
     projectId: project.id,
     providerKind: project.providerKind,
     userId,
   };
   let phase: SyncPhase = "stream";
+  let progress: SyncProgressSnapshot = {
+    runId: syncId,
+    mode,
+    status: "running",
+    phase,
+    startedAt: runStartedAt,
+    updatedAt: runStartedAt,
+    finishedAt: null,
+    chunksCompleted: 0,
+    itemsSeen: 0,
+    upserted: 0,
+    archived: 0,
+    inboundConversations: 0,
+    commentsReconciled: 0,
+    watermark: null,
+    error: null,
+  };
+
+  const persistProgress = async () => {
+    progress = { ...progress, updatedAt: new Date() };
+    await upsertProgress(db, project.id, progress);
+  };
+
   try {
+    await persistProgress();
+
     const provider = await buildProviderForUser(db, project, userId);
-    const cursor = await db.syncCursor.findUnique({ where: { projectId: project.id } });
+    const cursor = await db.syncCursor.findUnique({
+      where: { projectId: project.id },
+    });
     const watermark = cursor?.watermark ?? null;
     const syncedAt = new Date();
+
+    progress = { ...progress, watermark };
+    await persistProgress();
 
     logger.info({ ...baseCtx, watermark: watermark?.toISOString() ?? null }, "sync: start");
 
     phase = "persist";
+    progress = { ...progress, phase };
+    await persistProgress();
+
     const {
       upserted,
       latestUpdatedAt,
@@ -496,11 +791,47 @@ export async function runIncrementalSync(
       provider.listChangesSince(watermark),
       syncedAt,
       syncId,
+      async (chunkProgress) => {
+        progress = {
+          ...progress,
+          phase: "persist",
+          chunksCompleted: chunkProgress.chunks,
+          itemsSeen: chunkProgress.itemsSeen,
+          upserted: chunkProgress.upserted,
+          inboundConversations: chunkProgress.inboundConversations,
+          commentsReconciled: chunkProgress.commentsReconciled,
+          watermark: chunkProgress.latestUpdatedAt ?? watermark,
+        };
+        await persistProgress();
+      },
     );
 
     phase = "cursor";
     const newWatermark = latestUpdatedAt ?? watermark;
+    progress = {
+      ...progress,
+      phase,
+      chunksCompleted: chunks,
+      itemsSeen,
+      upserted,
+      inboundConversations,
+      commentsReconciled,
+      watermark: newWatermark,
+    };
+    await persistProgress();
+
     await bumpCursor(db, project.id, newWatermark, null);
+
+    progress = {
+      ...progress,
+      status: "done",
+      phase,
+      finishedAt: new Date(),
+      watermark: newWatermark,
+      archived: 0,
+      error: null,
+    };
+    await persistProgress();
 
     logger.info(
       {
@@ -516,10 +847,29 @@ export async function runIncrementalSync(
       },
       "sync: done",
     );
-    return { upserted, archived: 0, watermark: newWatermark, inboundConversations };
+    return {
+      upserted,
+      archived: 0,
+      watermark: newWatermark,
+      inboundConversations,
+    };
   } catch (err) {
+    progress = {
+      ...progress,
+      status: "failed",
+      phase,
+      finishedAt: new Date(),
+      error: err instanceof Error ? err.message : String(err),
+    };
+    await persistProgress();
+
     logger.error(
-      { ...baseCtx, phase, durationMs: Date.now() - startedAt, ...errFields(err) },
+      {
+        ...baseCtx,
+        phase,
+        durationMs: Date.now() - startedAt,
+        ...errFields(err),
+      },
       "sync: failed",
     );
     throw err;
@@ -533,21 +883,51 @@ export async function runFullSync(
 ): Promise<SyncResult> {
   const syncId = randomUUID();
   const startedAt = Date.now();
+  const runStartedAt = new Date(startedAt);
+  const mode: SyncMode = "full";
   const baseCtx = {
     syncId,
-    mode: "full" as const,
+    mode,
     projectId: project.id,
     providerKind: project.providerKind,
     userId,
   };
   let phase: SyncPhase = "stream";
+  let progress: SyncProgressSnapshot = {
+    runId: syncId,
+    mode,
+    status: "running",
+    phase,
+    startedAt: runStartedAt,
+    updatedAt: runStartedAt,
+    finishedAt: null,
+    chunksCompleted: 0,
+    itemsSeen: 0,
+    upserted: 0,
+    archived: 0,
+    inboundConversations: 0,
+    commentsReconciled: 0,
+    watermark: null,
+    error: null,
+  };
+
+  const persistProgress = async () => {
+    progress = { ...progress, updatedAt: new Date() };
+    await upsertProgress(db, project.id, progress);
+  };
+
   try {
+    await persistProgress();
+
     const provider = await buildProviderForUser(db, project, userId);
     const syncedAt = new Date();
 
     logger.info(baseCtx, "sync: start");
 
     phase = "persist";
+    progress = { ...progress, phase };
+    await persistProgress();
+
     const {
       upserted,
       seenIds,
@@ -563,11 +943,36 @@ export async function runFullSync(
       provider.listChangesSince(null),
       syncedAt,
       syncId,
+      async (chunkProgress) => {
+        progress = {
+          ...progress,
+          phase: "persist",
+          chunksCompleted: chunkProgress.chunks,
+          itemsSeen: chunkProgress.itemsSeen,
+          upserted: chunkProgress.upserted,
+          inboundConversations: chunkProgress.inboundConversations,
+          commentsReconciled: chunkProgress.commentsReconciled,
+          watermark: chunkProgress.latestUpdatedAt,
+        };
+        await persistProgress();
+      },
     );
 
     // Archive any cached row not seen in the full walk. Excluding already-
     // archived rows keeps the update count meaningful.
     phase = "archive";
+    progress = {
+      ...progress,
+      phase,
+      chunksCompleted: chunks,
+      itemsSeen,
+      upserted,
+      inboundConversations,
+      commentsReconciled,
+      watermark: latestUpdatedAt,
+    };
+    await persistProgress();
+
     const archive = await db.item.updateMany({
       where: {
         projectId: project.id,
@@ -578,7 +983,26 @@ export async function runFullSync(
     });
 
     phase = "cursor";
+    progress = {
+      ...progress,
+      phase,
+      archived: archive.count,
+      watermark: latestUpdatedAt,
+    };
+    await persistProgress();
+
     await bumpCursor(db, project.id, latestUpdatedAt, syncedAt);
+
+    progress = {
+      ...progress,
+      status: "done",
+      phase,
+      finishedAt: new Date(),
+      archived: archive.count,
+      watermark: latestUpdatedAt,
+      error: null,
+    };
+    await persistProgress();
 
     logger.info(
       {
@@ -601,8 +1025,22 @@ export async function runFullSync(
       inboundConversations,
     };
   } catch (err) {
+    progress = {
+      ...progress,
+      status: "failed",
+      phase,
+      finishedAt: new Date(),
+      error: err instanceof Error ? err.message : String(err),
+    };
+    await persistProgress();
+
     logger.error(
-      { ...baseCtx, phase, durationMs: Date.now() - startedAt, ...errFields(err) },
+      {
+        ...baseCtx,
+        phase,
+        durationMs: Date.now() - startedAt,
+        ...errFields(err),
+      },
       "sync: failed",
     );
     throw err;

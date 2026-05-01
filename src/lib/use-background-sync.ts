@@ -31,6 +31,10 @@ export function useBackgroundSync(projectSlug: string | null, readOnly: boolean)
   const intervalMs = useAutoRefreshIntervalMs();
   const utils = trpc.useUtils();
   const sync = trpc.items.runSync.useMutation({
+    onMutate: async () => {
+      if (!projectSlug) return;
+      await utils.items.syncStatus.invalidate({ projectSlug });
+    },
     onSuccess: async () => {
       if (!projectSlug) return;
       await Promise.all([

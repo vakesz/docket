@@ -1,7 +1,8 @@
 import { Clock, ExternalLink, GitBranch, Tag, User, UserX } from "lucide-react";
 import Link from "next/link";
-import { type ItemState, isItemKind, isItemState } from "@/core/types";
+import { canonicalIntentsFor, isItemKind, isItemState, type TransitionIntent } from "@/core/types";
 import { displayTag, formatKind, formatRelative, providerProfileUrl } from "@/lib/format";
+import { getProviderSpec } from "@/server/provider-registry";
 import { ChatToggleButton } from "@/ui/items/chat-toggle-button";
 import { CommentAvatar } from "@/ui/items/comment-avatar";
 import { CommentComposer } from "@/ui/items/comment-composer";
@@ -75,6 +76,11 @@ export function DetailPane({
 }) {
   const authorProfileUrl = providerProfileUrl(providerKind, item.author);
   const assigneeProfileUrl = providerProfileUrl(providerKind, item.assignee);
+  const transitionIntents = ((): readonly TransitionIntent[] => {
+    if (!isItemState(item.state)) return [];
+    const spec = providerKind ? getProviderSpec(providerKind) : null;
+    return spec ? spec.availableIntents(item.state) : canonicalIntentsFor(item.state);
+  })();
   return (
     <div className="flex h-full flex-col overflow-auto bg-background">
       <RecentRecorder projectSlug={projectSlug} itemNumber={item.itemNumber} />
@@ -227,7 +233,7 @@ export function DetailPane({
             <TransitionActions
               projectSlug={projectSlug}
               providerItemId={item.providerItemId}
-              state={item.state as ItemState}
+              intents={transitionIntents}
             />
           </div>
           {capabilities.supportedReactions.length > 0 && showHeaderReactions ? (

@@ -17,6 +17,7 @@ import type {
   CreateFields,
   Item,
   ItemKind,
+  ItemState,
   PRMatch,
   PullRequestDetail,
   PullRequestDiff,
@@ -409,6 +410,17 @@ export type ProviderSpec = {
    */
   itemNumberCodec: ProviderItemNumberCodec;
   capabilities: ProviderCapabilities;
+  /**
+   * Transition intents the UI should expose from a given canonical state.
+   *
+   * The canonical-state-to-intent mapping is also gated by what each provider
+   * can actually represent: e.g. GitHub has no native "open but not active"
+   * state, so `pause` from canonical `active` collapses to a no-op and the UI
+   * shouldn't offer it. Providers that can express the full intent set return
+   * the canonical list; others trim entries that would produce no provider-
+   * side change against the current snapshot.
+   */
+  availableIntents: (state: ItemState) => readonly TransitionIntent[];
   /**
    * OAuth sign-in metadata. `null` for providers that don't support OAuth
    * (CLI-only, API-token-only). The actual NextAuth adapter dispatch lives

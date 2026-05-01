@@ -41,11 +41,21 @@ export function StatusFooter({
     { projectSlug: projectSlug ?? "" },
     {
       enabled: !!projectSlug,
-      refetchInterval: refetchInterval === false ? false : refetchInterval,
+      // While a sync is running, poll fast so the footer text actually
+      // reflects what's happening; otherwise fall back to the user's
+      // auto-refresh cadence (or off).
+      refetchInterval: (query) =>
+        query.state.data?.progress?.status === "running"
+          ? 1_500
+          : refetchInterval === false
+            ? false
+            : refetchInterval,
       staleTime: 0,
     },
   );
   const lastSyncAt = syncStatus.data?.lastSyncAt ?? null;
+  const syncProgress = syncStatus.data?.progress ?? null;
+  const syncing = syncProgress?.status === "running";
 
   useBackgroundSync(projectSlug, readOnly);
 
@@ -75,7 +85,13 @@ export function StatusFooter({
         <>
           <span className="text-muted-foreground/70">·</span>
           <span className="inline-flex items-center gap-1">
-            <span>{lastSyncAt ? `synced ${formatRelative(lastSyncAt)}` : "never synced"}</span>
+            <span>
+              {syncing && syncProgress
+                ? `syncing · ${syncProgress.phaseLabel.toLowerCase()} · ${syncProgress.itemsSeen} seen · ${syncProgress.upserted} upserted${syncProgress.mode === "full" ? ` · ${syncProgress.archived} archived` : ""}`
+                : lastSyncAt
+                  ? `synced ${formatRelative(lastSyncAt)}`
+                  : "never synced"}
+            </span>
             <SyncButton projectSlug={projectSlug} readOnly={readOnly} variant="footer" />
           </span>
         </>

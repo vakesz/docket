@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronDown } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/primitives/button";
@@ -81,6 +81,8 @@ function browserLabel(): string {
   return `Browser local — ${BROWSER_ZONE}`;
 }
 
+const BROWSER_OFFSET = offsetFor(BROWSER_ZONE);
+
 export function TimezonePicker({
   id,
   value,
@@ -137,9 +139,11 @@ export function TimezonePicker({
                 }}
                 data-checked={value === ""}
               >
-                <span className="truncate">{browserLabel()}</span>
-                {value === "" ? (
-                  <Check aria-hidden className="ml-auto size-4 text-primary" />
+                <span className="min-w-0 flex-1 truncate font-mono text-xs">{browserLabel()}</span>
+                {BROWSER_OFFSET ? (
+                  <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+                    {BROWSER_OFFSET}
+                  </span>
                 ) : null}
               </CommandItem>
               {candidates.map((zone) => (
@@ -152,17 +156,12 @@ export function TimezonePicker({
                   }}
                   data-checked={value === zone.id}
                 >
-                  <span className="truncate font-mono text-xs">{zone.id}</span>
-                  <span className="ml-auto flex shrink-0 items-center gap-2">
-                    {zone.offset ? (
-                      <span className="font-mono text-[10px] text-muted-foreground">
-                        {zone.offset}
-                      </span>
-                    ) : null}
-                    {value === zone.id ? (
-                      <Check aria-hidden className="size-4 text-primary" />
-                    ) : null}
-                  </span>
+                  <span className="min-w-0 flex-1 truncate font-mono text-xs">{zone.id}</span>
+                  {zone.offset ? (
+                    <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+                      {zone.offset}
+                    </span>
+                  ) : null}
                 </CommandItem>
               ))}
             </CommandGroup>
