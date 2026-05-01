@@ -9,7 +9,6 @@
  * `find + typeof` dance at every read site.
  */
 
-import { useMemo } from "react";
 import { trpc } from "@/lib/trpc-client";
 
 type SettingsView = {
@@ -22,11 +21,11 @@ type SettingsView = {
 
 export function useSettingsMap(opts?: { staleTime?: number }): SettingsView {
   const list = trpc.settings.list.useQuery(undefined, opts);
-  const map = useMemo(() => {
+  const map = (() => {
     const m = new Map<string, unknown>();
     for (const row of list.data ?? []) m.set(row.key, row.value);
     return m;
-  }, [list.data]);
+  })();
 
   return {
     list,

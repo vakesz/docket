@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 
 interface SidebarDrawerController {
   open: boolean;
@@ -31,12 +31,12 @@ const Ctx = createContext<SidebarDrawerController | null>(null);
 export function SidebarDrawerProvider({ children }: { children: React.ReactNode }) {
   const [open, setOpenState] = useState(false);
   const [mountCount, setMountCount] = useState(0);
-  const setOpen = useCallback((next: boolean) => setOpenState(next), []);
-  const toggle = useCallback(() => setOpenState((v) => !v), []);
-  const registerMount = useCallback(() => {
+  const setOpen = (next: boolean) => setOpenState(next);
+  const toggle = () => setOpenState((v) => !v);
+  const registerMount = () => {
     setMountCount((n) => n + 1);
     return () => setMountCount((n) => Math.max(0, n - 1));
-  }, []);
+  };
   return (
     <Ctx.Provider value={{ open, setOpen, toggle, mounted: mountCount > 0, registerMount }}>
       {children}

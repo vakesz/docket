@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useState } from "react";
 import type { BacklogBucket, ItemKind } from "@/core/types";
 import { useRecentItemNumbers } from "@/lib/recent-items";
 import { useSettingsMap } from "@/lib/settings-client";
@@ -78,21 +78,15 @@ export function BacklogPane({
   }, [showArchivedBucket, bucket]);
 
   const pathname = usePathname();
-  const selectedNumber = useMemo(() => {
-    const m = pathname?.match(/\/items\/([^/?#]+)/);
-    return m?.[1];
-  }, [pathname]);
+  const selectedNumber = pathname?.match(/\/items\/([^/?#]+)/)?.[1];
 
-  const pinnedIds = useMemo(
-    () => new Set((pinned.data ?? []).map((p) => p.item.id)),
-    [pinned.data],
-  );
+  const pinnedIds = new Set((pinned.data ?? []).map((p) => p.item.id));
 
   const recentNumbers = useRecentItemNumbers(projectSlug);
 
   const data = items.data ?? [];
 
-  const recentItems = useMemo(() => {
+  const recentItems: ListItem[] = (() => {
     if (recentNumbers.length === 0) return [];
     const byNumber = new Map(data.map((it) => [it.itemNumber, it]));
     const out: ListItem[] = [];
@@ -102,14 +96,13 @@ export function BacklogPane({
       if (it) out.push(it);
     }
     return out;
-  }, [recentNumbers, data, selectedNumber]);
+  })();
 
-  // One pass over `data` produces all three facet aggregates. Keeping the
-  // counts in a single memo (vs the previous four) avoids two redundant
-  // walks per render and one Map allocation. `kind` is only here to fold
-  // the active selection into `visibleKinds` when it's filtered out by zero
-  // count — the underlying tallies don't depend on it.
-  const facets = useMemo(() => {
+  // One pass over `data` produces all three facet aggregates so we don't
+  // walk the list once per facet. `kind` is only used to fold the active
+  // selection into `visibleKinds` when it's filtered out by zero count —
+  // the underlying tallies don't depend on it.
+  const { visibleKinds, tagCounts, assigneeCounts } = (() => {
     const kindMap = new Map<ItemKind, number>();
     const tagMap = new Map<string, number>();
     const assigneeMap = new Map<string, number>();
@@ -134,10 +127,9 @@ export function BacklogPane({
       }
     }
     return { visibleKinds, tagCounts, assigneeCounts };
-  }, [data, kind, meIdentifier]);
-  const { visibleKinds, tagCounts, assigneeCounts } = facets;
+  })();
 
-  const filtered = useMemo(() => {
+  const filtered = (() => {
     const q = deferredQuery.trim().toLowerCase();
     return data.filter((it) => {
       if (kind !== "all" && it.kind !== kind) return false;
@@ -174,7 +166,7 @@ export function BacklogPane({
       }
       return true;
     });
-  }, [data, kind, activeTags, activeAssignees, deferredQuery]);
+  })();
 
   return (
     <div className="flex h-full flex-col bg-background">

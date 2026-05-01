@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { trpc } from "@/lib/trpc-client";
 import { Alert, AlertDescription } from "@/ui/primitives/alert";
 import { Badge } from "@/ui/primitives/badge";
@@ -43,7 +43,7 @@ export function McpPane({ projectSlug }: { projectSlug: string }) {
   const [headersError, setHeadersError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  const existingNames = useMemo(() => new Set((list.data ?? []).map((s) => s.name)), [list.data]);
+  const existingNames = new Set((list.data ?? []).map((s) => s.name));
 
   const submitNew = async () => {
     const name = draftName.trim();

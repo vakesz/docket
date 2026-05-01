@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 
 const SESSION_KEY = "docket.chatPaneOpen";
 
@@ -81,22 +81,22 @@ export function ChatPaneProvider({ children }: { children: React.ReactNode }) {
     else window.sessionStorage.removeItem(SESSION_KEY);
   }, [open]);
 
-  const setOpen = useCallback((next: boolean) => setOpenState(next), []);
+  const setOpen = (next: boolean) => setOpenState(next);
 
-  const requestOpenWithSeed = useCallback((seed: string) => {
+  const requestOpenWithSeed = (seed: string) => {
     if (seedRef.current !== null) return;
     seedRef.current = seed;
     setOpenState(true);
     setPendingSeedState(seed);
-  }, []);
+  };
 
-  const claimSeed = useCallback((): string | null => {
+  const claimSeed = (): string | null => {
     const claimed = seedRef.current;
     if (claimed === null) return null;
     seedRef.current = null;
     setPendingSeedState(null);
     return claimed;
-  }, []);
+  };
 
   return (
     <ChatPaneContext.Provider

@@ -1,7 +1,7 @@
 "use client";
 import type { Route } from "next";
 import { useRouter, useSearchParams } from "next/navigation";
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useState } from "react";
 import type { StateBucket } from "@/core/types";
 import { trpc } from "@/lib/trpc-client";
 import { cn } from "@/lib/utils";
@@ -71,10 +71,7 @@ export function ViewBar({ projectSlug }: Props) {
   const [showForm, setShowForm] = useState(false);
   const [newName, setNewName] = useState("");
 
-  const activeView = useMemo(
-    () => views.data?.find((v) => v.id === activeViewId) ?? null,
-    [views.data, activeViewId],
-  );
+  const activeView = views.data?.find((v) => v.id === activeViewId) ?? null;
 
   function navigateWith(patch: { viewId?: string | undefined; bucket?: StateBucket }) {
     const next = new URLSearchParams(params.toString());

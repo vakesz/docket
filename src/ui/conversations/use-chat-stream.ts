@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc-client";
 import {
   EMPTY_STREAM,
@@ -63,208 +63,199 @@ export function useChatStream(): UseChatStream {
     return () => abortRef.current?.abort();
   }, []);
 
-  const resetStream = useCallback(() => {
+  const resetStream = () => {
     abortRef.current?.abort();
     abortRef.current = null;
     setStreaming(EMPTY_STREAM);
     setProposalIds([]);
-  }, []);
+  };
 
-  const dismissProposal = useCallback((id: string) => {
+  const dismissProposal = (id: string) => {
     setProposalIds((prev) => prev.filter((p) => p !== id));
-  }, []);
+  };
 
-  const stopStream = useCallback(
-    async ({ projectSlug, itemId, conversationId }: StopArgs) => {
-      abortRef.current?.abort();
-      abortRef.current = null;
-      await Promise.all([
-        utils.conversations.list.invalidate({ projectSlug, itemId }),
-        utils.conversations.get.invalidate({ projectSlug, conversationId }),
-      ]);
-      setStreaming(EMPTY_STREAM);
-    },
-    [utils.conversations.get, utils.conversations.list],
-  );
+  const stopStream = async ({ projectSlug, itemId, conversationId }: StopArgs) => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    await Promise.all([
+      utils.conversations.list.invalidate({ projectSlug, itemId }),
+      utils.conversations.get.invalidate({ projectSlug, conversationId }),
+    ]);
+    setStreaming(EMPTY_STREAM);
+  };
 
-  const drainStream = useCallback(
-    async ({ projectSlug, itemId, conversationId, content }: DrainArgs) => {
-      abortRef.current?.abort();
-      const controller = new AbortController();
-      abortRef.current = controller;
+  const drainStream = async ({ projectSlug, itemId, conversationId, content }: DrainArgs) => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setStreaming({
+      pendingUserMessage: content,
+      settledRounds: [],
+      text: "",
+      toolCalls: [],
+      question: null,
+      guardrailNotices: [],
+      error: null,
+      done: false,
+    });
+
+    const url = `/api/projects/${projectSlug}/conversations/${conversationId}/stream`;
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (controller.signal.aborted) return;
       setStreaming({
-        pendingUserMessage: content,
+        pendingUserMessage: null,
         settledRounds: [],
         text: "",
         toolCalls: [],
         question: null,
         guardrailNotices: [],
-        error: null,
-        done: false,
+        error: err instanceof Error ? err.message : String(err),
+        done: true,
       });
-
-      const url = `/api/projects/${projectSlug}/conversations/${conversationId}/stream`;
-      let response: Response;
-      try {
-        response = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content }),
-          signal: controller.signal,
-        });
-      } catch (err) {
-        if (controller.signal.aborted) return;
-        setStreaming({
-          pendingUserMessage: null,
-          settledRounds: [],
-          text: "",
-          toolCalls: [],
-          question: null,
-          guardrailNotices: [],
-          error: err instanceof Error ? err.message : String(err),
-          done: true,
-        });
-        return;
-      }
-      if (!response.ok || !response.body) {
-        const message = response.statusText || `HTTP ${response.status}`;
-        setStreaming({
-          pendingUserMessage: null,
-          settledRounds: [],
-          text: "",
-          toolCalls: [],
-          question: null,
-          guardrailNotices: [],
-          error: message,
-          done: true,
-        });
-        return;
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      try {
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-
-          let blankIdx: number = buffer.indexOf("\n\n");
-          while (blankIdx >= 0) {
-            const rawEvent = buffer.slice(0, blankIdx);
-            buffer = buffer.slice(blankIdx + 2);
-            blankIdx = buffer.indexOf("\n\n");
-            const parsed = parseSseEvent(rawEvent);
-            if (!parsed) continue;
-            applyPayload(parsed.payload);
-          }
-        }
-      } catch (err) {
-        if (controller.signal.aborted) {
-          // A deliberate abort (resetStream, stopStream, unmount) owns
-          // its own state cleanup — bail without overwriting it.
-          return;
-        }
-        setStreaming((prev) => ({
-          ...prev,
-          error: err instanceof Error ? err.message : String(err),
-        }));
-      }
-
-      // Refetch the persisted transcript BEFORE flipping `done` so the
-      // streaming bubble + settled-rounds snapshot stay visible until
-      // detail.data has the official rows. Otherwise React would render
-      // one frame with the streaming UI gone but the persisted version
-      // not yet in place — a visible blink at end-of-stream.
-      await Promise.all([
-        utils.conversations.list.invalidate({ projectSlug, itemId }),
-        utils.conversations.get.invalidate({ projectSlug, conversationId }),
-      ]);
-      // If the controller was aborted while we awaited above, a newer
-      // call (resetStream, stopStream, or another drainStream) already
-      // owns `streaming` — never clobber that with this run's tail
-      // state. Without the guard, the pendingUserMessage of the next
-      // turn or the EMPTY_STREAM written by resetStream gets blown away
-      // with `done: true` and the UI looks stuck on the prior turn.
-      if (controller.signal.aborted) return;
-      setStreaming((prev) => ({
-        ...prev,
+      return;
+    }
+    if (!response.ok || !response.body) {
+      const message = response.statusText || `HTTP ${response.status}`;
+      setStreaming({
         pendingUserMessage: null,
         settledRounds: [],
         text: "",
         toolCalls: [],
+        question: null,
+        guardrailNotices: [],
+        error: message,
         done: true,
-      }));
+      });
+      return;
+    }
 
-      function applyPayload(p: StreamPayload) {
-        if (p.kind === "text_delta") {
-          setStreaming((prev) => ({ ...prev, text: prev.text + p.delta }));
-        } else if (p.kind === "tool_call_started") {
-          setStreaming((prev) => ({
-            ...prev,
-            toolCalls: [
-              ...prev.toolCalls,
-              { callId: p.callId, name: p.name, arguments: p.arguments, ok: null },
-            ],
-          }));
-        } else if (p.kind === "tool_call_completed") {
-          setStreaming((prev) => ({
-            ...prev,
-            toolCalls: prev.toolCalls.map((tc) =>
-              tc.callId === p.callId ? { ...tc, ok: p.ok } : tc,
-            ),
-          }));
-        } else if (p.kind === "round_boundary") {
-          // Snapshot the round that just finished into settledRounds and
-          // reset live state so the next round starts with a fresh bubble
-          // / progress block. The persisted rows for this round are
-          // already in the DB; the next `invalidate` will replace
-          // settledRounds with the official transcript.
-          setStreaming((prev) => {
-            const hasContent = prev.text.length > 0 || prev.toolCalls.length > 0;
-            if (!hasContent) return prev;
-            return {
-              ...prev,
-              settledRounds: [
-                ...prev.settledRounds,
-                { text: prev.text, toolCalls: prev.toolCalls },
-              ],
-              text: "",
-              toolCalls: [],
-            };
-          });
-        } else if (p.kind === "proposal_staged") {
-          setProposalIds((prev) => (prev.includes(p.proposalId) ? prev : [...prev, p.proposalId]));
-        } else if (p.kind === "ask_user_question") {
-          setStreaming((prev) => ({
-            ...prev,
-            question: { question: p.question, options: p.options, multiSelect: p.multiSelect },
-          }));
-        } else if (p.kind === "guardrail_blocked" || p.kind === "guardrail_flagged") {
-          setStreaming((prev) => ({
-            ...prev,
-            guardrailNotices: [
-              ...prev.guardrailNotices,
-              {
-                stage: p.stage,
-                reason: p.reason,
-                blocked: p.kind === "guardrail_blocked",
-                ...(p.categories ? { categories: p.categories } : {}),
-              },
-            ],
-          }));
-        } else if (p.kind === "error") {
-          setStreaming((prev) => ({ ...prev, error: p.message }));
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let blankIdx: number = buffer.indexOf("\n\n");
+        while (blankIdx >= 0) {
+          const rawEvent = buffer.slice(0, blankIdx);
+          buffer = buffer.slice(blankIdx + 2);
+          blankIdx = buffer.indexOf("\n\n");
+          const parsed = parseSseEvent(rawEvent);
+          if (!parsed) continue;
+          applyPayload(parsed.payload);
         }
-        // `done` is intentionally a no-op — the post-loop finalizer flips
-        // streaming.done after invalidate so the persisted view is in
-        // place before the streaming UI disappears.
       }
-    },
-    [utils.conversations.get, utils.conversations.list],
-  );
+    } catch (err) {
+      if (controller.signal.aborted) {
+        // A deliberate abort (resetStream, stopStream, unmount) owns
+        // its own state cleanup — bail without overwriting it.
+        return;
+      }
+      setStreaming((prev) => ({
+        ...prev,
+        error: err instanceof Error ? err.message : String(err),
+      }));
+    }
+
+    // Refetch the persisted transcript BEFORE flipping `done` so the
+    // streaming bubble + settled-rounds snapshot stay visible until
+    // detail.data has the official rows. Otherwise React would render
+    // one frame with the streaming UI gone but the persisted version
+    // not yet in place — a visible blink at end-of-stream.
+    await Promise.all([
+      utils.conversations.list.invalidate({ projectSlug, itemId }),
+      utils.conversations.get.invalidate({ projectSlug, conversationId }),
+    ]);
+    // If the controller was aborted while we awaited above, a newer
+    // call (resetStream, stopStream, or another drainStream) already
+    // owns `streaming` — never clobber that with this run's tail
+    // state. Without the guard, the pendingUserMessage of the next
+    // turn or the EMPTY_STREAM written by resetStream gets blown away
+    // with `done: true` and the UI looks stuck on the prior turn.
+    if (controller.signal.aborted) return;
+    setStreaming((prev) => ({
+      ...prev,
+      pendingUserMessage: null,
+      settledRounds: [],
+      text: "",
+      toolCalls: [],
+      done: true,
+    }));
+
+    function applyPayload(p: StreamPayload) {
+      if (p.kind === "text_delta") {
+        setStreaming((prev) => ({ ...prev, text: prev.text + p.delta }));
+      } else if (p.kind === "tool_call_started") {
+        setStreaming((prev) => ({
+          ...prev,
+          toolCalls: [
+            ...prev.toolCalls,
+            { callId: p.callId, name: p.name, arguments: p.arguments, ok: null },
+          ],
+        }));
+      } else if (p.kind === "tool_call_completed") {
+        setStreaming((prev) => ({
+          ...prev,
+          toolCalls: prev.toolCalls.map((tc) =>
+            tc.callId === p.callId ? { ...tc, ok: p.ok } : tc,
+          ),
+        }));
+      } else if (p.kind === "round_boundary") {
+        // Snapshot the round that just finished into settledRounds and
+        // reset live state so the next round starts with a fresh bubble
+        // / progress block. The persisted rows for this round are
+        // already in the DB; the next `invalidate` will replace
+        // settledRounds with the official transcript.
+        setStreaming((prev) => {
+          const hasContent = prev.text.length > 0 || prev.toolCalls.length > 0;
+          if (!hasContent) return prev;
+          return {
+            ...prev,
+            settledRounds: [...prev.settledRounds, { text: prev.text, toolCalls: prev.toolCalls }],
+            text: "",
+            toolCalls: [],
+          };
+        });
+      } else if (p.kind === "proposal_staged") {
+        setProposalIds((prev) => (prev.includes(p.proposalId) ? prev : [...prev, p.proposalId]));
+      } else if (p.kind === "ask_user_question") {
+        setStreaming((prev) => ({
+          ...prev,
+          question: { question: p.question, options: p.options, multiSelect: p.multiSelect },
+        }));
+      } else if (p.kind === "guardrail_blocked" || p.kind === "guardrail_flagged") {
+        setStreaming((prev) => ({
+          ...prev,
+          guardrailNotices: [
+            ...prev.guardrailNotices,
+            {
+              stage: p.stage,
+              reason: p.reason,
+              blocked: p.kind === "guardrail_blocked",
+              ...(p.categories ? { categories: p.categories } : {}),
+            },
+          ],
+        }));
+      } else if (p.kind === "error") {
+        setStreaming((prev) => ({ ...prev, error: p.message }));
+      }
+      // `done` is intentionally a no-op — the post-loop finalizer flips
+      // streaming.done after invalidate so the persisted view is in
+      // place before the streaming UI disappears.
+    }
+  };
 
   return { streaming, proposalIds, dismissProposal, drainStream, resetStream, stopStream };
 }

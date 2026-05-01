@@ -2,7 +2,7 @@
 
 import type { Route } from "next";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useState } from "react";
 import { formatKind } from "@/lib/format";
 import { shortcut } from "@/lib/platform";
 import { trpc } from "@/lib/trpc-client";
@@ -144,23 +144,20 @@ export function CommandPaletteImpl({
     },
   });
 
-  const go = useCallback(
-    (to: string) => {
-      setOpen(false);
-      router.push(to as Route);
-    },
-    [router, setOpen],
-  );
+  const go = (to: string) => {
+    setOpen(false);
+    router.push(to as Route);
+  };
 
-  const record = useCallback((id: string) => {
+  const record = (id: string) => {
     setRecents((prev) => {
       const next = pushRecent(prev, id);
       saveRecents(next);
       return next;
     });
-  }, []);
+  };
 
-  const itemCommands = useMemo<PaletteCommand[]>(() => {
+  const itemCommands: PaletteCommand[] = (() => {
     const list: PaletteCommand[] = [];
     if (!itemNumber) return list;
     const it = currentItem.data;
@@ -193,30 +190,27 @@ export function CommandPaletteImpl({
       });
     }
     return list;
-  }, [currentItem.data, isPinned.data?.pinned, itemNumber, pin, projectSlug, unpin, setOpen]);
+  })();
 
-  const navigateCommands = useMemo<PaletteCommand[]>(
-    () => [
-      {
-        id: "nav-items",
-        label: "All items",
-        description: "Open the items list for this project.",
-        run: () => go(`/projects/${projectSlug}/items`),
-      },
-      {
-        id: "nav-settings",
-        label: "Settings",
-        description:
-          "Per-user preferences (default project, send-on-enter) plus deployment-wide LLM and OAuth provider config.",
-        keywords:
-          "config preferences default project profile llm oauth openai anthropic github azure devops",
-        run: () => go("/settings"),
-      },
-    ],
-    [go, projectSlug],
-  );
+  const navigateCommands: PaletteCommand[] = [
+    {
+      id: "nav-items",
+      label: "All items",
+      description: "Open the items list for this project.",
+      run: () => go(`/projects/${projectSlug}/items`),
+    },
+    {
+      id: "nav-settings",
+      label: "Settings",
+      description:
+        "Per-user preferences (default project, send-on-enter) plus deployment-wide LLM and OAuth provider config.",
+      keywords:
+        "config preferences default project profile llm oauth openai anthropic github azure devops",
+      run: () => go("/settings"),
+    },
+  ];
 
-  const actionCommands = useMemo<PaletteCommand[]>(() => {
+  const actionCommands: PaletteCommand[] = (() => {
     const list: PaletteCommand[] = [
       {
         id: "sync-now",
@@ -270,52 +264,37 @@ export function CommandPaletteImpl({
     }
 
     return list;
-  }, [go, pendingProposals.data, projectSlug, projects, rejectProposal, sync, setOpen]);
+  })();
 
-  const allCommands = useMemo(
-    () => [...itemCommands, ...navigateCommands, ...actionCommands],
-    [actionCommands, itemCommands, navigateCommands],
-  );
+  const allCommands = [...itemCommands, ...navigateCommands, ...actionCommands];
 
-  const byId = useMemo(() => {
-    const map = new Map<string, PaletteCommand>();
-    for (const c of allCommands) map.set(c.id, c);
-    return map;
-  }, [allCommands]);
+  const byId = new Map<string, PaletteCommand>();
+  for (const c of allCommands) byId.set(c.id, c);
 
-  const recentCommands = useMemo(
-    () => recents.map((id) => byId.get(id)).filter((c): c is PaletteCommand => Boolean(c)),
-    [byId, recents],
-  );
-  const recentIds = useMemo(() => new Set(recentCommands.map((c) => c.id)), [recentCommands]);
+  const recentCommands = recents
+    .map((id) => byId.get(id))
+    .filter((c): c is PaletteCommand => Boolean(c));
+  const recentIds = new Set(recentCommands.map((c) => c.id));
 
-  const pinnedItems: ItemSummary[] = useMemo(
-    () =>
-      (pinned.data ?? []).map((row) => ({
-        id: row.item.id,
-        providerItemId: row.item.providerItemId,
-        itemNumber: row.item.itemNumber,
-        kind: row.item.kind,
-        title: row.item.title,
-        state: row.item.state,
-        url: row.item.url,
-      })),
-    [pinned.data],
-  );
+  const pinnedItems: ItemSummary[] = (pinned.data ?? []).map((row) => ({
+    id: row.item.id,
+    providerItemId: row.item.providerItemId,
+    itemNumber: row.item.itemNumber,
+    kind: row.item.kind,
+    title: row.item.title,
+    state: row.item.state,
+    url: row.item.url,
+  }));
 
-  const itemList: ItemSummary[] = useMemo(
-    () =>
-      (items.data ?? []).slice(0, 80).map((row) => ({
-        id: row.id,
-        providerItemId: row.providerItemId,
-        itemNumber: row.itemNumber,
-        kind: row.kind,
-        title: row.title,
-        state: row.state,
-        url: row.url,
-      })),
-    [items.data],
-  );
+  const itemList: ItemSummary[] = (items.data ?? []).slice(0, 80).map((row) => ({
+    id: row.id,
+    providerItemId: row.providerItemId,
+    itemNumber: row.itemNumber,
+    kind: row.kind,
+    title: row.title,
+    state: row.state,
+    url: row.url,
+  }));
 
   const runCommand = (c: PaletteCommand) => {
     record(c.id);

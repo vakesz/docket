@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus } from "lucide-react";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { ITEM_KINDS, type ItemKind } from "@/core/types";
 import { formatKind } from "@/lib/format";
 import { trpc } from "@/lib/trpc-client";
@@ -54,11 +54,11 @@ export function CreateItemForm({ projectSlug }: { projectSlug: string }) {
   const tagsId = useId();
 
   const project = trpc.projects.get.useQuery({ projectSlug }, { staleTime: 5 * 60_000 });
-  const creatableKinds = useMemo<readonly ItemKind[]>(() => {
-    const list = project.data?.capabilities.creatableKinds ?? [];
-    if (list.length === 0) return ["task"];
-    return ITEM_KINDS.filter((k) => list.includes(k));
-  }, [project.data]);
+  const creatableKindsList = project.data?.capabilities.creatableKinds ?? [];
+  const creatableKinds: readonly ItemKind[] =
+    creatableKindsList.length === 0
+      ? ["task"]
+      : ITEM_KINDS.filter((k) => creatableKindsList.includes(k));
   const defaultKind: ItemKind = creatableKinds[0] ?? "task";
 
   const [itemKind, setItemKind] = useState<ItemKind>(defaultKind);
@@ -104,7 +104,7 @@ export function CreateItemForm({ projectSlug }: { projectSlug: string }) {
         }}
       >
         <DialogTrigger asChild>
-          <Button type="button" variant="outline" size="xs" title="Stage a new item">
+          <Button type="button" variant="outline" title="Stage a new item">
             <Plus aria-hidden="true" />
             New
           </Button>

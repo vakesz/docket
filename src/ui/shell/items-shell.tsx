@@ -2,7 +2,6 @@
 
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { useMemo } from "react";
 import { ChatPane } from "@/ui/conversations/chat-pane";
 import { ChatPaneProvider, useChatPaneController } from "@/ui/conversations/chat-pane-context";
 import { BacklogPane } from "@/ui/items/backlog-pane";
@@ -33,10 +32,7 @@ export function ItemsShell({ projectSlug, staleThresholdDays, children }: Props)
 function ItemsShellInner({ projectSlug, staleThresholdDays, children }: Props) {
   const { open } = useChatPaneController();
   const pathname = usePathname();
-  const itemNumber = useMemo(
-    () => extractItemNumber(pathname, projectSlug),
-    [pathname, projectSlug],
-  );
+  const itemNumber = extractItemNumber(pathname, projectSlug);
   const showChat = open && Boolean(itemNumber);
 
   return (

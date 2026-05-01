@@ -1,6 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useId, useMemo, useState } from "react";
+import { type FormEvent, useId, useState } from "react";
 import { trpc } from "@/lib/trpc-client";
 import type { ProviderTypeId } from "@/server/provider-registry";
 import { Alert, AlertDescription } from "@/ui/primitives/alert";
@@ -82,10 +82,7 @@ export function CreateProjectForm({ defaultMakeDefault = true, onCreated }: Prop
   const providerId = useId();
   const makeDefaultId = useId();
 
-  const activeSpec = useMemo(
-    () => specs.find((s) => s.typeId === providerKind) ?? specs[0] ?? null,
-    [specs, providerKind],
-  );
+  const activeSpec = specs.find((s) => s.typeId === providerKind) ?? specs[0] ?? null;
   const activeKind = activeSpec?.typeId ?? "";
 
   function setScopeField(key: string, value: string) {

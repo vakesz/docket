@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/primitives/button";
 import {
@@ -96,14 +96,12 @@ export function TimezonePicker({
 }) {
   const [open, setOpen] = useState(false);
 
-  const candidates = useMemo<Zone[]>(() => {
-    // If the persisted value is non-empty and not in the runtime's list,
-    // surface it so the user sees what's currently saved.
-    if (value !== "" && !SUPPORTED_IDS.has(value)) {
-      return [{ id: value, offset: offsetFor(value) }, ...SUPPORTED_ZONES];
-    }
-    return SUPPORTED_ZONES.slice();
-  }, [value]);
+  // If the persisted value is non-empty and not in the runtime's list,
+  // surface it so the user sees what's currently saved.
+  const candidates: Zone[] =
+    value !== "" && !SUPPORTED_IDS.has(value)
+      ? [{ id: value, offset: offsetFor(value) }, ...SUPPORTED_ZONES]
+      : SUPPORTED_ZONES.slice();
 
   const selectedLabel =
     value === "" ? browserLabel() : entryLabel({ id: value, offset: offsetFor(value) });
