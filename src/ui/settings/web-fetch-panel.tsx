@@ -106,9 +106,8 @@ export function WebFetchPanel({ projectSlug }: { projectSlug: string }) {
           value={hostsText}
           disabled={save.isPending}
           onChange={(e) => setHostsText(e.target.value)}
-          rows={14}
           placeholder="docs.python.org&#10;learn.microsoft.com&#10;www.rfc-editor.org"
-          className="max-w-xl font-mono text-xs"
+          className="min-h-32 max-w-xl font-mono text-xs"
         />
       </div>
 

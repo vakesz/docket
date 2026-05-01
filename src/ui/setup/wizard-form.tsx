@@ -85,7 +85,7 @@ export function SetupWizardForm({
   const [azdoClientId, setAzdoClientId] = useState("");
   const [azdoClientSecret, setAzdoClientSecret] = useState("");
   const [azdoScopes, setAzdoScopes] = useState(
-    "499b84ac-1321-427f-aa17-267ca6975798/.default offline_access",
+    "11111111-2222-3333-4444-55555555/.default offline_access",
   );
   const [azdoTenantId, setAzdoTenantId] = useState("");
 
