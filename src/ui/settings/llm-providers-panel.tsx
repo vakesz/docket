@@ -39,10 +39,10 @@ export function LlmProvidersPanel() {
   const [editingId, setEditingId] = useState<string | null>(null);
 
   if (list.isPending) {
-    return <p className="text-sm text-muted-foreground/70">Loading providers…</p>;
+    return <p className="text-muted-foreground/70 text-sm">Loading providers…</p>;
   }
   if (list.error) {
-    return <p className="text-sm text-destructive">{list.error.message}</p>;
+    return <p className="text-destructive text-sm">{list.error.message}</p>;
   }
 
   const rows = list.data as Row[];
@@ -115,11 +115,11 @@ function Section({
   return (
     <section className="flex flex-col gap-3">
       <header className="flex flex-col gap-1">
-        <h2 className="text-base font-medium text-foreground">{title}</h2>
-        <p className="text-xs text-muted-foreground">{description}</p>
+        <h2 className="font-medium text-base text-foreground">{title}</h2>
+        <p className="text-muted-foreground text-xs">{description}</p>
       </header>
       {rows.length === 0 ? (
-        <p className="rounded-2xl border border-dashed border-border bg-card p-6 text-center text-sm text-muted-foreground">
+        <p className="rounded-2xl border border-border border-dashed bg-card p-6 text-center text-muted-foreground text-sm">
           None configured yet.
         </p>
       ) : (
@@ -149,7 +149,7 @@ function Section({
                   <div className="flex flex-col gap-1">
                     <div className="flex items-baseline gap-2">
                       <span className="font-medium text-foreground">{row.label}</span>
-                      <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                      <span className="text-muted-foreground text-xs uppercase tracking-wide">
                         {row.kind}
                       </span>
                       {!row.enabled ? <Badge variant="outline">disabled</Badge> : null}
@@ -158,12 +158,12 @@ function Section({
                         <Badge variant="outline">no price</Badge>
                       ) : null}
                     </div>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-muted-foreground text-xs">
                       {row.model || "(default model)"}
                       {row.baseUrl ? ` · ${row.baseUrl}` : ""}
                     </p>
                     {row.inputPriceCentsPerMtok !== null && row.outputPriceCentsPerMtok !== null ? (
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-muted-foreground text-xs">
                         ${(row.inputPriceCentsPerMtok / 100).toFixed(2)} in · $
                         {(row.outputPriceCentsPerMtok / 100).toFixed(2)} out per Mtok
                       </p>

@@ -225,8 +225,8 @@ export function SetupWizardForm({
         ) : page === "oauth" ? (
           <section className="flex w-full flex-col gap-4">
             <header className="flex flex-col gap-1">
-              <h2 className="text-base font-medium text-foreground">Sign-in providers</h2>
-              <p className="text-xs text-muted-foreground">
+              <h2 className="font-medium text-base text-foreground">Sign-in providers</h2>
+              <p className="text-muted-foreground text-xs">
                 Pick at least one. You can add more later in{" "}
                 <code className="font-mono">/settings</code>.
               </p>
@@ -295,8 +295,8 @@ export function SetupWizardForm({
           <section className="flex w-full flex-col gap-4">
             <header className="flex items-baseline justify-between gap-3">
               <div className="flex flex-col gap-1">
-                <h2 className="text-base font-medium text-foreground">LLM providers (optional)</h2>
-                <p className="text-xs text-muted-foreground">
+                <h2 className="font-medium text-base text-foreground">LLM providers (optional)</h2>
+                <p className="text-muted-foreground text-xs">
                   Powers the agent (chat) and the prompt-injection / topic-scope classifier
                   (guardrail). Skip any role for now and add later in{" "}
                   <code className="font-mono">/settings → LLM providers</code>.
@@ -355,10 +355,10 @@ export function SetupWizardForm({
         ) : (
           <section className="flex w-full flex-col gap-6">
             <header className="flex flex-col gap-1">
-              <h2 className="text-base font-medium text-foreground">
+              <h2 className="font-medium text-base text-foreground">
                 {submitDone ? "Setup complete" : "Review and confirm"}
               </h2>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-muted-foreground text-xs">
                 {submitDone
                   ? "You can change anything later in /settings."
                   : previewMode
@@ -432,9 +432,9 @@ export function SetupWizardForm({
 
 function SummaryRow({ title, value }: { title: string; value: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-4 border-t border-border pt-3 first:border-t-0 first:pt-0">
-      <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</dt>
-      <dd className="text-sm text-foreground">{value}</dd>
+    <div className="flex items-baseline justify-between gap-4 border-border border-t pt-3 first:border-t-0 first:pt-0">
+      <dt className="font-medium text-muted-foreground text-xs uppercase tracking-wide">{title}</dt>
+      <dd className="text-foreground text-sm">{value}</dd>
     </div>
   );
 }

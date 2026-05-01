@@ -70,7 +70,7 @@ export function AnalyticsPanel(
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs text-muted-foreground">Window:</span>
+        <span className="text-muted-foreground text-xs">Window:</span>
         {PRESETS.map((p) => (
           <button
             key={p.days}
@@ -87,7 +87,7 @@ export function AnalyticsPanel(
           </button>
         ))}
         <div className="ml-auto flex items-center gap-2">
-          <Label htmlFor={customDaysId} className="text-xs text-muted-foreground">
+          <Label htmlFor={customDaysId} className="text-muted-foreground text-xs">
             Custom (days):
           </Label>
           <Input
@@ -108,8 +108,8 @@ export function AnalyticsPanel(
         </div>
       </div>
 
-      {isPending ? <p className="text-sm text-muted-foreground/70">Loading…</p> : null}
-      {error ? <p className="text-xs text-destructive">{error.message}</p> : null}
+      {isPending ? <p className="text-muted-foreground/70 text-sm">Loading…</p> : null}
+      {error ? <p className="text-destructive text-xs">{error.message}</p> : null}
 
       {data ? (
         <>
@@ -161,16 +161,16 @@ function TotalsStrip({
   ];
   return (
     <div className="flex flex-col gap-2">
-      <div className="text-xs text-muted-foreground">
+      <div className="text-muted-foreground text-xs">
         {data.from} → {data.to} (UTC)
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {stats.map((s) => (
           <div key={s.label} className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            <div className="text-[10px] text-muted-foreground uppercase tracking-wide">
               {s.label}
             </div>
-            <div className="mt-1 font-mono text-lg text-foreground">{s.value}</div>
+            <div className="mt-1 font-mono text-foreground text-lg">{s.value}</div>
             {s.sub ? (
               <div className="mt-0.5 text-[10px] text-muted-foreground/70">{s.sub}</div>
             ) : null}
@@ -274,8 +274,8 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
   return (
     <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
-        <h4 className="text-sm font-medium text-foreground">Trends</h4>
-        <div className="flex flex-wrap items-center gap-3 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+        <h4 className="font-medium text-foreground text-sm">Trends</h4>
+        <div className="flex flex-wrap items-center gap-3 font-mono text-[10px] text-muted-foreground uppercase tracking-wide">
           <LegendDot color="bg-primary" label="Chat spend" />
           <LegendDot color="bg-chart-1" label="Guardrail spend" />
           <LegendDot color="bg-primary/50" label="7-day avg" dashed />
@@ -529,8 +529,8 @@ function BarChart({ buckets, peakCost }: { buckets: Bucket[]; peakCost: number }
   return (
     <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
       <div className="mb-2 flex items-baseline justify-between">
-        <h4 className="text-sm font-medium text-foreground">Daily spend</h4>
-        <div className="flex items-center gap-3 text-[10px] uppercase tracking-wide text-muted-foreground">
+        <h4 className="font-medium text-foreground text-sm">Daily spend</h4>
+        <div className="flex items-center gap-3 text-[10px] text-muted-foreground uppercase tracking-wide">
           <LegendDot color="bg-primary/70" label="Chat" />
           <LegendDot color="bg-chart-1/80" label="Guardrail" />
           <span>peak ${(peak / 100).toFixed(2)}</span>
@@ -571,13 +571,13 @@ function BarChart({ buckets, peakCost }: { buckets: Bucket[]; peakCost: number }
 function DataTable({ buckets }: { buckets: Bucket[] }) {
   return (
     <details className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-      <summary className="cursor-pointer select-none text-sm text-foreground">
+      <summary className="cursor-pointer select-none text-foreground text-sm">
         By day (table)
       </summary>
       <ScrollArea className="mt-3 max-h-72">
         <table className="w-full text-xs">
           <thead>
-            <tr className="text-left font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+            <tr className="text-left font-mono text-[10px] text-muted-foreground uppercase tracking-wide">
               <th className="pb-2">Date</th>
               <th className="pb-2 text-right">Conv</th>
               <th className="pb-2 text-right">Tokens in</th>
@@ -593,7 +593,7 @@ function DataTable({ buckets }: { buckets: Bucket[] }) {
               const totalOut = b.tokensOut + b.guardrailTokensOut;
               const totalCost = b.costCents + b.guardrailCostCents;
               return (
-                <tr key={b.date} className="border-t border-border">
+                <tr key={b.date} className="border-border border-t">
                   <td className="py-1 font-mono text-foreground">{b.date}</td>
                   <td className="py-1 text-right text-muted-foreground">{b.conversations}</td>
                   <td className="py-1 text-right text-muted-foreground">

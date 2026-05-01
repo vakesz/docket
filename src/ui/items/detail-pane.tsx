@@ -87,10 +87,10 @@ export function DetailPane({
   return (
     <ScrollArea className="h-full bg-background">
       <RecentRecorder projectSlug={projectSlug} itemNumber={item.itemNumber} />
-      <header className="flex flex-col gap-3 border-b border-border p-4">
+      <header className="flex flex-col gap-3 border-border border-b p-4">
         {/* Row 1: chips left, utility cluster + primary CTAs right */}
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="text-xs uppercase tracking-wide text-muted-foreground">
+          <span className="text-muted-foreground text-xs uppercase tracking-wide">
             {formatKind(item.kind)}
           </span>
           <StatePill state={item.state} />
@@ -117,10 +117,10 @@ export function DetailPane({
 
         {/* Rows 2 + 3: title and meta — meta sits tight under the title (mt-1) */}
         <div className="flex flex-col gap-1">
-          <h1 className="text-lg font-semibold leading-snug text-foreground">{item.title}</h1>
+          <h1 className="font-semibold text-foreground text-lg leading-snug">{item.title}</h1>
 
           {/* inline meta line — icons replace dl labels, missing fields omitted */}
-          <ul className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          <ul className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground text-xs">
             {item.author ? (
               <li className="inline-flex items-center gap-1">
                 <User aria-hidden="true" className="size-3" />
@@ -172,7 +172,7 @@ export function DetailPane({
               ) : (
                 <>
                   <UserX aria-hidden="true" className="size-3" />
-                  <span className="italic text-muted-foreground/70">unassigned</span>
+                  <span className="text-muted-foreground/70 italic">unassigned</span>
                 </>
               )}
             </li>
@@ -223,13 +223,13 @@ export function DetailPane({
 
         {/* Actions and reactions groups — each labelled with a small heading
             so the header reads title-block / actions-block / reactions-block. */}
-        <div className="flex flex-col gap-3 border-t border-border pt-3">
+        <div className="flex flex-col gap-3 border-border border-t pt-3">
           <div className="flex flex-col gap-1.5">
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-              <h3 className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              <h3 className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
                 Actions
               </h3>
-              <span className="text-[11px] italic text-muted-foreground/70">
+              <span className="text-[11px] text-muted-foreground/70 italic">
                 will require approval
               </span>
             </div>
@@ -241,7 +241,7 @@ export function DetailPane({
           </div>
           {capabilities.supportedReactions.length > 0 && showHeaderReactions ? (
             <div className="flex flex-col gap-1.5">
-              <h3 className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              <h3 className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
                 Reactions
               </h3>
               <ReactionRow
@@ -258,29 +258,29 @@ export function DetailPane({
       </header>
 
       <section className="flex flex-col gap-3 p-4">
-        <h2 className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+        <h2 className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">
           Description
         </h2>
         {item.descriptionMd ? (
           <Markdown source={item.descriptionMd} />
         ) : (
-          <p className="text-sm italic text-muted-foreground/70">(no description)</p>
+          <p className="text-muted-foreground/70 text-sm italic">(no description)</p>
         )}
       </section>
 
-      <section className="flex flex-col gap-3 border-t border-border p-4">
-        <h2 className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+      <section className="flex flex-col gap-3 border-border border-t p-4">
+        <h2 className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">
           Comments ({item.comments.length})
         </h2>
         {item.comments.length === 0 ? (
-          <p className="text-sm italic text-muted-foreground/70">No comments cached.</p>
+          <p className="text-muted-foreground/70 text-sm italic">No comments cached.</p>
         ) : (
           <ul className="flex flex-col gap-3">
             {item.comments.map((c) => {
               const commentAuthorProfileUrl = profileFor(c.author);
               return (
                 <li key={c.id} className="rounded border border-border p-3">
-                  <div className="mb-3 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                  <div className="mb-3 flex items-center justify-between gap-2 text-muted-foreground text-xs">
                     <span className="inline-flex items-center gap-2">
                       {c.author ? (
                         <CommentAvatar
@@ -317,7 +317,7 @@ export function DetailPane({
                   <Markdown source={c.bodyMd} />
                   {capabilities.supportedReactions.length > 0 && showCommentReactions ? (
                     <div className="mt-2 flex flex-col gap-1.5">
-                      <h3 className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                      <h3 className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
                         Reactions
                       </h3>
                       <ReactionRow
@@ -337,7 +337,7 @@ export function DetailPane({
         )}
       </section>
 
-      <section className="border-t border-border p-4">
+      <section className="border-border border-t p-4">
         <CommentComposer projectSlug={projectSlug} providerItemId={item.providerItemId} />
       </section>
     </ScrollArea>

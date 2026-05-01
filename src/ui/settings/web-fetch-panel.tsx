@@ -71,13 +71,13 @@ export function WebFetchPanel({ projectSlug }: { projectSlug: string }) {
   };
 
   if (projectSettings.isPending) {
-    return <p className="text-sm text-muted-foreground/70">Loading…</p>;
+    return <p className="text-muted-foreground/70 text-sm">Loading…</p>;
   }
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-2 text-sm text-foreground">
+        <div className="flex items-center gap-2 text-foreground text-sm">
           <Switch
             id={enabledId}
             checked={enabled}
@@ -86,17 +86,17 @@ export function WebFetchPanel({ projectSlug }: { projectSlug: string }) {
           />
           <Label htmlFor={enabledId}>Allow agent to fetch web pages</Label>
         </div>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-muted-foreground text-xs">
           When on, the agent can call web_fetch to read public URLs (RFCs, docs, changelogs).
           Private IPs and cloud metadata endpoints are blocked regardless of this flag.
         </p>
       </div>
 
-      <div className="flex flex-col gap-2 border-t border-border pt-6">
-        <Label htmlFor={hostsId} className="text-sm font-medium text-foreground">
+      <div className="flex flex-col gap-2 border-border border-t pt-6">
+        <Label htmlFor={hostsId} className="font-medium text-foreground text-sm">
           Host allowlist
         </Label>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-muted-foreground text-xs">
           Optional strict allowlist, one hostname per line (e.g.{" "}
           <code className="rounded bg-muted px-1 py-0.5 font-mono">docs.python.org</code>). Leave
           empty to let the agent reach any public host.
@@ -112,11 +112,11 @@ export function WebFetchPanel({ projectSlug }: { projectSlug: string }) {
         />
       </div>
 
-      <div className="flex flex-col gap-2 border-t border-border pt-6">
-        <Label htmlFor={maxBytesId} className="text-sm font-medium text-foreground">
+      <div className="flex flex-col gap-2 border-border border-t pt-6">
+        <Label htmlFor={maxBytesId} className="font-medium text-foreground text-sm">
           Response size cap (bytes)
         </Label>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-muted-foreground text-xs">
           Larger payloads are truncated and reported as denied_size. Range: 64 000 to 8 000 000.
           Default 1 000 000 (~1 MB).
         </p>
@@ -150,8 +150,8 @@ export function WebFetchPanel({ projectSlug }: { projectSlug: string }) {
         >
           Reset to defaults
         </Button>
-        {save.error ? <span className="text-xs text-destructive">{save.error.message}</span> : null}
-        {save.isSuccess ? <span className="text-xs text-muted-foreground">Saved.</span> : null}
+        {save.error ? <span className="text-destructive text-xs">{save.error.message}</span> : null}
+        {save.isSuccess ? <span className="text-muted-foreground text-xs">Saved.</span> : null}
       </div>
     </form>
   );

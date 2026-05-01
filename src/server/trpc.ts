@@ -3,11 +3,12 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import type { Session } from "next-auth";
 import superjson from "superjson";
 import { ZodError, z } from "zod";
+import { asUserId, type UserId } from "@/core/types";
 import { auth } from "@/server/auth";
 import { db } from "@/server/db";
 import { assertFound } from "@/server/errors";
 import { logger } from "@/server/logger";
-import { projectForUser } from "@/server/projects/access";
+import { type AuthorizedProject, projectForUser } from "@/server/projects/access";
 import type { SettingKey, SettingValue } from "@/server/settings/catalog";
 import { loadGlobalSetting } from "@/server/settings/effective";
 
@@ -79,17 +80,18 @@ export const publicProcedure = t.procedure;
 export const projectSlugSchema = z.object({ projectSlug: z.string().min(1) });
 
 const requireSession = t.middleware(({ ctx, next }) => {
-  const userId = ctx.session?.user?.id;
-  if (!ctx.session?.user || !userId) {
+  const rawUserId = ctx.session?.user?.id;
+  if (!ctx.session?.user || !rawUserId) {
     throw new TRPCError({ code: "UNAUTHORIZED" });
   }
+  const userId = asUserId(rawUserId);
   return next({
     ctx: {
       ...ctx,
       userId,
       session: {
         ...ctx.session,
-        user: { ...ctx.session.user, id: userId },
+        user: { ...ctx.session.user, id: rawUserId },
       },
     },
   });
@@ -131,7 +133,7 @@ export const mutationProcedure = protectedProcedure.use(enforceReadWrite);
  */
 const enforceProjectMembership = t.middleware(async ({ ctx, getRawInput, next }) => {
   // `requireSession` runs upstream and narrows ctx.userId to a non-empty string.
-  const sessionCtx = ctx as Context & { userId?: string };
+  const sessionCtx = ctx as Context & { userId?: UserId };
   const userId = sessionCtx.userId;
   if (!userId) {
     throw new TRPCError({ code: "UNAUTHORIZED" });
@@ -171,7 +173,7 @@ export const projectScopedProcedure = protectedProcedure.use(enforceProjectMembe
  * stored role; users with no membership row return `null`.
  */
 async function effectiveProjectRole(
-  ctx: Context & { userId?: string; project?: { id: string; ownerUserId: string } },
+  ctx: Context & { userId?: UserId; project?: AuthorizedProject },
 ): Promise<"owner" | "approver" | "member" | "viewer" | null> {
   const project = ctx.project;
   const userId = ctx.userId;
@@ -198,9 +200,7 @@ async function effectiveProjectRole(
  * gate so a single toggle can lock the whole app.
  */
 const rejectViewerRole = t.middleware(async ({ ctx, next }) => {
-  const role = await effectiveProjectRole(
-    ctx as Context & { project?: { id: string; ownerUserId: string } },
-  );
+  const role = await effectiveProjectRole(ctx as Context & { project?: AuthorizedProject });
   if (role === "viewer" || role === null) {
     throw new TRPCError({
       code: "FORBIDDEN",
@@ -220,9 +220,7 @@ export const projectScopedMutationProcedure = projectScopedProcedure
  * execute them — the human-in-the-loop on writes.
  */
 const requireApprover = t.middleware(async ({ ctx, next }) => {
-  const role = await effectiveProjectRole(
-    ctx as Context & { project?: { id: string; ownerUserId: string } },
-  );
+  const role = await effectiveProjectRole(ctx as Context & { project?: AuthorizedProject });
   if (role !== "owner" && role !== "approver") {
     throw new TRPCError({
       code: "FORBIDDEN",

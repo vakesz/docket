@@ -163,8 +163,8 @@ function MobileDrawer({
   return (
     <Sheet open={open} onOpenChange={(next) => (next ? null : onClose())}>
       <SheetContent side={side} className="flex w-[88vw] max-w-[420px] flex-col p-0 lg:hidden">
-        <SheetHeader className="border-b border-border bg-card px-3 py-2">
-          <SheetTitle className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+        <SheetHeader className="border-border border-b bg-card px-3 py-2">
+          <SheetTitle className="font-mono text-[11px] text-muted-foreground uppercase tracking-[0.18em]">
             {label}
           </SheetTitle>
         </SheetHeader>

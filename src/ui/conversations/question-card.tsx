@@ -57,14 +57,14 @@ export function QuestionCard({
   };
 
   return (
-    <section className="rounded border border-primary bg-card p-3 text-sm text-foreground">
+    <section className="rounded border border-primary bg-card p-3 text-foreground text-sm">
       <header className="mb-2 flex items-center gap-2">
-        <span className="rounded bg-primary px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-primary-foreground">
+        <span className="rounded bg-primary px-1.5 py-0.5 font-mono text-[10px] text-primary-foreground uppercase tracking-wider">
           ask
         </span>
         <span className="font-mono text-[11px] text-muted-foreground">Awaiting your answer</span>
         {question.multiSelect && (
-          <span className="ml-auto text-xs uppercase tracking-wide text-muted-foreground">
+          <span className="ml-auto text-muted-foreground text-xs uppercase tracking-wide">
             multi-select
           </span>
         )}

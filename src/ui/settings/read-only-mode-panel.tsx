@@ -28,14 +28,14 @@ export function ReadOnlyModePanel() {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-1">
-        <Label className="text-sm font-medium text-foreground">
+        <Label className="font-medium text-foreground text-sm">
           {row?.label ?? "System read-only mode"}
         </Label>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-muted-foreground text-xs">
           {row?.description ??
             "When on, every mutation route — including proposal confirms — is blocked. Reads stay open. Flip on for maintenance windows."}
         </p>
-        <div className="flex items-center gap-2 text-sm text-foreground">
+        <div className="flex items-center gap-2 text-foreground text-sm">
           <Switch
             id={switchId}
             checked={enabled}

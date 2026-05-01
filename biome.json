@@ -28,7 +28,35 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true
+      "recommended": true,
+      "style": {
+        "useImportType": "error",
+        "useExportType": "error",
+        "useNodejsImportProtocol": "error",
+        "noNonNullAssertion": "error",
+        "useConsistentArrayType": { "level": "error", "options": { "syntax": "shorthand" } },
+        "useShorthandAssign": "error",
+        "noYodaExpression": "error",
+        "useCollapsedElseIf": "error",
+        "noUselessElse": "error"
+      },
+      "suspicious": {
+        "noConsole": { "level": "error", "options": { "allow": ["warn", "error"] } },
+        "noEmptyBlockStatements": "error"
+      },
+      "performance": {
+        "noBarrelFile": "error",
+        "noReExportAll": "error"
+      },
+      "nursery": {
+        "useSortedClasses": {
+          "level": "error",
+          "options": {
+            "attributes": ["className", "class"],
+            "functions": ["cn", "clsx", "cva", "tw"]
+          }
+        }
+      }
     }
   },
   "overrides": [
@@ -39,6 +67,22 @@
           "a11y": {
             "useSemanticElements": "off",
             "useKeyWithClickEvents": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "src/server/logger.ts",
+        "bin/**",
+        "src/test/**",
+        "**/*.test.ts",
+        "**/*.test.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
           }
         }
       }

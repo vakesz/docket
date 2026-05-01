@@ -54,7 +54,7 @@ export function CommentComposer({
     >
       <Label
         htmlFor={fieldId}
-        className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground"
+        className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider"
       >
         Add comment
       </Label>
@@ -70,7 +70,7 @@ export function CommentComposer({
         <Button type="submit" size="xs" disabled={propose.isPending || !body.trim()}>
           {propose.isPending ? "Posting…" : "Post comment"}
         </Button>
-        {error ? <span className="text-xs text-destructive">{error}</span> : null}
+        {error ? <span className="text-destructive text-xs">{error}</span> : null}
       </div>
       <ProposalDialog
         projectSlug={projectSlug}

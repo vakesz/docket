@@ -32,7 +32,7 @@ export function SettingsSidebar({
     <nav className="flex flex-col gap-4">
       {grouped.map((group) => (
         <div key={group.key} className="flex flex-col gap-1">
-          <div className="px-3 pb-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+          <div className="px-3 pb-1 font-medium font-mono text-[10px] text-muted-foreground uppercase tracking-[0.18em]">
             {group.label}
           </div>
           {group.sections.map((section) => {
@@ -65,14 +65,14 @@ export function SettingsSidebar({
 
       {IS_DEV ? (
         <div className="flex flex-col gap-1">
-          <div className="px-3 pb-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+          <div className="px-3 pb-1 font-medium font-mono text-[10px] text-muted-foreground uppercase tracking-[0.18em]">
             Dev tools
           </div>
           <a
             href="/setup-preview"
             target="_blank"
             rel="noreferrer"
-            className="flex items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-muted"
+            className="flex items-center gap-3 rounded-xl px-3 py-2 text-left text-foreground text-sm transition-colors hover:bg-muted"
           >
             <Wrench className="h-4 w-4 shrink-0" />
             <span className="flex-1 truncate font-medium">Setup wizard preview</span>

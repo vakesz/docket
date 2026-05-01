@@ -52,7 +52,7 @@ export function ShortcutHelp() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="p-0 sm:max-w-[420px]">
-        <DialogHeader className="border-b border-border px-4 py-3">
+        <DialogHeader className="border-border border-b px-4 py-3">
           <DialogTitle>Keyboard shortcuts</DialogTitle>
           <DialogDescription className="sr-only">
             Globally-bound keys for the workspace.

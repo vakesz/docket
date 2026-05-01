@@ -116,7 +116,7 @@ export function SettingsShell({ publicBase, project, initialSection }: Props) {
       <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
         <SheetContent side="left" className="px-0 py-0 lg:hidden">
           <SheetHeader className="px-3 pt-3 pb-0">
-            <SheetTitle className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+            <SheetTitle className="font-mono text-[11px] text-muted-foreground uppercase tracking-[0.18em]">
               Settings
             </SheetTitle>
           </SheetHeader>
@@ -127,26 +127,26 @@ export function SettingsShell({ publicBase, project, initialSection }: Props) {
       </Sheet>
 
       <ScrollArea className="min-h-0">
-        <header className="border-b border-border bg-card/70 px-4 py-4 backdrop-blur sm:px-6">
+        <header className="border-border border-b bg-card/70 px-4 py-4 backdrop-blur sm:px-6">
           <div className="flex flex-wrap items-baseline gap-2">
-            <h2 className="text-lg font-semibold text-foreground">{activeMeta.label}</h2>
+            <h2 className="font-semibold text-foreground text-lg">{activeMeta.label}</h2>
             {activeMeta.needsProject && project ? (
               <span
                 className={cn(
                   "rounded-full border border-border bg-muted px-2 py-0.5",
-                  "text-[11px] uppercase tracking-wide text-muted-foreground",
+                  "text-[11px] text-muted-foreground uppercase tracking-wide",
                 )}
               >
                 {project.name}
               </span>
             ) : null}
           </div>
-          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{activeMeta.description}</p>
+          <p className="mt-1 max-w-3xl text-muted-foreground text-sm">{activeMeta.description}</p>
         </header>
 
         <div className="px-4 py-6 sm:px-6">
           {blockedByMissingProject ? (
-            <p className="rounded-2xl border border-dashed border-border bg-card p-6 text-center text-sm text-muted-foreground">
+            <p className="rounded-2xl border border-border border-dashed bg-card p-6 text-center text-muted-foreground text-sm">
               Pick a project from the sidebar to manage its {activeMeta.label.toLowerCase()}.
             </p>
           ) : (

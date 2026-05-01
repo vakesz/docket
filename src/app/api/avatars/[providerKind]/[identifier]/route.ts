@@ -22,6 +22,8 @@ import { db } from "@/server/db";
 import { getProviderSpec } from "@/server/provider-registry";
 
 export const runtime = "nodejs";
+// Auth + DB lookup on every request; nothing static to prerender.
+export const dynamic = "force-dynamic";
 
 const HIT_CACHE_HEADER = "public, max-age=86400, stale-while-revalidate=2592000";
 const MISS_CACHE_HEADER = "public, max-age=300";

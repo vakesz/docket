@@ -264,7 +264,7 @@ function toResponsesInput(messages: readonly import("@/agent/llm/types").LlmMess
   // We emit the explicit `type: "message"` + content-parts form rather than
   // the bare `{ role, content }` shorthand — api.openai.com infers the type,
   // but Azure AI Foundry's stricter validator rejects items without one.
-  const out: Array<Record<string, unknown>> = [];
+  const out: Record<string, unknown>[] = [];
   for (const m of messages) {
     if (m.role === "system") {
       out.push({

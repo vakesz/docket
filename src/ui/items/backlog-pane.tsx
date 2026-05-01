@@ -212,7 +212,7 @@ export function BacklogPane({
       />
 
       {recentItems.length > 0 && (
-        <div className="border-b border-border bg-card">
+        <div className="border-border border-b bg-card">
           <div className={`flex items-center gap-2 px-3 pt-2 pb-1 ${META_LABEL_FAINT}`}>
             <span>Recent</span>
             <span className="text-muted-foreground/70">{recentItems.length}</span>
@@ -229,7 +229,7 @@ export function BacklogPane({
       )}
 
       {pinned.data && pinned.data.length > 0 && (
-        <div className="border-b border-border bg-card">
+        <div className="border-border border-b bg-card">
           <div className={`flex items-center gap-2 px-3 pt-2 pb-1 ${META_LABEL_FAINT}`}>
             <span className="text-primary">●</span>
             <span>Pinned</span>

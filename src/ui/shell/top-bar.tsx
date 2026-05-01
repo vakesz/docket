@@ -32,10 +32,10 @@ export function TopBar({
   }
 
   return (
-    <header className="flex items-center border-b border-border bg-card px-2 py-2 sm:px-4">
+    <header className="flex items-center border-border border-b bg-card px-2 py-2 sm:px-4">
       <BacklogDrawerTrigger />
       <LogoLink currentProjectSlug={currentProjectSlug} />
-      <div className="ml-auto flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+      <div className="ml-auto flex shrink-0 items-center gap-2 text-muted-foreground text-xs">
         {currentProjectSlug && projects.length > 0 ? (
           <>
             <ThemeToggle />

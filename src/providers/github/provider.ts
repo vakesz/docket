@@ -626,7 +626,7 @@ export class GitHubProvider implements WorkItemProvider {
       per_page: 100,
     });
     const out: PRMatch[] = [];
-    for (const event of events as ReadonlyArray<TimelineEvent>) {
+    for (const event of events as readonly TimelineEvent[]) {
       const ev = event.event;
       if (ev !== "cross-referenced" && ev !== "connected") continue;
       const source = event.source?.issue;

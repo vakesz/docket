@@ -110,7 +110,7 @@ export function ViewBar({ projectSlug }: Props) {
     <section className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-3 text-sm shadow-sm">
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">
-          <span className="text-xs uppercase tracking-wide text-muted-foreground/70">View</span>
+          <span className="text-muted-foreground/70 text-xs uppercase tracking-wide">View</span>
           <Select
             value={activeViewId === "" ? NO_VIEW : activeViewId}
             onValueChange={(next) => navigateWith({ viewId: next === NO_VIEW ? undefined : next })}

@@ -158,7 +158,7 @@ export function OauthProviderForm(props: Props) {
         onSubmit={form.handleSubmit(onSubmit)}
         className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-6 text-sm shadow-sm"
       >
-        <h2 className="text-base font-medium text-foreground">
+        <h2 className="font-medium text-base text-foreground">
           {mode === "edit" ? "Edit OAuth provider" : "Add OAuth provider"}
         </h2>
 

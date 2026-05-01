@@ -66,7 +66,7 @@ function summarizeSelection(selected: ReadonlySet<string>, meIdentifier: string 
 function FilterRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-start gap-2">
-      <span className="mt-1 w-14 shrink-0 font-mono text-[10px] uppercase tracking-wider text-muted-foreground/70">
+      <span className="mt-1 w-14 shrink-0 font-mono text-[10px] text-muted-foreground/70 uppercase tracking-wider">
         {label}
       </span>
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">{children}</div>
@@ -123,9 +123,9 @@ export function FilterBar({
   state: FilterState;
   handlers: FilterHandlers;
   visibleKinds: Array<ItemKind | "all">;
-  tagCounts: Array<[string, number]>;
+  tagCounts: [string, number][];
   tagCollapseLimit: number;
-  assigneeCounts: Array<[string, number]>;
+  assigneeCounts: [string, number][];
   assigneeCollapseLimit: number;
   assigneeSelectorStyle: "chips" | "dropdown";
   meIdentifier: string | null;
@@ -152,7 +152,7 @@ export function FilterBar({
   const onClearAssignees = () => handlers.setActiveAssignees(new Set());
 
   return (
-    <div className="flex flex-col gap-2 border-b border-border p-3">
+    <div className="flex flex-col gap-2 border-border border-b p-3">
       <div className="flex items-center gap-2">
         <Input
           type="search"
@@ -218,7 +218,7 @@ export function FilterBar({
             <button
               type="button"
               onClick={() => handlers.setTagsExpanded((v) => !v)}
-              className="rounded-full px-2 py-0.5 font-mono text-[10px] lowercase tracking-wide text-muted-foreground/70 hover:bg-muted"
+              className="rounded-full px-2 py-0.5 font-mono text-[10px] text-muted-foreground/70 lowercase tracking-wide hover:bg-muted"
             >
               {tagsExpanded ? "show less" : `+${tagCounts.length - tagCollapseLimit} more`}
             </button>
@@ -287,7 +287,7 @@ function SegmentedButton({
       onClick={onClick}
       title={title}
       className={cn(
-        "px-2.5 py-1 font-mono text-[10px] lowercase tracking-wide transition-colors not-first:border-l not-first:border-border",
+        "not-first:border-border not-first:border-l px-2.5 py-1 font-mono text-[10px] lowercase tracking-wide transition-colors",
         selected
           ? "bg-primary text-primary-foreground"
           : "bg-card text-muted-foreground hover:bg-muted",
@@ -310,7 +310,7 @@ function AssigneeChips({
   providerHasAvatars,
   showAvatars,
 }: {
-  assigneeCounts: Array<[string, number]>;
+  assigneeCounts: [string, number][];
   activeAssignees: ReadonlySet<string>;
   assigneesExpanded: boolean;
   assigneeCollapseLimit: number;
@@ -376,7 +376,7 @@ function AssigneeChips({
         <button
           type="button"
           onClick={onToggleExpanded}
-          className="rounded-full px-2 py-0.5 font-mono text-[10px] lowercase tracking-wide text-muted-foreground/70 hover:bg-muted"
+          className="rounded-full px-2 py-0.5 font-mono text-[10px] text-muted-foreground/70 lowercase tracking-wide hover:bg-muted"
         >
           {assigneesExpanded ? "show less" : `+${overflow} more`}
         </button>
@@ -434,7 +434,7 @@ function AssigneeAvatar({
   return (
     <span
       aria-hidden="true"
-      className="relative flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full bg-background/40 font-sans text-[8px] font-medium text-muted-foreground/70"
+      className="relative flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full bg-background/40 font-medium font-sans text-[8px] text-muted-foreground/70"
     >
       <span>{initial}</span>
       {url ? (
@@ -466,7 +466,7 @@ function AssigneeDropdown({
   providerHasAvatars,
   showAvatars,
 }: {
-  assigneeCounts: Array<[string, number]>;
+  assigneeCounts: [string, number][];
   activeAssignees: ReadonlySet<string>;
   meIdentifier: string | null;
   onToggle: (value: string) => void;
@@ -482,7 +482,7 @@ function AssigneeDropdown({
 
   return (
     <Popover>
-      <PopoverTrigger className="inline-flex min-w-[10rem] items-center justify-between gap-2 rounded-md border border-border bg-card px-2 py-1 text-xs text-foreground hover:bg-muted">
+      <PopoverTrigger className="inline-flex min-w-[10rem] items-center justify-between gap-2 rounded-md border border-border bg-card px-2 py-1 text-foreground text-xs hover:bg-muted">
         <span className="truncate">{summary}</span>
         <ChevronDown aria-hidden="true" className="size-3 shrink-0 text-muted-foreground/70" />
       </PopoverTrigger>
@@ -503,7 +503,7 @@ function AssigneeDropdown({
           <span>Anyone</span>
           {activeAssignees.size === 0 ? <Check aria-hidden="true" className="size-3" /> : null}
         </button>
-        <div className="my-1 border-t border-border" />
+        <div className="my-1 border-border border-t" />
         {sentinels.map((s) => {
           const selected = activeAssignees.has(s.value);
           return (
@@ -523,7 +523,7 @@ function AssigneeDropdown({
         })}
         {assigneeCounts.length > 0 ? (
           <>
-            <div className="my-1 border-t border-border" />
+            <div className="my-1 border-border border-t" />
             {assigneeCounts.map(([name, n]) => {
               const selected = activeAssignees.has(name);
               const isMe = meIdentifier !== null && name === meIdentifier;
@@ -549,13 +549,13 @@ function AssigneeDropdown({
                     ) : null}
                     <span className="truncate">{name}</span>
                     {isMe ? (
-                      <span className="font-mono text-[9px] uppercase text-muted-foreground/70">
+                      <span className="font-mono text-[9px] text-muted-foreground/70 uppercase">
                         you
                       </span>
                     ) : null}
                   </span>
                   <span className="flex items-center gap-1.5">
-                    <span className="font-mono text-[9px] tabular-nums text-muted-foreground/70">
+                    <span className="font-mono text-[9px] text-muted-foreground/70 tabular-nums">
                       {n}
                     </span>
                     {selected ? <Check aria-hidden="true" className="size-3" /> : null}

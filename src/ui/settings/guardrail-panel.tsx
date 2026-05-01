@@ -140,7 +140,7 @@ export function GuardrailPanel({ projectSlug }: { projectSlug: string }) {
   };
 
   if (projectSettings.isPending || providers.isPending) {
-    return <p className="text-sm text-muted-foreground/70">Loading…</p>;
+    return <p className="text-muted-foreground/70 text-sm">Loading…</p>;
   }
 
   const knobsDisabled = !enabled || !hasGuardrailProvider || save.isPending;
@@ -170,7 +170,7 @@ export function GuardrailPanel({ projectSlug }: { projectSlug: string }) {
       ) : null}
 
       <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-2 text-sm text-foreground">
+        <div className="flex items-center gap-2 text-foreground text-sm">
           <Switch
             id={enabledId}
             checked={hasGuardrailProvider && enabled}
@@ -179,7 +179,7 @@ export function GuardrailPanel({ projectSlug }: { projectSlug: string }) {
           />
           <Label htmlFor={enabledId}>Enable chat guardrails</Label>
         </div>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-muted-foreground text-xs">
           When on, every user message, tool result, and final assistant reply runs through the
           guardrail layer. Calls go to the project&rsquo;s configured guardrail model
           {defaultGuardrailProvider ? (
@@ -193,11 +193,11 @@ export function GuardrailPanel({ projectSlug }: { projectSlug: string }) {
         </p>
       </div>
 
-      <div className="flex flex-col gap-2 border-t border-border pt-6">
-        <Label htmlFor={kindId} className="text-sm font-medium text-foreground">
+      <div className="flex flex-col gap-2 border-border border-t pt-6">
+        <Label htmlFor={kindId} className="font-medium text-foreground text-sm">
           Strategy
         </Label>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-muted-foreground text-xs">
           Composite is the default — pattern is fast and free, and the model only runs when the
           regex layer is uncertain.
         </p>
@@ -222,10 +222,10 @@ export function GuardrailPanel({ projectSlug }: { projectSlug: string }) {
         </p>
       </div>
 
-      <div className="flex flex-col gap-3 border-t border-border pt-6">
-        <h3 className="text-sm font-medium text-foreground">Behavior</h3>
+      <div className="flex flex-col gap-3 border-border border-t pt-6">
+        <h3 className="font-medium text-foreground text-sm">Behavior</h3>
 
-        <div className="flex items-start gap-2 text-sm text-foreground">
+        <div className="flex items-start gap-2 text-foreground text-sm">
           <Switch
             id={injectionId}
             checked={blockOnInjection}
@@ -234,14 +234,14 @@ export function GuardrailPanel({ projectSlug }: { projectSlug: string }) {
           />
           <div className="flex flex-col gap-0.5">
             <Label htmlFor={injectionId}>Block prompt-injection attempts</Label>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-muted-foreground text-xs">
               Tool results flagged as injection are replaced with a refusal stub before re-entering
               the prompt. Off keeps the original payload and only annotates the row.
             </p>
           </div>
         </div>
 
-        <div className="flex items-start gap-2 text-sm text-foreground">
+        <div className="flex items-start gap-2 text-foreground text-sm">
           <Switch
             id={offTopicId}
             checked={blockOffTopic}
@@ -250,7 +250,7 @@ export function GuardrailPanel({ projectSlug }: { projectSlug: string }) {
           />
           <div className="flex flex-col gap-0.5">
             <Label htmlFor={offTopicId}>Block off-topic chat</Label>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-muted-foreground text-xs">
               User messages classified as outside the software / work-item scope (cooking, shopping,
               medical advice) are refused before the agent sees them. Off downgrades to a banner.
             </p>
@@ -258,14 +258,14 @@ export function GuardrailPanel({ projectSlug }: { projectSlug: string }) {
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 border-t border-border pt-6">
-        <h3 className="text-sm font-medium text-foreground">LLM-judge round-trips</h3>
-        <p className="text-xs text-muted-foreground">
+      <div className="flex flex-col gap-3 border-border border-t pt-6">
+        <h3 className="font-medium text-foreground text-sm">LLM-judge round-trips</h3>
+        <p className="text-muted-foreground text-xs">
           These add a one-token classifier call on the guardrail model. They only run when the
           strategy is <em>composite</em> or <em>llm-judge</em>; pattern-only and off ignore them.
         </p>
 
-        <div className="flex items-start gap-2 text-sm text-foreground">
+        <div className="flex items-start gap-2 text-foreground text-sm">
           <Switch
             id={scopeId}
             checked={scopeCheckEnabled}
@@ -274,14 +274,14 @@ export function GuardrailPanel({ projectSlug }: { projectSlug: string }) {
           />
           <div className="flex flex-col gap-0.5">
             <Label htmlFor={scopeId}>Scope-check user input</Label>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-muted-foreground text-xs">
               Classify each user message as on-topic / off-topic. Turn off if your projects extend
               beyond software work-items.
             </p>
           </div>
         </div>
 
-        <div className="flex items-start gap-2 text-sm text-foreground">
+        <div className="flex items-start gap-2 text-foreground text-sm">
           <Switch
             id={outputId}
             checked={outputCheckEnabled}
@@ -290,7 +290,7 @@ export function GuardrailPanel({ projectSlug }: { projectSlug: string }) {
           />
           <div className="flex flex-col gap-0.5">
             <Label htmlFor={outputId}>Output safety check</Label>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-muted-foreground text-xs">
               Run the assistant&rsquo;s final reply through a harmful-content classifier. Output is
               never blocked mid-stream — flagged messages get a banner. Costs one extra round-trip
               per turn.
@@ -299,7 +299,7 @@ export function GuardrailPanel({ projectSlug }: { projectSlug: string }) {
         </div>
       </div>
 
-      <div className="flex items-center gap-3 border-t border-border pt-6">
+      <div className="flex items-center gap-3 border-border border-t pt-6">
         <Button type="submit" disabled={save.isPending || !hasGuardrailProvider}>
           {save.isPending ? "Saving…" : "Save guardrail settings"}
         </Button>
@@ -318,8 +318,8 @@ export function GuardrailPanel({ projectSlug }: { projectSlug: string }) {
         >
           Reset to defaults
         </Button>
-        {save.error ? <span className="text-xs text-destructive">{save.error.message}</span> : null}
-        {save.isSuccess ? <span className="text-xs text-muted-foreground">Saved.</span> : null}
+        {save.error ? <span className="text-destructive text-xs">{save.error.message}</span> : null}
+        {save.isSuccess ? <span className="text-muted-foreground text-xs">Saved.</span> : null}
       </div>
     </form>
   );

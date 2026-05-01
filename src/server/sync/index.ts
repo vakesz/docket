@@ -463,15 +463,13 @@ async function processChunk(
       });
       for (const r of newRows) surrogateMap.set(r.providerItemId, r.id);
     }
-    const results = await Promise.all(
-      bundlesWithComments.map(async (b) => {
-        const surrogate = surrogateMap.get(b.item.id);
-        if (!surrogate) return 0;
-        const comments = b.comments ?? [];
-        return reconcileComments(db, surrogate, comments);
-      }),
-    );
-    for (const n of results) commentsReconciled += n;
+    const reconcileBundles: CommentReconcileBundle[] = [];
+    for (const b of bundlesWithComments) {
+      const surrogate = surrogateMap.get(b.item.id);
+      if (!surrogate) continue;
+      reconcileBundles.push({ itemSurrogate: surrogate, comments: b.comments ?? [] });
+    }
+    commentsReconciled += await reconcileComments(db, reconcileBundles);
   }
 
   // Warm the avatar cache for assignees in this chunk so the first item-
@@ -529,66 +527,88 @@ function collectAssignees(bundles: readonly ChangedItem[]): string[] {
 }
 
 /**
- * Reconcile cached comments for a single item against the provider snapshot.
- * Skip-rewrite: comments whose `providerUpdatedAt` matches the cached row
- * (and whose body matches) are left untouched. Returns the number of writes.
+ * Reconcile cached comments against provider snapshots, batched over
+ * arbitrary many items. One `findMany` covers every item in the call, then
+ * per-comment upserts fan out in a single `Promise.all`. Skip-rewrite:
+ * comments whose `providerUpdatedAt` matches the cached row (and whose body
+ * matches) are left untouched. Returns the total number of writes.
  *
  * Deletions: not handled here. Providers don't reliably surface comment
  * deletions through their listing endpoints, and an over-eager delete would
  * silently erase user history. The next full refresh of the item can run a
  * stricter reconciliation if/when needed.
  */
+export type CommentReconcileBundle = {
+  itemSurrogate: string;
+  comments: readonly CanonicalComment[];
+};
+
 export async function reconcileComments(
   db: typeof Db,
-  itemSurrogate: string,
-  comments: readonly CanonicalComment[],
+  bundles: readonly CommentReconcileBundle[],
 ): Promise<number> {
-  if (comments.length === 0) return 0;
-  const existing = await db.comment.findMany({
-    where: { itemId: itemSurrogate },
-    select: { providerCommentId: true, providerUpdatedAt: true, bodyMd: true },
+  const nonEmpty = bundles.filter((b) => b.comments.length > 0);
+  if (nonEmpty.length === 0) return 0;
+  const itemIds = nonEmpty.map((b) => b.itemSurrogate);
+  const allExisting = await db.comment.findMany({
+    where: { itemId: { in: itemIds } },
+    select: { itemId: true, providerCommentId: true, providerUpdatedAt: true, bodyMd: true },
   });
-  const existingMap = new Map(existing.map((e) => [e.providerCommentId, e]));
-  const ops: Promise<unknown>[] = [];
-  for (const c of comments) {
-    const prev = existingMap.get(c.id);
-    const incomingPu = c.updatedAt ?? null;
-    const reactions = (c.reactions ?? Prisma.JsonNull) as
-      | Prisma.InputJsonValue
-      | typeof Prisma.JsonNull;
-    if (prev) {
-      const prevMs = prev.providerUpdatedAt?.getTime() ?? null;
-      const incMs = incomingPu?.getTime() ?? null;
-      if (prevMs === incMs && prev.bodyMd === c.bodyMd) continue;
+  const byItem = new Map<string, Map<string, { providerUpdatedAt: Date | null; bodyMd: string }>>();
+  for (const row of allExisting) {
+    let slot = byItem.get(row.itemId);
+    if (!slot) {
+      slot = new Map();
+      byItem.set(row.itemId, slot);
     }
-    ops.push(
-      db.comment.upsert({
-        where: {
-          itemId_providerCommentId: {
+    slot.set(row.providerCommentId, {
+      providerUpdatedAt: row.providerUpdatedAt,
+      bodyMd: row.bodyMd,
+    });
+  }
+  const ops: Promise<unknown>[] = [];
+  for (const { itemSurrogate, comments } of nonEmpty) {
+    const existing = byItem.get(itemSurrogate);
+    for (const c of comments) {
+      const prev = existing?.get(c.id);
+      const incomingPu = c.updatedAt ?? null;
+      const reactions = (c.reactions ?? Prisma.JsonNull) as
+        | Prisma.InputJsonValue
+        | typeof Prisma.JsonNull;
+      if (prev) {
+        const prevMs = prev.providerUpdatedAt?.getTime() ?? null;
+        const incMs = incomingPu?.getTime() ?? null;
+        if (prevMs === incMs && prev.bodyMd === c.bodyMd) continue;
+      }
+      ops.push(
+        db.comment.upsert({
+          where: {
+            itemId_providerCommentId: {
+              itemId: itemSurrogate,
+              providerCommentId: c.id,
+            },
+          },
+          create: {
             itemId: itemSurrogate,
             providerCommentId: c.id,
+            author: c.author,
+            bodyMd: c.bodyMd,
+            createdAt: c.createdAt,
+            providerUpdatedAt: incomingPu,
+            edited: c.edited ?? false,
+            reactions,
           },
-        },
-        create: {
-          itemId: itemSurrogate,
-          providerCommentId: c.id,
-          author: c.author,
-          bodyMd: c.bodyMd,
-          createdAt: c.createdAt,
-          providerUpdatedAt: incomingPu,
-          edited: c.edited ?? false,
-          reactions,
-        },
-        update: {
-          author: c.author,
-          bodyMd: c.bodyMd,
-          createdAt: c.createdAt,
-          providerUpdatedAt: incomingPu,
-          edited: c.edited ?? false,
-          reactions,
-        },
-      }),
-    );
+          update: {
+            author: c.author,
+            bodyMd: c.bodyMd,
+            createdAt: c.createdAt,
+            providerUpdatedAt: incomingPu,
+            edited: c.edited ?? false,
+            reactions,
+          },
+        }),
+      );
+    }
   }
   if (ops.length === 0) return 0;
   await Promise.all(ops);

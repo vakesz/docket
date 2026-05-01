@@ -52,7 +52,7 @@ export function ItemRow({
   const tone = freshnessTone(item.updatedAt, staleThresholdDays);
 
   return (
-    <div className="group/row relative border-b border-border">
+    <div className="group/row relative border-border border-b">
       <Link
         href={`/projects/${projectSlug}/items/${item.itemNumber}`}
         className={cn(
@@ -64,7 +64,7 @@ export function ItemRow({
         )}
       >
         <div className="flex items-center gap-2 text-xs">
-          <span className="text-xs uppercase tracking-wide text-muted-foreground/70">
+          <span className="text-muted-foreground/70 text-xs uppercase tracking-wide">
             {formatKind(item.kind)}
           </span>
           <StatePill state={item.state} />
@@ -78,7 +78,7 @@ export function ItemRow({
             <span>#{item.itemNumber}</span>
           </span>
         </div>
-        <div className="line-clamp-2 text-sm text-foreground">{item.title}</div>
+        <div className="line-clamp-2 text-foreground text-sm">{item.title}</div>
         {hasMeta && (
           <div className="flex flex-wrap items-center gap-1.5 font-mono text-[10px] text-muted-foreground/70">
             {item.assignee && <span className="truncate">{item.assignee}</span>}
@@ -108,7 +108,7 @@ export function ItemRow({
           onClick={(e) => e.stopPropagation()}
           title="Open in provider (new tab)"
           aria-label={`Open #${item.itemNumber} in a new tab`}
-          className="absolute right-1.5 top-1.5 rounded bg-card p-1 text-muted-foreground/70 opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover/row:opacity-100"
+          className="absolute top-1.5 right-1.5 rounded bg-card p-1 text-muted-foreground/70 opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover/row:opacity-100"
         >
           <ExternalLink aria-hidden="true" className="h-3 w-3" />
         </a>
@@ -130,12 +130,12 @@ export function PinnedRow({
     <Link
       href={`/projects/${projectSlug}/items/${item.itemNumber}`}
       className={cn(
-        "flex items-center gap-2 border-b border-border px-3 py-1.5 text-xs transition-colors",
+        "flex items-center gap-2 border-border border-b px-3 py-1.5 text-xs transition-colors",
         "hover:bg-muted",
         selected && "bg-muted",
       )}
     >
-      <span className="text-xs uppercase tracking-wide text-muted-foreground/70">
+      <span className="text-muted-foreground/70 text-xs uppercase tracking-wide">
         {formatKind(item.kind)}
       </span>
       <StatePill state={item.state} />

@@ -59,7 +59,7 @@ export function SourcesPane({ projectSlug }: { projectSlug: string }) {
   return (
     <section className="flex flex-col gap-4">
       <form
-        className="flex flex-col gap-2 rounded-2xl border border-dashed border-border bg-muted/40 p-4"
+        className="flex flex-col gap-2 rounded-2xl border border-border border-dashed bg-muted/40 p-4"
         onSubmit={(e) => {
           e.preventDefault();
           void submitNew();
@@ -96,7 +96,7 @@ export function SourcesPane({ projectSlug }: { projectSlug: string }) {
             ref={fileRef}
             type="file"
             accept=".md,.markdown,.txt,.json,text/plain,text/markdown,application/json"
-            className="text-xs text-muted-foreground"
+            className="text-muted-foreground text-xs"
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) void handleFile(file);
@@ -114,9 +114,9 @@ export function SourcesPane({ projectSlug }: { projectSlug: string }) {
       </form>
 
       {list.isPending ? (
-        <p className="text-sm italic text-muted-foreground">Loading sources…</p>
+        <p className="text-muted-foreground text-sm italic">Loading sources…</p>
       ) : list.data?.length === 0 ? (
-        <p className="rounded-2xl border border-dashed border-border bg-card p-6 text-center text-sm text-muted-foreground">
+        <p className="rounded-2xl border border-border border-dashed bg-card p-6 text-center text-muted-foreground text-sm">
           No sources yet. Add one above so the agent has material to cite.
         </p>
       ) : (
@@ -128,15 +128,15 @@ export function SourcesPane({ projectSlug }: { projectSlug: string }) {
             >
               <div className="flex min-w-0 flex-col gap-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-foreground">{s.title}</span>
+                  <span className="font-medium text-foreground text-sm">{s.title}</span>
                   {s.kind && (
-                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
                       {s.kind}
                     </span>
                   )}
                 </div>
                 {s.bodyMd && (
-                  <p className="line-clamp-2 whitespace-pre-wrap text-xs text-muted-foreground">
+                  <p className="line-clamp-2 whitespace-pre-wrap text-muted-foreground text-xs">
                     {s.bodyMd}
                   </p>
                 )}

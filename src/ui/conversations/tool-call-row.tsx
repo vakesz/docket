@@ -71,7 +71,7 @@ export function ToolCallRow({
           )}
           {result && (
             <div
-              className={cn("px-3 pb-2", prettyArgs !== null && "border-t border-border/40 pt-2")}
+              className={cn("px-3 pb-2", prettyArgs !== null && "border-border/40 border-t pt-2")}
             >
               <div className={cn("mb-1", META_LABEL)}>result</div>
               <pre className="whitespace-pre-wrap font-mono text-xs">{result}</pre>
@@ -104,7 +104,7 @@ export function ToolCallProgress({
     return null;
   }
   return (
-    <div className="mb-3 flex flex-col gap-1 rounded border border-dashed border-border px-3 py-1.5 font-mono text-xs text-muted-foreground">
+    <div className="mb-3 flex flex-col gap-1 rounded border border-border border-dashed px-3 py-1.5 font-mono text-muted-foreground text-xs">
       {toolCalls.map((tc) => {
         const arrow = tc.ok === null ? "→" : tc.ok ? "✓" : "✗";
         const argSummary = condenseArgs(tc.arguments, 80);

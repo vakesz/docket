@@ -414,7 +414,7 @@ export function CommandPalette({
             ) : null}
           </CommandList>
           <CommandSeparator />
-          <div className="px-3 py-2 text-xs uppercase tracking-wide text-muted-foreground/70">
+          <div className="px-3 py-2 text-muted-foreground/70 text-xs uppercase tracking-wide">
             {shortcut("K")} · Esc to close
           </div>
         </Command>
@@ -432,7 +432,7 @@ function CommandRow({ command, onSelect }: { command: PaletteCommand; onSelect: 
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="truncate text-foreground">{command.label}</span>
         {command.description ? (
-          <span className="truncate text-xs text-muted-foreground/70">{command.description}</span>
+          <span className="truncate text-muted-foreground/70 text-xs">{command.description}</span>
         ) : null}
       </span>
       {command.hint ? (
@@ -447,7 +447,7 @@ function CommandRow({ command, onSelect }: { command: PaletteCommand; onSelect: 
 function ItemRow({ item, onSelect }: { item: ItemSummary; onSelect: () => void }) {
   return (
     <CommandItem value={`${item.providerItemId} ${item.title}`} onSelect={onSelect}>
-      <span className="text-xs uppercase tracking-wide text-muted-foreground">
+      <span className="text-muted-foreground text-xs uppercase tracking-wide">
         {formatKind(item.kind)}
       </span>
       <span className="ml-2 truncate">{item.title}</span>

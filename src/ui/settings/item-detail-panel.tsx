@@ -36,21 +36,21 @@ export function ItemDetailPanel() {
     <div className="flex flex-col gap-6">
       <section className="flex flex-col gap-3">
         <header className="flex flex-col gap-1">
-          <h3 className="text-sm font-medium text-foreground">Reactions</h3>
-          <p className="text-xs text-muted-foreground">
+          <h3 className="font-medium text-foreground text-sm">Reactions</h3>
+          <p className="text-muted-foreground text-xs">
             Hide reaction pickers and existing chips on the detail page. Sync still pulls reactions;
             flip these off when you don't care to see or post them.
           </p>
         </header>
 
         <div className="flex flex-col gap-1">
-          <Label className="text-sm font-medium text-foreground">
+          <Label className="font-medium text-foreground text-sm">
             Show reactions on item header
           </Label>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-muted-foreground text-xs">
             Controls the reactions strip below the item title. Comment reactions are unaffected.
           </p>
-          <div className="flex items-center gap-2 text-sm text-foreground">
+          <div className="flex items-center gap-2 text-foreground text-sm">
             <Switch
               id={headerId}
               checked={headerOn}
@@ -62,11 +62,11 @@ export function ItemDetailPanel() {
         </div>
 
         <div className="flex flex-col gap-1">
-          <Label className="text-sm font-medium text-foreground">Show reactions in comments</Label>
-          <p className="text-xs text-muted-foreground">
+          <Label className="font-medium text-foreground text-sm">Show reactions in comments</Label>
+          <p className="text-muted-foreground text-xs">
             Controls the reactions strip below each comment. Header reactions are unaffected.
           </p>
-          <div className="flex items-center gap-2 text-sm text-foreground">
+          <div className="flex items-center gap-2 text-foreground text-sm">
             <Switch
               id={commentsId}
               checked={commentsOn}

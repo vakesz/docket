@@ -20,6 +20,7 @@ import { NextResponse } from "next/server";
 import { selectAdapterFor } from "@/agent/llm/registry";
 import type { LoopEvent } from "@/agent/loop";
 import { runTurn } from "@/agent/loop";
+import { asUserId } from "@/core/types";
 import { auth } from "@/server/auth";
 import { ownsConversation } from "@/server/conversations/storage";
 import { db } from "@/server/db";
@@ -57,7 +58,7 @@ export async function POST(req: Request, context: RouteContext): Promise<Respons
   if (!session?.user?.id) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  const userId = session.user.id;
+  const userId = asUserId(session.user.id);
   const { projectSlug, conversationId } = await context.params;
 
   // Project membership: shares `projectForUser` with the tRPC

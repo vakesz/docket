@@ -55,7 +55,7 @@ export function TransitionActions({
           {INTENT_LABEL[intent]}
         </Button>
       ))}
-      {error ? <span className="text-xs text-destructive">{error}</span> : null}
+      {error ? <span className="text-destructive text-xs">{error}</span> : null}
       <ProposalDialog
         projectSlug={projectSlug}
         proposalId={pendingProposalId}

@@ -24,7 +24,7 @@ export function ProviderToggle({
 }) {
   const switchId = useId();
   return (
-    <div className="flex flex-col gap-4 border-t border-border pt-4 first:border-t-0 first:pt-0">
+    <div className="flex flex-col gap-4 border-border border-t pt-4 first:border-t-0 first:pt-0">
       <div
         className={cn(
           "flex items-start gap-3",
@@ -42,10 +42,10 @@ export function ProviderToggle({
           <span className="flex items-baseline gap-2">
             <span className="font-medium text-foreground">{label}</span>
             {alreadyConfigured ? (
-              <span className="text-xs uppercase tracking-wide text-primary">configured</span>
+              <span className="text-primary text-xs uppercase tracking-wide">configured</span>
             ) : null}
           </span>
-          {help ? <span className="text-xs font-normal text-muted-foreground">{help}</span> : null}
+          {help ? <span className="font-normal text-muted-foreground text-xs">{help}</span> : null}
         </Label>
       </div>
       {checked && !disabled ? <div className="flex flex-col gap-3">{children}</div> : null}

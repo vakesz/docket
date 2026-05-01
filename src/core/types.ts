@@ -10,6 +10,23 @@
  * narrowing). One source, no drift.
  */
 
+/**
+ * Branded id types. Plain strings at runtime, but the compiler refuses to
+ * mix a `UserId` where a `ProjectId` is expected. The brand is attached at
+ * the access boundary (`projectForUser`, the project-membership middleware,
+ * session resolution); inside the system it flows through tRPC ctx and the
+ * proposal executor without further casts. Prisma `where` clauses accept
+ * the branded value transparently because brands are subtypes of `string`.
+ */
+declare const __brand: unique symbol;
+export type ProjectId = string & { readonly [__brand]: "ProjectId" };
+export type UserId = string & { readonly [__brand]: "UserId" };
+export type ProposalId = string & { readonly [__brand]: "ProposalId" };
+
+export const asProjectId = (value: string): ProjectId => value as ProjectId;
+export const asUserId = (value: string): UserId => value as UserId;
+export const asProposalId = (value: string): ProposalId => value as ProposalId;
+
 export const ITEM_KINDS = ["epic", "feature", "story", "task", "bug"] as const;
 export type ItemKind = (typeof ITEM_KINDS)[number];
 
@@ -432,15 +449,3 @@ export type Source = {
   createdAt: Date | null;
   updatedAt: Date | null;
 };
-
-/**
- * Deterministic project id — currently identical to the provider key.
- *
- * A project IS a provider: memory, sources, sub-agents, and MCP servers
- * live per-provider and are shared across every scope (view). Scopes are
- * visual filters applied at query time, so they don't split project
- * identity. Empty `providerKey` is allowed for tests.
- */
-export function projectIdFor(providerKey: string): string {
-  return providerKey;
-}

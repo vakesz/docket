@@ -76,26 +76,24 @@ export function McpServerEditor({
         if (wrapped) headersJson[field.key] = wrapped;
         else delete headersJson[field.key];
       }
+    } else if (rawJson.trim() === "") {
+      headersJson = {};
     } else {
-      if (rawJson.trim() === "") {
-        headersJson = {};
-      } else {
-        try {
-          const parsed = JSON.parse(rawJson);
-          if (
-            !parsed ||
-            typeof parsed !== "object" ||
-            Array.isArray(parsed) ||
-            Object.values(parsed).some((v) => typeof v !== "string")
-          ) {
-            setError("Headers must be a JSON object of string → string.");
-            return;
-          }
-          headersJson = parsed as Record<string, string>;
-        } catch (err) {
-          setError(`Invalid JSON: ${err instanceof Error ? err.message : String(err)}`);
+      try {
+        const parsed = JSON.parse(rawJson);
+        if (
+          !parsed ||
+          typeof parsed !== "object" ||
+          Array.isArray(parsed) ||
+          Object.values(parsed).some((v) => typeof v !== "string")
+        ) {
+          setError("Headers must be a JSON object of string → string.");
           return;
         }
+        headersJson = parsed as Record<string, string>;
+      } catch (err) {
+        setError(`Invalid JSON: ${err instanceof Error ? err.message : String(err)}`);
+        return;
       }
     }
     await update.mutateAsync({
@@ -138,17 +136,17 @@ export function McpServerEditor({
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-border bg-muted/40 p-4">
       <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-foreground">Configure {row.name}</span>
+        <span className="font-medium text-foreground text-sm">Configure {row.name}</span>
         <button
           type="button"
-          className="text-xs text-muted-foreground underline"
+          className="text-muted-foreground text-xs underline"
           onClick={() => setAdvanced((prev) => !prev)}
         >
           {advanced ? "Use template fields" : "Advanced (raw JSON)"}
         </button>
       </div>
       <Label className="flex flex-col gap-1">
-        <span className="text-xs text-muted-foreground">URL</span>
+        <span className="text-muted-foreground text-xs">URL</span>
         <Input
           type="url"
           value={url}
@@ -166,7 +164,7 @@ export function McpServerEditor({
         />
       ) : (
         <Label className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">Headers JSON</span>
+          <span className="text-muted-foreground text-xs">Headers JSON</span>
           <Textarea
             value={rawJson}
             onChange={(e) => setRawJson(e.target.value)}
@@ -207,7 +205,7 @@ export function McpServerEditor({
                 href={template.docsUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs text-muted-foreground underline self-center"
+                className="self-center text-muted-foreground text-xs underline"
               >
                 Docs
               </a>
@@ -259,7 +257,7 @@ function StructuredFields({
 }) {
   if (template.fields.length === 0) {
     return (
-      <p className="text-xs text-muted-foreground">
+      <p className="text-muted-foreground text-xs">
         No credentials required. Save & enable to connect.
       </p>
     );
@@ -268,7 +266,7 @@ function StructuredFields({
     <div className="flex flex-col gap-3">
       {template.fields.map((field) => (
         <Label key={field.key} className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">{field.label}</span>
+          <span className="text-muted-foreground text-xs">{field.label}</span>
           <Input
             type="password"
             value={values[field.key] ?? ""}

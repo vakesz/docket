@@ -53,10 +53,10 @@ export function ProjectItemsPanel({ projectSlug }: { projectSlug: string }) {
     <div className="flex flex-col gap-6">
       <section className="flex flex-col gap-3">
         <header className="flex flex-col gap-1">
-          <h3 className="text-sm font-medium text-foreground">
+          <h3 className="font-medium text-foreground text-sm">
             Staleness threshold (project default)
           </h3>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-muted-foreground text-xs">
             Backlog rows tint amber once an item has been untouched for this many days, and red at
             2x. Each project member sees this value by default; they can override it under Profile →
             Item detail.
@@ -64,12 +64,12 @@ export function ProjectItemsPanel({ projectSlug }: { projectSlug: string }) {
         </header>
 
         <div className="flex flex-col gap-1">
-          <Label className="text-sm font-medium text-foreground">Show staleness indicator</Label>
-          <p className="text-xs text-muted-foreground">
+          <Label className="font-medium text-foreground text-sm">Show staleness indicator</Label>
+          <p className="text-muted-foreground text-xs">
             When off, the freshness tint and detail-page age badge are hidden for everyone viewing
             this project (members with their own override still see their value).
           </p>
-          <div className="flex items-center gap-2 text-sm text-foreground">
+          <div className="flex items-center gap-2 text-foreground text-sm">
             <Switch
               id={indicatorId}
               checked={indicatorOn}
@@ -82,10 +82,10 @@ export function ProjectItemsPanel({ projectSlug }: { projectSlug: string }) {
 
         {indicatorOn ? (
           <div className="flex flex-col gap-1">
-            <Label htmlFor={thresholdId} className="text-sm font-medium text-foreground">
+            <Label htmlFor={thresholdId} className="font-medium text-foreground text-sm">
               Threshold (days)
             </Label>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-muted-foreground text-xs">
               Days an item can sit untouched before it tints amber. Range: 1 to 3650.
             </p>
             <NumberField

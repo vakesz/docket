@@ -64,7 +64,7 @@ export function StepAzdo({
       }
     >
       <div className="flex flex-col gap-1">
-        <Label htmlFor={labelId} className="text-xs text-muted-foreground">
+        <Label htmlFor={labelId} className="text-muted-foreground text-xs">
           Display label
         </Label>
         <Input
@@ -79,7 +79,7 @@ export function StepAzdo({
 
       <div className="flex gap-3">
         <div className="flex flex-1 flex-col gap-1">
-          <Label htmlFor={clientIdId} className="text-xs text-muted-foreground">
+          <Label htmlFor={clientIdId} className="text-muted-foreground text-xs">
             Application (client) ID
           </Label>
           <Input
@@ -91,10 +91,10 @@ export function StepAzdo({
             autoComplete="off"
             required={state.enabled}
           />
-          <p className="text-xs text-muted-foreground/70">UUID shown on the app's Overview page.</p>
+          <p className="text-muted-foreground/70 text-xs">UUID shown on the app's Overview page.</p>
         </div>
         <div className="flex flex-1 flex-col gap-1">
-          <Label htmlFor={clientSecretId} className="text-xs text-muted-foreground">
+          <Label htmlFor={clientSecretId} className="text-muted-foreground text-xs">
             Client secret value
           </Label>
           <Input
@@ -107,7 +107,7 @@ export function StepAzdo({
             autoComplete="off"
             required={state.enabled}
           />
-          <p className="text-xs text-muted-foreground/70">
+          <p className="text-muted-foreground/70 text-xs">
             Use the <em>value</em>, not the secret id. ~40 chars, may include{" "}
             <code className="font-mono">~</code>, <code className="font-mono">-</code>,{" "}
             <code className="font-mono">.</code>.
@@ -116,7 +116,7 @@ export function StepAzdo({
       </div>
 
       <div className="flex flex-col gap-1">
-        <Label htmlFor={tenantIdId} className="text-xs text-muted-foreground">
+        <Label htmlFor={tenantIdId} className="text-muted-foreground text-xs">
           Directory (tenant) ID
         </Label>
         <Input
@@ -128,19 +128,19 @@ export function StepAzdo({
           autoComplete="off"
           required={state.enabled}
         />
-        <p className="text-xs text-muted-foreground/70">
+        <p className="text-muted-foreground/70 text-xs">
           UUID. Found on the Entra tenant overview page; required so the OAuth endpoints resolve
           correctly.
         </p>
       </div>
 
       <details className="flex flex-col gap-3">
-        <summary className="cursor-pointer select-none text-xs font-medium text-muted-foreground hover:text-foreground">
+        <summary className="cursor-pointer select-none font-medium text-muted-foreground text-xs hover:text-foreground">
           Advanced
         </summary>
         <div className="mt-3 flex flex-col gap-3">
           <div className="flex flex-col gap-1">
-            <Label htmlFor={scopesId} className="text-xs text-muted-foreground">
+            <Label htmlFor={scopesId} className="text-muted-foreground text-xs">
               Scopes (space-separated)
             </Label>
             <Input
@@ -150,7 +150,7 @@ export function StepAzdo({
               className="font-mono"
               autoComplete="off"
             />
-            <p className="text-xs text-muted-foreground/70">
+            <p className="text-muted-foreground/70 text-xs">
               Default is the AzDO v6 work-items scope plus offline access for refresh tokens.
             </p>
           </div>

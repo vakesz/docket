@@ -73,7 +73,7 @@ export function ProposalDiffView({ diff }: { diff: ProposalDiff }) {
           ) : null}
           <Field label="Result">
             {diff.after.length === 0 ? (
-              <span className="italic text-muted-foreground">(no tags)</span>
+              <span className="text-muted-foreground italic">(no tags)</span>
             ) : (
               <span className="flex flex-wrap gap-1">
                 {diff.after.map((t) => (
@@ -158,7 +158,7 @@ export function ProposalDiffView({ diff }: { diff: ProposalDiff }) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-baseline gap-2">
-      <span className="w-24 shrink-0 text-xs uppercase tracking-wide text-muted-foreground">
+      <span className="w-24 shrink-0 text-muted-foreground text-xs uppercase tracking-wide">
         {label}
       </span>
       <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 break-words">
@@ -201,7 +201,7 @@ function DiffBlock({
   const border = tone === "primary" ? "border-primary/30" : "border-border";
   return (
     <div className={`flex min-w-0 flex-col gap-1 rounded-md border ${border} p-2`}>
-      <span className="text-xs uppercase tracking-wide text-muted-foreground">{label}</span>
+      <span className="text-muted-foreground text-xs uppercase tracking-wide">{label}</span>
       <ScrollArea className="max-h-64">
         <pre className="whitespace-pre-wrap break-words text-xs">{body || "(empty)"}</pre>
       </ScrollArea>

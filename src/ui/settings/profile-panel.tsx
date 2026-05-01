@@ -42,11 +42,11 @@ export function ProfilePanel() {
     <div className="flex flex-col gap-6">
       <DefaultProjectPicker />
 
-      <div className="flex flex-col gap-1 border-t border-border pt-6">
-        <Label htmlFor={themeId} className="text-sm font-medium text-foreground">
+      <div className="flex flex-col gap-1 border-border border-t pt-6">
+        <Label htmlFor={themeId} className="font-medium text-foreground text-sm">
           Theme
         </Label>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-muted-foreground text-xs">
           Color scheme for this browser. Adaptive variants follow your OS&rsquo;s light/dark
           preference; a fixed theme overrides it.
         </p>
@@ -55,11 +55,11 @@ export function ProfilePanel() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-1 border-t border-border pt-6">
-        <Label htmlFor={tzId} className="text-sm font-medium text-foreground">
+      <div className="flex flex-col gap-1 border-border border-t pt-6">
+        <Label htmlFor={tzId} className="font-medium text-foreground text-sm">
           Display time zone
         </Label>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-muted-foreground text-xs">
           Used for relative dates and the staleness tint window. Pick &ldquo;Browser local&rdquo; to
           follow whatever zone the browser reports.
         </p>
@@ -76,11 +76,11 @@ export function ProfilePanel() {
         ) : null}
       </div>
 
-      <div className="flex flex-col gap-1 border-t border-border pt-6">
-        <Label htmlFor={refreshId} className="text-sm font-medium text-foreground">
+      <div className="flex flex-col gap-1 border-border border-t pt-6">
+        <Label htmlFor={refreshId} className="font-medium text-foreground text-sm">
           Background sync interval (minutes)
         </Label>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-muted-foreground text-xs">
           While a project is open, sync from the provider every N minutes and refetch dashboard list
           views (LLM providers, OAuth providers, and similar) on the same cadence. The footer's
           "synced X ago" tracks each sync. 0 disables — the manual sync button still works. Maximum

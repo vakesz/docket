@@ -33,7 +33,7 @@ import type { LlmAdapter, LlmEvent, LlmMessage, LlmToolCall } from "@/agent/llm/
 import { buildSystemPrefix } from "@/agent/prompt";
 import { buildToolRegistry } from "@/agent/tools/registry";
 import type { AgentTool, ToolContext } from "@/agent/tools/types";
-import type { ItemKind } from "@/core/types";
+import { asProjectId, type ItemKind, type ProjectId, type UserId } from "@/core/types";
 import type { Conversation, Message } from "@/db/generated/client";
 import { getBudgetStatus } from "@/server/billing/budget";
 import { compactConversation, loadCompactionSettings } from "@/server/conversations/compaction";
@@ -96,7 +96,7 @@ export type RunTurnArgs = {
   db: Database;
   adapter: LlmAdapter;
   conversationId: string;
-  userId: string;
+  userId: UserId;
   userMessage: string;
   /** Read-only mode strips mutating tools from the registry. */
   readOnly: boolean;
@@ -136,11 +136,12 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
     yield { kind: "error", message: `conversation '${conversationId}' not found` };
     return;
   }
+  const projectId: ProjectId = asProjectId(conv.projectId);
 
   const baseCtx = {
     turnId,
     conversationId,
-    projectId: conv.projectId,
+    projectId,
     userId,
     adapter: adapter.kind,
     readOnly,
@@ -243,7 +244,7 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
 
   const toolCtx: ToolContext = {
     db,
-    projectId: conv.projectId,
+    projectId,
     userId,
     itemId: conv.itemId,
     providerItemId: itemContext.providerItemId,

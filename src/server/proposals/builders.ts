@@ -28,7 +28,7 @@ import type {
   StateChangeProposal,
   TagsChangeProposal,
 } from "@/core/proposal-types";
-import type { CreateFields, ItemKind, TransitionIntent } from "@/core/types";
+import type { CreateFields, ItemKind, ProjectId, TransitionIntent, UserId } from "@/core/types";
 import type { Prisma, Proposal as ProposalRow } from "@/db/generated/client";
 import type { db as Db } from "@/server/db";
 import { assertFound } from "@/server/errors";
@@ -44,8 +44,8 @@ import { proposalPayloadSchema } from "@/server/proposals/schema";
  */
 type ProposalContext = {
   db: typeof Db;
-  projectId: string;
-  userId: string;
+  projectId: ProjectId;
+  userId: UserId;
   origin: ProposalOrigin;
 };
 

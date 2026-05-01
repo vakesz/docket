@@ -152,7 +152,7 @@ export function LlmProviderForm(props: Props) {
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className={formClass}>
         {!isEdit ? (
-          <h2 className="text-base font-medium text-foreground">Add LLM provider</h2>
+          <h2 className="font-medium text-base text-foreground">Add LLM provider</h2>
         ) : null}
 
         <div className="flex gap-3">
@@ -232,7 +232,7 @@ export function LlmProviderForm(props: Props) {
         </div>
 
         {!isEdit ? (
-          <p className="-mt-2 text-xs text-muted-foreground">
+          <p className="-mt-2 text-muted-foreground text-xs">
             {role === "chat"
               ? "Chat rows feed the agent loop. The conversation LLM picker only sees chat rows."
               : "Guardrail rows feed the prompt-injection / topic-scope / output-safety classifier. They run alongside chat — never as the chat model. A small / cheap model is recommended (e.g. gpt-5-nano)."}
@@ -346,7 +346,7 @@ export function LlmProviderForm(props: Props) {
             )}
           />
         </div>
-        <p className="-mt-2 text-xs text-muted-foreground">
+        <p className="-mt-2 text-muted-foreground text-xs">
           USD per million tokens — paste the vendor's published rate as-is
           {isEdit
             ? ". Leave blank if unknown — turns will then be logged with no cost and budget tracking will undercount."
@@ -366,7 +366,7 @@ export function LlmProviderForm(props: Props) {
             name="isDefault"
             render={({ field }) => (
               <FormItem className="flex flex-col gap-1">
-                <div className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                <div className="inline-flex items-center gap-2 text-muted-foreground text-xs">
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} />
                   </FormControl>

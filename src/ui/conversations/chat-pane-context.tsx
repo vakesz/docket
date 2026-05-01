@@ -35,12 +35,14 @@ export interface ChatPaneController {
   claimSeed: () => string | null;
 }
 
+const noop = (): void => undefined;
+
 const NO_OP: ChatPaneController = {
   open: false,
-  setOpen: () => {},
+  setOpen: noop,
   pendingSeed: null,
   seedPending: false,
-  requestOpenWithSeed: () => {},
+  requestOpenWithSeed: noop,
   claimSeed: () => null,
 };
 
@@ -82,14 +84,7 @@ export function ChatPaneProvider({ children }: { children: React.ReactNode }) {
   const setOpen = useCallback((next: boolean) => setOpenState(next), []);
 
   const requestOpenWithSeed = useCallback((seed: string) => {
-    if (seedRef.current !== null) {
-      if (process.env.NODE_ENV !== "production") {
-        console.debug("[chat-pane] requestOpenWithSeed: ignoring duplicate tap", {
-          pendingLen: seedRef.current.length,
-        });
-      }
-      return;
-    }
+    if (seedRef.current !== null) return;
     seedRef.current = seed;
     setOpenState(true);
     setPendingSeedState(seed);

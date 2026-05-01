@@ -24,8 +24,8 @@ export function LogoLink({ currentProjectSlug }: { currentProjectSlug: string | 
       aria-label="Docket"
     >
       <DocketLogo size={20} className="shrink-0" />
-      <span className="text-[13px] font-semibold uppercase tracking-[0.18em]">DOCKET</span>
-      <span className="ml-1 hidden text-[12px] font-light italic tracking-wide text-muted-foreground sm:inline">
+      <span className="font-semibold text-[13px] uppercase tracking-[0.18em]">DOCKET</span>
+      <span className="ml-1 hidden font-light text-[12px] text-muted-foreground italic tracking-wide sm:inline">
         build something cool together
       </span>
     </Link>

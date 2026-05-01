@@ -9,12 +9,13 @@
  */
 
 import type { LlmToolDef } from "@/agent/llm/types";
+import type { ProjectId, UserId } from "@/core/types";
 import type { db as Db } from "@/server/db";
 
 export type ToolContext = {
   db: typeof Db;
-  projectId: string;
-  userId: string;
+  projectId: ProjectId;
+  userId: UserId;
   /** Optional item this conversation is anchored on. */
   itemId: string | null;
   /** The item's providerItemId, when itemId is set. Convenience for tools. */
@@ -46,7 +47,7 @@ export type ToolContext = {
 export type GuardrailScan =
   | { mode: "skip" }
   | { mode: "full" }
-  | { mode: "fields"; untrusted: ReadonlyArray<string> };
+  | { mode: "fields"; untrusted: readonly string[] };
 
 export type AgentTool = {
   def: LlmToolDef;

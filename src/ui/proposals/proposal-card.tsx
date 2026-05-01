@@ -87,7 +87,7 @@ export function ProposalCard({
 
   if (query.isPending) {
     return (
-      <section className="rounded border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
+      <section className="rounded border border-border bg-card px-3 py-2 text-muted-foreground text-xs">
         Loading proposal…
       </section>
     );
@@ -134,7 +134,7 @@ export function ProposalCard({
   return (
     <section
       className={cn(
-        "rounded border bg-card text-sm text-foreground",
+        "rounded border bg-card text-foreground text-sm",
         isPending ? "border-primary" : "border-border",
       )}
     >
@@ -189,7 +189,7 @@ export function ProposalCard({
       </header>
 
       {open ? (
-        <div className="border-t border-border px-3 py-2">
+        <div className="border-border border-t px-3 py-2">
           {row.advisory ? (
             <Alert variant="warning" className="mb-3">
               <AlertDescription>Heads up: {row.advisory}</AlertDescription>
@@ -200,8 +200,8 @@ export function ProposalCard({
       ) : null}
 
       {isFailed && row.errorMessage ? (
-        <div className="border-t border-border px-3 py-2">
-          <p className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">
+        <div className="border-border border-t px-3 py-2">
+          <p className="mb-1 text-muted-foreground text-xs uppercase tracking-wide">
             Provider error
           </p>
           <Alert variant="destructive">
@@ -211,7 +211,7 @@ export function ProposalCard({
       ) : null}
 
       {mutationError ? (
-        <div className="border-t border-border px-3 py-2">
+        <div className="border-border border-t px-3 py-2">
           <Alert variant="destructive">
             <AlertDescription>{mutationError}</AlertDescription>
           </Alert>

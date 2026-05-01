@@ -544,7 +544,7 @@ export const itemsRouter = router({
     }
 
     const comments = await provider.getComments(cached.providerItemId);
-    await reconcileComments(ctx.db, upserted.id, comments);
+    await reconcileComments(ctx.db, [{ itemSurrogate: upserted.id, comments }]);
 
     return { commentsCount: comments.length, inboundConversations };
   }),

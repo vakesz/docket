@@ -18,18 +18,18 @@ export function OauthProvidersPanel({ publicBase }: { publicBase: string }) {
   const [editingId, setEditingId] = useState<string | null>(null);
 
   if (list.isPending) {
-    return <p className="text-sm text-muted-foreground/70">Loading providers…</p>;
+    return <p className="text-muted-foreground/70 text-sm">Loading providers…</p>;
   }
   if (list.error) {
-    return <p className="text-sm text-destructive">{list.error.message}</p>;
+    return <p className="text-destructive text-sm">{list.error.message}</p>;
   }
 
   return (
     <div className="flex flex-col gap-4">
       <section className="flex flex-col gap-3">
-        <h2 className="text-base font-medium text-foreground">Configured providers</h2>
+        <h2 className="font-medium text-base text-foreground">Configured providers</h2>
         {list.data.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-border bg-card p-6 text-center text-sm text-muted-foreground">
+          <p className="rounded-2xl border border-border border-dashed bg-card p-6 text-center text-muted-foreground text-sm">
             No OAuth providers yet. Until at least one row exists, no one can sign in.
           </p>
         ) : (
@@ -57,13 +57,13 @@ export function OauthProvidersPanel({ publicBase }: { publicBase: string }) {
                     <div className="flex flex-col gap-1">
                       <div className="flex items-baseline gap-2">
                         <span className="font-medium text-foreground">{row.label}</span>
-                        <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                        <span className="text-muted-foreground text-xs uppercase tracking-wide">
                           {row.kind.replace("_", " ")}
                         </span>
                         {!row.enabled ? <Badge variant="outline">disabled</Badge> : null}
                       </div>
-                      <p className="font-mono text-xs text-muted-foreground">{row.clientId}</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="font-mono text-muted-foreground text-xs">{row.clientId}</p>
+                      <p className="text-muted-foreground text-xs">
                         Callback URL:{" "}
                         <code className="rounded bg-muted px-1 py-0.5 font-mono text-foreground">
                           {callbackUrl(row.kind, publicBase)}

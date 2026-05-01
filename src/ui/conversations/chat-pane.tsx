@@ -250,8 +250,8 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
 
   return (
     <div className="flex h-full flex-col bg-background">
-      <header className="flex items-center gap-2 border-b border-border px-3 py-2">
-        <h2 className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+      <header className="flex items-center gap-2 border-border border-b px-3 py-2">
+        <h2 className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">
           Chat
         </h2>
         {conversation && (
@@ -289,11 +289,11 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
 
       <ScrollArea viewportRef={scrollRef} className="relative flex-1" viewportClassName="px-3 py-3">
         {!conversationId && messages.length === 0 && !hasStreamingActivity ? (
-          <p className="text-sm italic text-muted-foreground/70">
+          <p className="text-muted-foreground/70 text-sm italic">
             No conversation yet. Send a message to start one.
           </p>
         ) : detail.isPending && messages.length === 0 && !hasStreamingActivity ? (
-          <p className="text-sm italic text-muted-foreground/70">Loading messages…</p>
+          <p className="text-muted-foreground/70 text-sm italic">Loading messages…</p>
         ) : (
           <>
             {renderUnits.map((unit) => {
@@ -362,7 +362,7 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
               </Alert>
             )}
             {((!inFlight && proposalIds.length > 0) || streaming.question) && (
-              <div className="sticky bottom-0 -mx-3 mt-3 flex flex-col gap-2 border-t border-border bg-background/95 px-3 pb-1 pt-2 backdrop-blur-sm">
+              <div className="sticky bottom-0 -mx-3 mt-3 flex flex-col gap-2 border-border border-t bg-background/95 px-3 pt-2 pb-1 backdrop-blur-sm">
                 {!inFlight &&
                   proposalIds.map((id) => (
                     <ProposalCard
@@ -390,7 +390,7 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
           e.preventDefault();
           void submit();
         }}
-        className="border-t border-border p-2"
+        className="border-border border-t p-2"
       >
         <p className="mb-1 text-[10px] text-muted-foreground/70">
           {streaming.question

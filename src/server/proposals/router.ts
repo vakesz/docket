@@ -1,6 +1,12 @@
 import "server-only";
 import { z } from "zod";
-import { ITEM_KINDS, TRANSITION_INTENTS } from "@/core/types";
+import {
+  asProposalId,
+  ITEM_KINDS,
+  type ProjectId,
+  TRANSITION_INTENTS,
+  type UserId,
+} from "@/core/types";
 import {
   hydrateProposal,
   proposeComment,
@@ -89,7 +95,11 @@ const ProposeNewItemInput = projectSlugSchema.extend({
   }),
 });
 
-function ctxFor(ctx: { db: typeof import("@/server/db").db; projectId: string; userId: string }) {
+function ctxFor(ctx: {
+  db: typeof import("@/server/db").db;
+  projectId: ProjectId;
+  userId: UserId;
+}) {
   return { db: ctx.db, projectId: ctx.projectId, userId: ctx.userId, origin: "ui" as const };
 }
 
@@ -243,11 +253,11 @@ export const proposalsRouter = router({
   confirm: projectScopedApproverProcedure
     .input(ProposalIdInput)
     .mutation(async ({ ctx, input }) => {
-      return confirmProposal(ctxFor(ctx), input.proposalId);
+      return confirmProposal(ctxFor(ctx), asProposalId(input.proposalId));
     }),
 
   reject: projectScopedApproverProcedure.input(ProposalIdInput).mutation(async ({ ctx, input }) => {
-    return rejectProposal(ctxFor(ctx), input.proposalId);
+    return rejectProposal(ctxFor(ctx), asProposalId(input.proposalId));
   }),
 
   /**

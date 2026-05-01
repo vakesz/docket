@@ -105,9 +105,9 @@ export function ProposalDialog({
 
         <div className="min-h-[6rem]">
           {query.isPending ? (
-            <p className="text-sm text-muted-foreground">Loading proposal…</p>
+            <p className="text-muted-foreground text-sm">Loading proposal…</p>
           ) : query.data?.isEmpty ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-muted-foreground text-sm">
               Nothing to apply — the change is already reflected. Dismissing…
             </p>
           ) : query.data ? (

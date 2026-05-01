@@ -42,7 +42,7 @@ export function ProjectsPanel() {
   });
 
   if (list.isPending) {
-    return <p className="text-sm text-muted-foreground/70">Loading projects…</p>;
+    return <p className="text-muted-foreground/70 text-sm">Loading projects…</p>;
   }
   if (list.error) {
     return (
@@ -58,9 +58,9 @@ export function ProjectsPanel() {
   return (
     <div className="flex flex-col gap-6">
       <section className="flex flex-col gap-3">
-        <h2 className="text-base font-medium text-foreground">Your projects</h2>
+        <h2 className="font-medium text-base text-foreground">Your projects</h2>
         {projects.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-border bg-card p-6 text-center text-sm text-muted-foreground">
+          <p className="rounded-2xl border border-border border-dashed bg-card p-6 text-center text-muted-foreground text-sm">
             No projects yet. Add one below — each project tracks one repo (GitHub) or one team
             project (Azure DevOps), and they all share the same sign-in.
           </p>
@@ -85,10 +85,10 @@ export function ProjectsPanel() {
                       ) : null}
                     </div>
                     {label ? (
-                      <p className="font-mono text-xs text-muted-foreground">{label}</p>
+                      <p className="font-mono text-muted-foreground text-xs">{label}</p>
                     ) : null}
                     {p.description ? (
-                      <p className="text-xs text-muted-foreground">{p.description}</p>
+                      <p className="text-muted-foreground text-xs">{p.description}</p>
                     ) : null}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">

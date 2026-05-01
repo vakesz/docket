@@ -53,26 +53,26 @@ export function SyncPanel({ projectSlug }: { projectSlug: string }) {
       <section className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-6 shadow-sm">
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="flex flex-col gap-1">
-            <span className="text-xs uppercase tracking-wide text-muted-foreground">Watermark</span>
-            <span className="font-mono text-sm text-foreground">{formatTimestamp(watermark)}</span>
-            <p className="text-xs text-muted-foreground">
+            <span className="text-muted-foreground text-xs uppercase tracking-wide">Watermark</span>
+            <span className="font-mono text-foreground text-sm">{formatTimestamp(watermark)}</span>
+            <p className="text-muted-foreground text-xs">
               Incremental sync pulls items updated after this point.
             </p>
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-xs uppercase tracking-wide text-muted-foreground">
+            <span className="text-muted-foreground text-xs uppercase tracking-wide">
               Last full sync
             </span>
-            <span className="font-mono text-sm text-foreground">
+            <span className="font-mono text-foreground text-sm">
               {formatTimestamp(lastFullSyncAt)}
             </span>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-muted-foreground text-xs">
               A full walk reconciles archived items the provider no longer returns.
             </p>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 border-t border-border pt-4">
+        <div className="flex flex-wrap items-center gap-3 border-border border-t pt-4">
           {running && progress ? (
             <div className="w-full rounded-lg border border-border bg-muted/40 p-3 text-xs">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -130,11 +130,11 @@ export function SyncPanel({ projectSlug }: { projectSlug: string }) {
             {pending && sync.variables?.mode === "full" ? "Running full sync…" : "Run full sync"}
           </Button>
           {progress?.status === "failed" && progress.error ? (
-            <span className="text-xs text-destructive">{progress.error}</span>
+            <span className="text-destructive text-xs">{progress.error}</span>
           ) : sync.error ? (
-            <span className="text-xs text-destructive">{sync.error.message}</span>
+            <span className="text-destructive text-xs">{sync.error.message}</span>
           ) : sync.data ? (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-muted-foreground text-xs">
               {sync.data.upserted} upserted · {sync.data.archived} archived
               {sync.data.inboundConversations > 0
                 ? ` · ${sync.data.inboundConversations} conversation${
