@@ -70,14 +70,18 @@ field names never escape — that's what `Item.providerRaw` is for.
 export interface WorkItemProvider {
   healthCheck(): Promise<void>;
 
-  listChangesSince(watermark: Date | null): AsyncIterable<Item>;
+  // Yields fully-hydrated bundles (item + comments). Sync upserts both in a
+  // single pass. Yield `comments: null` to skip comment reconciliation, `[]`
+  // to assert "no comments." Reactions ride along inside the canonical
+  // `Item.reactions` / `Comment.reactions` fields.
+  listChangesSince(watermark: Date | null): AsyncIterable<ChangedItem>;
 
   getItem(id: string): Promise<Item>;
   getComments(id: string): Promise<Comment[]>;
   getLinked(id: string): Promise<Item[]>;
 
   transition(id: string, intent: TransitionIntent): Promise<Item>;
-  patchDescription(id: string, newMd: string): Promise<Item>;
+  patchDescription(id: string, newDescription: string): Promise<Item>;
   uploadAttachment(
     id: string, filename: string, content: Uint8Array, contentType: string,
   ): Promise<string>;
@@ -96,7 +100,18 @@ export interface WorkItemProvider {
   getPullRequestDiff?(prId: string): Promise<PullRequestDiff>;
   getCommit?(sha: string): Promise<CommitDetail>;
   getCIStatus?(ref: string): Promise<CIStatus>;
+  searchPullRequests?(
+    query: string,
+    opts: { state: "open" | "closed" | "merged" | "all"; limit: number },
+  ): Promise<PRMatch[]>;
   searchCode?(query: string, limit: number): Promise<CodeSearchResult>;
+
+  // Optional — only implement when `capabilities.supportedReactions` is
+  // non-empty. Validate the `reaction` against that list and throw
+  // `ProviderError` on unknown kinds. Returns the post-write reaction summary
+  // so the proposal executor can refresh the cache without an extra fetch.
+  addReaction?(target: ReactionTarget, reaction: string): Promise<{ reactions: Reactions }>;
+  removeReaction?(target: ReactionTarget, reaction: string): Promise<{ reactions: Reactions }>;
 }
 ```
 
@@ -162,7 +177,7 @@ const labelTemplate: LabelTemplate = (config) => {
   return tenant || "";
 };
 
-export const acmeSpec: ProviderSpec = {
+export const acmeSpec = {
   typeId: "acme",                   // wire id; matches OauthProviderConfig.kind + Project.providerKind
   displayName: "ACME Tracker",
   factory: (config, displayName) => new AcmeProvider(config),
@@ -177,21 +192,43 @@ export const acmeSpec: ProviderSpec = {
       help: "Tenant URL.",
     },
   ],
-  normalizeConfig: (raw) => {       // optional; runs before factory
+  normalizeConfig: (raw) => {       // null when no normalization is needed
     const tenant = typeof raw.tenant === "string" ? raw.tenant.trim() : "";
     if (!tenant) throw new Error("ACME: 'tenant' is required");
     return { tenant };
   },
-  labelTemplate,                    // optional; suggests the project's display name
+  labelTemplate,                    // null when bare type id is enough
   grouping: "by_state_bucket",      // or "by_kind" — drives backlog grouping in the UI
-  supportedKinds: ["story", "task", "bug"],
   scopeAxes: [
     { key: "squad", label: "Squad", discoveryStage: "squads" },
     { key: "component", label: "Component", discoveryStage: null },  // null → free-form
   ],
   axisMatcher: acmeAxisMatcher,     // required iff scopeAxes is non-empty
   axisExtract: acmeAxisExtract,     // required iff scopeAxes is non-empty
-};
+  itemNumberCodec: {                // required — see §5.1
+    parseItemNumber: (_scope, urlNumber) => (/^\d+$/.test(urlNumber) ? urlNumber : null),
+    formatItemNumber: (id) => id,
+  },
+  capabilities: {                   // required — drives UI capability gating
+    supportedReactions: [],         // empty → UI hides reactions strip
+    ciStatus: false,
+    pullRequestDiffs: false,
+    linkedItems: false,
+    creatableKinds: ["story", "task", "bug"],   // first entry is the create-form default; non-empty
+  },
+  availableIntents: (state) => {    // trim intents the provider can't represent from `state`
+    if (state === "closed") return ["reopen"] as const;
+    return ["start_work", "pause", "block", "needs_info", "close_done", "close_wontfix"] as const;
+  },
+  oauth: {                          // null when the provider isn't OAuth-backed
+    defaultLabel: "ACME",
+    defaultScopes: "read:items write:items",
+    baseUrlPlaceholder: "https://acme.example.com",
+    baseUrlHelpKey: "",
+  },
+  profileUrl: null,                 // (identity) => string | null; null when no public profile URL exists
+  avatarFetcher: null,              // null keeps initials-only avatars in the UI
+} satisfies ProviderSpec;
 ```
 
 **`setupFields`** drive any future setup UI surface; today, the bootstrap
@@ -207,8 +244,27 @@ filter exposes (in addition to the always-on `assignee` axis). Empty `[]`
 means assignee is the only axis — the GitHub default. See §6.
 
 **`labelTemplate`** computes the default project display name from a
-config dict (`owner/repo`, `org/project`, etc.). Skip it for providers
-where the bare type id is fine.
+config dict (`owner/repo`, `org/project`, etc.). Pass `null` when the bare
+type id is fine.
+
+**`capabilities.creatableKinds`** is the canonical-`ItemKind` list the
+"+ New item" form offers. Must be non-empty (the form needs a default);
+the first entry is the default. The arch test
+`src/__arch__/provider-creatable-kinds.test.ts` enforces both invariants.
+
+**`capabilities.supportedReactions`** is the wire-level list of reaction
+strings the provider accepts. Empty → the UI omits the reaction strip and
+`addReaction` / `removeReaction` should be left unimplemented; non-empty →
+both methods are required and must validate against this list.
+
+**`itemNumberCodec`** translates between the URL-friendly item number
+(`/items/42`) and the provider-native `Item.providerItemId` stored in the
+cache. Required on every spec — items are routed by URL number, with no
+fallback.
+
+**`availableIntents`** lets the spec hide transition intents that would be
+no-ops against a given canonical state for this provider (e.g. GitHub has
+no native "open but not active" so `pause` from `active` is hidden).
 
 ---
 
@@ -290,23 +346,31 @@ dispatcher lives in `src/server/providers/auth-build.ts`:
 
 ```ts
 import { azureDevOpsProvider } from "@/providers/azure-devops/auth";
+import { acmeAuthProvider } from "@/providers/acme/auth";
 
-export function buildAuthProvider(row: OauthProviderConfig): Provider | null {
+export function buildAuthProvider(row: OauthProviderConfig): Provider {
   const clientSecret = decryptSecret(row.clientSecret);
   switch (row.kind) {
-    case "github": return GitHub({ clientId: row.clientId, clientSecret });
-    case "azure_devops": return azureDevOpsProvider({ ... });
-    case "acme": return acmeProvider({ clientId: row.clientId, clientSecret });
-    default: return null;
+    case "github": return githubAuthProvider({ clientId: row.clientId, clientSecret, scopes: row.scopes });
+    case "azure_devops": return azureDevOpsProvider({ clientId: row.clientId, clientSecret, ...(row.baseUrl ? { tenant: row.baseUrl } : {}), ...(row.scopes ? { extraScope: row.scopes } : {}) });
+    case "acme": return acmeAuthProvider({ clientId: row.clientId, clientSecret });
+    default: throw new UnknownOauthKindError(row.kind);
   }
 }
 ```
 
-For built-in NextAuth providers (GitHub, Google, etc.) you can call the
-NextAuth factory directly. For anything custom (Azure DevOps + Entra,
-home-grown OAuth servers), put the factory in `src/providers/<type-id>/auth.ts`
-and import it here. **This file is one of the four allowed importers of
-`@/providers/<x>/...`** — the arch test (`no-router-provider-import.test.ts`)
+The wrapper pattern (each provider exports a `<name>AuthProvider` from
+`src/providers/<type-id>/auth.ts` that internally imports
+`next-auth/providers/<x>`) keeps `buildAuthProvider` a pure switch — every
+concrete `next-auth/providers/<x>` import lives next to the rest of its
+provider package. The arch test `no-nextauth-provider-leak.test.ts`
+whitelists `src/server/providers/auth-build.ts` AND `src/providers/<x>/**`
+as the only callers allowed to import those concrete adapters; following
+the wrapper pattern keeps the dispatcher trivial and the rules easy to
+grep. `auth-build.ts` is also one of the few allowed importers of
+`@/providers/<x>/...` (alongside `provider-registry.ts`,
+`src/server/providers/build.ts`, sibling files inside the same provider
+package, and the provider's own arch tests) — `no-router-provider-import.test.ts`
 explicitly whitelists it.
 
 The OAuth token NextAuth captures lands in `Account.access_token` for the
@@ -317,25 +381,19 @@ splices it into the spec factory's config as `accessToken`.
 
 ## 8. Registration
 
-**In-tree (built-in):** add the spec to `PROVIDER_SPECS` and append the
-matching type id to `PROVIDER_TYPE_IDS` in
-`src/server/provider-registry.ts` (the runtime drift check refuses to
-import the module if the two arrays disagree):
+**In-tree (built-in):** append the spec to the `PROVIDER_SPECS` `as const`
+tuple in `src/server/provider-registry.ts`. `ProviderTypeId` and
+`PROVIDER_TYPE_IDS` are derived from the tuple, so adding a provider only
+needs one edit here:
 
 ```ts
 import { acmeSpec } from "@/providers/acme/spec";
 
-export const PROVIDER_SPECS: readonly ProviderSpec[] = [
-  githubSpec,
-  azureDevOpsSpec,
-  acmeSpec,
-];
-
-export const PROVIDER_TYPE_IDS = ["github", "azure_devops", "acme"] as const;
+export const PROVIDER_SPECS = [githubSpec, azureDevOpsSpec, acmeSpec] as const;
 ```
 
 Then add the NextAuth case in `buildAuthProvider` (§7). That's it for
-in-tree registration — the registry is intentionally a static array, not
+in-tree registration — the registry is intentionally a static tuple, not
 an entry-point system. Third-party providers should fork or vendor.
 
 ---

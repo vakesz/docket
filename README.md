@@ -102,7 +102,7 @@ Adding a new provider (Jira, Linear, …) is an isolated `src/providers/<name>/`
 
 ### Chat & Agent
 - **Streaming chat** over SSE, anchored to an item or project-wide. Stop button, per-conversation LLM override, auto-compaction, and a "Suggest next action" one-click prompt.
-- **Read-only tools** — item/PR/commit/CI reads, memory and source reads, `ask_user_question`, `web_fetch` (HTML auto-cleaned to Markdown; `raw: true` to opt out), `search_items`, `list_audit`, `get_pull_request_diff`, `search_code`, plus project-scoped MCP tools.
+- **Read-only tools** — item/PR/commit/CI reads, memory and source reads, `ask_user_question`, `web_fetch` (HTML auto-cleaned to Markdown; `raw: true` to opt out), `search_items`, `list_audit_log`, `get_pull_request_diff`, `search_code`, `search_pull_requests`, plus project-scoped MCP tools.
 - **Mutating tools** — `propose_transition`, `propose_description_patch`, `propose_comment`, `propose_new_item`, `propose_item_tags`, `propose_memory_write`, `propose_memory_delete`. All stage proposals; none execute without human confirmation.
 - **Multi-LLM** — any OpenAI-compatible endpoint. Role-split: separate `chat` and `guardrail` provider rows so a cheaper model handles safety checks without affecting the main chat model.
 - **Guardrail** — pluggable safety pipeline (`noop` / `pattern` / `llm-judge` / `composite`). Toggles for prompt-injection, off-topic, scope, and output checks.
