@@ -49,9 +49,9 @@ export function FreshnessStamp({
 function toneClassName(tone: FreshnessTone): string {
   switch (tone) {
     case "warning":
-      return "bg-amber-500/10 text-amber-600 dark:text-amber-400";
+      return "bg-warning/10 text-warning";
     case "stale":
-      return "bg-destructive/10 text-destructive";
+      return "bg-stale/10 text-stale";
     default:
       return "text-muted-foreground/70";
   }

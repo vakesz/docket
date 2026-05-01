@@ -178,10 +178,7 @@ export function McpPane({ projectSlug }: { projectSlug: string }) {
                         </Badge>
                       )}
                       {needsConfig && (
-                        <Badge
-                          variant="secondary"
-                          className="border-amber-500/40 bg-amber-500/15 uppercase tracking-wide text-amber-700 dark:text-amber-300"
-                        >
+                        <Badge variant="warning" className="uppercase tracking-wide">
                           needs config
                         </Badge>
                       )}

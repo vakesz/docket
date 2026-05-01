@@ -276,7 +276,7 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
         <h4 className="text-sm font-medium text-foreground">Trends</h4>
         <div className="flex flex-wrap items-center gap-3 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
           <LegendDot color="bg-primary" label="Chat spend" />
-          <LegendDot color="bg-amber-500" label="Guardrail spend" />
+          <LegendDot color="bg-warning" label="Guardrail spend" />
           <LegendDot color="bg-primary/50" label="7-day avg" dashed />
           <LegendDot color="bg-muted-foreground" label="Tokens in" />
           <LegendDot color="bg-muted-foreground/70" label="Tokens out" />
@@ -338,7 +338,7 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
         {/* guardrail spend (separate line, same y-axis) */}
         <polyline
           points={guardrailCostLine}
-          className="fill-none stroke-amber-500"
+          className="fill-none stroke-warning"
           strokeWidth={1.5}
           strokeLinejoin="round"
           strokeLinecap="round"
@@ -397,7 +397,7 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
               cx={xAt(hover)}
               cy={yCost(hovered.guardrailCostCents)}
               r={3}
-              className="fill-amber-500"
+              className="fill-warning"
             />
             <circle
               cx={xAt(hover)}
@@ -531,7 +531,7 @@ function BarChart({ buckets, peakCost }: { buckets: Bucket[]; peakCost: number }
         <h4 className="text-sm font-medium text-foreground">Daily spend</h4>
         <div className="flex items-center gap-3 text-[10px] uppercase tracking-wide text-muted-foreground">
           <LegendDot color="bg-primary/70" label="Chat" />
-          <LegendDot color="bg-amber-500/80" label="Guardrail" />
+          <LegendDot color="bg-warning/80" label="Guardrail" />
           <span>peak ${(peak / 100).toFixed(2)}</span>
         </div>
       </div>
@@ -548,7 +548,7 @@ function BarChart({ buckets, peakCost }: { buckets: Bucket[]; peakCost: number }
               title={`${b.date}: chat $${(b.costCents / 100).toFixed(3)} · guardrail $${(b.guardrailCostCents / 100).toFixed(3)} · ${b.conversations} conv`}
             >
               <div
-                className="w-full bg-amber-500/80 transition-colors group-hover:bg-amber-500"
+                className="w-full bg-warning/80 transition-colors group-hover:bg-warning"
                 style={{ height: `${guardShare}%` }}
               />
               <div
@@ -604,7 +604,7 @@ function DataTable({ buckets }: { buckets: Bucket[] }) {
                   <td className="py-1 text-right text-foreground">
                     ${(b.costCents / 100).toFixed(3)}
                   </td>
-                  <td className="py-1 text-right text-amber-600 dark:text-amber-400">
+                  <td className="py-1 text-right text-warning">
                     ${(b.guardrailCostCents / 100).toFixed(3)}
                   </td>
                   <td className="py-1 text-right font-medium text-foreground">

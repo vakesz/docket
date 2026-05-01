@@ -2,16 +2,57 @@
  * Local additions on top of globals.css.
  *
  * globals.css is the tweakcn paste target — it must match the exact shape
- * the theme generator emits, so anything we add (custom-variant presets,
- * webfont loaders, extra @layer rules) lives here instead. layout.tsx
- * imports globals.css first, then this file, so these rules layer on top.
+ * the theme generator emits, so anything we add (webfont loaders,
+ * app-level semantic tokens, scrollbar utilities) lives here instead.
+ * layout.tsx imports globals.css first, then this file, so these rules
+ * layer on top.
  *
- * - shadcn/tailwind.css supplies the `data-open` / `data-closed` /
- *   `data-checked` / etc. custom variants the Origin-style primitives use.
+ * - Primitives use canonical shadcn Tailwind v4 selectors
+ *   (`data-[state=open]:`, `data-[selected=true]:`, `data-[orientation=...]:`)
+ *   so no custom-variant preset is needed.
  * - The Google Fonts import loads the families that globals.css's
  *   `--font-sans` / `--font-mono` reference. If you paste a theme that
  *   names different families, update the URL below to match.
+ * - Status tokens (`--warning`, `--success`, `--stale`) live here because
+ *   tweakcn doesn't emit them. They render as Tailwind utilities
+ *   (`text-warning`, `bg-success/10`, `text-stale`) via the
+ *   `@theme inline` aliases below.
  */
 
-@import "shadcn/tailwind.css";
 @import url("https://fonts.googleapis.com/css2?family=Outfit:wght@300..700&family=Geist+Mono:wght@400..600&display=swap");
+
+@utility no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+:root {
+  --warning: oklch(76.9% 0.188 70.08);
+  --warning-foreground: oklch(27.9% 0.077 45.64);
+  --success: oklch(69.6% 0.17 162.48);
+  --success-foreground: oklch(26.4% 0.05 157.97);
+  --stale: oklch(63.7% 0.237 25.33);
+  --stale-foreground: oklch(98.5% 0 0);
+}
+
+.dark {
+  --warning: oklch(82.8% 0.189 84.43);
+  --warning-foreground: oklch(27.9% 0.077 45.64);
+  --success: oklch(76.5% 0.177 163.22);
+  --success-foreground: oklch(26.4% 0.05 157.97);
+  --stale: oklch(70.4% 0.191 22.22);
+  --stale-foreground: oklch(98.5% 0 0);
+}
+
+@theme inline {
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-stale: var(--stale);
+  --color-stale-foreground: var(--stale-foreground);
+}
