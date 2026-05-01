@@ -5,10 +5,10 @@ import { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { GROUPS, SECTIONS, type SectionKey } from "@/ui/settings/sections";
 
-// `process.env.NODE_ENV` is inlined at build time by Next, so this
+// `process.env["NODE_ENV"]` is inlined at build time by Next, so this
 // constant drops out of the client bundle entirely in production — the
 // dev-tools section never ships to end users.
-const IS_DEV = process.env.NODE_ENV !== "production";
+const IS_DEV = process.env["NODE_ENV"] !== "production";
 
 export function SettingsSidebar({
   active,

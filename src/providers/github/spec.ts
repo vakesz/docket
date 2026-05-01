@@ -27,8 +27,8 @@ import { availableIntentsForState } from "@/providers/github/state-map";
 const itemNumberCodec: ProviderItemNumberCodec = {
   parseItemNumber: (scope, urlNumber) => {
     if (!/^\d+$/.test(urlNumber)) return null;
-    const owner = typeof scope.owner === "string" ? scope.owner.trim() : "";
-    const repo = typeof scope.repo === "string" ? scope.repo.trim() : "";
+    const owner = typeof scope["owner"] === "string" ? scope["owner"].trim() : "";
+    const repo = typeof scope["repo"] === "string" ? scope["repo"].trim() : "";
     if (!owner || !repo) return null;
     return `${owner}/${repo}#${urlNumber}`;
   },
@@ -39,8 +39,8 @@ const itemNumberCodec: ProviderItemNumberCodec = {
 };
 
 const labelTemplate: LabelTemplate = (config) => {
-  const owner = typeof config.owner === "string" ? config.owner.trim() : "";
-  const repo = typeof config.repo === "string" ? config.repo.trim() : "";
+  const owner = typeof config["owner"] === "string" ? config["owner"].trim() : "";
+  const repo = typeof config["repo"] === "string" ? config["repo"].trim() : "";
   if (!owner || !repo) {
     return "";
   }
@@ -72,8 +72,8 @@ export const githubSpec = {
   requiresCli: [],
   grouping: "by_state_bucket",
   normalizeConfig: (raw) => {
-    const owner = typeof raw.owner === "string" ? raw.owner.trim() : "";
-    const repo = typeof raw.repo === "string" ? raw.repo.trim() : "";
+    const owner = typeof raw["owner"] === "string" ? raw["owner"].trim() : "";
+    const repo = typeof raw["repo"] === "string" ? raw["repo"].trim() : "";
     if (!owner) {
       throw new Error("GitHub: 'owner' is required");
     }

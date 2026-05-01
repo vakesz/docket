@@ -29,7 +29,7 @@ loadEnv({ path: ".env.local" });
 loadEnv({ path: ".env" });
 
 async function main() {
-  const databaseUrl = process.env.DATABASE_URL;
+  const databaseUrl = process.env["DATABASE_URL"];
   if (!databaseUrl) {
     console.warn("[apply-raw-sql] DATABASE_URL not set — skipping.");
     return;

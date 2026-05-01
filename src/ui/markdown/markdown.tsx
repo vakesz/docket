@@ -50,17 +50,20 @@ const sanitizeSchema = {
     ...defaultSchema.attributes,
     "*": [...(defaultSchema.attributes?.["*"] ?? []), "align", "id", "title"],
     a: [
-      ...(defaultSchema.attributes?.a ?? []),
+      ...(defaultSchema.attributes?.["a"] ?? []),
       ["target", "_blank"],
       ["rel", "noopener", "noreferrer"],
     ],
-    img: [...(defaultSchema.attributes?.img ?? []), "width", "height", "loading"],
+    img: [...(defaultSchema.attributes?.["img"] ?? []), "width", "height", "loading"],
     video: ["src", "controls", "width", "height", "poster"],
     source: ["src", "type", "media", "srcset"],
     details: ["open"],
-    code: [...(defaultSchema.attributes?.code ?? []), ["className", /^hljs(-|$)/, /^language-/]],
-    span: [...(defaultSchema.attributes?.span ?? []), ["className", /^hljs-/]],
-    pre: [...(defaultSchema.attributes?.pre ?? []), "className"],
+    code: [
+      ...(defaultSchema.attributes?.["code"] ?? []),
+      ["className", /^hljs(-|$)/, /^language-/],
+    ],
+    span: [...(defaultSchema.attributes?.["span"] ?? []), ["className", /^hljs-/]],
+    pre: [...(defaultSchema.attributes?.["pre"] ?? []), "className"],
   },
 };
 

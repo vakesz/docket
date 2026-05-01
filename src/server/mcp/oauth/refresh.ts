@@ -47,7 +47,7 @@ export async function ensureFreshAccessToken(
       scopes: row.oauthScopes,
     });
     const headers = decodeHeaders(row.headersJson);
-    headers.Authorization = `Bearer ${tokens.accessToken}`;
+    headers["Authorization"] = `Bearer ${tokens.accessToken}`;
     const expiresAt = tokens.expiresInSec
       ? new Date(Date.now() + tokens.expiresInSec * 1000)
       : null;

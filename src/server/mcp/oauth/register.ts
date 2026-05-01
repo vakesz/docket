@@ -39,11 +39,11 @@ export async function registerOauthClient(
     );
   }
   const body = (await res.json()) as Record<string, unknown>;
-  if (typeof body.client_id !== "string") {
+  if (typeof body["client_id"] !== "string") {
     throw new Error("oauth dynamic client registration: response missing client_id");
   }
   return {
-    clientId: body.client_id,
-    clientSecret: typeof body.client_secret === "string" ? body.client_secret : null,
+    clientId: body["client_id"],
+    clientSecret: typeof body["client_secret"] === "string" ? body["client_secret"] : null,
   };
 }

@@ -56,10 +56,10 @@ type Config = {
 };
 
 function readConfig(raw: Record<string, unknown>): Config {
-  const owner = typeof raw.owner === "string" ? raw.owner : "";
-  const repo = typeof raw.repo === "string" ? raw.repo : "";
-  const accessToken = typeof raw.accessToken === "string" ? raw.accessToken : "";
-  const baseUrl = typeof raw.baseUrl === "string" && raw.baseUrl ? raw.baseUrl : undefined;
+  const owner = typeof raw["owner"] === "string" ? raw["owner"] : "";
+  const repo = typeof raw["repo"] === "string" ? raw["repo"] : "";
+  const accessToken = typeof raw["accessToken"] === "string" ? raw["accessToken"] : "";
+  const baseUrl = typeof raw["baseUrl"] === "string" && raw["baseUrl"] ? raw["baseUrl"] : undefined;
   if (!owner || !repo) {
     throw new ProviderError("GitHub provider config is missing 'owner' or 'repo'");
   }

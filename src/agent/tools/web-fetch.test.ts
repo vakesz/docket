@@ -16,7 +16,12 @@ const settings = vi.hoisted(() => ({
   maxBytes: 200_000 as number,
 }));
 
-const auditLog = vi.hoisted(() => ({ rows: [] as Record<string, unknown>[] }));
+interface AuditRow {
+  cleaned?: boolean | null;
+  cleanError?: string;
+}
+
+const auditLog = vi.hoisted(() => ({ rows: [] as AuditRow[] }));
 
 vi.mock("@/server/settings/effective", () => ({
   loadProjectSetting: async (_db: unknown, _projectId: string, key: string) => {
@@ -81,12 +86,18 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-type ToolOk = { ok: true; data: Record<string, unknown> };
+interface ToolData {
+  cleaned: boolean | null;
+  cleanedBytes?: number;
+  cleanError?: string;
+  body: string;
+  truncated?: boolean;
+}
 
-async function callTool(args: Record<string, unknown>): Promise<ToolOk["data"]> {
+async function callTool(args: Record<string, unknown>): Promise<ToolData> {
   const tool = webFetchTool(ctx);
   const result = (await tool.handler(args)) as
-    | { ok: true; data: Record<string, unknown> }
+    | { ok: true; data: ToolData }
     | { ok: false; error: string };
   if (!result.ok) throw new Error(`tool failed: ${result.error}`);
   return result.data;

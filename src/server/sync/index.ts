@@ -141,17 +141,17 @@ function decodeProgress(raw: string | null): SyncProgressSnapshot | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (!isSyncMode(parsed.mode)) return null;
-    if (!isSyncProgressStatus(parsed.status)) return null;
-    if (!isSyncPhase(parsed.phase)) return null;
-    if (typeof parsed.runId !== "string" || parsed.runId.length === 0) return null;
-    const startedAt = toDate(parsed.startedAt);
-    const updatedAt = toDate(parsed.updatedAt);
-    const finishedAt = parsed.finishedAt === null ? null : toDate(parsed.finishedAt);
-    const watermark = parsed.watermark === null ? null : toDate(parsed.watermark);
+    if (!isSyncMode(parsed["mode"])) return null;
+    if (!isSyncProgressStatus(parsed["status"])) return null;
+    if (!isSyncPhase(parsed["phase"])) return null;
+    if (typeof parsed["runId"] !== "string" || parsed["runId"].length === 0) return null;
+    const startedAt = toDate(parsed["startedAt"]);
+    const updatedAt = toDate(parsed["updatedAt"]);
+    const finishedAt = parsed["finishedAt"] === null ? null : toDate(parsed["finishedAt"]);
+    const watermark = parsed["watermark"] === null ? null : toDate(parsed["watermark"]);
     if (!startedAt || !updatedAt) return null;
-    if (parsed.finishedAt !== null && !finishedAt) return null;
-    if (parsed.watermark !== null && !watermark) return null;
+    if (parsed["finishedAt"] !== null && !finishedAt) return null;
+    if (parsed["watermark"] !== null && !watermark) return null;
 
     const readInt = (key: keyof PersistedSyncProgressSnapshot) => {
       const value = parsed[key];
@@ -161,10 +161,10 @@ function decodeProgress(raw: string | null): SyncProgressSnapshot | null {
     };
 
     return {
-      runId: parsed.runId,
-      mode: parsed.mode,
-      status: parsed.status,
-      phase: parsed.phase,
+      runId: parsed["runId"],
+      mode: parsed["mode"],
+      status: parsed["status"],
+      phase: parsed["phase"],
       startedAt,
       updatedAt,
       finishedAt,
@@ -175,7 +175,7 @@ function decodeProgress(raw: string | null): SyncProgressSnapshot | null {
       inboundConversations: readInt("inboundConversations"),
       commentsReconciled: readInt("commentsReconciled"),
       watermark,
-      error: typeof parsed.error === "string" ? parsed.error : null,
+      error: typeof parsed["error"] === "string" ? parsed["error"] : null,
     };
   } catch {
     return null;

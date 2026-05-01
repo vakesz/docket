@@ -39,7 +39,7 @@ let cacheChecked = false;
 function loadKey(): Buffer | null {
   if (cacheChecked) return cachedKey;
   cacheChecked = true;
-  const raw = process.env.SECRETS_KEY?.trim();
+  const raw = process.env["SECRETS_KEY"]?.trim();
   if (!raw) return null;
   let buf: Buffer;
   try {

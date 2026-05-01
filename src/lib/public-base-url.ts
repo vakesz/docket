@@ -22,5 +22,7 @@ export function publicBaseUrl(): string {
   if (typeof window !== "undefined") {
     throw new Error("publicBaseUrl() must only be called on the server");
   }
-  return (process.env.PUBLIC_BASE_URL ?? `http://localhost:${process.env.PORT ?? 3000}`).trim();
+  return (
+    process.env["PUBLIC_BASE_URL"] ?? `http://localhost:${process.env["PORT"] ?? 3000}`
+  ).trim();
 }

@@ -87,7 +87,7 @@ export const oauthProvidersRouter = router({
     const data: Record<string, unknown> = { ...rest };
     const trimmedSecret = clientSecret?.trim();
     if (trimmedSecret) {
-      data.clientSecret = encryptSecret(trimmedSecret);
+      data["clientSecret"] = encryptSecret(trimmedSecret);
     }
     await ctx.db.oauthProviderConfig.update({ where: { id }, data });
     return { ok: true } as const;

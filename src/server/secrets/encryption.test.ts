@@ -9,11 +9,11 @@ import {
   isEncryptionConfigured,
 } from "@/server/secrets/encryption";
 
-const ORIGINAL_KEY = process.env.SECRETS_KEY;
+const ORIGINAL_KEY = process.env["SECRETS_KEY"];
 
 function setKey(key: string | undefined): void {
-  if (key === undefined) delete process.env.SECRETS_KEY;
-  else process.env.SECRETS_KEY = key;
+  if (key === undefined) delete process.env["SECRETS_KEY"];
+  else process.env["SECRETS_KEY"] = key;
   _resetEncryptionCacheForTests();
 }
 

@@ -15,7 +15,7 @@ import { SetupWizardForm } from "@/ui/setup/wizard-form";
  * the bootstrap mutation, so just don't click it.
  */
 export default function SetupPreviewPage() {
-  if (process.env.NODE_ENV === "production") {
+  if (process.env["NODE_ENV"] === "production") {
     notFound();
   }
   const baseUrl = publicBaseUrl();

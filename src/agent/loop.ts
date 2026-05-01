@@ -544,22 +544,22 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
             call.name === "propose_description_patch" ||
             call.name === "propose_comment" ||
             call.name === "propose_new_item") &&
-          typeof d.proposalId === "string"
+          typeof d["proposalId"] === "string"
         ) {
           yield {
             kind: "proposal_staged",
-            proposalId: d.proposalId,
-            proposalKind: typeof d.kind === "string" ? d.kind : call.name,
+            proposalId: d["proposalId"],
+            proposalKind: typeof d["kind"] === "string" ? d["kind"] : call.name,
             toolName: call.name,
           };
         }
-        if (call.name === "ask_user_question" && typeof d.question === "string") {
+        if (call.name === "ask_user_question" && typeof d["question"] === "string") {
           askedQuestion = true;
           yield {
             kind: "ask_user_question",
-            question: d.question,
-            options: Array.isArray(d.options) ? (d.options as string[]) : null,
-            multiSelect: Boolean(d.multiSelect),
+            question: d["question"],
+            options: Array.isArray(d["options"]) ? (d["options"] as string[]) : null,
+            multiSelect: Boolean(d["multiSelect"]),
           };
         }
       }

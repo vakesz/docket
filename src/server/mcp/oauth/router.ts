@@ -141,7 +141,7 @@ export const mcpOauthRouter = router({
         "MCP server not found",
       );
       const headers = decodeHeaders(row.headersJson);
-      delete headers.Authorization;
+      delete headers["Authorization"];
       const updated = await ctx.db.mcpServerConfig.update({
         where: { id: row.id },
         data: {
@@ -210,7 +210,7 @@ export async function completeMcpOauth(args: {
   }
 
   const headers = decodeHeaders(row.headersJson);
-  headers.Authorization = `Bearer ${tokens.accessToken}`;
+  headers["Authorization"] = `Bearer ${tokens.accessToken}`;
   const expiresAt = tokens.expiresInSec ? new Date(Date.now() + tokens.expiresInSec * 1000) : null;
   const scopes = tokens.scope ?? state.scopes;
 

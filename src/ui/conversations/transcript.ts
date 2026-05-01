@@ -59,11 +59,11 @@ export function parseAssistantToolCalls(raw: unknown): AssistantToolCall[] {
   for (const entry of raw) {
     if (!entry || typeof entry !== "object") continue;
     const e = entry as Record<string, unknown>;
-    const id = typeof e.id === "string" ? e.id : null;
-    const name = typeof e.name === "string" ? e.name : null;
+    const id = typeof e["id"] === "string" ? e["id"] : null;
+    const name = typeof e["name"] === "string" ? e["name"] : null;
     const args =
-      e.arguments && typeof e.arguments === "object"
-        ? (e.arguments as Record<string, unknown>)
+      e["arguments"] && typeof e["arguments"] === "object"
+        ? (e["arguments"] as Record<string, unknown>)
         : {};
     if (!id || !name) continue;
     out.push({ id, name, arguments: args });

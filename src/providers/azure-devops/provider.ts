@@ -88,9 +88,9 @@ const DEFAULT_FIELDS = [
 const MAX_BATCH_IDS = 200;
 
 function readConfig(raw: Record<string, unknown>): Config {
-  const orgUrl = typeof raw.orgUrl === "string" ? raw.orgUrl.trim() : "";
-  const project = typeof raw.project === "string" ? raw.project : "";
-  const accessToken = typeof raw.accessToken === "string" ? raw.accessToken : "";
+  const orgUrl = typeof raw["orgUrl"] === "string" ? raw["orgUrl"].trim() : "";
+  const project = typeof raw["project"] === "string" ? raw["project"] : "";
+  const accessToken = typeof raw["accessToken"] === "string" ? raw["accessToken"] : "";
   if (!orgUrl) {
     throw new ProviderError("Azure DevOps provider config is missing 'orgUrl'");
   }
@@ -126,9 +126,9 @@ function readAssignee(raw: unknown): string | null {
   if (typeof raw === "string") return raw;
   if (typeof raw === "object" && raw !== null) {
     const obj = raw as Record<string, unknown>;
-    const unique = obj.uniqueName ?? obj.unique_name;
+    const unique = obj["uniqueName"] ?? obj["unique_name"];
     if (typeof unique === "string" && unique) return unique;
-    const display = obj.displayName ?? obj.display_name;
+    const display = obj["displayName"] ?? obj["display_name"];
     if (typeof display === "string" && display) return display;
   }
   return null;

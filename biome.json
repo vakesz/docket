@@ -44,6 +44,9 @@
         "noConsole": { "level": "error", "options": { "allow": ["warn", "error"] } },
         "noEmptyBlockStatements": "error"
       },
+      "complexity": {
+        "useLiteralKeys": "off"
+      },
       "performance": {
         "noBarrelFile": "error",
         "noReExportAll": "error"
