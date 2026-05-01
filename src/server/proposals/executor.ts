@@ -222,7 +222,7 @@ export async function confirmProposal(
             // by merging onto the existing payload object — Prisma's JSON
             // column accepts a full replacement value, so we hand it the
             // updated proposal minus the surrogate id.
-            const { id: _ignore, ...rest } = proposal;
+            const { id: _, ...rest } = proposal;
             const nextPayload = { ...rest, postedCommentId: comment.id };
             await ctx.db.proposal.update({
               where: { id: row.id },

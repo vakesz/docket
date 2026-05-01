@@ -302,11 +302,11 @@ model Item {
   /// time; null when no parent or parent is outside the synced cache.
   parentId       String?
   tags           String[] @default([])
-  /// TODO: providerRaw became a catch-all before typed slots existed. Once
-  /// header/list/detail surfaces all read from typed columns (reactions,
-  /// assignees, reviewers, milestone, iteration, area, ciSummary, etc.),
-  /// audit consumers (agent tools, sync upserts) and shrink this to truly
-  /// bespoke fields.
+  /// Catch-all bag for provider-native fields that don't have typed slots
+  /// yet. Items already surface reactions, assignees, reviewers, milestone,
+  /// iteration, area, ciSummary as typed columns — providerRaw is for the
+  /// long tail beyond those. Read access is audit-logged via the agent's
+  /// readonly tools; do not introduce new typed columns by reading from here.
   providerRaw    Json     @default("{}")
   url            String?
   repositoryUrl  String?
