@@ -46,8 +46,8 @@ export async function generateMetadata({
   try {
     const item = await loadItem(projectSlug, itemNumber);
     const title = `${item.providerItemId} · ${item.title}`;
-    const description = item.descriptionMd
-      ? stripMarkdown(item.descriptionMd).slice(0, 160) || undefined
+    const description = item.description
+      ? stripMarkdown(item.description).slice(0, 160) || undefined
       : undefined;
     return { title, description };
   } catch {
@@ -88,7 +88,7 @@ export default async function ItemDetailPage({
     loadProjectSetting(db, project.id, "items.stale-after-days"),
     userId
       ? loadUserSetting(db, userId, "items.stale-after-days.user")
-      : Promise.resolve(-1 as number),
+      : Promise.resolve<number>(-1),
     userId ? loadUserSetting(db, userId, "items.show-reactions-header") : Promise.resolve(true),
     userId ? loadUserSetting(db, userId, "items.show-reactions-comments") : Promise.resolve(true),
   ]);

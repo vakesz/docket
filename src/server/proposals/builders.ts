@@ -138,52 +138,52 @@ export async function proposeTransition(
  * everything else, so the model can't accidentally double-archive.
  */
 export function appendPreviousVersionFooter(
-  newMd: string,
-  previousMd: string,
+  newDescription: string,
+  previousDescription: string,
   author: string | null,
   timestamp: Date | null,
 ): string {
-  if (!previousMd.trim()) return newMd;
+  if (!previousDescription.trim()) return newDescription;
   const date = timestamp ? timestamp.toISOString().slice(0, 10) : null;
   let label: string;
   if (author && date) label = `*Previous version (by ${author}, ${date}):*`;
   else if (author) label = `*Previous version (by ${author}):*`;
   else if (date) label = `*Previous version (${date}):*`;
   else label = `*Previous version:*`;
-  return `${newMd.trimEnd()}\n\n---\n\n${label}\n\n${previousMd}`;
+  return `${newDescription.trimEnd()}\n\n---\n\n${label}\n\n${previousDescription}`;
 }
 
 export async function proposeDescriptionPatch(
   ctx: ProposalContext,
-  args: { providerItemId: string; newMd: string },
+  args: { providerItemId: string; newDescription: string },
 ): Promise<ProposalRow> {
   const row = await loadCachedItem(ctx, args.providerItemId);
   const item = snapshotFromRow(row);
-  if (item.descriptionMd === args.newMd) {
+  if (item.description === args.newDescription) {
     throw new TRPCError({
       code: "BAD_REQUEST",
       message: "description_patch is a no-op (description unchanged)",
     });
   }
   const merged = appendPreviousVersionFooter(
-    args.newMd,
-    item.descriptionMd,
+    args.newDescription,
+    item.description,
     item.author,
     item.updatedAt ?? item.createdAt,
   );
   const draft: Omit<DescriptionPatchProposal, "id"> = {
     kind: "description_patch",
     item,
-    newMd: merged,
+    newDescription: merged,
   };
   return persist(ctx, draft, args.providerItemId);
 }
 
 export async function proposeComment(
   ctx: ProposalContext,
-  args: { providerItemId: string; bodyMd: string },
+  args: { providerItemId: string; body: string },
 ): Promise<ProposalRow> {
-  if (!args.bodyMd.trim()) {
+  if (!args.body.trim()) {
     throw new TRPCError({ code: "BAD_REQUEST", message: "comment body is empty" });
   }
   const row = await loadCachedItem(ctx, args.providerItemId);
@@ -191,14 +191,14 @@ export async function proposeComment(
   const draft: Omit<CommentAddProposal, "id"> = {
     kind: "comment_add",
     item,
-    bodyMd: args.bodyMd,
+    body: args.body,
   };
   // Advisory: flag a comment that closely echoes the item description. This
   // does NOT block staging — the human can still confirm — it just surfaces
   // a banner in the confirm dialog so the human notices an "agent is
   // restating the body" failure mode before approving.
   let advisory: string | null = null;
-  const sim = jaccardSimilarity(args.bodyMd, item.descriptionMd);
+  const sim = jaccardSimilarity(args.body, item.description);
   if (sim >= COMMENT_ECHO_THRESHOLD) {
     advisory = `This comment shares ${Math.round(sim * 100)}% of its words with the item description. Confirm only if it adds new information.`;
   }
@@ -289,7 +289,7 @@ export async function proposeMemoryWrite(
   ctx: ProposalContext,
   args: {
     title: string;
-    bodyMd: string;
+    body: string;
     tags?: readonly string[];
     source?: "user" | "agent";
     memoryId?: string | null;
@@ -300,7 +300,7 @@ export async function proposeMemoryWrite(
     throw new TRPCError({ code: "BAD_REQUEST", message: "memory title is required" });
   }
   let previousTitle = "";
-  let previousBodyMd = "";
+  let previousBody = "";
   if (args.memoryId) {
     const existing = assertFound(
       await ctx.db.memoryEntry.findFirst({
@@ -309,8 +309,8 @@ export async function proposeMemoryWrite(
       `memory entry '${args.memoryId}' not found`,
     );
     previousTitle = existing.title;
-    previousBodyMd = existing.bodyMd;
-    if (existing.title === title && existing.bodyMd === args.bodyMd) {
+    previousBody = existing.body;
+    if (existing.title === title && existing.body === args.body) {
       throw new TRPCError({
         code: "BAD_REQUEST",
         message: "memory_write is a no-op (title and body unchanged)",
@@ -321,15 +321,15 @@ export async function proposeMemoryWrite(
     kind: "memory_write",
     projectId: ctx.projectId,
     title,
-    bodyMd: args.bodyMd,
+    body: args.body,
     tags: args.tags ?? [],
     source: args.source ?? "user",
     memoryId: args.memoryId ?? null,
     previousTitle,
-    previousBodyMd,
+    previousBody,
   };
   let advisory: string | null = null;
-  const byteLen = Buffer.byteLength(args.bodyMd, "utf8");
+  const byteLen = Buffer.byteLength(args.body, "utf8");
   if (byteLen > MEMORY_BODY_ADVISORY_BYTES) {
     advisory = `This entry is ${(byteLen / 1024).toFixed(1)} KB. Memory loads into every agent turn — consider splitting into multiple titled entries (one per topic) so the next conversation isn't paying the full body for an unrelated question.`;
   }

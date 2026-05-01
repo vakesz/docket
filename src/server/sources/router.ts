@@ -8,7 +8,7 @@
  * `propose_source_*` family, and the architecture test
  * `src/__arch__/no-source-mutation-tools.test.ts` enforces that.
  *
- * Storage shape: `bodyMd: String`. Sources are text-only today (paste or
+ * Storage shape: `body: String`. Sources are text-only today (paste or
  * `.md`/`.txt` upload); a `Source.body bytea` column is reserved for binary
  * uploads if/when we need them.
  */
@@ -39,7 +39,7 @@ const CreateInput = projectSlugSchema.extend({
   title: z.string().min(1).max(200),
   kind: z.string().max(64).default(""),
   uri: z.string().max(500).default(""),
-  bodyMd: z.string().max(500_000).default(""),
+  body: z.string().max(500_000).default(""),
   tags: z.array(z.string().min(1).max(64)).max(32).default([]),
 });
 
@@ -47,7 +47,7 @@ const UpdateInput = GetInput.extend({
   title: z.string().min(1).max(200).optional(),
   kind: z.string().max(64).optional(),
   uri: z.string().max(500).optional(),
-  bodyMd: z.string().max(500_000).optional(),
+  body: z.string().max(500_000).optional(),
   tags: z.array(z.string().min(1).max(64)).max(32).optional(),
 });
 
@@ -62,7 +62,7 @@ export const sourcesRouter = router({
           ? {
               OR: [
                 { title: { contains: input.search, mode: "insensitive" } },
-                { bodyMd: { contains: input.search, mode: "insensitive" } },
+                { body: { contains: input.search, mode: "insensitive" } },
               ],
             }
           : {}),
@@ -88,7 +88,7 @@ export const sourcesRouter = router({
         title: input.title.trim(),
         kind: input.kind,
         uri: input.uri,
-        bodyMd: input.bodyMd,
+        body: input.body,
         tags: input.tags,
       },
     });
@@ -104,7 +104,7 @@ export const sourcesRouter = router({
         ...(input.title !== undefined ? { title: input.title.trim() } : {}),
         ...(input.kind !== undefined ? { kind: input.kind } : {}),
         ...(input.uri !== undefined ? { uri: input.uri } : {}),
-        ...(input.bodyMd !== undefined ? { bodyMd: input.bodyMd } : {}),
+        ...(input.body !== undefined ? { body: input.body } : {}),
         ...(input.tags !== undefined ? { tags: input.tags } : {}),
       },
     });

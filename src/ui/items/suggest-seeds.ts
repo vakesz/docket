@@ -46,13 +46,13 @@ export function buildSuggestSeed(args: {
   kind: ItemKind | null;
   state: ItemState | null;
   title: string;
-  bodyMd: string | null;
+  body: string | null;
   commentCount: number;
 }): string {
-  const { kind, state, title, bodyMd, commentCount } = args;
+  const { kind, state, title, body: rawBody, commentCount } = args;
   const kindHint = kind ? KIND_HINTS[kind] : null;
   const stateHint = state ? STATE_HINTS[state] : null;
-  const body = excerpt(bodyMd);
+  const body = excerpt(rawBody);
 
   const lines = [
     SUGGEST_NEXT_ACTION_SENTINEL,
@@ -64,7 +64,7 @@ export function buildSuggestSeed(args: {
     "- propose_item_tags when a label change is unambiguous (needs-info, ready-for-work, …). Sample a few similar items via list_items first to learn the project's actual vocabulary — don't invent labels.",
     "- propose_comment with a substantive update (status, fix reference, decision, answered question, small fenced code snippet). Never an echo of the description.",
     "- propose_description_patch to fill repro / AC / env gaps. Pass only the new top-level content; the system preserves the previous version automatically.",
-    "- propose_new_item to split when the item conflates concerns. Set fields.parentId to this item's providerItemId so the parent-child link is native; spell out WHY the split helps.",
+    "- propose_new_item to split when the item conflates concerns. Set parent_id to this item's id so the parent-child link is native; spell out WHY the split helps.",
     "- propose_memory_write to capture a non-obvious project convention you noticed (one per reply; narrow title; update an existing entry rather than creating a duplicate).",
     "- ask_user_question when you genuinely need info to decide.",
     "- Or: say nothing meaningful applies, and stop. Don't stage an echo proposal.",

@@ -14,7 +14,7 @@ describe("isEmptyDiff", () => {
       kind: "comment_add",
       itemId: "i1",
       itemTitle: "t",
-      bodyMd: "   \n\t ",
+      body: "   \n\t ",
     };
     expect(isEmptyDiff(diff)).toBe(true);
   });
@@ -24,7 +24,7 @@ describe("isEmptyDiff", () => {
       kind: "comment_add",
       itemId: "i1",
       itemTitle: "t",
-      bodyMd: "looks good to me",
+      body: "looks good to me",
     };
     expect(isEmptyDiff(diff)).toBe(false);
   });
@@ -82,9 +82,9 @@ describe("isEmptyDiff", () => {
       kind: "memory_write",
       memoryId: "m1",
       title: "T",
-      bodyMd: "B",
+      body: "B",
       previousTitle: "T",
-      previousBodyMd: "B",
+      previousBody: "B",
     };
     expect(isEmptyDiff(diff)).toBe(true);
   });
@@ -94,9 +94,9 @@ describe("isEmptyDiff", () => {
       kind: "memory_write",
       memoryId: null,
       title: "",
-      bodyMd: "",
+      body: "",
       previousTitle: "",
-      previousBodyMd: "",
+      previousBody: "",
     };
     // memoryId === null means create — never empty.
     expect(isEmptyDiff(diff)).toBe(false);
@@ -119,7 +119,7 @@ describe("isEmptyDiff", () => {
         kind: "item_create",
         itemKind: "task",
         title: "x",
-        descriptionMd: "",
+        description: "",
         assignee: null,
         tags: [],
       }),

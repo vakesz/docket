@@ -88,8 +88,8 @@ afterEach(() => {
 
 interface ToolData {
   cleaned: boolean | null;
-  cleanedBytes?: number;
-  cleanError?: string;
+  cleaned_bytes?: number;
+  clean_error?: string;
   body: string;
   truncated?: boolean;
 }
@@ -111,7 +111,7 @@ describe("web_fetch tool", () => {
     );
     const data = await callTool({ url: "https://example.com/page" });
     expect(data.cleaned).toBe(true);
-    expect(typeof data.cleanedBytes).toBe("number");
+    expect(typeof data.cleaned_bytes).toBe("number");
     expect(data.body as string).toContain("# Hi");
     expect(data.body as string).toContain("Body.");
     expect(data.body as string).not.toContain("<script");
@@ -153,7 +153,7 @@ describe("web_fetch tool", () => {
     mockFetchOnce(html, "text/html");
     const data = await callTool({ url: "https://example.com/spa" });
     expect(data.cleaned).toBe(false);
-    expect(data.cleanError).toMatch(/empty/i);
+    expect(data.clean_error).toMatch(/empty/i);
     expect(data.body).toBe(html);
     expect(auditLog.rows.at(-1)?.cleaned).toBe(false);
     expect(auditLog.rows.at(-1)?.cleanError).toMatch(/empty/i);

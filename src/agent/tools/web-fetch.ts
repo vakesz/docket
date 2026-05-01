@@ -334,12 +334,12 @@ export const webFetchTool: ToolFactory = (ctx) => ({
       });
       return ok({
         status: response.status,
-        contentType,
+        content_type: contentType,
         truncated: true,
         bytes: finalBytes,
         cleaned,
-        cleanedBytes,
-        cleanError,
+        cleaned_bytes: cleanedBytes,
+        clean_error: cleanError,
         body,
         note: `response truncated at ${maxBytes} bytes`,
       });
@@ -357,12 +357,12 @@ export const webFetchTool: ToolFactory = (ctx) => ({
     });
     return ok({
       status: response.status,
-      contentType,
+      content_type: contentType,
       truncated: false,
       bytes: finalBytes,
       cleaned,
-      cleanedBytes,
-      cleanError,
+      cleaned_bytes: cleanedBytes,
+      clean_error: cleanError,
       body,
     });
   },

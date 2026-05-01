@@ -111,20 +111,29 @@ type GithubReactionsSummary = {
   eyes?: number;
 } | null;
 
+/**
+ * Structural shape over `octokit.issues.{get,update,list-for-repo}.response.data`.
+ * Octokit's response types are operation-tagged with deeply nested fields we
+ * don't read; this widened-but-compatible shape lets the TS compiler verify
+ * Octokit responses are assignable directly (no casts) while staying
+ * permissive enough to also cover search-result rows and inline timeline
+ * payloads. Every property is optional/nullable to match the most permissive
+ * response — runtime sites guard with `?? ""` / `?? null` already.
+ */
 type IssueLikePayload = {
   number: number;
-  title: string;
-  body: string | null;
+  title?: string | null;
+  body?: string | null;
   state: string;
   state_reason?: string | null;
   user?: { login?: string | null } | null;
   assignee?: { login?: string | null } | null;
   assignees?: ReadonlyArray<{ login?: string | null } | null> | null;
-  labels: ReadonlyArray<string | { name?: string | null }>;
-  html_url: string;
+  labels?: ReadonlyArray<string | { name?: string | null | undefined }>;
+  html_url?: string;
   repository_url?: string | null;
-  created_at: string;
-  updated_at: string;
+  created_at?: string;
+  updated_at?: string;
   closed_at?: string | null;
   milestone?: { title?: string | null } | null;
   comments?: number;
@@ -133,7 +142,7 @@ type IssueLikePayload = {
 };
 
 function labelsOf(issue: IssueLikePayload): string[] {
-  return issue.labels
+  return (issue.labels ?? [])
     .map((label) => (typeof label === "string" ? label : (label.name ?? "")))
     .filter((name): name is string => Boolean(name));
 }
@@ -216,8 +225,8 @@ export class GitHubProvider implements WorkItemProvider {
     return {
       id: makeProviderItemId(this.config.owner, this.config.repo, issue.number),
       kind: inferKind(labels),
-      title: issue.title,
-      descriptionMd: issue.body ?? "",
+      title: issue.title ?? "",
+      description: issue.body ?? "",
       state: toCanonicalState(
         {
           state: issue.state as GithubIssueState,
@@ -237,13 +246,13 @@ export class GitHubProvider implements WorkItemProvider {
       author: issue.user?.login ?? null,
       parentId: null,
       tags: labels,
-      createdAt: new Date(issue.created_at),
-      updatedAt: new Date(issue.updated_at),
+      createdAt: issue.created_at ? new Date(issue.created_at) : new Date(0),
+      updatedAt: issue.updated_at ? new Date(issue.updated_at) : new Date(0),
       closedAt: issue.closed_at ? new Date(issue.closed_at) : null,
-      url: issue.html_url,
+      url: issue.html_url ?? null,
       repositoryUrl: `https://github.com/${this.config.owner}/${this.config.repo}`,
       attachments: [],
-      providerRaw: issue as unknown as Record<string, unknown>,
+      providerRaw: { ...(issue as Record<string, unknown>) },
       providerKey: this.providerKey,
     };
   }
@@ -316,7 +325,7 @@ export class GitHubProvider implements WorkItemProvider {
         id: String(c.id),
         itemId: id,
         author: c.user?.login ?? "",
-        bodyMd: c.body ?? "",
+        body: c.body ?? "",
         createdAt: created,
         updatedAt: updated,
         edited: updated ? updated.getTime() > created.getTime() : false,
@@ -329,7 +338,7 @@ export class GitHubProvider implements WorkItemProvider {
     const { owner, repo, number } = parseProviderItemId(id);
     try {
       const res = await this.octokit.issues.get({ owner, repo, issue_number: number });
-      return this.toCanonicalItem(res.data as unknown as IssueLikePayload);
+      return this.toCanonicalItem(res.data);
     } catch (err) {
       wrapOctokitError(err);
     }
@@ -358,7 +367,7 @@ export class GitHubProvider implements WorkItemProvider {
       let labels: string[] | undefined;
       if (touchesLabels) {
         const current = await this.octokit.issues.get({ owner, repo, issue_number: number });
-        const currentLabels = labelsOf(current.data as unknown as IssueLikePayload);
+        const currentLabels = labelsOf(current.data);
         labels = mergeLabels(currentLabels, plan);
       }
       const res = await this.octokit.issues.update({
@@ -369,22 +378,22 @@ export class GitHubProvider implements WorkItemProvider {
         ...(plan.stateReason ? { state_reason: plan.stateReason } : {}),
         ...(labels ? { labels } : {}),
       });
-      return this.toCanonicalItem(res.data as unknown as IssueLikePayload);
+      return this.toCanonicalItem(res.data);
     } catch (err) {
       wrapOctokitError(err);
     }
   }
 
-  async patchDescription(id: string, newMd: string): Promise<Item> {
+  async patchDescription(id: string, newDescription: string): Promise<Item> {
     const { owner, repo, number } = parseProviderItemId(id);
     try {
       const res = await this.octokit.issues.update({
         owner,
         repo,
         issue_number: number,
-        body: newMd,
+        body: newDescription,
       });
-      return this.toCanonicalItem(res.data as unknown as IssueLikePayload);
+      return this.toCanonicalItem(res.data);
     } catch (err) {
       wrapOctokitError(err);
     }
@@ -401,14 +410,14 @@ export class GitHubProvider implements WorkItemProvider {
     );
   }
 
-  async addComment(id: string, bodyMd: string): Promise<Comment> {
+  async addComment(id: string, body: string): Promise<Comment> {
     const { owner, repo, number } = parseProviderItemId(id);
     try {
       const res = await this.octokit.issues.createComment({
         owner,
         repo,
         issue_number: number,
-        body: bodyMd,
+        body: body,
       });
       const c = res.data;
       const created = new Date(c.created_at);
@@ -417,7 +426,7 @@ export class GitHubProvider implements WorkItemProvider {
         id: String(c.id),
         itemId: id,
         author: c.user?.login ?? "",
-        bodyMd: c.body ?? "",
+        body: c.body ?? "",
         createdAt: created,
         updatedAt: updated,
         edited: updated ? updated.getTime() > created.getTime() : false,
@@ -539,7 +548,7 @@ export class GitHubProvider implements WorkItemProvider {
     const { owner, repo, number } = parseProviderItemId(id);
     try {
       const current = await this.octokit.issues.get({ owner, repo, issue_number: number });
-      const currentLabels = labelsOf(current.data as unknown as IssueLikePayload);
+      const currentLabels = labelsOf(current.data);
       const preserved = currentLabels.filter((l) => STATE_ENCODING_LABELS.has(l.toLowerCase()));
       const seen = new Set(preserved.map((l) => l.toLowerCase()));
       const out = [...preserved];
@@ -558,7 +567,7 @@ export class GitHubProvider implements WorkItemProvider {
         issue_number: number,
         labels: out,
       });
-      return this.toCanonicalItem(res.data as unknown as IssueLikePayload);
+      return this.toCanonicalItem(res.data);
     } catch (err) {
       wrapOctokitError(err);
     }
@@ -570,11 +579,11 @@ export class GitHubProvider implements WorkItemProvider {
         owner: this.config.owner,
         repo: this.config.repo,
         title: fields.title,
-        body: fields.descriptionMd,
+        body: fields.description,
         ...(fields.tags.length > 0 ? { labels: [...fields.tags] } : {}),
         ...(fields.assignee ? { assignees: [fields.assignee] } : {}),
       });
-      return this.toCanonicalItem(res.data as unknown as IssueLikePayload);
+      return this.toCanonicalItem(res.data);
     } catch (err) {
       wrapOctokitError(err);
     }
@@ -723,7 +732,7 @@ export class GitHubProvider implements WorkItemProvider {
         number: data.number,
         state: data.merged ? "merged" : data.state,
         author: data.user?.login ?? "",
-        bodyMd: data.body ?? "",
+        body: data.body ?? "",
         headRef: data.head.ref,
         baseRef: data.base.ref,
         headSha: data.head.sha,
@@ -746,7 +755,7 @@ export class GitHubProvider implements WorkItemProvider {
         reviews: reviews.data.map((r) => ({
           author: r.user?.login ?? "",
           state: r.state,
-          bodyMd: r.body ?? "",
+          body: r.body ?? "",
           submittedAt: r.submitted_at ? new Date(r.submitted_at) : null,
         })),
         commentsCount: data.comments ?? 0,

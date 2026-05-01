@@ -302,7 +302,7 @@ export function toItemRow(canonical: CanonicalItem, projectId: string, syncedAt:
     providerItemId: canonical.id,
     kind: canonical.kind,
     title: canonical.title,
-    descriptionMd: canonical.descriptionMd,
+    description: canonical.description,
     state: canonical.state,
     assignee: canonical.assignee,
     assignees,
@@ -371,7 +371,7 @@ async function processChunk(
       providerItemId: true,
       state: true,
       title: true,
-      descriptionMd: true,
+      description: true,
       assignee: true,
     },
   });
@@ -552,9 +552,9 @@ export async function reconcileComments(
   const itemIds = nonEmpty.map((b) => b.itemSurrogate);
   const allExisting = await db.comment.findMany({
     where: { itemId: { in: itemIds } },
-    select: { itemId: true, providerCommentId: true, providerUpdatedAt: true, bodyMd: true },
+    select: { itemId: true, providerCommentId: true, providerUpdatedAt: true, body: true },
   });
-  const byItem = new Map<string, Map<string, { providerUpdatedAt: Date | null; bodyMd: string }>>();
+  const byItem = new Map<string, Map<string, { providerUpdatedAt: Date | null; body: string }>>();
   for (const row of allExisting) {
     let slot = byItem.get(row.itemId);
     if (!slot) {
@@ -563,7 +563,7 @@ export async function reconcileComments(
     }
     slot.set(row.providerCommentId, {
       providerUpdatedAt: row.providerUpdatedAt,
-      bodyMd: row.bodyMd,
+      body: row.body,
     });
   }
   const ops: Promise<unknown>[] = [];
@@ -578,7 +578,7 @@ export async function reconcileComments(
       if (prev) {
         const prevMs = prev.providerUpdatedAt?.getTime() ?? null;
         const incMs = incomingPu?.getTime() ?? null;
-        if (prevMs === incMs && prev.bodyMd === c.bodyMd) continue;
+        if (prevMs === incMs && prev.body === c.body) continue;
       }
       ops.push(
         db.comment.upsert({
@@ -592,7 +592,7 @@ export async function reconcileComments(
             itemId: itemSurrogate,
             providerCommentId: c.id,
             author: c.author,
-            bodyMd: c.bodyMd,
+            body: c.body,
             createdAt: c.createdAt,
             providerUpdatedAt: incomingPu,
             edited: c.edited ?? false,
@@ -600,7 +600,7 @@ export async function reconcileComments(
           },
           update: {
             author: c.author,
-            bodyMd: c.bodyMd,
+            body: c.body,
             createdAt: c.createdAt,
             providerUpdatedAt: incomingPu,
             edited: c.edited ?? false,

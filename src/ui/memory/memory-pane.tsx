@@ -35,7 +35,7 @@ export function MemoryPane({ projectSlug }: { projectSlug: string }) {
       projectSlug,
       memoryId: null,
       title,
-      bodyMd: draftBody,
+      body: draftBody,
       tags: [],
     });
     setDraftTitle("");
@@ -104,9 +104,9 @@ export function MemoryPane({ projectSlug }: { projectSlug: string }) {
                     {m.source}
                   </span>
                 </div>
-                {m.bodyMd && (
+                {m.body && (
                   <p className="line-clamp-2 whitespace-pre-wrap text-muted-foreground text-xs">
-                    {m.bodyMd}
+                    {m.body}
                   </p>
                 )}
               </div>

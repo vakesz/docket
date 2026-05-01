@@ -131,7 +131,7 @@ export type Item = {
   id: string;
   kind: ItemKind;
   title: string;
-  descriptionMd: string;
+  description: string;
   state: ItemState;
   assignee: string | null;
   /**
@@ -189,7 +189,7 @@ export type Comment = {
   id: string;
   itemId: string;
   author: string;
-  bodyMd: string;
+  body: string;
   createdAt: Date;
   /** Last-touched timestamp from the provider; null when not surfaced. */
   updatedAt?: Date | null;
@@ -228,7 +228,7 @@ export type Conversation = {
 
 export type CreateFields = {
   title: string;
-  descriptionMd: string;
+  description: string;
   parentId: string | null;
   assignee: string | null;
   tags: string[];
@@ -270,7 +270,7 @@ export type PullRequestReview = {
   author: string;
   /** APPROVED | CHANGES_REQUESTED | COMMENTED | DISMISSED */
   state: string;
-  bodyMd: string;
+  body: string;
   submittedAt: Date | null;
 };
 
@@ -291,7 +291,7 @@ export type PullRequestDetail = {
   /** "open" | "closed" | "merged" */
   state: string;
   author: string;
-  bodyMd: string;
+  body: string;
   headRef: string;
   baseRef: string;
   headSha: string;
@@ -422,7 +422,7 @@ export type MemoryEntry = {
   id: string;
   projectId: string;
   title: string;
-  bodyMd: string;
+  body: string;
   tags: string[];
   /** "user" | "agent" — informational, no behavior depends on it. */
   source: string;
@@ -442,7 +442,7 @@ export type Source = {
   id: string;
   projectId: string;
   title: string;
-  bodyMd: string;
+  body: string;
   kind: string;
   uri: string;
   tags: string[];

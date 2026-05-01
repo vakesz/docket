@@ -19,12 +19,17 @@ export const PROVIDER_SPECS = [githubSpec, azureDevOpsSpec] as const;
 export type ProviderTypeId = (typeof PROVIDER_SPECS)[number]["typeId"];
 
 /**
- * Tuple of provider type ids derived from `PROVIDER_SPECS`. The asserted
- * non-empty-tuple shape lets `z.enum` consume it directly.
+ * Non-empty tuple of provider type ids derived from `PROVIDER_SPECS`. Built
+ * head-then-tail so the result type is `[ProviderTypeId, ...ProviderTypeId[]]`
+ * without needing an `unknown`-cast bridge — the `[0]` index access is
+ * checked at the type level by `noUncheckedIndexedAccess` plus the runtime
+ * guard below, which is fine because `PROVIDER_SPECS` is an `as const` tuple
+ * with two static entries.
  */
-export const PROVIDER_TYPE_IDS = PROVIDER_SPECS.map((s) => s.typeId) as unknown as readonly [
-  ProviderTypeId,
-  ...ProviderTypeId[],
+const [firstSpec, ...restSpecs] = PROVIDER_SPECS;
+export const PROVIDER_TYPE_IDS: readonly [ProviderTypeId, ...ProviderTypeId[]] = [
+  firstSpec.typeId,
+  ...restSpecs.map((s) => s.typeId),
 ];
 
 export function getProviderSpec(typeId: string): ProviderSpec | null {

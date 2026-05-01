@@ -25,6 +25,7 @@ import type { IGitApi } from "azure-devops-node-api/GitApi.js";
 import type { JsonPatchOperation } from "azure-devops-node-api/interfaces/common/VSSInterfaces.js";
 import {
   type Comment as AzdoComment,
+  type WorkItem,
   WorkItemErrorPolicy,
   WorkItemExpand,
 } from "azure-devops-node-api/interfaces/WorkItemTrackingInterfaces.js";
@@ -144,12 +145,13 @@ function readDate(raw: unknown): Date | null {
   return null;
 }
 
-type WorkItemPayload = {
-  id?: number;
-  fields?: Record<string, unknown>;
-  url?: string;
-  relations?: Array<{ rel?: string; url?: string; attributes?: Record<string, unknown> }>;
-};
+/**
+ * Local alias for the SDK's `WorkItem` so call sites read fluently and a
+ * future structural divergence is a one-line edit. Using the SDK type
+ * directly removes the need for `as unknown as` casts on every API
+ * response — `wit.getWorkItem(...)` and friends already produce this shape.
+ */
+type WorkItemPayload = WorkItem;
 
 type VstfsRef = NonNullable<ReturnType<typeof parseVstfsPRRef>>;
 
@@ -230,7 +232,7 @@ export class AzureDevOpsProvider implements WorkItemProvider {
       id,
       kind,
       title: typeof fields["System.Title"] === "string" ? (fields["System.Title"] as string) : "",
-      descriptionMd:
+      description:
         typeof fields["System.Description"] === "string"
           ? (fields["System.Description"] as string)
           : "",
@@ -253,7 +255,7 @@ export class AzureDevOpsProvider implements WorkItemProvider {
       author: null,
       repositoryUrl: null,
       attachments: [],
-      providerRaw: payload as unknown as Record<string, unknown>,
+      providerRaw: { ...payload },
       providerKey: this.providerKey,
     };
   }
@@ -328,7 +330,7 @@ export class AzureDevOpsProvider implements WorkItemProvider {
       }
       for (const raw of batch ?? []) {
         if (!raw) continue;
-        const payload = raw as unknown as WorkItemPayload;
+        const payload = raw;
         const item = this.toCanonicalItem(payload);
         if (!item) continue;
         const commentCount = payload.fields?.["System.CommentCount"];
@@ -361,7 +363,7 @@ export class AzureDevOpsProvider implements WorkItemProvider {
         id: String(c.id ?? ""),
         itemId: id,
         author,
-        bodyMd: c.text ?? "",
+        body: c.text ?? "",
         createdAt: created,
         updatedAt: modified ?? null,
         edited: modified ? modified.getTime() > created.getTime() : false,
@@ -379,7 +381,7 @@ export class AzureDevOpsProvider implements WorkItemProvider {
         undefined,
         WorkItemExpand.All,
       );
-      const item = this.toCanonicalItem(raw as unknown as WorkItemPayload);
+      const item = this.toCanonicalItem(raw);
       if (!item) {
         throw new ProviderError(`Work item ${id} is not a tracked type`);
       }
@@ -410,7 +412,7 @@ export class AzureDevOpsProvider implements WorkItemProvider {
     } catch (err) {
       wrapError(err);
     }
-    const relations = (raw as unknown as WorkItemPayload).relations ?? [];
+    const relations = raw.relations ?? [];
     const relatedIds: number[] = [];
     for (const rel of relations) {
       const url = rel.url ?? "";
@@ -433,7 +435,7 @@ export class AzureDevOpsProvider implements WorkItemProvider {
     const out: Item[] = [];
     for (const r of batch ?? []) {
       if (!r) continue;
-      const item = this.toCanonicalItem(r as unknown as WorkItemPayload);
+      const item = this.toCanonicalItem(r);
       if (item) out.push(item);
     }
     return out;
@@ -455,7 +457,7 @@ export class AzureDevOpsProvider implements WorkItemProvider {
     const wit = await this.witApi();
     try {
       const raw = await wit.updateWorkItem(null, patch, Number.parseInt(id, 10));
-      const item = this.toCanonicalItem(raw as unknown as WorkItemPayload);
+      const item = this.toCanonicalItem(raw);
       if (!item) {
         throw new ProviderError(`Work item ${id} is not a tracked type after update`);
       }
@@ -465,14 +467,14 @@ export class AzureDevOpsProvider implements WorkItemProvider {
     }
   }
 
-  async patchDescription(id: string, newMd: string): Promise<Item> {
+  async patchDescription(id: string, newDescription: string): Promise<Item> {
     const patch: JsonPatchOperation[] = [
-      { op: 0, path: "/fields/System.Description", value: newMd } as JsonPatchOperation,
+      { op: 0, path: "/fields/System.Description", value: newDescription } as JsonPatchOperation,
     ];
     const wit = await this.witApi();
     try {
       const raw = await wit.updateWorkItem(null, patch, Number.parseInt(id, 10));
-      const item = this.toCanonicalItem(raw as unknown as WorkItemPayload);
+      const item = this.toCanonicalItem(raw);
       if (!item) {
         throw new ProviderError(`Work item ${id} is not a tracked type after update`);
       }
@@ -539,7 +541,7 @@ export class AzureDevOpsProvider implements WorkItemProvider {
     } catch (err) {
       wrapError(err);
     }
-    const relations = (raw as unknown as WorkItemPayload).relations ?? [];
+    const relations = raw.relations ?? [];
     const refs: VstfsRef[] = [];
     for (const rel of relations) {
       if (rel.rel !== "ArtifactLink") continue;
@@ -568,7 +570,9 @@ export class AzureDevOpsProvider implements WorkItemProvider {
         url,
         title: pr.title ?? "",
         branch: stripRefPrefix(pr.sourceRefName),
-        state: pullRequestStatusToCanonical(pr.status as unknown as number),
+        state: pullRequestStatusToCanonical(
+          pr.status === undefined ? undefined : Number(pr.status),
+        ),
         author: pr.createdBy?.uniqueName ?? pr.createdBy?.displayName ?? "",
         confidence: 0.95,
       });
@@ -596,7 +600,7 @@ export class AzureDevOpsProvider implements WorkItemProvider {
     const reviews: PullRequestReview[] = (pr.reviewers ?? []).map((r) => ({
       author: r.uniqueName ?? r.displayName ?? "",
       state: voteToReviewState(r.vote ?? 0),
-      bodyMd: "",
+      body: "",
       submittedAt: null,
     }));
     let files: PullRequestFile[] = [];
@@ -617,7 +621,9 @@ export class AzureDevOpsProvider implements WorkItemProvider {
           );
           files = (changes.changeEntries ?? []).map((c) => ({
             path: (c.item as { path?: string } | undefined)?.path ?? "",
-            status: changeTypeToStatus(c.changeType as unknown as number),
+            status: changeTypeToStatus(
+              c.changeType === undefined ? undefined : Number(c.changeType),
+            ),
             additions: 0,
             deletions: 0,
           }));
@@ -627,7 +633,7 @@ export class AzureDevOpsProvider implements WorkItemProvider {
         // detail payload — the agent gets metadata even if change-walk 404s.
       }
     }
-    const status = pr.status as unknown as number;
+    const status = pr.status === undefined ? undefined : Number(pr.status);
     const repoName = pr.repository?.name ?? "";
     const url = this.webPullRequestUrl(repoName, pr.pullRequestId ?? num);
     return {
@@ -637,7 +643,7 @@ export class AzureDevOpsProvider implements WorkItemProvider {
       number: pr.pullRequestId ?? num,
       state: pullRequestStatusToCanonical(status),
       author: pr.createdBy?.uniqueName ?? pr.createdBy?.displayName ?? "",
-      bodyMd: pr.description ?? "",
+      body: pr.description ?? "",
       headRef: stripRefPrefix(pr.sourceRefName),
       baseRef: stripRefPrefix(pr.targetRefName),
       headSha: pr.lastMergeSourceCommit?.commitId ?? "",
@@ -664,11 +670,11 @@ export class AzureDevOpsProvider implements WorkItemProvider {
     return `${this.config.orgUrl}/${encodeURIComponent(this.config.project)}/_git/${encodeURIComponent(repoName)}/pullrequest/${pullRequestId}`;
   }
 
-  async addComment(id: string, bodyMd: string): Promise<Comment> {
+  async addComment(id: string, body: string): Promise<Comment> {
     const wit = await this.witApi();
     try {
       const resp = await wit.addComment(
-        { text: bodyMd },
+        { text: body },
         this.config.project,
         Number.parseInt(id, 10),
       );
@@ -681,7 +687,7 @@ export class AzureDevOpsProvider implements WorkItemProvider {
           (resp.createdBy?.uniqueName as string | undefined) ||
           resp.createdBy?.displayName ||
           "unknown",
-        bodyMd: resp.text ?? bodyMd,
+        body: resp.text ?? body,
         createdAt: created,
         updatedAt: modified ?? null,
         edited: modified ? modified.getTime() > created.getTime() : false,
@@ -716,7 +722,7 @@ export class AzureDevOpsProvider implements WorkItemProvider {
     const wit = await this.witApi();
     try {
       const raw = await wit.updateWorkItem(null, patch, Number.parseInt(id, 10));
-      const item = this.toCanonicalItem(raw as unknown as WorkItemPayload);
+      const item = this.toCanonicalItem(raw);
       if (!item) {
         throw new ProviderError(`Work item ${id} is not a tracked type after update`);
       }
@@ -734,11 +740,11 @@ export class AzureDevOpsProvider implements WorkItemProvider {
     const patch: JsonPatchOperation[] = [
       { op: 0, path: "/fields/System.Title", value: fields.title } as JsonPatchOperation,
     ];
-    if (fields.descriptionMd) {
+    if (fields.description) {
       patch.push({
         op: 0,
         path: "/fields/System.Description",
-        value: fields.descriptionMd,
+        value: fields.description,
       } as JsonPatchOperation);
     }
     if (fields.assignee) {
@@ -769,7 +775,7 @@ export class AzureDevOpsProvider implements WorkItemProvider {
     const wit = await this.witApi();
     try {
       const raw = await wit.createWorkItem(null, patch, this.config.project, witType);
-      const item = this.toCanonicalItem(raw as unknown as WorkItemPayload);
+      const item = this.toCanonicalItem(raw);
       if (!item) {
         throw new ProviderError("Created work item is not a tracked type");
       }

@@ -38,7 +38,7 @@ export type ToolContext = {
  *   - `fields`: scan only the listed dotted paths inside `result.data`.
  *     For tools whose envelope mixes server metadata with one or two
  *     untrusted text fields (e.g. `get_item` carries server ids alongside
- *     `descriptionMd` and `comments[].bodyMd`). Empty extraction
+ *     `description` and `comments[].body`). Empty extraction
  *     short-circuits the same way `skip` does.
  *
  * The default (`full`) is fail-safe: any tool that forgets to tag itself

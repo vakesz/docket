@@ -34,7 +34,7 @@ const stateChange = z.object({
 const descriptionPatch = z.object({
   kind: z.literal("description_patch"),
   item: itemSnapshotSchema,
-  newMd: z.string(),
+  newDescription: z.string(),
 });
 
 const attachmentUpload = z.object({
@@ -57,7 +57,7 @@ const itemCreate = z.object({
 const commentAdd = z.object({
   kind: z.literal("comment_add"),
   item: itemSnapshotSchema,
-  bodyMd: z.string(),
+  body: z.string(),
 });
 
 const tagsChange = z.object({
@@ -79,12 +79,12 @@ const memoryWrite = z.object({
   kind: z.literal("memory_write"),
   projectId: z.string(),
   title: z.string(),
-  bodyMd: z.string(),
+  body: z.string(),
   tags: z.array(z.string()).readonly(),
   source: z.string(),
   memoryId: z.string().nullable(),
   previousTitle: z.string(),
-  previousBodyMd: z.string(),
+  previousBody: z.string(),
 });
 
 const memoryDelete = z.object({

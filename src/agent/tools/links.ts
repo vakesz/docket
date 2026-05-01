@@ -20,10 +20,10 @@ export const findRelatedPullRequestsTool: ToolFactory = (ctx) => ({
   def: {
     name: "find_related_pull_requests",
     description:
-      "Find pull requests the provider heuristically links to a cached item (id mention, branch name, keyword overlap). Defaults to the conversation's anchored item; pass providerItemId only to look up a different one. Use this before drilling into a specific PR with get_pull_request. If `matches` comes back empty, you MUST follow up with `search_pull_requests` using distinctive keywords from the issue title before concluding no PR exists — many PRs are merged without ever referencing the issue.",
+      "Find pull requests the provider heuristically links to a cached item (id mention, branch name, keyword overlap). Defaults to the conversation's anchored item; pass `item_id` only to look up a different one. Use this before drilling into a specific PR with get_pull_request. If `matches` comes back empty, you MUST follow up with `search_pull_requests` using distinctive keywords from the issue title before concluding no PR exists — many PRs are merged without ever referencing the issue.",
     parameters: zodToJsonSchema(
       z.object({
-        providerItemId: z
+        item_id: z
           .string()
           .min(1)
           .optional()
@@ -37,10 +37,10 @@ export const findRelatedPullRequestsTool: ToolFactory = (ctx) => ({
   // branch name, state, author handle, confidence) is provider metadata.
   guardrailScan: { mode: "fields", untrusted: ["matches[].title"] },
   handler: async (raw) => {
-    const args = z.object({ providerItemId: z.string().min(1).optional() }).parse(raw);
-    const providerItemId = args.providerItemId ?? ctx.providerItemId;
-    if (!providerItemId) {
-      return fail("providerItemId is required when no item is anchored on this conversation.");
+    const args = z.object({ item_id: z.string().min(1).optional() }).parse(raw);
+    const itemId = args.item_id ?? ctx.providerItemId;
+    if (!itemId) {
+      return fail("item_id is required when no item is anchored on this conversation.");
     }
     const project = await ctx.db.project.findUnique({ where: { id: ctx.projectId } });
     if (!project) return fail(`project ${ctx.projectId} not found`);
@@ -49,7 +49,7 @@ export const findRelatedPullRequestsTool: ToolFactory = (ctx) => ({
       return ok({ matches: [] as const, note: "provider does not surface PR links" });
     }
     try {
-      const matches = await provider.findRelatedPRs(providerItemId);
+      const matches = await provider.findRelatedPRs(itemId);
       return ok({ matches });
     } catch (err) {
       return fail(err instanceof Error ? err.message : String(err));

@@ -63,12 +63,12 @@ const ProposeTransitionInput = projectSlugSchema.extend({
 
 const ProposeDescriptionPatchInput = projectSlugSchema.extend({
   providerItemId: z.string().min(1),
-  newMd: z.string().max(50_000),
+  newDescription: z.string().max(50_000),
 });
 
 const ProposeCommentInput = projectSlugSchema.extend({
   providerItemId: z.string().min(1),
-  bodyMd: z.string().min(1).max(50_000),
+  body: z.string().min(1).max(50_000),
 });
 
 const ProposeTagsChangeInput = projectSlugSchema.extend({
@@ -88,7 +88,7 @@ const ProposeNewItemInput = projectSlugSchema.extend({
   itemKind: ItemKindEnum,
   fields: z.object({
     title: z.string().min(1).max(500),
-    descriptionMd: z.string().max(50_000).default(""),
+    description: z.string().max(50_000).default(""),
     parentId: z.string().nullable().default(null),
     assignee: z.string().nullable().default(null),
     tags: z.array(z.string()).default([]),
@@ -185,7 +185,7 @@ export const proposalsRouter = router({
         c,
         await proposeDescriptionPatch(c, {
           providerItemId: input.providerItemId,
-          newMd: input.newMd,
+          newDescription: input.newDescription,
         }),
       );
       return { id: row.id, status: row.status, diff: diffOf(hydrateProposal(row)) };
@@ -199,7 +199,7 @@ export const proposalsRouter = router({
         c,
         await proposeComment(c, {
           providerItemId: input.providerItemId,
-          bodyMd: input.bodyMd,
+          body: input.body,
         }),
       );
       return { id: row.id, status: row.status, diff: diffOf(hydrateProposal(row)) };

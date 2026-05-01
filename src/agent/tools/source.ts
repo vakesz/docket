@@ -27,8 +27,8 @@ export const listSourcesTool: ToolFactory = (ctx) => ({
       }),
     ),
   },
-  // List view returns id/title/kind/uri/tags/updatedAt — only the title is
-  // author-controlled prose. Body markdown is fetched separately.
+  // List view returns id/title/kind/uri/tags/updated_at — only the title
+  // is author-controlled prose. Body markdown is fetched separately.
   guardrailScan: { mode: "fields", untrusted: ["[].title"] },
   handler: async (raw) => {
     const args = z
@@ -55,21 +55,30 @@ export const listSourcesTool: ToolFactory = (ctx) => ({
         updatedAt: true,
       },
     });
-    return ok(rows);
+    return ok(
+      rows.map((r) => ({
+        id: r.id,
+        title: r.title,
+        kind: r.kind,
+        uri: r.uri,
+        tags: r.tags,
+        updated_at: r.updatedAt,
+      })),
+    );
   },
 });
 
-export const readSourceTool: ToolFactory = (ctx) => ({
+export const getSourceTool: ToolFactory = (ctx) => ({
   def: {
-    name: "read_source",
-    description: "Read a source document by id. Returns full body markdown.",
-    parameters: zodToJsonSchema(z.object({ sourceId: z.string().min(1) })),
+    name: "get_source",
+    description: "Read a source document by id. Returns full markdown body.",
+    parameters: zodToJsonSchema(z.object({ source_id: z.string().min(1) })),
   },
-  // Title and bodyMd are author-authored markdown. The rest of the
-  // envelope (id/kind/uri/tags/updatedAt) is server / project metadata.
-  guardrailScan: { mode: "fields", untrusted: ["title", "bodyMd"] },
+  // Title and body are author-authored markdown. The rest of the envelope
+  // (id/kind/uri/tags/updated_at) is server / project metadata.
+  guardrailScan: { mode: "fields", untrusted: ["title", "body"] },
   handler: async (raw) => {
-    const { sourceId } = z.object({ sourceId: z.string().min(1) }).parse(raw);
+    const { source_id: sourceId } = z.object({ source_id: z.string().min(1) }).parse(raw);
     const row = await ctx.db.sourceDoc.findFirst({
       where: { id: sourceId, projectId: ctx.projectId },
     });
@@ -80,8 +89,8 @@ export const readSourceTool: ToolFactory = (ctx) => ({
       kind: row.kind,
       uri: row.uri,
       tags: row.tags,
-      bodyMd: row.bodyMd,
-      updatedAt: row.updatedAt,
+      body: row.body,
+      updated_at: row.updatedAt,
     });
   },
 });
@@ -90,7 +99,7 @@ export const searchSourcesTool: ToolFactory = (ctx) => ({
   def: {
     name: "search_sources",
     description:
-      "Free-text search across source documents in this project (title + body). Use this before read_source to locate the right doc.",
+      "Free-text search across source documents in this project (title + body). Use this before get_source to locate the right doc.",
     parameters: zodToJsonSchema(
       z.object({
         query: z.string().min(1).max(200),
@@ -112,7 +121,7 @@ export const searchSourcesTool: ToolFactory = (ctx) => ({
         projectId: ctx.projectId,
         OR: [
           { title: { contains: args.query, mode: "insensitive" } },
-          { bodyMd: { contains: args.query, mode: "insensitive" } },
+          { body: { contains: args.query, mode: "insensitive" } },
         ],
       },
       orderBy: [{ updatedAt: "desc" }],
@@ -126,10 +135,19 @@ export const searchSourcesTool: ToolFactory = (ctx) => ({
         updatedAt: true,
       },
     });
-    return ok(rows);
+    return ok(
+      rows.map((r) => ({
+        id: r.id,
+        title: r.title,
+        kind: r.kind,
+        uri: r.uri,
+        tags: r.tags,
+        updated_at: r.updatedAt,
+      })),
+    );
   },
 });
 
 export function sourceReadonlyTools(ctx: Parameters<ToolFactory>[0]) {
-  return [listSourcesTool(ctx), readSourceTool(ctx), searchSourcesTool(ctx)] as const;
+  return [listSourcesTool(ctx), getSourceTool(ctx), searchSourcesTool(ctx)] as const;
 }

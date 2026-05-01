@@ -58,7 +58,7 @@ export const searchItemsTool: ToolFactory = (ctx) => ({
             : {}),
         OR: [
           { title: { contains: args.query, mode: "insensitive" } },
-          { descriptionMd: { contains: args.query, mode: "insensitive" } },
+          { description: { contains: args.query, mode: "insensitive" } },
         ],
       },
       orderBy: [{ updatedAt: "desc" }],
@@ -72,19 +72,30 @@ export const searchItemsTool: ToolFactory = (ctx) => ({
         url: true,
       },
     });
-    return ok({ query: args.query, count: items.length, items });
+    return ok({
+      query: args.query,
+      count: items.length,
+      items: items.map((i) => ({
+        item_id: i.providerItemId,
+        kind: i.kind,
+        title: i.title,
+        state: i.state,
+        assignee: i.assignee,
+        url: i.url,
+      })),
+    });
   },
 });
 
-export const listAuditTool: ToolFactory = (ctx) => ({
+export const listAuditLogTool: ToolFactory = (ctx) => ({
   def: {
-    name: "list_audit",
+    name: "list_audit_log",
     description:
-      "Read the project's append-only audit log of confirmed/rejected proposals. Use this to answer 'what was changed recently?' or to check whether a specific proposal kind has fired. Filter by `action` (e.g. 'proposal.confirm', 'proposal.reject', 'proposal.auto_confirm', 'proposal.confirm.failed') or by `proposalId` for a single proposal's trail.",
+      "Read the project's append-only audit log of confirmed/rejected proposals. Use this to answer 'what was changed recently?' or to check whether a specific proposal kind has fired. Filter by `action` (e.g. 'proposal.confirm', 'proposal.reject', 'proposal.auto_confirm', 'proposal.confirm.failed') or by `proposal_id` for a single proposal's trail.",
     parameters: zodToJsonSchema(
       z.object({
         action: z.string().min(1).max(64).optional(),
-        proposalId: z.string().min(1).optional(),
+        proposal_id: z.string().min(1).optional(),
         limit: z.number().int().min(1).max(100).default(25),
       }),
     ),
@@ -97,7 +108,7 @@ export const listAuditTool: ToolFactory = (ctx) => ({
     const args = z
       .object({
         action: z.string().min(1).max(64).optional(),
-        proposalId: z.string().min(1).optional(),
+        proposal_id: z.string().min(1).optional(),
         limit: z.number().int().min(1).max(100).default(25),
       })
       .parse(raw);
@@ -105,7 +116,7 @@ export const listAuditTool: ToolFactory = (ctx) => ({
       where: {
         projectId: ctx.projectId,
         ...(args.action ? { action: args.action } : {}),
-        ...(args.proposalId ? { proposalId: args.proposalId } : {}),
+        ...(args.proposal_id ? { proposalId: args.proposal_id } : {}),
       },
       orderBy: [{ createdAt: "desc" }],
       take: args.limit,
@@ -117,7 +128,16 @@ export const listAuditTool: ToolFactory = (ctx) => ({
         payload: true,
       },
     });
-    return ok({ count: rows.length, rows });
+    return ok({
+      count: rows.length,
+      rows: rows.map((r) => ({
+        id: r.id,
+        action: r.action,
+        proposal_id: r.proposalId,
+        created_at: r.createdAt,
+        payload: r.payload,
+      })),
+    });
   },
 });
 
@@ -125,14 +145,16 @@ export const getPullRequestDiffTool: ToolFactory = (ctx) => ({
   def: {
     name: "get_pull_request_diff",
     description:
-      "Fetch the per-file unified diff for a pull request. Use this when reviewing a PR's content — get_pull_request gives metadata, this gives the actual code changes. Provider-specific id format (e.g. 'owner/repo#123' on GitHub).",
-    parameters: zodToJsonSchema(z.object({ pullRequestId: z.string().min(1) })),
+      "Fetch the per-file unified diff for a pull request. Use this when reviewing a PR's content — get_pull_request gives metadata, this gives the actual code changes. Provider-specific id format passed as `pull_request_id` (e.g. 'owner/repo#123' on GitHub).",
+    parameters: zodToJsonSchema(z.object({ pull_request_id: z.string().min(1) })),
   },
   // The patch text is the foreign code payload. Paths and counts are
   // provider-controlled; the diff itself is the only injection surface.
   guardrailScan: { mode: "fields", untrusted: ["files[].patch"] },
   handler: async (raw) => {
-    const { pullRequestId } = z.object({ pullRequestId: z.string().min(1) }).parse(raw);
+    const { pull_request_id: pullRequestId } = z
+      .object({ pull_request_id: z.string().min(1) })
+      .parse(raw);
     try {
       return await withProvider(ctx, async (p) => {
         if (!p.getPullRequestDiff) return fail("provider does not surface PR diffs");
@@ -222,7 +244,7 @@ export const searchCodeTool: ToolFactory = (ctx) => ({
 export function discoveryTools(ctx: ToolContext): readonly AgentTool[] {
   return [
     searchItemsTool(ctx),
-    listAuditTool(ctx),
+    listAuditLogTool(ctx),
     getPullRequestDiffTool(ctx),
     searchCodeTool(ctx),
     searchPullRequestsTool(ctx),

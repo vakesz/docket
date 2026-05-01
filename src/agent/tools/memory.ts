@@ -51,7 +51,7 @@ export const listMemoryTool: ToolFactory = (ctx) => ({
           ? {
               OR: [
                 { title: { contains: args.search, mode: "insensitive" } },
-                { bodyMd: { contains: args.search, mode: "insensitive" } },
+                { body: { contains: args.search, mode: "insensitive" } },
               ],
             }
           : {}),
@@ -66,21 +66,29 @@ export const listMemoryTool: ToolFactory = (ctx) => ({
         updatedAt: true,
       },
     });
-    return ok(rows);
+    return ok(
+      rows.map((r) => ({
+        id: r.id,
+        title: r.title,
+        tags: r.tags,
+        source: r.source,
+        updated_at: r.updatedAt,
+      })),
+    );
   },
 });
 
 export const getMemoryTool: ToolFactory = (ctx) => ({
   def: {
     name: "get_memory",
-    description: "Read one memory entry by id. Returns full body markdown.",
-    parameters: zodToJsonSchema(z.object({ memoryId: z.string().min(1) })),
+    description: "Read one memory entry by id. Returns full markdown body.",
+    parameters: zodToJsonSchema(z.object({ memory_id: z.string().min(1) })),
   },
-  // Title and bodyMd are user-authored. id/tags/source/updatedAt are
+  // Title and body are user-authored. id/tags/source/updated_at are
   // server-controlled metadata.
-  guardrailScan: { mode: "fields", untrusted: ["title", "bodyMd"] },
+  guardrailScan: { mode: "fields", untrusted: ["title", "body"] },
   handler: async (raw) => {
-    const { memoryId } = z.object({ memoryId: z.string().min(1) }).parse(raw);
+    const { memory_id: memoryId } = z.object({ memory_id: z.string().min(1) }).parse(raw);
     const row = await ctx.db.memoryEntry.findFirst({
       where: { id: memoryId, projectId: ctx.projectId },
     });
@@ -88,10 +96,10 @@ export const getMemoryTool: ToolFactory = (ctx) => ({
     return ok({
       id: row.id,
       title: row.title,
-      bodyMd: row.bodyMd,
+      body: row.body,
       tags: row.tags,
       source: row.source,
-      updatedAt: row.updatedAt,
+      updated_at: row.updatedAt,
     });
   },
 });

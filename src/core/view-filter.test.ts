@@ -16,7 +16,7 @@ function fakeItem(overrides: Partial<Item> & { id: string }): Item {
     id: overrides.id,
     kind: (overrides.kind ?? "task") as ItemKind,
     title: overrides.title ?? "t",
-    descriptionMd: overrides.descriptionMd ?? "",
+    description: overrides.description ?? "",
     state: (overrides.state ?? "active") as ItemState,
     assignee: overrides.assignee ?? null,
     parentId: overrides.parentId ?? null,

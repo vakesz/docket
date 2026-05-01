@@ -46,20 +46,6 @@ import {
  * `setup.complete` is excluded from the global union — it's a sticky
  * bootstrap flag, not a router-writable setting.
  */
-function scopedUpdateOptions(scope: SettingScope) {
-  return SETTING_KEYS.filter(
-    (k) => SETTINGS_CATALOG[k].scope === scope && k !== "setup.complete",
-  ).map((k) =>
-    z.object({
-      key: z.literal(k),
-      value: SETTINGS_CATALOG[k].schema as z.ZodTypeAny,
-    }),
-  );
-}
-
-type UpdateOption = z.ZodObject<{ key: z.ZodLiteral<SettingKey>; value: z.ZodTypeAny }>;
-type UpdateOptions = readonly [UpdateOption, ...UpdateOption[]];
-
 /**
  * Mapped-type-derived discriminated union over `(key, value)` pairs for one
  * scope. The runtime schema is built dynamically from the catalog (so adding
@@ -80,19 +66,48 @@ export type UserSettingUpdate = ScopedUpdateInput<"user">;
 export type GlobalSettingUpdate = ScopedUpdateInput<"global">;
 export type ProjectSettingUpdate = { projectSlug: string } & ScopedUpdateInput<"project">;
 
-const UserUpdateInput = z.discriminatedUnion(
-  "key",
-  scopedUpdateOptions("user") as unknown as UpdateOptions,
-) as unknown as z.ZodType<UserSettingUpdate>;
+type UpdateOption = z.ZodObject<{ key: z.ZodLiteral<SettingKey>; value: z.ZodTypeAny }>;
 
-const GlobalUpdateInput = z.discriminatedUnion(
-  "key",
-  scopedUpdateOptions("global") as unknown as UpdateOptions,
-) as unknown as z.ZodType<GlobalSettingUpdate>;
+/**
+ * Build the per-scope `{ key, value }` discriminated-union schema. The cast
+ * on the `discriminatedUnion` result is the one inherent bridge between the
+ * dynamically-built runtime tuple and the statically-mapped `ScopedUpdateInput<S>`
+ * type — Zod can't see through `SettingKey` → catalog-scope filtering.
+ */
+function buildScopedUpdateSchema<S extends SettingScope>(
+  scope: S,
+): z.ZodType<ScopedUpdateInput<S>> {
+  const [first, ...rest] = SETTING_KEYS.filter(
+    (k) => SETTINGS_CATALOG[k].scope === scope && k !== "setup.complete",
+  ).map(
+    (k): UpdateOption =>
+      z.object({
+        key: z.literal(k),
+        value: SETTINGS_CATALOG[k].schema as z.ZodTypeAny,
+      }),
+  );
+  if (!first) {
+    throw new Error(`buildScopedUpdateSchema: no writable keys for scope '${scope}'`);
+  }
+  // The runtime union enumerates every catalog key for the scope, but the
+  // generic `S` parameter is opaque to TS at this point — it can't prove the
+  // dynamic key list matches `WritableScopedKey<S>`. The unknown bridge is
+  // confined to this one helper; callers see a precise per-scope type.
+  return z.discriminatedUnion("key", [first, ...rest]) as unknown as z.ZodType<
+    ScopedUpdateInput<S>
+  >;
+}
 
+const UserUpdateInput = buildScopedUpdateSchema("user");
+const GlobalUpdateInput = buildScopedUpdateSchema("global");
+// `projectSlugSchema.and(...)` returns a `ZodIntersection` whose output
+// inference loses the discriminated-union arm because `.and()` on a
+// `ZodType<T>` doesn't propagate `T` through the intersection's output.
+// One cast on the result is the minimum bridge — the runtime parse still
+// validates both sides; only the TS view is being patched.
 const ProjectUpdateInput = projectSlugSchema.and(
-  z.discriminatedUnion("key", scopedUpdateOptions("project") as unknown as UpdateOptions),
-) as unknown as z.ZodType<ProjectSettingUpdate>;
+  buildScopedUpdateSchema("project"),
+) as z.ZodType<ProjectSettingUpdate>;
 
 function scopedKeys(scope: SettingScope): SettingKey[] {
   return SETTING_KEYS.filter((k) => SETTINGS_CATALOG[k].scope === scope && k !== "setup.complete");

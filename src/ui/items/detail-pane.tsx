@@ -22,7 +22,7 @@ type Comment = {
   id: string;
   providerCommentId: string;
   author: string | null;
-  bodyMd: string;
+  body: string;
   reactions: unknown;
   createdAt: Date;
 };
@@ -40,7 +40,7 @@ type DetailItem = {
   parentNumber: string | null;
   tags: string[];
   url: string | null;
-  descriptionMd: string | null;
+  description: string | null;
   reactions: unknown;
   createdAt: Date | null;
   updatedAt: Date;
@@ -108,7 +108,7 @@ export function DetailPane({
               kind={isItemKind(item.kind) ? item.kind : null}
               state={isItemState(item.state) ? item.state : null}
               title={item.title}
-              bodyMd={item.descriptionMd}
+              body={item.description}
               commentCount={item.comments.length}
             />
             <ChatToggleButton />
@@ -261,8 +261,8 @@ export function DetailPane({
         <h2 className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">
           Description
         </h2>
-        {item.descriptionMd ? (
-          <Markdown source={item.descriptionMd} />
+        {item.description ? (
+          <Markdown source={item.description} />
         ) : (
           <p className="text-muted-foreground/70 text-sm italic">(no description)</p>
         )}
@@ -314,7 +314,7 @@ export function DetailPane({
                       {formatRelative(c.createdAt)}
                     </time>
                   </div>
-                  <Markdown source={c.bodyMd} />
+                  <Markdown source={c.body} />
                   {capabilities.supportedReactions.length > 0 && showCommentReactions ? (
                     <div className="mt-2 flex flex-col gap-1.5">
                       <h3 className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">

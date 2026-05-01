@@ -35,12 +35,12 @@ export const proposeMemoryWriteTool: ToolFactory = (ctx) => ({
   def: {
     name: "propose_memory_write",
     description:
-      "Stage a project-memory entry (create or update). Pass `title` (short, narrowly-scoped headline — one topic per entry), `bodyMd` (markdown body — not `body`/`content`/`text`), and optional `tags`. If `memoryId` is null a new entry is staged; otherwise the named entry is overwritten. Stage at most ONE memory write per reply, and only when you've learned something non-obvious that the next conversation couldn't easily re-derive (a project-specific convention, a glossary term, a recurring decision, an ownership pointer, a label/state convention you just inferred). Keep entries narrowly-scoped: split unrelated findings into separate entries with their own titles rather than piling everything into one note. Before staging a NEW entry, call list_memory to see if an entry on the same topic already exists — if so, pass that entry's `memoryId` to update it in place instead of creating a duplicate. The human reviews the diff and confirms before anything lands.",
+      "Stage a project-memory entry (create or update). Pass `title` (short, narrowly-scoped headline — one topic per entry), `body` (markdown), and optional `tags`. If `memory_id` is null a new entry is staged; otherwise the named entry is overwritten. Stage at most ONE memory write per reply, and only when you've learned something non-obvious that the next conversation couldn't easily re-derive (a project-specific convention, a glossary term, a recurring decision, an ownership pointer, a label/state convention you just inferred). Keep entries narrowly-scoped: split unrelated findings into separate entries with their own titles rather than piling everything into one note. Before staging a NEW entry, call list_memory to see if an entry on the same topic already exists — if so, pass that entry's `memory_id` to update it in place instead of creating a duplicate. The human reviews the diff and confirms before anything lands.",
     parameters: zodToJsonSchema(
       z.object({
-        memoryId: z.string().nullable().default(null),
+        memory_id: z.string().nullable().default(null),
         title: z.string().min(1).max(200),
-        bodyMd: z.string().max(50_000).default(""),
+        body: z.string().max(50_000).default(""),
         tags: z.array(z.string().min(1).max(64)).max(32).default([]),
       }),
     ),
@@ -50,26 +50,26 @@ export const proposeMemoryWriteTool: ToolFactory = (ctx) => ({
   handler: async (raw) => {
     const args = z
       .object({
-        memoryId: z.string().nullable().default(null),
+        memory_id: z.string().nullable().default(null),
         title: z.string().min(1).max(200),
-        bodyMd: z.string().max(50_000).default(""),
+        body: z.string().max(50_000).default(""),
         tags: z.array(z.string().min(1).max(64)).max(32).default([]),
       })
       .parse(raw);
     try {
       const row = await proposeMemoryWrite(builderCtx(ctx), {
-        memoryId: args.memoryId,
+        memoryId: args.memory_id,
         title: args.title,
-        bodyMd: args.bodyMd,
+        body: args.body,
         tags: args.tags,
         source: "agent",
       });
       const final = await maybeAutoAccept(builderCtx(ctx), row);
       return ok({
-        proposalId: final.id,
+        proposal_id: final.id,
         kind: final.kind,
         status: final.status,
-        autoConfirmed: final.status === "confirmed",
+        auto_confirmed: final.status === "confirmed",
       });
     } catch (err) {
       return fail(err instanceof Error ? err.message : String(err));
@@ -81,20 +81,20 @@ export const proposeMemoryDeleteTool: ToolFactory = (ctx) => ({
   def: {
     name: "propose_memory_delete",
     description: "Stage deletion of a project-memory entry. The human confirms before delete.",
-    parameters: zodToJsonSchema(z.object({ memoryId: z.string().min(1) })),
+    parameters: zodToJsonSchema(z.object({ memory_id: z.string().min(1) })),
   },
   // Returns server-generated proposal metadata only — no foreign content.
   guardrailScan: { mode: "skip" },
   handler: async (raw) => {
-    const { memoryId } = z.object({ memoryId: z.string().min(1) }).parse(raw);
+    const { memory_id: memoryId } = z.object({ memory_id: z.string().min(1) }).parse(raw);
     try {
       const row = await proposeMemoryDelete(builderCtx(ctx), { memoryId });
       const final = await maybeAutoAccept(builderCtx(ctx), row);
       return ok({
-        proposalId: final.id,
+        proposal_id: final.id,
         kind: final.kind,
         status: final.status,
-        autoConfirmed: final.status === "confirmed",
+        auto_confirmed: final.status === "confirmed",
       });
     } catch (err) {
       return fail(err instanceof Error ? err.message : String(err));

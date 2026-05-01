@@ -81,7 +81,7 @@ export interface WorkItemProvider {
   uploadAttachment(
     id: string, filename: string, content: Uint8Array, contentType: string,
   ): Promise<string>;
-  addComment(id: string, bodyMd: string): Promise<Comment>;
+  addComment(id: string, body: string): Promise<Comment>;
   createItem(kind: ItemKind, fields: CreateFields): Promise<Item>;
   setTags(id: string, tags: readonly string[]): Promise<Item>;
 

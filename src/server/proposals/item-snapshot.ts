@@ -25,7 +25,7 @@ export function snapshotFromRow(row: PrismaItem): CanonicalItem {
     id: row.providerItemId,
     kind: row.kind,
     title: row.title,
-    descriptionMd: row.descriptionMd,
+    description: row.description,
     state: row.state,
     assignee: row.assignee,
     author: row.author,

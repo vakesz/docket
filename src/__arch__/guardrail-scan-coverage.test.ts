@@ -44,7 +44,7 @@ const EXPECTED: Record<string, ScanMode> = {
   get_memory: "fields",
   // (4) source readonly
   list_sources: "fields",
-  read_source: "fields",
+  get_source: "fields",
   search_sources: "fields",
   // (6) provider mutating
   propose_transition: "skip",
@@ -61,7 +61,7 @@ const EXPECTED: Record<string, ScanMode> = {
   web_fetch: "full",
   // (9) discovery
   search_items: "fields",
-  list_audit: "fields",
+  list_audit_log: "fields",
   get_pull_request_diff: "fields",
   search_code: "skip",
   search_pull_requests: "fields",

@@ -184,10 +184,10 @@ export async function confirmProposal(
         canonical = await provider.transition(proposal.item.id, proposal.intent);
         break;
       case "description_patch":
-        canonical = await provider.patchDescription(proposal.item.id, proposal.newMd);
+        canonical = await provider.patchDescription(proposal.item.id, proposal.newDescription);
         break;
       case "comment_add": {
-        const comment = await provider.addComment(proposal.item.id, proposal.bodyMd);
+        const comment = await provider.addComment(proposal.item.id, proposal.body);
         commentId = comment.id;
         const cachedItem = await ctx.db.item.findUnique({
           where: {
@@ -264,7 +264,7 @@ export async function confirmProposal(
             where: { id: proposal.memoryId },
             data: {
               title: proposal.title,
-              bodyMd: proposal.bodyMd,
+              body: proposal.body,
               tags: [...proposal.tags],
               source: proposal.source,
             },
@@ -274,7 +274,7 @@ export async function confirmProposal(
             data: {
               projectId: ctx.projectId,
               title: proposal.title,
-              bodyMd: proposal.bodyMd,
+              body: proposal.body,
               tags: [...proposal.tags],
               source: proposal.source,
             },

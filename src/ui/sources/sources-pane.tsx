@@ -13,7 +13,7 @@ import { Textarea } from "@/ui/primitives/textarea";
  * Sources are author material the agent reads but never writes
  * (AGENTS.md rule 6, enforced by `src/__arch__/no-source-mutation-tools.test.ts`).
  * That makes the surface intentionally simple: paste markdown OR upload a
- * `.md`/`.txt`/`.json` file and the body lands in `bodyMd`. Binary upload
+ * `.md`/`.txt`/`.json` file and the body lands in `body`. Binary upload
  * + text extraction is intentionally deferred until a real need shows up.
  *
  * Writes hit `sources.create` / `sources.delete` directly — no proposal
@@ -41,7 +41,7 @@ export function SourcesPane({ projectSlug }: { projectSlug: string }) {
       projectSlug,
       title,
       kind: draftKind.trim(),
-      bodyMd: draftBody,
+      body: draftBody,
       tags: [],
     });
     setDraftTitle("");
@@ -135,9 +135,9 @@ export function SourcesPane({ projectSlug }: { projectSlug: string }) {
                     </span>
                   )}
                 </div>
-                {s.bodyMd && (
+                {s.body && (
                   <p className="line-clamp-2 whitespace-pre-wrap text-muted-foreground text-xs">
-                    {s.bodyMd}
+                    {s.body}
                   </p>
                 )}
               </div>

@@ -40,7 +40,7 @@ export function ProposalDiffView({ diff }: { diff: ProposalDiff }) {
             <span className="font-medium">{diff.itemTitle}</span>{" "}
             <span className="text-muted-foreground">({diff.itemId})</span>
           </Field>
-          <DiffBlock label="New comment" tone="primary" body={diff.bodyMd} />
+          <DiffBlock label="New comment" tone="primary" body={diff.body} />
         </div>
       );
 
@@ -104,8 +104,8 @@ export function ProposalDiffView({ diff }: { diff: ProposalDiff }) {
               </span>
             </Field>
           ) : null}
-          {diff.descriptionMd ? (
-            <DiffBlock label="Description" tone="primary" body={diff.descriptionMd} />
+          {diff.description ? (
+            <DiffBlock label="Description" tone="primary" body={diff.description} />
           ) : null}
         </div>
       );
@@ -134,11 +134,11 @@ export function ProposalDiffView({ diff }: { diff: ProposalDiff }) {
           </Field>
           {diff.memoryId ? (
             <div className="grid grid-cols-2 gap-3">
-              <DiffBlock label="Before" tone="muted" body={diff.previousBodyMd} />
-              <DiffBlock label="After" tone="primary" body={diff.bodyMd} />
+              <DiffBlock label="Before" tone="muted" body={diff.previousBody} />
+              <DiffBlock label="After" tone="primary" body={diff.body} />
             </div>
           ) : (
-            <DiffBlock label="Body" tone="primary" body={diff.bodyMd} />
+            <DiffBlock label="Body" tone="primary" body={diff.body} />
           )}
         </div>
       );

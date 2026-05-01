@@ -84,6 +84,12 @@ type AppendArgs = {
   /** 'system' | 'user' | 'assistant' | 'tool' */
   role: "system" | "user" | "assistant" | "tool";
   content: string;
+  /**
+   * Tool-call records are stored as JSON; callers serialize their typed
+   * shape (`LlmToolCall[]`) at the boundary. `object | null` is used here
+   * because Prisma's `InputJsonValue` doesn't accept `unknown`-valued
+   * structures (which our typed `arguments: Record<string, unknown>` is).
+   */
   toolCallsJson?: object | null;
   toolCallId?: string | null;
   toolName?: string | null;

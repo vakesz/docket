@@ -151,7 +151,7 @@ export interface WorkItemProvider {
 
   transition(id: string, intent: TransitionIntent): Promise<Item>;
 
-  patchDescription(id: string, newMd: string): Promise<Item>;
+  patchDescription(id: string, newDescription: string): Promise<Item>;
 
   uploadAttachment(
     id: string,
@@ -160,7 +160,7 @@ export interface WorkItemProvider {
     contentType: string,
   ): Promise<string>;
 
-  addComment(id: string, bodyMd: string): Promise<Comment>;
+  addComment(id: string, body: string): Promise<Comment>;
 
   createItem(kind: ItemKind, fields: CreateFields): Promise<Item>;
 

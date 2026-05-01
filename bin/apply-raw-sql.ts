@@ -12,8 +12,8 @@
  *      enforced even though Postgres treats NULL as distinct in plain
  *      uniques. The previous `@@unique([key, userId, projectId])` was a
  *      no-op for the global / partial-NULL scopes.
- *   3. GIN trgm indexes on `Item.title` and `Item.descriptionMd` to back
- *      the ILIKE-style search (`title contains`, `descriptionMd contains`)
+ *   3. GIN trgm indexes on `Item.title` and `Item.description` to back
+ *      the ILIKE-style search (`title contains`, `description contains`)
  *      run by the items router and the agent's `search_items` tool.
  *
  * Missing env or unavailable DB just logs a warning and exits 0 — never
@@ -105,7 +105,7 @@ async function main() {
 
     // GIN trgm indexes for ILIKE search on Item title + description.
     await db.$executeRaw`CREATE INDEX IF NOT EXISTS "Item_title_trgm_idx" ON "Item" USING GIN ("title" gin_trgm_ops);`;
-    await db.$executeRaw`CREATE INDEX IF NOT EXISTS "Item_descriptionMd_trgm_idx" ON "Item" USING GIN ("descriptionMd" gin_trgm_ops);`;
+    await db.$executeRaw`CREATE INDEX IF NOT EXISTS "Item_description_trgm_idx" ON "Item" USING GIN ("description" gin_trgm_ops);`;
 
     console.log("[apply-raw-sql] Applied pg_trgm + Setting partial uniques + Item trgm indexes.");
   } catch (err) {

@@ -300,10 +300,11 @@ export class LlmJudgeGuardrail implements Guardrail {
         stream: false,
       };
       if (reasoning) {
-        // Cast: the SDK types `reasoning_effort` only on the responses-API
-        // params; chat.completions accepts it for gpt-5* / o-series models
-        // even though the type doesn't surface it.
-        (params as unknown as Record<string, unknown>)["reasoning_effort"] = "minimal";
+        // The SDK types `reasoning_effort` only on the responses-API params;
+        // chat.completions accepts it for gpt-5* / o-series models even
+        // though the type doesn't surface it. Index via a re-typed handle so
+        // the assignment is one-cast-one-line, not nested `as unknown as`.
+        (params as { reasoning_effort?: string }).reasoning_effort = "minimal";
       } else {
         params.temperature = 0;
       }

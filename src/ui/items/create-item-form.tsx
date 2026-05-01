@@ -63,7 +63,7 @@ export function CreateItemForm({ projectSlug }: { projectSlug: string }) {
 
   const [itemKind, setItemKind] = useState<ItemKind>(defaultKind);
   const [title, setTitle] = useState("");
-  const [descriptionMd, setDescriptionMd] = useState("");
+  const [description, setDescription] = useState("");
   const [assignee, setAssignee] = useState("");
   const [tagsInput, setTagsInput] = useState("");
 
@@ -84,7 +84,7 @@ export function CreateItemForm({ projectSlug }: { projectSlug: string }) {
   function resetForm() {
     setItemKind(defaultKind);
     setTitle("");
-    setDescriptionMd("");
+    setDescription("");
     setAssignee("");
     setTagsInput("");
   }
@@ -133,7 +133,7 @@ export function CreateItemForm({ projectSlug }: { projectSlug: string }) {
                 itemKind,
                 fields: {
                   title: trimmedTitle,
-                  descriptionMd,
+                  description,
                   parentId: null,
                   assignee: assignee.trim() || null,
                   tags,
@@ -184,8 +184,8 @@ export function CreateItemForm({ projectSlug }: { projectSlug: string }) {
               </Label>
               <Textarea
                 id={descId}
-                value={descriptionMd}
-                onChange={(e) => setDescriptionMd(e.target.value)}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
                 rows={5}
                 placeholder="Markdown body (optional)"
                 disabled={propose.isPending}

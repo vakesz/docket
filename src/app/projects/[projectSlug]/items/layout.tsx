@@ -38,7 +38,7 @@ export default async function ItemsLayout({
     loadProjectSetting(db, project.id, "items.stale-after-days"),
     userId
       ? loadUserSetting(db, userId, "items.stale-after-days.user")
-      : Promise.resolve(-1 as number),
+      : Promise.resolve<number>(-1),
   ]);
   const staleThresholdDays = resolveEffectiveStaleThreshold(userStale, projectStale);
 

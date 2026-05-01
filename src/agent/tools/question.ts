@@ -34,7 +34,7 @@ const QuestionInput = z.object({
     .describe(
       "Optional multiple-choice answers. Provide 2-8 specific, exhaustive options when the answer space is closed; omit for free-text.",
     ),
-  multiSelect: z
+  multi_select: z
     .boolean()
     .default(false)
     .describe("True if more than one option may be selected. Only meaningful when options is set."),
@@ -59,7 +59,7 @@ export const askUserQuestionTool: ToolFactory = (_ctx) => ({
       kind: "ask_user_question" as const,
       question: payload.question,
       options: payload.options ?? null,
-      multiSelect: payload.multiSelect,
+      multi_select: payload.multi_select,
     });
   },
 });

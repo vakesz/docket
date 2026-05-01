@@ -291,7 +291,7 @@ describe("agent loop", () => {
             arguments: {
               question: "Which repo?",
               options: ["repo-a", "repo-b"],
-              multiSelect: false,
+              multi_select: false,
             },
           },
         },

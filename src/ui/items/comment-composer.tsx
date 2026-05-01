@@ -49,7 +49,7 @@ export function CommentComposer({
         e.preventDefault();
         const trimmed = body.trim();
         if (!trimmed) return;
-        propose.mutate({ projectSlug, providerItemId, bodyMd: trimmed });
+        propose.mutate({ projectSlug, providerItemId, body: trimmed });
       }}
     >
       <Label

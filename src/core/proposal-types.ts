@@ -49,7 +49,7 @@ export type DescriptionPatchProposal = {
   kind: "description_patch";
   id: string;
   item: Item;
-  newMd: string;
+  newDescription: string;
 };
 
 export type AttachmentUploadProposal = {
@@ -72,7 +72,7 @@ export type CommentAddProposal = {
   kind: "comment_add";
   id: string;
   item: Item;
-  bodyMd: string;
+  body: string;
 };
 
 /**
@@ -124,13 +124,13 @@ export type MemoryWriteProposal = {
   id: string;
   projectId: string;
   title: string;
-  bodyMd: string;
+  body: string;
   tags: readonly string[];
   /** "user" | "agent" — informational. */
   source: string;
   memoryId: string | null;
   previousTitle: string;
-  previousBodyMd: string;
+  previousBody: string;
 };
 
 export type MemoryDeleteProposal = {

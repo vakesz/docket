@@ -9,10 +9,26 @@
 
 import type { z } from "zod";
 
+/**
+ * Loose shape over Zod's `_def` covering every internal field this walker
+ * reads. Zod doesn't export per-typeName variants and Zod 4's `$ZodTypeDef`
+ * has its own `type: string` discriminator that collides with our
+ * `type?: ZodTypeAny` (ZodArray's element). We bridge via `unknown` once
+ * here rather than `as unknown as` per branch — the runtime `typeName`
+ * switch is what gates safe access.
+ */
+type ZodDef = {
+  typeName?: string;
+  shape?: () => Record<string, z.ZodTypeAny>;
+  innerType?: z.ZodTypeAny;
+  type?: z.ZodTypeAny;
+  values?: readonly string[];
+};
+
 export function zodToJsonSchema(schema: z.ZodTypeAny): Record<string, unknown> {
-  const def = schema._def as { typeName?: string };
-  if (def.typeName === "ZodObject") {
-    const shape = (def as { shape: () => Record<string, z.ZodTypeAny> }).shape();
+  const def = schema._def as unknown as ZodDef;
+  if (def.typeName === "ZodObject" && def.shape) {
+    const shape = def.shape();
     const properties: Record<string, unknown> = {};
     const required: string[] = [];
     for (const [key, child] of Object.entries(shape)) {
@@ -26,25 +42,22 @@ export function zodToJsonSchema(schema: z.ZodTypeAny): Record<string, unknown> {
       additionalProperties: false,
     };
   }
-  if (def.typeName === "ZodOptional" || def.typeName === "ZodDefault") {
-    return zodToJsonSchema((def as unknown as { innerType: z.ZodTypeAny }).innerType);
+  if ((def.typeName === "ZodOptional" || def.typeName === "ZodDefault") && def.innerType) {
+    return zodToJsonSchema(def.innerType);
   }
-  if (def.typeName === "ZodNullable") {
-    const inner = zodToJsonSchema((def as unknown as { innerType: z.ZodTypeAny }).innerType);
+  if (def.typeName === "ZodNullable" && def.innerType) {
+    const inner = zodToJsonSchema(def.innerType);
     const t = (inner as { type?: string | string[] }).type;
     return { ...inner, type: Array.isArray(t) ? [...t, "null"] : t ? [t, "null"] : "null" };
   }
-  if (def.typeName === "ZodEnum") {
-    return { type: "string", enum: (def as unknown as { values: readonly string[] }).values };
+  if (def.typeName === "ZodEnum" && def.values) {
+    return { type: "string", enum: def.values };
   }
   if (def.typeName === "ZodString") return { type: "string" };
   if (def.typeName === "ZodNumber") return { type: "number" };
   if (def.typeName === "ZodBoolean") return { type: "boolean" };
-  if (def.typeName === "ZodArray") {
-    return {
-      type: "array",
-      items: zodToJsonSchema((def as unknown as { type: z.ZodTypeAny }).type),
-    };
+  if (def.typeName === "ZodArray" && def.type) {
+    return { type: "array", items: zodToJsonSchema(def.type) };
   }
   // Fallback — accept anything.
   return {};
