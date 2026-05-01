@@ -67,7 +67,7 @@ export function ProfilePanel() {
           id={tzId}
           value={timezone}
           disabled={disabled}
-          onChange={(next) => update.mutate({ key: "display.timezone" as never, value: next })}
+          onChange={(next) => update.mutate({ key: "display.timezone", value: next })}
         />
         {update.error ? (
           <Alert variant="destructive">
@@ -93,9 +93,7 @@ export function ProfilePanel() {
           step={1}
           value={autoRefreshMinutes}
           disabled={disabled}
-          onCommit={(next) =>
-            update.mutate({ key: "ui.auto-refresh-seconds" as never, value: next * 60 })
-          }
+          onCommit={(next) => update.mutate({ key: "ui.auto-refresh-seconds", value: next * 60 })}
           className="max-w-[8rem]"
         />
         {update.error ? (

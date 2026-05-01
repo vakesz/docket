@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import type { Session } from "next-auth";
 import { cache } from "react";
 import { resolveEffectiveStaleThreshold } from "@/lib/staleness";
 import { auth } from "@/server/auth";
@@ -63,12 +64,17 @@ export default async function ItemDetailPage({
 }) {
   const { projectSlug, itemNumber } = await params;
 
+  // auth() doesn't depend on the item or project fetch, so include it in
+  // the same fan-out. The session result is awaited up-front but its
+  // round-trip overlaps with the tRPC reads instead of running after.
   let item: Awaited<ReturnType<typeof loadItem>>;
   let project: Awaited<ReturnType<typeof loadProject>>;
+  let session: Session | null;
   try {
-    [item, project] = await Promise.all([
+    [item, project, session] = await Promise.all([
       loadItem(projectSlug, itemNumber),
       loadProject(projectSlug),
+      auth() as Promise<Session | null>,
     ]);
   } catch (err) {
     if (err instanceof TRPCError && (err.code === "FORBIDDEN" || err.code === "NOT_FOUND")) {
@@ -77,7 +83,6 @@ export default async function ItemDetailPage({
     throw err;
   }
 
-  const session = await auth();
   const userId = session?.user?.id ?? null;
   const [projectStale, userStale, showHeaderReactions, showCommentReactions] = await Promise.all([
     loadProjectSetting(db, project.id, "items.stale-after-days"),

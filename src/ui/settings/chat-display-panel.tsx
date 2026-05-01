@@ -71,7 +71,7 @@ export function ChatDisplayPanel() {
       return;
     }
     if (n === storedMaxRounds) return;
-    update.mutate({ key: "chat.max-tool-rounds" as never, value: n });
+    update.mutate({ key: "chat.max-tool-rounds", value: n });
   };
 
   return (
@@ -107,9 +107,7 @@ export function ChatDisplayPanel() {
             id={sendOnEnterId}
             checked={sendOnEnter}
             disabled={disabled}
-            onCheckedChange={(next) =>
-              update.mutate({ key: "chat.send-on-enter" as never, value: next })
-            }
+            onCheckedChange={(next) => update.mutate({ key: "chat.send-on-enter", value: next })}
           />
           <Label htmlFor={sendOnEnterId}>{sendOnEnter ? "Enabled" : "Disabled"}</Label>
         </div>

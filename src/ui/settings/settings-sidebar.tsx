@@ -1,7 +1,6 @@
 "use client";
 
 import { ExternalLink, Wrench } from "lucide-react";
-import { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { GROUPS, SECTIONS, type SectionKey } from "@/ui/settings/sections";
 
@@ -9,6 +8,11 @@ import { GROUPS, SECTIONS, type SectionKey } from "@/ui/settings/sections";
 // constant drops out of the client bundle entirely in production — the
 // dev-tools section never ships to end users.
 const IS_DEV = process.env["NODE_ENV"] !== "production";
+
+const GROUPED = GROUPS.map((g) => ({
+  ...g,
+  sections: SECTIONS.filter((s) => s.group === g.key),
+}));
 
 export function SettingsSidebar({
   active,
@@ -19,18 +23,9 @@ export function SettingsSidebar({
   onSelect: (key: SectionKey) => void;
   projectSlug: string | null;
 }) {
-  const grouped = useMemo(
-    () =>
-      GROUPS.map((g) => ({
-        ...g,
-        sections: SECTIONS.filter((s) => s.group === g.key),
-      })),
-    [],
-  );
-
   return (
     <nav className="flex flex-col gap-4">
-      {grouped.map((group) => (
+      {GROUPED.map((group) => (
         <div key={group.key} className="flex flex-col gap-1">
           <div className="px-3 pb-1 font-medium font-mono text-[10px] text-muted-foreground uppercase tracking-[0.18em]">
             {group.label}

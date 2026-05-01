@@ -103,14 +103,14 @@ export function ItemsListPanel({ projectSlug }: { projectSlug: string | null }) 
 
   const onToggleStaleOverride = (next: boolean) => {
     update.mutate({
-      key: USER_STALE_OVERRIDE_KEY as never,
+      key: USER_STALE_OVERRIDE_KEY,
       value: next ? DEFAULT_STALE_THRESHOLD_DAYS : -1,
     });
   };
 
   const onToggleStaleIndicator = (next: boolean) => {
     update.mutate({
-      key: USER_STALE_OVERRIDE_KEY as never,
+      key: USER_STALE_OVERRIDE_KEY,
       value: next ? DEFAULT_STALE_THRESHOLD_DAYS : 0,
     });
   };
@@ -118,7 +118,7 @@ export function ItemsListPanel({ projectSlug }: { projectSlug: string | null }) 
   const onChangeStaleThreshold = (next: number) => {
     if (!Number.isFinite(next) || next < 1) return;
     update.mutate({
-      key: USER_STALE_OVERRIDE_KEY as never,
+      key: USER_STALE_OVERRIDE_KEY,
       value: Math.min(Math.trunc(next), 3650),
     });
   };
@@ -180,7 +180,10 @@ export function ItemsListPanel({ projectSlug }: { projectSlug: string | null }) 
             value={backlogSort}
             disabled={disabled}
             onValueChange={(value) =>
-              update.mutate({ key: "backlog.default-sort" as never, value })
+              update.mutate({
+                key: "backlog.default-sort",
+                value: value as "updated" | "created" | "priority" | "title",
+              })
             }
           >
             <SelectTrigger id={sortId} className="max-w-[10rem]">
@@ -207,8 +210,8 @@ export function ItemsListPanel({ projectSlug }: { projectSlug: string | null }) 
             disabled={disabled}
             onValueChange={(value) =>
               update.mutate({
-                key: "backlog.default-state-filter" as never,
-                value,
+                key: "backlog.default-state-filter",
+                value: value as "all" | "open" | "in_progress" | "done",
               })
             }
           >
@@ -236,7 +239,7 @@ export function ItemsListPanel({ projectSlug }: { projectSlug: string | null }) 
               checked={showArchivedBucket}
               disabled={disabled}
               onCheckedChange={(next) =>
-                update.mutate({ key: "items.show-archived-bucket" as never, value: next })
+                update.mutate({ key: "items.show-archived-bucket", value: next })
               }
             />
             <Label htmlFor={archivedId}>{showArchivedBucket ? "Visible" : "Hidden"}</Label>
@@ -256,8 +259,8 @@ export function ItemsListPanel({ projectSlug }: { projectSlug: string | null }) 
             disabled={disabled}
             onValueChange={(value) =>
               update.mutate({
-                key: "items.assignee-selector-style" as never,
-                value,
+                key: "items.assignee-selector-style",
+                value: value as "chips" | "dropdown",
               })
             }
           >
@@ -284,7 +287,7 @@ export function ItemsListPanel({ projectSlug }: { projectSlug: string | null }) 
               checked={showAvatars}
               disabled={disabled}
               onCheckedChange={(next) =>
-                update.mutate({ key: "items.show-assignee-avatars" as never, value: next })
+                update.mutate({ key: "items.show-assignee-avatars", value: next })
               }
             />
             <Label htmlFor={showAvatarsId}>{showAvatars ? "Visible" : "Hidden"}</Label>
@@ -307,9 +310,7 @@ export function ItemsListPanel({ projectSlug }: { projectSlug: string | null }) 
             step={1}
             value={maxVisibleTags}
             disabled={disabled}
-            onCommit={(next) =>
-              update.mutate({ key: "items.max-visible-tags" as never, value: next })
-            }
+            onCommit={(next) => update.mutate({ key: "items.max-visible-tags", value: next })}
             className="max-w-[6rem]"
           />
         </div>
@@ -330,9 +331,7 @@ export function ItemsListPanel({ projectSlug }: { projectSlug: string | null }) 
             step={1}
             value={maxVisibleAssignees}
             disabled={disabled || assigneeSelectorStyle !== "chips"}
-            onCommit={(next) =>
-              update.mutate({ key: "items.max-visible-assignees" as never, value: next })
-            }
+            onCommit={(next) => update.mutate({ key: "items.max-visible-assignees", value: next })}
             className="max-w-[6rem]"
           />
         </div>
@@ -357,7 +356,9 @@ export function ItemsListPanel({ projectSlug }: { projectSlug: string | null }) 
           <Select
             value={backlogDensity}
             disabled={disabled}
-            onValueChange={(value) => update.mutate({ key: "backlog.density" as never, value })}
+            onValueChange={(value) =>
+              update.mutate({ key: "backlog.density", value: value as "cozy" | "compact" })
+            }
           >
             <SelectTrigger id={densityId} className="max-w-[10rem]">
               <SelectValue />

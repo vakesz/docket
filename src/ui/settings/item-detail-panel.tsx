@@ -55,7 +55,7 @@ export function ItemDetailPanel() {
               id={headerId}
               checked={headerOn}
               disabled={disabled}
-              onCheckedChange={(next) => update.mutate({ key: HEADER_KEY as never, value: next })}
+              onCheckedChange={(next) => update.mutate({ key: HEADER_KEY, value: next })}
             />
             <Label htmlFor={headerId}>{headerOn ? "Visible" : "Hidden"}</Label>
           </div>
@@ -71,7 +71,7 @@ export function ItemDetailPanel() {
               id={commentsId}
               checked={commentsOn}
               disabled={disabled}
-              onCheckedChange={(next) => update.mutate({ key: COMMENTS_KEY as never, value: next })}
+              onCheckedChange={(next) => update.mutate({ key: COMMENTS_KEY, value: next })}
             />
             <Label htmlFor={commentsId}>{commentsOn ? "Visible" : "Hidden"}</Label>
           </div>

@@ -1,4 +1,5 @@
 "use client";
+import type { Route } from "next";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useMemo, useState } from "react";
 import type { StateBucket } from "@/core/types";
@@ -88,7 +89,7 @@ export function ViewBar({ projectSlug }: Props) {
       next.set("bucket", patch.bucket);
     }
     const qs = next.toString();
-    router.replace(`/projects/${projectSlug}/items${qs ? `?${qs}` : ""}`);
+    router.replace(`/projects/${projectSlug}/items${qs ? `?${qs}` : ""}` as Route);
   }
 
   function onCreate(e: FormEvent<HTMLFormElement>) {

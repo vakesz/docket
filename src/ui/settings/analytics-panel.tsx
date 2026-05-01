@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc-client";
 import { cn } from "@/lib/utils";
 import { Input } from "@/ui/primitives/input";
@@ -57,7 +57,7 @@ export function AnalyticsPanel(
   const isPending = props.scope === "project" ? projectQuery.isPending : globalQuery.isPending;
   const error = props.scope === "project" ? projectQuery.error : globalQuery.error;
 
-  const peakCost = useMemo(() => {
+  const peakCost = (() => {
     if (!data) return 0;
     let p = 0;
     for (const b of data.buckets) {
@@ -65,7 +65,7 @@ export function AnalyticsPanel(
       if (total > p) p = total;
     }
     return p;
-  }, [data]);
+  })();
 
   return (
     <div className="flex flex-col gap-6">
@@ -210,7 +210,7 @@ function TrendChart({ buckets }: { buckets: Bucket[] }) {
     return () => ro.disconnect();
   }, []);
 
-  const trend = useMemo(() => buildTrend(buckets), [buckets]);
+  const trend = buildTrend(buckets);
 
   if (buckets.length === 0 || !trend) return null;
 

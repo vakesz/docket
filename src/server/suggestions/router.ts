@@ -22,6 +22,7 @@ import "server-only";
 import { z } from "zod";
 import type { db as Db } from "@/server/db";
 import {
+  mutationProcedure,
   projectScopedMutationProcedure,
   projectScopedProcedure,
   projectSlugSchema,
@@ -123,7 +124,7 @@ export const suggestionsRouter = router({
    * `projectSlug` when the command is project-scoped; omit for global
    * commands (the unique key treats `projectId == null` as its own slot).
    */
-  bump: protectedProcedure.input(BumpInput).mutation(async ({ ctx, input }) => {
+  bump: mutationProcedure.input(BumpInput).mutation(async ({ ctx, input }) => {
     const userId = ctx.userId;
     const projectId = input.projectSlug
       ? ((await resolveSlug(ctx.db, input.projectSlug, userId)) ?? null)

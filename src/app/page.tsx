@@ -7,8 +7,9 @@ import { DocketLogo } from "@/ui/setup/docket-logo";
 import { SignInButtons } from "@/ui/shell/sign-in-button";
 
 export default async function Home() {
-  await requireSetupComplete();
-  const session = await auth();
+  // Fan out the setup-gate check and the session read — neither depends on
+  // the other, so batching saves a round-trip on every landing-page render.
+  const [, session] = await Promise.all([requireSetupComplete(), auth()]);
 
   if (!session?.user) {
     return (

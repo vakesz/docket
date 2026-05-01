@@ -1,6 +1,7 @@
 "use client";
 
 import { LogOut, Settings } from "lucide-react";
+import type { Route } from "next";
 import Link from "next/link";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -45,7 +46,9 @@ export function AccountMenu({
   const [imageBroken, setImageBroken] = useState(false);
   const initial = userLabel.trim().charAt(0).toUpperCase() || "?";
   const showImage = !!userImage && !imageBroken;
-  const settingsHref = currentProjectSlug ? `/settings?project=${currentProjectSlug}` : "/settings";
+  const settingsHref: Route = currentProjectSlug
+    ? (`/settings?project=${currentProjectSlug}` as Route)
+    : "/settings";
 
   return (
     <DropdownMenu>

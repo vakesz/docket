@@ -40,9 +40,7 @@ export function ReadOnlyModePanel() {
             id={switchId}
             checked={enabled}
             disabled={disabled}
-            onCheckedChange={(next) =>
-              update.mutate({ key: "app.read-only" as never, value: next })
-            }
+            onCheckedChange={(next) => update.mutate({ key: "app.read-only", value: next })}
           />
           <Label htmlFor={switchId}>{enabled ? "Enabled — all writes blocked" : "Disabled"}</Label>
         </div>

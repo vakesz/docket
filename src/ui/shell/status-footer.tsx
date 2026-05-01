@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { formatRelative } from "@/lib/format";
 import { trpc } from "@/lib/trpc-client";
 import { useAutoRefreshIntervalMs } from "@/lib/use-auto-refresh";
@@ -144,13 +144,13 @@ function PendingProposalsButton({
 
   // Oldest-first drains the queue in the order the agent staged them,
   // matching the user's mental model of "the one I forgot about first."
-  const oldestPendingId = useMemo(() => {
+  const oldestPendingId = (() => {
     if (proposals.length === 0) return null;
     const next = [...proposals].sort(
       (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
     )[0];
     return next?.id ?? null;
-  }, [proposals]);
+  })();
 
   if (count === 0) return null;
 

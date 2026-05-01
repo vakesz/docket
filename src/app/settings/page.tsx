@@ -42,8 +42,9 @@ export default async function SettingsPage({
 }: {
   searchParams: Promise<{ project?: string; section?: string }>;
 }) {
-  await requireSetupComplete();
-  const session = await auth();
+  // Setup gate and session check are independent — fan them out so the
+  // page's first await batches both round-trips.
+  const [, session] = await Promise.all([requireSetupComplete(), auth()]);
   if (!session?.user?.id) {
     redirect("/");
   }

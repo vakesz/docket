@@ -58,7 +58,7 @@ export function BudgetAuditPanel() {
   const onSaveRetention = () => {
     const n = Number.parseInt(retentionInput, 10);
     if (!Number.isFinite(n) || n < 0 || n > 3650) return;
-    update.mutate({ key: "audit.retention-days" as never, value: n });
+    update.mutate({ key: "audit.retention-days", value: n });
   };
 
   const onSaveCap = () => {
@@ -66,7 +66,7 @@ export function BudgetAuditPanel() {
     if (!Number.isFinite(dollars) || dollars < 0) return;
     const cents = Math.round(dollars * 100);
     if (cents > 10_000_000) return;
-    update.mutate({ key: "llm.monthly-cost-cap-cents" as never, value: cents });
+    update.mutate({ key: "llm.monthly-cost-cap-cents", value: cents });
   };
 
   return (
@@ -114,7 +114,12 @@ export function BudgetAuditPanel() {
           <Select
             value={typeof action?.value === "string" ? action.value : "warn"}
             disabled={list.isPending || update.isPending}
-            onValueChange={(value) => update.mutate({ key: "llm.cost-cap-action" as never, value })}
+            onValueChange={(value) =>
+              update.mutate({
+                key: "llm.cost-cap-action",
+                value: value as "warn" | "block",
+              })
+            }
           >
             <SelectTrigger className="max-w-[14rem]">
               <SelectValue />

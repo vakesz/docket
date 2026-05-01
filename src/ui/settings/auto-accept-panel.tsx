@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc-client";
 import { Button } from "@/ui/primitives/button";
 import { Label } from "@/ui/primitives/label";
@@ -60,13 +60,13 @@ export function AutoAcceptPanel({ projectSlug }: { projectSlug: string }) {
     },
   });
 
-  const isDirty = useMemo(() => {
+  const isDirty = (() => {
     const row = projectSettings.data?.find((r) => r.key === "proposals.auto-accept-kinds");
     const stored = Array.isArray(row?.value) ? new Set(row.value as string[]) : new Set<string>();
     if (stored.size !== selected.size) return true;
     for (const k of stored) if (!selected.has(k)) return true;
     return false;
-  }, [projectSettings.data, selected]);
+  })();
 
   const toggle = (key: string) => {
     setSelected((prev) => {

@@ -37,7 +37,7 @@ export function ProjectItemsPanel({ projectSlug }: { projectSlug: string }) {
   const onToggleIndicator = (next: boolean) => {
     update.mutate({
       projectSlug,
-      key: STALE_KEY as never,
+      key: STALE_KEY,
       value: next ? lastPositive : 0,
     });
   };
@@ -46,7 +46,7 @@ export function ProjectItemsPanel({ projectSlug }: { projectSlug: string }) {
     if (!Number.isFinite(next) || next < 1) return;
     const clamped = Math.min(Math.trunc(next), 3650);
     setLastPositive(clamped);
-    update.mutate({ projectSlug, key: STALE_KEY as never, value: clamped });
+    update.mutate({ projectSlug, key: STALE_KEY, value: clamped });
   };
 
   return (

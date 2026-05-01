@@ -1,4 +1,5 @@
 "use client";
+import type { Route } from "next";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { DocketLogo } from "@/ui/setup/docket-logo";
@@ -15,7 +16,7 @@ export function LogoLink({ currentProjectSlug }: { currentProjectSlug: string | 
   const onSettings = pathname?.startsWith("/settings") ?? false;
   const urlProject = onSettings ? searchParams.get("project") : null;
   const effective = urlProject ?? currentProjectSlug;
-  const href = effective ? `/projects/${effective}/items` : "/";
+  const href: Route = effective ? (`/projects/${effective}/items` as Route) : "/";
 
   return (
     <Link

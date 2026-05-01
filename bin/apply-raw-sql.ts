@@ -39,20 +39,22 @@ async function main() {
   const db = new PrismaClient({ adapter, log: ["error"] });
 
   try {
-    await db.$executeRawUnsafe(`CREATE EXTENSION IF NOT EXISTS pg_trgm;`);
+    await db.$executeRaw`CREATE EXTENSION IF NOT EXISTS pg_trgm;`;
 
     // The auto-generated unique from `@@unique([key, userId, projectId])`
     // was named `Setting_key_userId_projectId_key`. Drop it if present so
     // the partial uniques below are the only enforcement on this column
     // tuple. Safe to drop unconditionally — the partials are stricter.
-    await db.$executeRawUnsafe(`DROP INDEX IF EXISTS "Setting_key_userId_projectId_key";`);
+    await db.$executeRaw`DROP INDEX IF EXISTS "Setting_key_userId_projectId_key";`;
 
     // Pre-flight: any existing duplicates would block partial-unique
     // creation with a generic "could not create unique index" error that
     // gets swallowed by the catch below. Surface them loudly first so the
     // operator (or a developer with a stale dev DB) notices instead of
     // silently running without per-scope uniqueness enforcement.
-    const dupes = (await db.$queryRawUnsafe(`
+    const dupes = await db.$queryRaw<
+      Array<{ scope: string; key: string; count: bigint; sample_ids: string[] }>
+    >`
       SELECT scope, "key", count, sample_ids FROM (
         SELECT 'global' AS scope, "key",
                COUNT(*) AS count,
@@ -80,7 +82,7 @@ async function main() {
       ) d
       ORDER BY scope, "key"
       LIMIT 50;
-    `)) as Array<{ scope: string; key: string; count: bigint; sample_ids: string[] }>;
+    `;
     if (dupes.length > 0) {
       console.warn(
         `[apply-raw-sql] Found ${dupes.length} duplicate Setting groups — partial unique creation will be skipped. De-dup first.`,
@@ -93,27 +95,17 @@ async function main() {
     }
 
     // Global scope: at most one row per key with both FKs null.
-    await db.$executeRawUnsafe(
-      `CREATE UNIQUE INDEX IF NOT EXISTS "Setting_key_global_key" ON "Setting" ("key") WHERE "userId" IS NULL AND "projectId" IS NULL;`,
-    );
+    await db.$executeRaw`CREATE UNIQUE INDEX IF NOT EXISTS "Setting_key_global_key" ON "Setting" ("key") WHERE "userId" IS NULL AND "projectId" IS NULL;`;
 
     // User scope: at most one row per (key, userId) with projectId null.
-    await db.$executeRawUnsafe(
-      `CREATE UNIQUE INDEX IF NOT EXISTS "Setting_key_userId_key" ON "Setting" ("key", "userId") WHERE "userId" IS NOT NULL AND "projectId" IS NULL;`,
-    );
+    await db.$executeRaw`CREATE UNIQUE INDEX IF NOT EXISTS "Setting_key_userId_key" ON "Setting" ("key", "userId") WHERE "userId" IS NOT NULL AND "projectId" IS NULL;`;
 
     // Project scope: at most one row per (key, projectId) with userId null.
-    await db.$executeRawUnsafe(
-      `CREATE UNIQUE INDEX IF NOT EXISTS "Setting_key_projectId_key" ON "Setting" ("key", "projectId") WHERE "userId" IS NULL AND "projectId" IS NOT NULL;`,
-    );
+    await db.$executeRaw`CREATE UNIQUE INDEX IF NOT EXISTS "Setting_key_projectId_key" ON "Setting" ("key", "projectId") WHERE "userId" IS NULL AND "projectId" IS NOT NULL;`;
 
     // GIN trgm indexes for ILIKE search on Item title + description.
-    await db.$executeRawUnsafe(
-      `CREATE INDEX IF NOT EXISTS "Item_title_trgm_idx" ON "Item" USING GIN ("title" gin_trgm_ops);`,
-    );
-    await db.$executeRawUnsafe(
-      `CREATE INDEX IF NOT EXISTS "Item_descriptionMd_trgm_idx" ON "Item" USING GIN ("descriptionMd" gin_trgm_ops);`,
-    );
+    await db.$executeRaw`CREATE INDEX IF NOT EXISTS "Item_title_trgm_idx" ON "Item" USING GIN ("title" gin_trgm_ops);`;
+    await db.$executeRaw`CREATE INDEX IF NOT EXISTS "Item_descriptionMd_trgm_idx" ON "Item" USING GIN ("descriptionMd" gin_trgm_ops);`;
 
     console.log("[apply-raw-sql] Applied pg_trgm + Setting partial uniques + Item trgm indexes.");
   } catch (err) {
