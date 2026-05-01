@@ -15,6 +15,7 @@
 import "server-only";
 import { z } from "zod";
 import { getBudgetStatus } from "@/server/billing/budget";
+import { logger } from "@/server/logger";
 import { pruneAuditOlderThan } from "@/server/proposals/executor";
 import {
   decodeSettingValue,
@@ -222,6 +223,13 @@ export const settingsRouter = router({
       orderBy: { updatedAt: "desc" },
       select: { id: true },
     });
+    // Log every global setting change — they affect the whole deployment, are
+    // rare, and the audit log only covers proposals. Operators reading logs
+    // need to see who flipped read-only mode, retention windows, etc.
+    logger.info(
+      { actorUserId: ctx.userId, key: input.key, value: input.value },
+      "settings: global setting changed",
+    );
     if (existing) {
       return ctx.db.setting.update({ where: { id: existing.id }, data: { value: encoded } });
     }
@@ -233,6 +241,10 @@ export const settingsRouter = router({
     await ctx.db.setting.deleteMany({
       where: { key: input.key, scope: "global", userId: null, projectId: null },
     });
+    logger.info(
+      { actorUserId: ctx.userId, key: input.key },
+      "settings: global setting reset to default",
+    );
     return { ok: true, value: def.default };
   }),
 
@@ -323,6 +335,15 @@ export const settingsRouter = router({
     }
     const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
     const deleted = await pruneAuditOlderThan(ctx.db, cutoff);
+    logger.info(
+      {
+        actorUserId: ctx.userId,
+        retentionDays,
+        cutoff: cutoff.toISOString(),
+        deleted,
+      },
+      "settings: audit pruned",
+    );
     return { ok: true, deleted, cutoff: cutoff.toISOString() };
   }),
 

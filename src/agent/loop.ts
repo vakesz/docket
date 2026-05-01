@@ -230,7 +230,19 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
   //     configured threshold or the toggle is off.
   const compactionSettings = await loadCompactionSettings(db, conv.projectId);
   if (compactionSettings.enabled) {
-    await compactConversation(db, conversationId, compactionSettings);
+    const compaction = await compactConversation(db, conversationId, compactionSettings);
+    if (compaction.compactedCount > 0) {
+      logger.info(
+        {
+          ...baseCtx,
+          strategy: compactionSettings.strategy,
+          compactedCount: compaction.compactedCount,
+          tokensBefore: compaction.tokensBefore,
+          tokensAfter: compaction.tokensAfter,
+        },
+        "agent: compaction ran",
+      );
+    }
   }
 
   // 3. Build prompt prefix and tool registry. Both must be byte-stable

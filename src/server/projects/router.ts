@@ -4,6 +4,7 @@ import { z } from "zod";
 import { slugify } from "@/core/slug";
 import type { Prisma } from "@/db/generated/client";
 import { asPlainObject } from "@/lib/json";
+import { logger } from "@/server/logger";
 import { buildProjectExport } from "@/server/projects/export";
 import { getProviderSpec, listProviderSpecs, PROVIDER_TYPE_IDS } from "@/server/provider-registry";
 import {
@@ -160,7 +161,7 @@ export const projectsRouter = router({
     }
     const slug = nameToSlug(input.name);
     try {
-      return await ctx.db.project.create({
+      const created = await ctx.db.project.create({
         data: {
           name: input.name,
           slug,
@@ -176,6 +177,16 @@ export const projectsRouter = router({
           },
         },
       });
+      logger.info(
+        {
+          actorUserId: userId,
+          projectId: created.id,
+          slug: created.slug,
+          providerKind: created.providerKind,
+        },
+        "projects: created",
+      );
+      return created;
     } catch (err) {
       if (isUniqueViolation(err)) {
         throw new TRPCError({
@@ -231,10 +242,15 @@ export const projectsRouter = router({
         message: "only the project owner can archive",
       });
     }
-    return ctx.db.project.update({
+    const archived = await ctx.db.project.update({
       where: { id: ctx.projectId },
       data: { archivedAt: new Date() },
     });
+    logger.info(
+      { actorUserId: ctx.userId, projectId: ctx.projectId, slug: ctx.project.slug },
+      "projects: archived",
+    );
+    return archived;
   }),
 
   /**
@@ -389,7 +405,7 @@ export const projectsRouter = router({
         });
       }
       try {
-        return await ctx.db.projectMembership.create({
+        const created = await ctx.db.projectMembership.create({
           data: {
             projectId: ctx.projectId,
             userId: user.id,
@@ -397,6 +413,17 @@ export const projectsRouter = router({
           },
           select: { id: true, userId: true, role: true, createdAt: true },
         });
+        logger.info(
+          {
+            actorUserId: ctx.userId,
+            projectId: ctx.projectId,
+            membershipId: created.id,
+            grantedUserId: created.userId,
+            role: created.role,
+          },
+          "projects: member added",
+        );
+        return created;
       } catch (err) {
         if (isUniqueViolation(err)) {
           throw new TRPCError({
@@ -424,11 +451,22 @@ export const projectsRouter = router({
         }),
         "membership not found",
       );
-      return ctx.db.projectMembership.update({
+      const updated = await ctx.db.projectMembership.update({
         where: { id: membership.id },
         data: { role: input.role },
         select: { id: true, userId: true, role: true },
       });
+      logger.info(
+        {
+          actorUserId: ctx.userId,
+          projectId: ctx.projectId,
+          membershipId: updated.id,
+          targetUserId: updated.userId,
+          role: updated.role,
+        },
+        "projects: member role changed",
+      );
+      return updated;
     }),
 
   /**
@@ -451,6 +489,15 @@ export const projectsRouter = router({
         "membership not found",
       );
       await ctx.db.projectMembership.delete({ where: { id: membership.id } });
+      logger.info(
+        {
+          actorUserId: ctx.userId,
+          projectId: ctx.projectId,
+          membershipId: membership.id,
+          removedUserId: membership.userId,
+        },
+        "projects: member removed",
+      );
       return { ok: true as const, membershipId: membership.id };
     }),
 

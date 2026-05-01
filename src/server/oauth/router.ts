@@ -2,6 +2,7 @@ import "server-only";
 import { z } from "zod";
 import type { Prisma } from "@/db/generated/client";
 import { asPlainObject } from "@/lib/json";
+import { logger } from "@/server/logger";
 import { listProviderSpecs } from "@/server/provider-registry";
 import { encryptSecret } from "@/server/secrets/encryption";
 import { mutationProcedure, protectedProcedure, router } from "@/server/trpc";
@@ -145,6 +146,10 @@ export const oauthProvidersRouter = router({
         metadata,
       },
     });
+    logger.info(
+      { actorUserId: ctx.userId, oauthProviderId: created.id, kind: created.kind },
+      "oauth: provider created",
+    );
     return { id: created.id, kind: created.kind, label: created.label };
   }),
 
@@ -172,6 +177,10 @@ export const oauthProvidersRouter = router({
         where: { id: input.id },
         data: { enabled: input.enabled },
       });
+      logger.info(
+        { actorUserId: ctx.userId, oauthProviderId: input.id, enabled: input.enabled },
+        "oauth: provider enabled flag changed",
+      );
       return { ok: true } as const;
     }),
 
@@ -179,6 +188,10 @@ export const oauthProvidersRouter = router({
     .input(z.object({ id: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
       await ctx.db.oauthProviderConfig.delete({ where: { id: input.id } });
+      logger.info(
+        { actorUserId: ctx.userId, oauthProviderId: input.id },
+        "oauth: provider deleted",
+      );
       return { ok: true } as const;
     }),
 });

@@ -2,6 +2,7 @@ import "server-only";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { LLM_KINDS } from "@/agent/llm/types";
+import { logger } from "@/server/logger";
 import { encryptSecret } from "@/server/secrets/encryption";
 import {
   assertFound,
@@ -112,6 +113,16 @@ export const llmProvidersRouter = router({
     const created = await ctx.db.llmProvider.create({
       data: { ...input, apiKey: encryptSecret(input.apiKey) },
     });
+    logger.info(
+      {
+        actorUserId: ctx.userId,
+        llmProviderId: created.id,
+        kind: created.kind,
+        role: created.role,
+        isDefault: input.isDefault,
+      },
+      "llm: provider created",
+    );
     return { id: created.id, kind: created.kind, role: created.role, label: created.label };
   }),
 
@@ -142,7 +153,7 @@ export const llmProvidersRouter = router({
       // concurrent delete between findUnique and the update can't leave the
       // role with no default at all (the updateMany clears flags, then the
       // update would 404 — Postgres rolls the whole tx back).
-      await ctx.db.$transaction(async (tx) => {
+      const role = await ctx.db.$transaction(async (tx) => {
         const row = assertFound(
           await tx.llmProvider.findUnique({
             where: { id: input.id },
@@ -158,7 +169,12 @@ export const llmProvidersRouter = router({
           where: { id: input.id },
           data: { isDefault: true },
         });
+        return row.role;
       });
+      logger.info(
+        { actorUserId: ctx.userId, llmProviderId: input.id, role },
+        "llm: deployment default changed",
+      );
       return { ok: true } as const;
     }),
 
@@ -170,6 +186,10 @@ export const llmProvidersRouter = router({
         where: { id: input.id },
         data: { enabled: input.enabled },
       });
+      logger.info(
+        { actorUserId: ctx.userId, llmProviderId: input.id, enabled: input.enabled },
+        "llm: provider enabled flag changed",
+      );
       return { ok: true } as const;
     }),
 
@@ -225,6 +245,7 @@ export const llmProvidersRouter = router({
     .input(z.object({ id: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
       await ctx.db.llmProvider.delete({ where: { id: input.id } });
+      logger.info({ actorUserId: ctx.userId, llmProviderId: input.id }, "llm: provider deleted");
       return { ok: true } as const;
     }),
 });
