@@ -14,8 +14,9 @@
  *     `OauthProviderConfig` row (kind=github).
  *   - `DEV_AZURE_DEVOPS_CLIENT_ID` + `DEV_AZURE_DEVOPS_CLIENT_SECRET`
  *     (+ optional `DEV_AZURE_DEVOPS_TENANT_ID`) → an `OauthProviderConfig`
- *     row (kind=azure_devops). The tenant id rides in `baseUrl` to match
- *     `auth-build.ts`; empty falls back to the multi-tenant `common` endpoint.
+ *     row (kind=azure_devops). The tenant id rides in `metadata.tenant` to
+ *     match `auth-build.ts`; empty falls back to the multi-tenant `common`
+ *     endpoint.
  *
  * Idempotency comes from each branch's own existence check. There is no
  * gate on `setup.complete` — that bit is owned by the in-browser wizard
@@ -31,7 +32,7 @@
 
 import { PrismaPg } from "@prisma/adapter-pg";
 import { config as loadEnv } from "dotenv";
-import { PrismaClient } from "../src/db/generated/client";
+import { type Prisma, PrismaClient } from "../src/db/generated/client";
 import { encryptSecret, isEncryptionConfigured } from "../src/server/secrets/encryption";
 
 // Match prisma.config.ts precedence: .env.local first, then .env fills any gaps.
@@ -210,7 +211,8 @@ async function seedAzureDevOpsOAuth(db: PrismaClient): Promise<void> {
         clientId,
         clientSecret: writeSecret,
         scopes: "",
-        baseUrl: tenant,
+        baseUrl: "",
+        metadata: tenant ? { tenant } : {},
         enabled: true,
       },
     });
@@ -223,15 +225,33 @@ async function seedAzureDevOpsOAuth(db: PrismaClient): Promise<void> {
   // Same approach as GitHub: compare by clientId, rewrap the secret each
   // time (fresh IV → ciphertexts can't be byte-compared). Tenant change
   // also forces a refresh so `.env` edits propagate without a manual UI poke.
+  // Tenant lives in `metadata.tenant`; legacy rows that still carry the
+  // value in `baseUrl` are read as a fallback so a re-seed before the
+  // backfill migration ran still compares against the live tenant.
   const idChanged = existing.clientId !== clientId;
-  const tenantChanged = existing.baseUrl !== tenant;
+  const meta: Record<string, unknown> =
+    existing.metadata && typeof existing.metadata === "object" && !Array.isArray(existing.metadata)
+      ? (existing.metadata as Record<string, unknown>)
+      : {};
+  const currentTenant =
+    typeof meta["tenant"] === "string" && meta["tenant"].length > 0
+      ? (meta["tenant"] as string)
+      : existing.baseUrl;
+  const tenantChanged = currentTenant !== tenant;
   if (idChanged || tenantChanged) {
+    const nextMeta: Record<string, unknown> = { ...meta };
+    if (tenant) {
+      nextMeta["tenant"] = tenant;
+    } else {
+      delete nextMeta["tenant"];
+    }
     await db.oauthProviderConfig.update({
       where: { id: existing.id },
       data: {
         clientId,
         clientSecret: writeSecret,
-        baseUrl: tenant,
+        baseUrl: "",
+        metadata: nextMeta as Prisma.InputJsonValue,
         enabled: true,
       },
     });

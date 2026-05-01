@@ -86,7 +86,6 @@ export function StepAzdo({
             id={clientIdId}
             value={state.clientId}
             onChange={(e) => handlers.setClientId(e.target.value)}
-            placeholder="11111111-2222-3333-4444-555555555555"
             className="font-mono"
             autoComplete="off"
             required={state.enabled}
@@ -123,7 +122,6 @@ export function StepAzdo({
           id={tenantIdId}
           value={state.tenantId}
           onChange={(e) => handlers.setTenantId(e.target.value)}
-          placeholder="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
           className="font-mono"
           autoComplete="off"
           required={state.enabled}

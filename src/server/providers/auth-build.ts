@@ -16,6 +16,7 @@
 import "server-only";
 import type { Provider } from "next-auth/providers";
 import type { OauthProviderConfig } from "@/db/generated/client";
+import { asPlainObject } from "@/lib/json";
 import { azureDevOpsProvider } from "@/providers/azure-devops/auth";
 import { githubAuthProvider } from "@/providers/github/auth";
 import { decryptSecret } from "@/server/secrets/encryption";
@@ -25,6 +26,12 @@ export class UnknownOauthKindError extends Error {
     super(`Unknown OauthProviderConfig kind: '${kind}'`);
     this.name = "UnknownOauthKindError";
   }
+}
+
+function readStringMeta(metadata: unknown, key: string): string | undefined {
+  const obj = asPlainObject(metadata);
+  const v = obj[key];
+  return typeof v === "string" && v.length > 0 ? v : undefined;
 }
 
 export function buildAuthProvider(row: OauthProviderConfig): Provider {
@@ -39,17 +46,19 @@ export function buildAuthProvider(row: OauthProviderConfig): Provider {
         clientSecret,
         scopes: row.scopes,
       });
-    case "azure_devops":
-      // Tenant id rides in the `baseUrl` column for now — the schema's
-      // existing override slot is exactly the right shape (per-row,
-      // optional, free-form string) and avoids an Entra-only schema bump.
-      // Empty string → multi-tenant `common` endpoint.
+    case "azure_devops": {
+      // Entra tenant id lives under `metadata.tenant`. The legacy `baseUrl`
+      // slot is read as a fallback so a row that hasn't been migrated yet
+      // (between `prisma db push` and `bin/apply-raw-sql.ts`) still resolves.
+      // Empty → multi-tenant `common` endpoint.
+      const tenant = readStringMeta(row.metadata, "tenant") ?? row.baseUrl;
       return azureDevOpsProvider({
         clientId: row.clientId,
         clientSecret,
-        ...(row.baseUrl ? { tenant: row.baseUrl } : {}),
+        ...(tenant ? { tenant } : {}),
         ...(row.scopes ? { extraScope: row.scopes } : {}),
       });
+    }
     default:
       throw new UnknownOauthKindError(row.kind);
   }

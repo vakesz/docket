@@ -15,6 +15,10 @@
  *   3. GIN trgm indexes on `Item.title` and `Item.description` to back
  *      the ILIKE-style search (`title contains`, `description contains`)
  *      run by the items router and the agent's `search_items` tool.
+ *   4. Backfill `OauthProviderConfig.metadata.tenant` from `baseUrl` for
+ *      `azure_devops` rows that pre-date the metadata column. Idempotent:
+ *      runs once on rows where metadata is `{}` and `baseUrl` is non-empty,
+ *      then leaves them alone forever after.
  *
  * Missing env or unavailable DB just logs a warning and exits 0 — never
  * blocks the server.
@@ -107,7 +111,25 @@ async function main() {
     await db.$executeRaw`CREATE INDEX IF NOT EXISTS "Item_title_trgm_idx" ON "Item" USING GIN ("title" gin_trgm_ops);`;
     await db.$executeRaw`CREATE INDEX IF NOT EXISTS "Item_description_trgm_idx" ON "Item" USING GIN ("description" gin_trgm_ops);`;
 
-    console.log("[apply-raw-sql] Applied pg_trgm + Setting partial uniques + Item trgm indexes.");
+    // Backfill: legacy `azure_devops` rows stored the Entra tenant id in
+    // `baseUrl` because the metadata column didn't exist yet. Move those
+    // values into `metadata.tenant` so the per-kind dispatch in
+    // `auth-build.ts` / `oauth/router.ts` reads from a single slot. Only
+    // touches rows where metadata is still the default empty object — once
+    // a row carries any metadata, the operator owns it.
+    const moved = await db.$executeRaw`
+      UPDATE "OauthProviderConfig"
+      SET "metadata" = jsonb_build_object('tenant', "baseUrl"),
+          "baseUrl" = ''
+      WHERE "kind" = 'azure_devops'
+        AND "baseUrl" <> ''
+        AND ("metadata" IS NULL OR "metadata" = '{}'::jsonb);
+    `;
+
+    console.log(
+      `[apply-raw-sql] Applied pg_trgm + Setting partial uniques + Item trgm indexes` +
+        (moved > 0 ? ` + migrated ${moved} azure_devops baseUrl→metadata.tenant rows.` : "."),
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.warn(`[apply-raw-sql] Skipped: ${message}`);

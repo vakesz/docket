@@ -1,5 +1,7 @@
 import "server-only";
 import { z } from "zod";
+import type { Prisma } from "@/db/generated/client";
+import { asPlainObject } from "@/lib/json";
 import { listProviderSpecs } from "@/server/provider-registry";
 import { encryptSecret } from "@/server/secrets/encryption";
 import { mutationProcedure, protectedProcedure, router } from "@/server/trpc";
@@ -33,9 +35,11 @@ const CreateOauthProviderInput = z.object({
   /** Comma-separated provider-specific scope list. Empty = adapter default. */
   scopes: z.string().max(500).default(""),
   /**
-   * Optional override for the OAuth API base URL. Used for self-hosted
-   * GitHub Enterprise and (today) the Entra tenant id for Azure DevOps —
-   * see `auth-build.ts` for the per-kind interpretation.
+   * Per-kind aux value carried by the form's "Base URL / tenant" field.
+   * The server stores it in `baseUrl` for kinds that override the OAuth
+   * endpoint (e.g. GitHub Enterprise) and in `metadata.tenant` for kinds
+   * that key off a tenant id (`azure_devops`). The `auxFor(kind)` mapping
+   * below is the single source of truth for which slot a kind uses.
    */
   baseUrl: z.string().max(500).default(""),
 });
@@ -55,10 +59,59 @@ const UpdateOauthProviderInput = z.object({
   baseUrl: z.string().max(500).default(""),
 });
 
+/**
+ * Per-kind dispatch for the form's free-form "Base URL / tenant" input. The
+ * single field on the form maps to one storage slot, and the slot differs by
+ * kind: GitHub Enterprise repurposes the OAuth endpoint (`baseUrl`); Azure
+ * DevOps uses the Entra tenant id (`metadata.tenant`).
+ */
+type OauthAuxSlot = "baseUrl" | "metadataTenant";
+function auxFor(kind: string): OauthAuxSlot {
+  return kind === "azure_devops" ? "metadataTenant" : "baseUrl";
+}
+
+/**
+ * Read the kind-appropriate aux value from a row. Used by `list` so the
+ * admin form sees the right value regardless of where the row stored it.
+ * Falls back to `baseUrl` for `azure_devops` rows that haven't migrated
+ * yet (mirrors the fallback in `auth-build.ts`).
+ */
+function readAux(row: { kind: string; baseUrl: string; metadata: unknown }): string {
+  if (auxFor(row.kind) === "metadataTenant") {
+    const meta = asPlainObject(row.metadata);
+    const tenant = meta["tenant"];
+    if (typeof tenant === "string" && tenant.length > 0) return tenant;
+    return row.baseUrl;
+  }
+  return row.baseUrl;
+}
+
+function writeAux(
+  kind: string,
+  value: string,
+  existingMetadata: unknown,
+): { baseUrl: string; metadata: Prisma.InputJsonValue } {
+  const trimmed = value.trim();
+  const meta = asPlainObject(existingMetadata);
+  if (auxFor(kind) === "metadataTenant") {
+    if (trimmed) meta["tenant"] = trimmed;
+    else delete meta["tenant"];
+    // Clear `baseUrl` so a stale value from a pre-migration row doesn't
+    // shadow the metadata read in `auth-build.ts`'s fallback path.
+    return { baseUrl: "", metadata: meta as Prisma.InputJsonValue };
+  }
+  return { baseUrl: trimmed, metadata: meta as Prisma.InputJsonValue };
+}
+
 export const oauthProvidersRouter = router({
-  /** List all configured OAuth providers. Visible to any authenticated user. */
+  /**
+   * List all configured OAuth providers. Visible to any authenticated user.
+   * The `aux` field is the kind-appropriate value for the form's "Base URL /
+   * tenant" input — pulled from `baseUrl` for most kinds, `metadata.tenant`
+   * for `azure_devops`. The UI never reads `baseUrl` or `metadata` directly.
+   */
   list: protectedProcedure.query(async ({ ctx }) => {
-    return ctx.db.oauthProviderConfig.findMany({
+    const rows = await ctx.db.oauthProviderConfig.findMany({
       orderBy: [{ enabled: "desc" }, { createdAt: "desc" }],
       select: {
         id: true,
@@ -67,24 +120,42 @@ export const oauthProvidersRouter = router({
         clientId: true,
         scopes: true,
         baseUrl: true,
+        metadata: true,
         enabled: true,
         createdAt: true,
         updatedAt: true,
         // clientSecret deliberately omitted from list responses.
       },
     });
+    return rows.map((row) => {
+      const { baseUrl: _baseUrl, metadata: _metadata, ...rest } = row;
+      return { ...rest, aux: readAux(row) };
+    });
   }),
 
   create: mutationProcedure.input(CreateOauthProviderInput).mutation(async ({ ctx, input }) => {
+    const { baseUrl: aux, clientSecret, kind, ...rest } = input;
+    const { baseUrl, metadata } = writeAux(kind, aux, {});
     const created = await ctx.db.oauthProviderConfig.create({
-      data: { ...input, clientSecret: encryptSecret(input.clientSecret) },
+      data: {
+        ...rest,
+        kind,
+        clientSecret: encryptSecret(clientSecret),
+        baseUrl,
+        metadata,
+      },
     });
     return { id: created.id, kind: created.kind, label: created.label };
   }),
 
   update: mutationProcedure.input(UpdateOauthProviderInput).mutation(async ({ ctx, input }) => {
-    const { id, clientSecret, ...rest } = input;
-    const data: Record<string, unknown> = { ...rest };
+    const { id, clientSecret, baseUrl: aux, ...rest } = input;
+    const existing = await ctx.db.oauthProviderConfig.findUniqueOrThrow({
+      where: { id },
+      select: { kind: true, metadata: true },
+    });
+    const { baseUrl, metadata } = writeAux(existing.kind, aux, existing.metadata);
+    const data: Record<string, unknown> = { ...rest, baseUrl, metadata };
     const trimmedSecret = clientSecret?.trim();
     if (trimmedSecret) {
       data["clientSecret"] = encryptSecret(trimmedSecret);

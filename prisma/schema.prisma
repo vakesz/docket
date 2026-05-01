@@ -114,9 +114,16 @@ model OauthProviderConfig {
   clientSecret String
   /// Comma-separated scope list. Provider-specific syntax.
   scopes       String   @default("")
-  /// Optional override for the OAuth API base URL (self-hosted GitHub
-  /// Enterprise, AzDO on a custom domain, etc.). Empty string = stock.
+  /// Optional override for the OAuth API base URL — used today only by the
+  /// GitHub Enterprise self-hosted endpoint. Empty string = stock.
   baseUrl      String   @default("")
+  /// Per-provider auxiliary configuration as a free-form JSON object.
+  /// Today only `azure_devops` reads `metadata.tenant` (Entra tenant id /
+  /// `common` / `organizations`). Future providers needing per-row config
+  /// that doesn't fit either `scopes` or `baseUrl` (Bitbucket workspace,
+  /// GitLab self-hosted instance id, etc.) get a key here without a
+  /// migration. The shape is interpreted by `auth-build.ts` per kind.
+  metadata     Json     @default("{}")
   enabled      Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

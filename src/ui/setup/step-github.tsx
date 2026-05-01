@@ -89,7 +89,6 @@ export function StepGithub({
             id={clientIdId}
             value={state.clientId}
             onChange={(e) => handlers.setClientId(e.target.value)}
-            placeholder="Iv23liab1cd2EFG3hijK"
             className="font-mono"
             autoComplete="off"
             required={state.enabled}

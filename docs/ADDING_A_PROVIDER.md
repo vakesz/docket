@@ -352,7 +352,10 @@ export function buildAuthProvider(row: OauthProviderConfig): Provider {
   const clientSecret = decryptSecret(row.clientSecret);
   switch (row.kind) {
     case "github": return githubAuthProvider({ clientId: row.clientId, clientSecret, scopes: row.scopes });
-    case "azure_devops": return azureDevOpsProvider({ clientId: row.clientId, clientSecret, ...(row.baseUrl ? { tenant: row.baseUrl } : {}), ...(row.scopes ? { extraScope: row.scopes } : {}) });
+    case "azure_devops": {
+      const tenant = readStringMeta(row.metadata, "tenant") ?? row.baseUrl;
+      return azureDevOpsProvider({ clientId: row.clientId, clientSecret, ...(tenant ? { tenant } : {}), ...(row.scopes ? { extraScope: row.scopes } : {}) });
+    }
     case "acme": return acmeAuthProvider({ clientId: row.clientId, clientSecret });
     default: throw new UnknownOauthKindError(row.kind);
   }

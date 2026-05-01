@@ -142,6 +142,7 @@ export async function applyBootstrap(
   if (input.azureDevops) {
     const existing = await db.oauthProviderConfig.findFirst({ where: { kind: "azure_devops" } });
     if (!existing) {
+      const tenant = input.azureDevops.tenantId.trim();
       await db.oauthProviderConfig.create({
         data: {
           kind: "azure_devops",
@@ -149,7 +150,8 @@ export async function applyBootstrap(
           clientId: input.azureDevops.clientId.trim(),
           clientSecret: encryptSecret(input.azureDevops.clientSecret),
           scopes: input.azureDevops.scopes.trim() || DEFAULT_AZURE_DEVOPS_SCOPES,
-          baseUrl: input.azureDevops.tenantId.trim(),
+          baseUrl: "",
+          metadata: { tenant },
           enabled: true,
         },
       });

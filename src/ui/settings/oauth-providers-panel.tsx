@@ -48,7 +48,7 @@ export function OauthProvidersPanel({ publicBase }: { publicBase: string }) {
                       label: row.label,
                       clientId: row.clientId,
                       scopes: row.scopes,
-                      baseUrl: row.baseUrl,
+                      baseUrl: row.aux,
                     }}
                     onDone={() => setEditingId(null)}
                   />
