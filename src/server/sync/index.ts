@@ -778,7 +778,8 @@ async function runSync(
     const syncedAt = new Date();
     const watermark =
       mode === "incremental"
-        ? ((await db.syncCursor.findUnique({ where: { projectId: project.id } }))?.watermark ?? null)
+        ? ((await db.syncCursor.findUnique({ where: { projectId: project.id } }))?.watermark ??
+          null)
         : null;
 
     if (mode === "incremental") {

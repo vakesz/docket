@@ -1,5 +1,6 @@
 "use client";
 import { useId } from "react";
+import { useSettingsMap } from "@/lib/settings-client";
 import { trpc } from "@/lib/trpc-client";
 import { NumberField } from "@/ui/forms/number-field";
 import { Alert, AlertDescription } from "@/ui/primitives/alert";
@@ -21,19 +22,17 @@ import { ThemePicker } from "@/ui/shell/theme-picker";
  */
 export function ProfilePanel() {
   const utils = trpc.useUtils();
-  const list = trpc.settings.list.useQuery();
+  const settings = useSettingsMap();
   const update = trpc.settings.update.useMutation({
     onSuccess: async () => {
       await utils.settings.list.invalidate();
     },
   });
 
-  const timezoneRaw = list.data?.find((r) => r.key === "display.timezone")?.value;
-  const timezone = typeof timezoneRaw === "string" ? timezoneRaw : "";
-  const autoRefreshRaw = list.data?.find((r) => r.key === "ui.auto-refresh-seconds")?.value;
-  const autoRefreshSeconds = typeof autoRefreshRaw === "number" ? autoRefreshRaw : 0;
+  const timezone = settings.str("display.timezone", "");
+  const autoRefreshSeconds = settings.num("ui.auto-refresh-seconds", 0);
   const autoRefreshMinutes = Math.round(autoRefreshSeconds / 60);
-  const disabled = list.isPending || update.isPending;
+  const disabled = settings.list.isPending || update.isPending;
 
   const themeId = useId();
   const tzId = useId();
@@ -93,7 +92,7 @@ export function ProfilePanel() {
           max={60}
           step={1}
           value={autoRefreshMinutes}
-          disabled={list.isPending}
+          disabled={disabled}
           onCommit={(next) =>
             update.mutate({ key: "ui.auto-refresh-seconds" as never, value: next * 60 })
           }

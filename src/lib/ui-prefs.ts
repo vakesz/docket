@@ -49,6 +49,10 @@ export function useLocalPref<T>(
   const [value, setValue] = useState<T>(initial);
 
   useEffect(() => {
+    // `rebindKey` is referenced so the lint rule sees it; its purpose is
+    // to retrigger the effect when callers' read closures depend on
+    // changing inputs (e.g. projectSlug) — `read` itself is held in a ref.
+    void rebindKey;
     setValue(readRef.current());
     const onChange = () => setValue(readRef.current());
     window.addEventListener("storage", onChange);
@@ -59,10 +63,7 @@ export function useLocalPref<T>(
       window.removeEventListener(PREF_EVENT, onChange);
       for (const ev of extraEvents) window.removeEventListener(ev, onChange);
     };
-    // `extraEvents` is expected to be a module-level constant; tracking it
-    // would re-bind listeners on every render without changing behavior.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rebindKey]);
+  }, [rebindKey, extraEvents]);
 
   return value;
 }

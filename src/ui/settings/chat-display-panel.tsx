@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useState } from "react";
+import { useSettingsMap } from "@/lib/settings-client";
 import { trpc } from "@/lib/trpc-client";
 import { type ToolDisplayMode, useToolDisplayMode } from "@/lib/ui-prefs";
 import { Alert, AlertDescription } from "@/ui/primitives/alert";
@@ -41,16 +42,17 @@ export function ChatDisplayPanel() {
   const [mode, setMode] = useToolDisplayMode();
 
   const utils = trpc.useUtils();
-  const list = trpc.settings.list.useQuery();
+  const settings = useSettingsMap();
   const update = trpc.settings.update.useMutation({
     onSuccess: async () => {
       await utils.settings.list.invalidate();
     },
   });
 
-  const sendOnEnter = list.data?.find((r) => r.key === "chat.send-on-enter")?.value ?? true;
-  const storedMaxRounds = list.data?.find((r) => r.key === "chat.max-tool-rounds")?.value;
-  const disabled = list.isPending || update.isPending;
+  const sendOnEnter = settings.bool("chat.send-on-enter", true);
+  const storedMaxRoundsRaw = settings.raw("chat.max-tool-rounds");
+  const storedMaxRounds = typeof storedMaxRoundsRaw === "number" ? storedMaxRoundsRaw : undefined;
+  const disabled = settings.list.isPending || update.isPending;
   const sendOnEnterId = useId();
   const maxRoundsId = useId();
 
@@ -103,13 +105,13 @@ export function ChatDisplayPanel() {
         <div className="flex items-center gap-2 text-sm text-foreground">
           <Switch
             id={sendOnEnterId}
-            checked={sendOnEnter === true}
+            checked={sendOnEnter}
             disabled={disabled}
             onCheckedChange={(next) =>
               update.mutate({ key: "chat.send-on-enter" as never, value: next })
             }
           />
-          <Label htmlFor={sendOnEnterId}>{sendOnEnter === true ? "Enabled" : "Disabled"}</Label>
+          <Label htmlFor={sendOnEnterId}>{sendOnEnter ? "Enabled" : "Disabled"}</Label>
         </div>
       </div>
 

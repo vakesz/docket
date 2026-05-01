@@ -1,6 +1,7 @@
 "use client";
 
 import { useId } from "react";
+import { useSettingsMap } from "@/lib/settings-client";
 import { trpc } from "@/lib/trpc-client";
 import { Alert, AlertDescription } from "@/ui/primitives/alert";
 import { Label } from "@/ui/primitives/label";
@@ -17,19 +18,17 @@ const COMMENTS_KEY = "items.show-reactions-comments";
  */
 export function ItemDetailPanel() {
   const utils = trpc.useUtils();
-  const list = trpc.settings.list.useQuery();
+  const settings = useSettingsMap();
   const update = trpc.settings.update.useMutation({
     onSuccess: async () => {
       await utils.settings.list.invalidate();
     },
   });
 
-  const headerRaw = list.data?.find((r) => r.key === HEADER_KEY)?.value;
-  const headerOn = typeof headerRaw === "boolean" ? headerRaw : true;
-  const commentsRaw = list.data?.find((r) => r.key === COMMENTS_KEY)?.value;
-  const commentsOn = typeof commentsRaw === "boolean" ? commentsRaw : true;
+  const headerOn = settings.bool(HEADER_KEY, true);
+  const commentsOn = settings.bool(COMMENTS_KEY, true);
 
-  const disabled = list.isPending || update.isPending;
+  const disabled = settings.list.isPending || update.isPending;
   const headerId = useId();
   const commentsId = useId();
 

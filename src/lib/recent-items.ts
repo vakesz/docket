@@ -13,12 +13,7 @@
  * lose ids the user might want back when they raise it.
  */
 
-import {
-  RECENT_LIMIT_MAX,
-  readRecentEnabled,
-  readRecentLimit,
-  useLocalPref,
-} from "@/lib/ui-prefs";
+import { RECENT_LIMIT_MAX, readRecentEnabled, readRecentLimit, useLocalPref } from "@/lib/ui-prefs";
 
 const STORAGE_KEY = "docket.recentItems";
 const RECENT_EVENT = "docket:recent-items";

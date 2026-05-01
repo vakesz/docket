@@ -18,6 +18,7 @@ import {
   toSyncProgressLabel,
 } from "@/server/sync";
 import { assertFound, projectScopedProcedure, projectSlugSchema, router } from "@/server/trpc";
+import { parseSavedViewAxes } from "@/server/views/router";
 
 /**
  * Translate the URL-facing `itemNumber` into the provider's stored
@@ -132,7 +133,7 @@ async function resolveViewFilter(
       view: {
         stateBucket: row.stateBucket as StateBucket,
         assignees: row.assignees,
-        axes: (row.axes ?? {}) as Record<string, string>,
+        axes: parseSavedViewAxes(row.axes),
       },
       archivedFlag: false,
     };

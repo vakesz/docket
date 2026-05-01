@@ -2,6 +2,7 @@
 
 import { Send, Square } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSettingsMap } from "@/lib/settings-client";
 import { trpc } from "@/lib/trpc-client";
 import { type ToolDisplayMode, useToolDisplayMode } from "@/lib/ui-prefs";
 import { cn } from "@/lib/utils";
@@ -83,11 +84,8 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
       resetStream();
     },
   });
-  const settings = trpc.settings.list.useQuery();
-  const sendOnEnter = useMemo(() => {
-    const row = settings.data?.find((r) => r.key === "chat.send-on-enter");
-    return row ? Boolean(row.value) : true;
-  }, [settings.data]);
+  const settings = useSettingsMap();
+  const sendOnEnter = settings.bool("chat.send-on-enter", true);
 
   const messages = (detail.data?.messages ?? []) as PersistedMessage[];
   const renderUnits = useMemo(() => buildRenderUnits(messages), [messages]);
