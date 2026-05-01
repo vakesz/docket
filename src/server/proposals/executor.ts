@@ -35,7 +35,7 @@ import type { db as Db } from "@/server/db";
 import { assertFound } from "@/server/errors";
 import { errFields } from "@/server/log-fields";
 import { logger } from "@/server/logger";
-import { hydrateProposal } from "@/server/proposals/builders";
+import { buildDuplicateCommentBody, hydrateProposal } from "@/server/proposals/builders";
 import { buildProviderForUser } from "@/server/providers/build";
 import {
   AUTO_ACCEPT_EXTRA_ELIGIBLE_KINDS_LIST,
@@ -189,9 +189,50 @@ export async function confirmProposal(
     const providerStartedAt = Date.now();
 
     switch (proposal.kind) {
-      case "state_change":
+      case "state_change": {
+        // close_duplicate bundles a comment naming the canonical item with the
+        // transition itself. Comment goes first so the duplicate-link is
+        // durable even if the transition fails (a retry won't double-post —
+        // we stamp `postedCommentId` on the proposal payload between the two
+        // calls; on retry we skip the addComment step).
+        if (proposal.intent === "close_duplicate" && proposal.canonicalItem) {
+          if (!proposal.postedCommentId) {
+            const body = buildDuplicateCommentBody(proposal.canonicalItem);
+            const comment = await provider.addComment(proposal.item.id, body);
+            commentId = comment.id;
+            const cachedItem = await ctx.db.item.findUnique({
+              where: {
+                projectId_providerItemId: {
+                  projectId: ctx.projectId,
+                  providerItemId: proposal.item.id,
+                },
+              },
+              select: { id: true },
+            });
+            if (cachedItem) {
+              await reconcileComments(ctx.db, [
+                { itemSurrogate: cachedItem.id, comments: [comment] },
+              ]);
+            }
+            // Persist the posted comment id back into the payload so a later
+            // retry (after a transition failure) can skip re-posting. Mutate
+            // by merging onto the existing payload object — Prisma's JSON
+            // column accepts a full replacement value, so we hand it the
+            // updated proposal minus the surrogate id.
+            const { id: _ignore, ...rest } = proposal;
+            const nextPayload = { ...rest, postedCommentId: comment.id };
+            await ctx.db.proposal.update({
+              where: { id: row.id },
+              data: { payload: nextPayload as unknown as Prisma.InputJsonValue },
+            });
+            proposal.postedCommentId = comment.id;
+          } else {
+            commentId = proposal.postedCommentId;
+          }
+        }
         canonical = await provider.transition(proposal.item.id, proposal.intent);
         break;
+      }
       case "description_patch":
         canonical = await provider.patchDescription(proposal.item.id, proposal.newDescription);
         break;
@@ -217,6 +258,9 @@ export async function confirmProposal(
         break;
       case "tags_change":
         canonical = await provider.setTags(proposal.item.id, proposal.nextTags);
+        break;
+      case "assignee_change":
+        canonical = await provider.setAssignee(proposal.item.id, proposal.nextAssignee);
         break;
       case "reaction_toggle": {
         const fn = proposal.op === "add" ? provider.addReaction : provider.removeReaction;
@@ -313,8 +357,8 @@ export async function confirmProposal(
       where: { id: row.id },
       data: {
         executedAt: new Date(),
-        ...(commentId
-          ? { providerItemId: proposal.kind === "comment_add" ? proposal.item.id : null }
+        ...(commentId && proposal.kind === "comment_add"
+          ? { providerItemId: proposal.item.id }
           : {}),
       },
     });

@@ -17,7 +17,7 @@ import { githubAvatarFetcher } from "@/providers/github/avatar";
 import { githubProfileUrl } from "@/providers/github/profile";
 import { GitHubProvider } from "@/providers/github/provider";
 import { GITHUB_REACTION_KINDS } from "@/providers/github/reactions";
-import { availableIntentsForState } from "@/providers/github/state-map";
+import { availableIntentsForState, STATE_ENCODING_LABELS } from "@/providers/github/state-map";
 
 /**
  * GitHub providerItemId is `${owner}/${repo}#${number}`. The `(owner, repo)`
@@ -96,6 +96,7 @@ export const githubSpec = {
     // the timeline / cross-reference scan lands.
     linkedItems: false,
     creatableKinds: ["task"],
+    stateEncodingTags: [...STATE_ENCODING_LABELS],
   },
   availableIntents: availableIntentsForState,
   oauth: {

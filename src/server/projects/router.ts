@@ -130,6 +130,7 @@ export const projectsRouter = router({
         pullRequestDiffs: false,
         linkedItems: false,
         creatableKinds: ["task"],
+        stateEncodingTags: [],
       },
       hasAvatarFetcher: spec?.avatarFetcher != null,
     };

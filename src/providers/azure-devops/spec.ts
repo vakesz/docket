@@ -32,7 +32,7 @@ import type { Item } from "@/core/types";
 import { asPlainObject } from "@/lib/json";
 import { azureDevOpsAvatarFetcher } from "@/providers/azure-devops/avatar";
 import { AzureDevOpsProvider } from "@/providers/azure-devops/provider";
-import { availableIntentsForState } from "@/providers/azure-devops/state-map";
+import { availableIntentsForState, STATE_ENCODING_TAGS } from "@/providers/azure-devops/state-map";
 
 /**
  * Azure DevOps work item ids are bare integers, scoped per organization. The
@@ -158,6 +158,7 @@ export const azureDevOpsSpec = {
     pullRequestDiffs: false,
     linkedItems: true,
     creatableKinds: ["epic", "feature", "story", "task", "bug"],
+    stateEncodingTags: [...STATE_ENCODING_TAGS],
   },
   availableIntents: availableIntentsForState,
   oauth: {

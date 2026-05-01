@@ -24,10 +24,17 @@ const itemSnapshotSchema = z
   })
   .passthrough();
 
+const canonicalItemRefSchema = z.object({
+  providerItemId: z.string(),
+  title: z.string(),
+});
+
 const stateChange = z.object({
   kind: z.literal("state_change"),
   item: itemSnapshotSchema,
   intent: z.enum(TRANSITION_INTENTS),
+  canonicalItem: canonicalItemRefSchema.nullable().default(null),
+  postedCommentId: z.string().nullable().default(null),
 });
 
 const descriptionPatch = z.object({
@@ -65,6 +72,12 @@ const tagsChange = z.object({
   nextTags: z.array(z.string()).readonly(),
 });
 
+const assigneeChange = z.object({
+  kind: z.literal("assignee_change"),
+  item: itemSnapshotSchema,
+  nextAssignee: z.string().nullable(),
+});
+
 const reactionToggle = z.object({
   kind: z.literal("reaction_toggle"),
   item: itemSnapshotSchema,
@@ -93,16 +106,35 @@ const memoryDelete = z.object({
   title: z.string(),
 });
 
-export const proposalPayloadSchema = z.discriminatedUnion("kind", [
-  stateChange,
-  descriptionPatch,
-  attachmentUpload,
-  itemCreate,
-  commentAdd,
-  tagsChange,
-  reactionToggle,
-  memoryWrite,
-  memoryDelete,
-]);
+export const proposalPayloadSchema = z
+  .discriminatedUnion("kind", [
+    stateChange,
+    descriptionPatch,
+    attachmentUpload,
+    itemCreate,
+    commentAdd,
+    tagsChange,
+    assigneeChange,
+    reactionToggle,
+    memoryWrite,
+    memoryDelete,
+  ])
+  .superRefine((val, ctx) => {
+    if (val.kind !== "state_change") return;
+    if (val.intent === "close_duplicate" && !val.canonicalItem) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["canonicalItem"],
+        message: "close_duplicate requires a canonical item reference",
+      });
+    }
+    if (val.intent !== "close_duplicate" && val.canonicalItem) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["canonicalItem"],
+        message: "canonicalItem only applies to close_duplicate transitions",
+      });
+    }
+  });
 
 export type ProposalPayload = z.infer<typeof proposalPayloadSchema>;

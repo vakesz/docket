@@ -177,6 +177,17 @@ export interface WorkItemProvider {
   setTags(id: string, tags: readonly string[]): Promise<Item>;
 
   /**
+   * Replace the item's assignee.
+   *
+   * `assignee` is the provider-native identity string the provider stamps
+   * into `Item.assignee` (e.g. a GitHub login or an Azure DevOps email/UPN).
+   * `null` clears the assignment. Implementations must accept the same
+   * string they emit on reads — no normalization on the caller side — and
+   * return the refreshed canonical `Item`.
+   */
+  setAssignee(id: string, assignee: string | null): Promise<Item>;
+
+  /**
    * The string the provider stamps into `Item.assignee` for "me".
    *
    * Lets the surface-level `@me` visual filter match cached rows. Providers
@@ -431,6 +442,14 @@ export type ProviderCapabilities = {
    * `inferKind`. Azure DevOps under the Agile template lists the full set.
    */
   creatableKinds: readonly ItemKind[];
+  /**
+   * Lowercased tag/label values the provider uses to encode canonical state
+   * (e.g. GitHub's `blocked`/`needs-info`/`wontfix`). The provider's
+   * `setTags` re-unions these in regardless of what the caller passes, so
+   * the tag-editor surface filters them out of the editable set — otherwise
+   * the diff would show a removal that never happens.
+   */
+  stateEncodingTags: readonly string[];
 };
 
 export type ProviderSpec = {

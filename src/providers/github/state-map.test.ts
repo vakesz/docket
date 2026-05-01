@@ -35,6 +35,7 @@ const ALL_TRIPLES: readonly Triple[] = [
   { status: { state: "open", stateReason: "reopened" }, labels: [] },
   { status: { state: "closed", stateReason: "completed" }, labels: [] },
   { status: { state: "closed", stateReason: "not_planned" }, labels: [] },
+  { status: { state: "closed", stateReason: "duplicate" }, labels: [] },
   { status: { state: "closed", stateReason: null }, labels: [] },
 ];
 
@@ -92,9 +93,10 @@ describe("github state-map", () => {
     expect(merged).not.toContain(LABEL_BLOCKED);
   });
 
-  it("close_duplicate closes the issue and strips soft labels without stamping wontfix", () => {
+  it("close_duplicate uses the native duplicate state_reason and strips soft labels", () => {
     const plan = planForIntent("close_duplicate");
     expect(plan.state).toBe("closed");
+    expect(plan.stateReason).toBe("duplicate");
     const merged = mergeLabels([LABEL_BLOCKED, "scope:billing"], plan);
     expect(merged).not.toContain(LABEL_BLOCKED);
     expect(merged).not.toContain(LABEL_WONTFIX);

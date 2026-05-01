@@ -13,6 +13,7 @@
 
 import type { Proposal, ProposalKind } from "@/core/proposal-types";
 import type { ItemState, TransitionIntent } from "@/core/types";
+import { buildDuplicateCommentBody } from "@/server/proposals/builders";
 
 export type StateChangeDiff = {
   kind: "state_change";
@@ -20,6 +21,14 @@ export type StateChangeDiff = {
   itemTitle: string;
   intent: TransitionIntent;
   before: ItemState;
+  /**
+   * For `close_duplicate` only: the canonical item this one duplicates and
+   * the comment body the executor will post alongside the transition. The
+   * UI surfaces this so the reviewer sees BOTH provider writes before they
+   * confirm.
+   */
+  canonicalItem: { providerItemId: string; title: string } | null;
+  commentBody: string | null;
 };
 
 export type DescriptionPatchDiff = {
@@ -65,6 +74,14 @@ export type TagsChangeDiff = {
   removed: readonly string[];
 };
 
+export type AssigneeChangeDiff = {
+  kind: "assignee_change";
+  itemId: string;
+  itemTitle: string;
+  before: string | null;
+  after: string | null;
+};
+
 export type ReactionToggleDiff = {
   kind: "reaction_toggle";
   itemId: string;
@@ -97,6 +114,7 @@ export type ProposalDiff =
   | ItemCreateDiff
   | CommentAddDiff
   | TagsChangeDiff
+  | AssigneeChangeDiff
   | ReactionToggleDiff
   | MemoryWriteDiff
   | MemoryDeleteDiff;
@@ -125,6 +143,8 @@ export function isEmptyDiff(diff: ProposalDiff): boolean {
       return diff.before === diff.after;
     case "tags_change":
       return diff.added.length === 0 && diff.removed.length === 0;
+    case "assignee_change":
+      return (diff.before ?? null) === (diff.after ?? null);
     case "memory_write":
       return (
         diff.memoryId !== null &&
@@ -149,6 +169,10 @@ export function diffOf(proposal: Proposal): ProposalDiff {
         itemTitle: proposal.item.title,
         intent: proposal.intent,
         before: proposal.item.state,
+        canonicalItem: proposal.canonicalItem,
+        commentBody: proposal.canonicalItem
+          ? buildDuplicateCommentBody(proposal.canonicalItem)
+          : null,
       };
     case "description_patch":
       return {
@@ -192,6 +216,14 @@ export function diffOf(proposal: Proposal): ProposalDiff {
         targetId: proposal.targetId,
         reaction: proposal.reaction,
         op: proposal.op,
+      };
+    case "assignee_change":
+      return {
+        kind: "assignee_change",
+        itemId: proposal.item.id,
+        itemTitle: proposal.item.title,
+        before: proposal.item.assignee,
+        after: proposal.nextAssignee,
       };
     case "tags_change": {
       const beforeSet = new Set(proposal.item.tags.map((t) => t.toLowerCase()));

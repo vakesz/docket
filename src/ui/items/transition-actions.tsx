@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { TransitionIntent } from "@/core/types";
 import { trpc } from "@/lib/trpc-client";
+import { CloseDuplicateDialog } from "@/ui/items/close-duplicate-dialog";
 import { Button } from "@/ui/primitives/button";
 import { ProposalDialog } from "@/ui/proposals/proposal-dialog";
 
@@ -23,6 +24,10 @@ const INTENT_LABEL: Record<TransitionIntent, string> = {
  * is computed server-side from the project's provider spec
  * (`availableIntents`) so the UI never offers a button whose plan would be
  * a no-op against the current snapshot.
+ *
+ * `close_duplicate` is special: before staging, we ask the user which item
+ * this one duplicates so the executor can pair the close with a comment
+ * naming the canonical item. See `CloseDuplicateDialog`.
  */
 export function TransitionActions({
   projectSlug,
@@ -34,6 +39,7 @@ export function TransitionActions({
   intents: readonly TransitionIntent[];
 }) {
   const [pendingProposalId, setPendingProposalId] = useState<string | null>(null);
+  const [duplicatePickerOpen, setDuplicatePickerOpen] = useState(false);
   const proposeTransition = trpc.proposals.proposeTransition.useMutation({
     onSuccess: (res) => setPendingProposalId(res.id),
   });
@@ -51,12 +57,32 @@ export function TransitionActions({
           variant="outline"
           size="xs"
           disabled={proposeTransition.isPending}
-          onClick={() => proposeTransition.mutate({ projectSlug, providerItemId, intent })}
+          onClick={() => {
+            if (intent === "close_duplicate") {
+              setDuplicatePickerOpen(true);
+              return;
+            }
+            proposeTransition.mutate({ projectSlug, providerItemId, intent });
+          }}
         >
           {INTENT_LABEL[intent]}
         </Button>
       ))}
       {error ? <span className="text-destructive text-xs">{error}</span> : null}
+      <CloseDuplicateDialog
+        projectSlug={projectSlug}
+        sourceProviderItemId={providerItemId}
+        open={duplicatePickerOpen}
+        onOpenChange={setDuplicatePickerOpen}
+        onSelect={(canonicalItemId) =>
+          proposeTransition.mutate({
+            projectSlug,
+            providerItemId,
+            intent: "close_duplicate",
+            canonicalItemId,
+          })
+        }
+      />
       <ProposalDialog
         projectSlug={projectSlug}
         proposalId={pendingProposalId}

@@ -5,13 +5,14 @@
  *
  * Nothing outside the proposal executor may touch `provider.transition` /
  * `patchDescription` / `uploadAttachment` / `addComment` / `createItem` /
- * `setTags` / `addReaction` / `removeReaction`.
+ * `setTags` / `setAssignee` / `addReaction` / `removeReaction`.
  * That keeps the proposal-first mutation invariant load-bearing — every
  * provider write is preceded by a Proposal row, a diff render, and a
  * confirm step.
  *
  * Allowed callers of `.transition(`, `.patchDescription(`, `.uploadAttachment(`,
- * `.addComment(`, `.createItem(`, `.setTags(`, `.addReaction(`, `.removeReaction(`:
+ * `.addComment(`, `.createItem(`, `.setTags(`, `.setAssignee(`, `.addReaction(`,
+ * `.removeReaction(`:
  *   - `src/server/proposals/executor.ts` (the executor — the ONE place these
  *     fire as side effects)
  *   - sibling files inside `src/providers/<x>/` (provider implementations
@@ -42,6 +43,7 @@ const WRITE_METHODS = [
   "addComment",
   "createItem",
   "setTags",
+  "setAssignee",
   "addReaction",
   "removeReaction",
 ] as const;

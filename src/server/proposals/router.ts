@@ -9,6 +9,7 @@ import {
 } from "@/core/types";
 import {
   hydrateProposal,
+  proposeAssigneeChange,
   proposeComment,
   proposeDescriptionPatch,
   proposeNewItem,
@@ -59,11 +60,13 @@ const AuditListInput = projectSlugSchema.extend({
 const ProposeTransitionInput = projectSlugSchema.extend({
   providerItemId: z.string().min(1),
   intent: TransitionIntentEnum,
+  canonicalItemId: z.string().min(1).optional(),
 });
 
 const ProposeDescriptionPatchInput = projectSlugSchema.extend({
   providerItemId: z.string().min(1),
   newDescription: z.string().max(50_000),
+  includePreviousVersion: z.boolean().optional(),
 });
 
 const ProposeCommentInput = projectSlugSchema.extend({
@@ -74,6 +77,11 @@ const ProposeCommentInput = projectSlugSchema.extend({
 const ProposeTagsChangeInput = projectSlugSchema.extend({
   providerItemId: z.string().min(1),
   nextTags: z.array(z.string().min(1).max(80)).max(50),
+});
+
+const ProposeAssigneeChangeInput = projectSlugSchema.extend({
+  providerItemId: z.string().min(1),
+  nextAssignee: z.string().max(200).nullable(),
 });
 
 const ProposeReactionToggleInput = projectSlugSchema.extend({
@@ -172,6 +180,7 @@ export const proposalsRouter = router({
         await proposeTransition(c, {
           providerItemId: input.providerItemId,
           intent: input.intent,
+          ...(input.canonicalItemId ? { canonicalItemId: input.canonicalItemId } : {}),
         }),
       );
       return { id: row.id, status: row.status, diff: diffOf(hydrateProposal(row)) };
@@ -186,6 +195,9 @@ export const proposalsRouter = router({
         await proposeDescriptionPatch(c, {
           providerItemId: input.providerItemId,
           newDescription: input.newDescription,
+          ...(input.includePreviousVersion !== undefined
+            ? { includePreviousVersion: input.includePreviousVersion }
+            : {}),
         }),
       );
       return { id: row.id, status: row.status, diff: diffOf(hydrateProposal(row)) };
@@ -228,6 +240,20 @@ export const proposalsRouter = router({
         await proposeTagsChange(c, {
           providerItemId: input.providerItemId,
           nextTags: input.nextTags,
+        }),
+      );
+      return { id: row.id, status: row.status, diff: diffOf(hydrateProposal(row)) };
+    }),
+
+  proposeAssigneeChange: projectScopedMutationProcedure
+    .input(ProposeAssigneeChangeInput)
+    .mutation(async ({ ctx, input }) => {
+      const c = ctxFor(ctx);
+      const row = await maybeAutoAccept(
+        c,
+        await proposeAssigneeChange(c, {
+          providerItemId: input.providerItemId,
+          nextAssignee: input.nextAssignee,
         }),
       );
       return { id: row.id, status: row.status, diff: diffOf(hydrateProposal(row)) };

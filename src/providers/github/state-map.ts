@@ -4,7 +4,7 @@
  *
  * GitHub stores issue state as `(state, state_reason)`:
  *   - `state` is "open" | "closed"
- *   - `state_reason` is "completed" | "not_planned" | "reopened" | null
+ *   - `state_reason` is "completed" | "not_planned" | "duplicate" | "reopened" | null
  *
  * GitHub doesn't have a native concept of "blocked" or "needs info" — the
  * provider encodes those as **labels** alongside the state field, mirroring
@@ -22,7 +22,7 @@ import { ProviderError } from "@/core/provider";
 import { canonicalIntentsFor, type ItemState, type TransitionIntent } from "@/core/types";
 
 export type GithubIssueState = "open" | "closed";
-export type GithubStateReason = "completed" | "not_planned" | "reopened" | null;
+export type GithubStateReason = "completed" | "not_planned" | "duplicate" | "reopened" | null;
 
 export type GithubIssueStatus = {
   state: GithubIssueState;
@@ -54,7 +54,7 @@ export function toCanonicalState(status: GithubIssueStatus, labels: readonly str
   if (lower.has(LABEL_BLOCKED)) return "blocked";
   if (lower.has(LABEL_NEEDS_INFO)) return "needs_info";
   if (status.state === "open") return "active";
-  if (status.stateReason === "not_planned") return "closed";
+  if (status.stateReason === "not_planned" || status.stateReason === "duplicate") return "closed";
   return "resolved";
 }
 
@@ -117,15 +117,14 @@ export function planForIntent(intent: TransitionIntent): GithubTransitionPlan {
         labelsToAdd: [LABEL_WONTFIX],
         labelsToRemove: [LABEL_BLOCKED, LABEL_NEEDS_INFO],
       };
-    // GitHub Issues has no first-class "duplicate" state; it shares the
-    // closed/not_planned shape with `close_wontfix`. The canonical
-    // distinction lives on the proposal kind + the comment body that
-    // references the canonical ticket. Soft labels are stripped — duplicate
-    // closure should not retain `wontfix`/`blocked`/`needs-info`.
+    // GitHub exposes `state_reason: "duplicate"` on the issue update endpoint;
+    // surfacing it here makes the timeline display "closed this as duplicate"
+    // instead of falling back to "not planned". Soft labels are stripped —
+    // duplicate closure shouldn't retain `wontfix`/`blocked`/`needs-info`.
     case "close_duplicate":
       return {
         state: "closed",
-        stateReason: "not_planned",
+        stateReason: "duplicate",
         labelsToAdd: [],
         labelsToRemove: SOFT_LABELS,
       };

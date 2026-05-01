@@ -1,12 +1,14 @@
 import { Clock, ExternalLink, GitBranch, Tag, User, UserX } from "lucide-react";
 import Link from "next/link";
 import { canonicalIntentsFor, isItemKind, isItemState, type TransitionIntent } from "@/core/types";
-import { displayTag, formatKind, formatRelative } from "@/lib/format";
+import { formatKind, formatRelative } from "@/lib/format";
 import { getProviderSpec } from "@/server/provider-registry";
+import { AssigneeEditor } from "@/ui/items/assignee-editor";
 import { ChatToggleButton } from "@/ui/items/chat-toggle-button";
 import { CommentAvatar } from "@/ui/items/comment-avatar";
 import { CommentComposer } from "@/ui/items/comment-composer";
 import { CopyIdButton } from "@/ui/items/copy-id-button";
+import { DescriptionEditor } from "@/ui/items/description-editor";
 import { FreshnessStamp } from "@/ui/items/freshness";
 import { PinButton } from "@/ui/items/pin-button";
 import { ReactionRow } from "@/ui/items/reaction-row";
@@ -14,9 +16,11 @@ import { RecentRecorder } from "@/ui/items/recent-recorder";
 import { RefreshItemButton } from "@/ui/items/refresh-item-button";
 import { StatePill } from "@/ui/items/state-pill";
 import { SuggestActionButton } from "@/ui/items/suggest-action-button";
+import { TagsEditor } from "@/ui/items/tags-editor";
 import { TransitionActions } from "@/ui/items/transition-actions";
 import { Markdown } from "@/ui/markdown/markdown";
 import { ScrollArea } from "@/ui/primitives/scroll-area";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/ui/primitives/tooltip";
 
 type Comment = {
   id: string;
@@ -68,7 +72,10 @@ export function DetailPane({
 }: {
   projectSlug: string;
   providerKind: string | null;
-  capabilities: { supportedReactions: readonly string[] };
+  capabilities: {
+    supportedReactions: readonly string[];
+    stateEncodingTags: readonly string[];
+  };
   providerHasAvatars: boolean;
   item: DetailItem;
   staleThresholdDays: number | null;
@@ -117,7 +124,25 @@ export function DetailPane({
 
         {/* Rows 2 + 3: title and meta — meta sits tight under the title (mt-1) */}
         <div className="flex flex-col gap-1">
-          <h1 className="font-semibold text-foreground text-lg leading-snug">{item.title}</h1>
+          <h1 className="font-semibold text-foreground text-lg leading-snug">
+            {item.title}
+            {item.url ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    aria-label="Open in provider"
+                    className="ml-1.5 inline-flex size-4 translate-y-[-1px] items-center justify-center align-middle text-muted-foreground hover:text-primary"
+                  >
+                    <ExternalLink aria-hidden="true" className="size-3.5" />
+                  </a>
+                </TooltipTrigger>
+                <TooltipContent side="top">Open in provider</TooltipContent>
+              </Tooltip>
+            ) : null}
+          </h1>
 
           {/* inline meta line — icons replace dl labels, missing fields omitted */}
           <ul className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground text-xs">
@@ -153,28 +178,17 @@ export function DetailPane({
             ) : null}
             <li className="inline-flex items-center gap-1">
               {item.assignee ? (
-                <>
-                  <User aria-hidden="true" className="size-3" />
-                  <span className="sr-only">Assignee</span>
-                  {assigneeProfileUrl ? (
-                    <a
-                      href={assigneeProfileUrl}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      className="text-foreground hover:text-primary hover:underline"
-                    >
-                      {item.assignee}
-                    </a>
-                  ) : (
-                    <span className="text-foreground">{item.assignee}</span>
-                  )}
-                </>
+                <User aria-hidden="true" className="size-3" />
               ) : (
-                <>
-                  <UserX aria-hidden="true" className="size-3" />
-                  <span className="text-muted-foreground/70 italic">unassigned</span>
-                </>
+                <UserX aria-hidden="true" className="size-3" />
               )}
+              <span className="sr-only">Assignee</span>
+              <AssigneeEditor
+                projectSlug={projectSlug}
+                providerItemId={item.providerItemId}
+                currentAssignee={item.assignee}
+                profileUrl={assigneeProfileUrl}
+              />
             </li>
             {item.parentNumber ? (
               <li className="inline-flex items-center gap-1">
@@ -188,36 +202,16 @@ export function DetailPane({
                 </Link>
               </li>
             ) : null}
-            {item.tags.length > 0 ? (
-              <li className="inline-flex items-center gap-1">
-                <Tag aria-hidden="true" className="size-3" />
-                <span className="sr-only">Labels</span>
-                <span className="inline-flex flex-wrap items-center gap-1">
-                  {item.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      title={tag}
-                      className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
-                    >
-                      {displayTag(tag)}
-                    </span>
-                  ))}
-                </span>
-              </li>
-            ) : null}
-            {item.url ? (
-              <li className="inline-flex items-center gap-1">
-                <a
-                  href={item.url}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="inline-flex items-center gap-1 text-primary hover:underline"
-                >
-                  Open in provider
-                  <ExternalLink aria-hidden="true" className="size-3" />
-                </a>
-              </li>
-            ) : null}
+            <li className="inline-flex items-center gap-1">
+              <Tag aria-hidden="true" className="size-3" />
+              <span className="sr-only">Labels</span>
+              <TagsEditor
+                projectSlug={projectSlug}
+                providerItemId={item.providerItemId}
+                currentTags={item.tags}
+                stateEncodingTags={capabilities.stateEncodingTags}
+              />
+            </li>
           </ul>
         </div>
 
@@ -257,15 +251,12 @@ export function DetailPane({
         </div>
       </header>
 
-      <section className="flex flex-col gap-3 p-4">
-        <h2 className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">
-          Description
-        </h2>
-        {item.description ? (
-          <Markdown source={item.description} />
-        ) : (
-          <p className="text-muted-foreground/70 text-sm italic">(no description)</p>
-        )}
+      <section className="p-4">
+        <DescriptionEditor
+          projectSlug={projectSlug}
+          providerItemId={item.providerItemId}
+          description={item.description}
+        />
       </section>
 
       <section className="flex flex-col gap-3 border-border border-t p-4">

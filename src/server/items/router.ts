@@ -389,6 +389,61 @@ export const itemsRouter = router({
     };
   }),
 
+  /**
+   * Distinct, sorted list of tags currently in use across the project's
+   * cached items. Powers the tag-editor autocomplete on the item detail
+   * pane. State-encoding labels declared by the provider are filtered out
+   * — surfacing them as autocomplete entries would invite a confusing
+   * "remove" attempt that the provider's setTags would silently undo.
+   */
+  listProjectTags: projectScopedProcedure.input(projectSlugSchema).query(async ({ ctx }) => {
+    const rows = await ctx.db.$queryRaw<Array<{ tag: string }>>`
+        SELECT DISTINCT UNNEST("tags") AS tag
+        FROM "Item"
+        WHERE "projectId" = ${ctx.projectId}
+        ORDER BY tag ASC
+        LIMIT 500
+      `;
+    const spec = getProviderSpec(ctx.project.providerKind);
+    const reserved = new Set(
+      (spec?.capabilities.stateEncodingTags ?? []).map((t) => t.toLowerCase()),
+    );
+    return rows.map((r) => r.tag).filter((tag) => tag && !reserved.has(tag.toLowerCase()));
+  }),
+
+  /**
+   * Distinct non-null assignees seen in cached items in this project. Powers
+   * the assignee-editor autocomplete so the user can quickly re-assign to
+   * someone already active on the board without typing an email/login from
+   * memory. Capped at 500 — handles "every active contributor" without
+   * unbounding the popover for huge projects.
+   */
+  listProjectAssignees: projectScopedProcedure.input(projectSlugSchema).query(async ({ ctx }) => {
+    const rows = await ctx.db.item.findMany({
+      where: { projectId: ctx.projectId, assignee: { not: null } },
+      select: { assignee: true },
+      distinct: ["assignee"],
+      orderBy: { assignee: "asc" },
+      take: 500,
+    });
+    return rows.map((r) => r.assignee).filter((a): a is string => !!a);
+  }),
+
+  /**
+   * Provider-stamped identity for the signed-in user — `@me` in editors and
+   * filters resolves to this string. Returns null if the provider can't
+   * resolve the identity (the editor degrades to "no quick-pick", the user
+   * can still type a value).
+   */
+  currentUserIdentity: projectScopedProcedure.input(projectSlugSchema).query(async ({ ctx }) => {
+    try {
+      const provider = await buildProviderForUser(ctx.db, ctx.project, ctx.userId);
+      return await provider.currentUserIdentity();
+    } catch {
+      return null;
+    }
+  }),
+
   search: projectScopedProcedure
     .input(
       projectSlugSchema.extend({

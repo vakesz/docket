@@ -21,6 +21,7 @@ export const PROPOSAL_KINDS = [
   "item_create",
   "comment_add",
   "tags_change",
+  "assignee_change",
   "reaction_toggle",
   "memory_write",
   "memory_delete",
@@ -38,11 +39,31 @@ export type ProposalKind = (typeof PROPOSAL_KINDS)[number];
 export const PROPOSAL_ORIGINS = ["ui", "agent"] as const;
 export type ProposalOrigin = (typeof PROPOSAL_ORIGINS)[number];
 
+/**
+ * Snapshot of the item this proposal claims as the canonical/non-duplicate
+ * counterpart. Required when `intent === "close_duplicate"`, forbidden
+ * otherwise. The executor pairs the close transition with a comment that
+ * names this item, so the duplicate-link survives in the provider history
+ * even though neither GitHub nor Azure DevOps has a native "duplicate" reason.
+ */
+export type CanonicalItemRef = {
+  providerItemId: string;
+  title: string;
+};
+
 export type StateChangeProposal = {
   kind: "state_change";
   id: string;
   item: Item;
   intent: TransitionIntent;
+  canonicalItem: CanonicalItemRef | null;
+  /**
+   * Set after the executor successfully posts the paired duplicate-comment
+   * but BEFORE the transition completes. On retry of a failed bundled
+   * close_duplicate, the executor uses this to skip re-posting the comment.
+   * Always null for non-`close_duplicate` transitions.
+   */
+  postedCommentId: string | null;
 };
 
 export type DescriptionPatchProposal = {
@@ -87,6 +108,21 @@ export type TagsChangeProposal = {
   id: string;
   item: Item;
   nextTags: readonly string[];
+};
+
+/**
+ * Stage a change to the item's assignee.
+ *
+ * `nextAssignee` is the provider-native identity string the provider stamps
+ * into `Item.assignee` (e.g. a GitHub login or Azure DevOps email/UPN), or
+ * `null` to clear the assignment. The diff renderer reads `item.assignee`
+ * for the previous value, so callers don't need to thread it explicitly.
+ */
+export type AssigneeChangeProposal = {
+  kind: "assignee_change";
+  id: string;
+  item: Item;
+  nextAssignee: string | null;
 };
 
 /**
@@ -149,6 +185,7 @@ export type Proposal =
   | ItemCreateProposal
   | CommentAddProposal
   | TagsChangeProposal
+  | AssigneeChangeProposal
   | ReactionToggleProposal
   | MemoryWriteProposal
   | MemoryDeleteProposal;

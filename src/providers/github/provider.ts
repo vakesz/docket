@@ -573,6 +573,26 @@ export class GitHubProvider implements WorkItemProvider {
     }
   }
 
+  async setAssignee(id: string, assignee: string | null): Promise<Item> {
+    const { owner, repo, number } = parseProviderItemId(id);
+    try {
+      // GitHub stores a multi-assignee set; our canonical model is a single
+      // assignee. Replace the entire set so an existing co-assignee can't
+      // shadow the change. PATCH /issues/:n with `assignees` is the only
+      // endpoint that overwrites; the dedicated add/remove endpoints only
+      // mutate deltas.
+      const res = await this.octokit.issues.update({
+        owner,
+        repo,
+        issue_number: number,
+        assignees: assignee ? [assignee] : [],
+      });
+      return this.toCanonicalItem(res.data);
+    } catch (err) {
+      wrapOctokitError(err);
+    }
+  }
+
   async createItem(_kind: ItemKind, fields: CreateFields): Promise<Item> {
     try {
       const res = await this.octokit.issues.create({

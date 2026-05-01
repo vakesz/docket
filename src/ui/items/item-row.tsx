@@ -1,6 +1,5 @@
 "use client";
 
-import { ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { displayTag, formatKind } from "@/lib/format";
 import { freshnessTone } from "@/lib/staleness";
@@ -17,7 +16,6 @@ export type ListItem = {
   state: string;
   assignee: string | null;
   tags: string[];
-  url: string | null;
   updatedAt: Date;
 };
 
@@ -52,68 +50,53 @@ export function ItemRow({
   const tone = freshnessTone(item.updatedAt, staleThresholdDays);
 
   return (
-    <div className="group/row relative border-border border-b">
-      <Link
-        href={`/projects/${projectSlug}/items/${item.itemNumber}`}
-        className={cn(
-          "flex w-full flex-col gap-1 px-3 py-2 text-left transition-colors",
-          "hover:bg-muted",
-          selected && "bg-muted",
-          tone === "warning" && "bg-primary/10 hover:bg-primary/15",
-          tone === "stale" && "bg-primary/20 hover:bg-primary/25",
-        )}
-      >
-        <div className="flex items-center gap-2 text-xs">
-          <span className="text-muted-foreground/70 text-xs uppercase tracking-wide">
-            {formatKind(item.kind)}
+    <Link
+      href={`/projects/${projectSlug}/items/${item.itemNumber}`}
+      className={cn(
+        "flex w-full flex-col gap-1 border-border border-b px-3 py-2 text-left transition-colors",
+        "hover:bg-muted",
+        selected && "bg-muted",
+        tone === "warning" && "bg-primary/10 hover:bg-primary/15",
+        tone === "stale" && "bg-primary/20 hover:bg-primary/25",
+      )}
+    >
+      <div className="flex items-center gap-2 text-xs">
+        <span className="text-muted-foreground/70 text-xs uppercase tracking-wide">
+          {formatKind(item.kind)}
+        </span>
+        <StatePill state={item.state} />
+        {pinned && (
+          <span className="font-mono text-[10px] text-primary" title="Pinned">
+            ●
           </span>
-          <StatePill state={item.state} />
-          {pinned && (
-            <span className="font-mono text-[10px] text-primary" title="Pinned">
-              ●
+        )}
+        <span className="ml-auto flex items-center gap-2 font-mono text-[10px] text-muted-foreground/70">
+          <FreshnessStamp updatedAt={item.updatedAt} thresholdDays={staleThresholdDays} />
+          <span>#{item.itemNumber}</span>
+        </span>
+      </div>
+      <div className="line-clamp-2 text-foreground text-sm">{item.title}</div>
+      {hasMeta && (
+        <div className="flex flex-wrap items-center gap-1.5 font-mono text-[10px] text-muted-foreground/70">
+          {item.assignee && <span className="truncate">{item.assignee}</span>}
+          {item.assignee && tags.length > 0 && (
+            <span aria-hidden className="text-muted-foreground/70">
+              ·
             </span>
           )}
-          <span className="ml-auto flex items-center gap-2 font-mono text-[10px] text-muted-foreground/70">
-            <FreshnessStamp updatedAt={item.updatedAt} thresholdDays={staleThresholdDays} />
-            <span>#{item.itemNumber}</span>
-          </span>
+          {shownTags.map((t) => (
+            <span
+              key={t}
+              title={t}
+              className="rounded bg-muted px-1.5 py-0.5 text-muted-foreground"
+            >
+              {displayTag(t)}
+            </span>
+          ))}
+          {extraTags > 0 && <span className="text-muted-foreground/70">+{extraTags}</span>}
         </div>
-        <div className="line-clamp-2 text-foreground text-sm">{item.title}</div>
-        {hasMeta && (
-          <div className="flex flex-wrap items-center gap-1.5 font-mono text-[10px] text-muted-foreground/70">
-            {item.assignee && <span className="truncate">{item.assignee}</span>}
-            {item.assignee && tags.length > 0 && (
-              <span aria-hidden className="text-muted-foreground/70">
-                ·
-              </span>
-            )}
-            {shownTags.map((t) => (
-              <span
-                key={t}
-                title={t}
-                className="rounded bg-muted px-1.5 py-0.5 text-muted-foreground"
-              >
-                {displayTag(t)}
-              </span>
-            ))}
-            {extraTags > 0 && <span className="text-muted-foreground/70">+{extraTags}</span>}
-          </div>
-        )}
-      </Link>
-      {item.url ? (
-        <a
-          href={item.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          title="Open in provider (new tab)"
-          aria-label={`Open #${item.itemNumber} in a new tab`}
-          className="absolute top-1.5 right-1.5 rounded bg-card p-1 text-muted-foreground/70 opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover/row:opacity-100"
-        >
-          <ExternalLink aria-hidden="true" className="h-3 w-3" />
-        </a>
-      ) : null}
-    </div>
+      )}
+    </Link>
   );
 }
 

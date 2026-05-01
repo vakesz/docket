@@ -109,6 +109,8 @@ describe("isEmptyDiff", () => {
       itemTitle: "t",
       intent: "start_work",
       before: "new",
+      canonicalItem: null,
+      commentBody: null,
     };
     expect(isEmptyDiff(diff)).toBe(false);
   });

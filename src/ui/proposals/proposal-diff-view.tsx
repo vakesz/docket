@@ -12,11 +12,20 @@ export function ProposalDiffView({ diff }: { diff: ProposalDiff }) {
             <span className="font-medium">{diff.itemTitle}</span>{" "}
             <span className="text-muted-foreground">({diff.itemId})</span>
           </Field>
+          {diff.canonicalItem ? (
+            <Field label="Duplicate of">
+              <span className="font-medium">{diff.canonicalItem.title}</span>{" "}
+              <span className="text-muted-foreground">({diff.canonicalItem.providerItemId})</span>
+            </Field>
+          ) : null}
           <Field label="Transition">
             <Pill>{formatState(diff.before)}</Pill>
             <span className="text-muted-foreground">→</span>
             <Pill tone="primary">{formatIntent(diff.intent)}</Pill>
           </Field>
+          {diff.commentBody ? (
+            <DiffBlock label="Comment to post" tone="primary" body={diff.commentBody} markdown />
+          ) : null}
         </div>
       );
 

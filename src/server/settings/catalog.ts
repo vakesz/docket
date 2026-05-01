@@ -123,17 +123,26 @@ const PromptStringSchema = z.string().max(16_000);
 
 // UI-origin auto-accept floor. These kinds always auto-confirm when staged
 // from the UI (origin === "ui") — they're not gated by the per-project
-// policy, only by read-only mode. Tier-A enrichment: additive, reversible,
-// no silent state changes. Agent-staged rows still always wait for a human
-// regardless. Adding a kind here is a security review event.
-export const AUTO_ACCEPT_FLOOR_KINDS = ["comment_add", "reaction_toggle"] as const;
+// policy, only by read-only mode. The floor covers writes the user clearly
+// intends as the click itself: comments, reactions, tag changes, assignee
+// changes, and inline description edits where the diff dialog would just
+// be a second confirmation of what the user already did in the UI.
+// Agent-staged rows still always wait for a human regardless. Adding a
+// kind here is a security review event.
+export const AUTO_ACCEPT_FLOOR_KINDS = [
+  "comment_add",
+  "reaction_toggle",
+  "tags_change",
+  "assignee_change",
+  "description_patch",
+] as const;
 export const AUTO_ACCEPT_FLOOR_KINDS_LIST: readonly string[] = AUTO_ACCEPT_FLOOR_KINDS;
 
 // Opt-in kinds the project may add on top of the floor. Memory writes/deletes
 // are local-DB only (no provider blast radius) so they're safe to auto-accept
-// when the project explicitly opts in. Provider-touching kinds (state changes,
-// descriptions, tags, item creation, assignee changes) are deliberately NOT
-// eligible and never make this list.
+// when the project explicitly opts in. Provider-touching kinds beyond the
+// floor (state changes, item creation) are deliberately NOT eligible and
+// never make this list.
 const AUTO_ACCEPT_EXTRA_ELIGIBLE_KINDS = ["memory_write", "memory_delete"] as const;
 export const AUTO_ACCEPT_EXTRA_ELIGIBLE_KINDS_LIST: readonly string[] =
   AUTO_ACCEPT_EXTRA_ELIGIBLE_KINDS;
@@ -575,7 +584,7 @@ export const SETTINGS_CATALOG = {
     default: [] as string[],
     label: "Auto-accept proposals — extra kinds",
     description:
-      "Additional proposal kinds that confirm automatically without a human tap when the user originates them in the UI. UI-origin comments and reactions always auto-confirm regardless of this setting (Tier-A enrichment — additive, reversible). This list opts in extra local-DB kinds (memory writes/deletes); provider-touching kinds (state changes, descriptions, tags, assignee changes, new items) always require explicit review. Agent-staged proposals never auto-confirm regardless. Read-only mode still wins.",
+      "Additional proposal kinds that confirm automatically without a human tap when the user originates them in the UI. UI-origin comments, reactions, and tag changes always auto-confirm regardless of this setting (chip-level edits the user already made in the UI). This list opts in extra local-DB kinds (memory writes/deletes); provider-touching kinds beyond the floor (state changes, descriptions, assignee changes, new items) always require explicit review. Agent-staged proposals never auto-confirm regardless. Read-only mode still wins.",
   },
 } as const satisfies Record<string, SettingDef<z.ZodTypeAny>>;
 

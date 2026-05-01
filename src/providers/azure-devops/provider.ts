@@ -732,6 +732,38 @@ export class AzureDevOpsProvider implements WorkItemProvider {
     }
   }
 
+  async setAssignee(id: string, assignee: string | null): Promise<Item> {
+    // System.AssignedTo accepts an `IdentityRef`-shaped value or a bare
+    // identifier (email/UPN/display name). On an existing work item, "Add"
+    // upserts the field; clearing requires the explicit "Remove" op (a
+    // blank-string "Add" gets rejected by the server as an invalid value).
+    const patch: JsonPatchOperation[] = assignee
+      ? [
+          {
+            op: 0,
+            path: "/fields/System.AssignedTo",
+            value: assignee,
+          } as JsonPatchOperation,
+        ]
+      : [
+          {
+            op: 1,
+            path: "/fields/System.AssignedTo",
+          } as JsonPatchOperation,
+        ];
+    const wit = await this.witApi();
+    try {
+      const raw = await wit.updateWorkItem(null, patch, Number.parseInt(id, 10));
+      const item = this.toCanonicalItem(raw);
+      if (!item) {
+        throw new ProviderError(`Work item ${id} is not a tracked type after update`);
+      }
+      return item;
+    } catch (err) {
+      wrapError(err);
+    }
+  }
+
   async createItem(kind: ItemKind, fields: CreateFields): Promise<Item> {
     const witType = WIT_BY_KIND[kind];
     if (!witType) {

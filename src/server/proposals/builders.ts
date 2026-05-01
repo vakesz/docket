@@ -19,6 +19,7 @@ import { TRPCError } from "@trpc/server";
 import { capCodeSnippets } from "@/agent/post/code-snippet-cap";
 import { loadCodeSnippetCapOptions } from "@/agent/post/load-options";
 import type {
+  AssigneeChangeProposal,
   CommentAddProposal,
   DescriptionPatchProposal,
   ItemCreateProposal,
@@ -96,16 +97,72 @@ async function loadCachedItem(ctx: ProposalContext, providerItemId: string) {
   );
 }
 
+/**
+ * Body of the auto-generated comment that pairs with a `close_duplicate`
+ * transition. Single source of truth so the diff renderer and the executor
+ * agree byte-for-byte; if either drifted, the diff would lie about what gets
+ * posted. Format references the canonical item by both id and title because
+ * neither GitHub nor Azure DevOps has a native "duplicate" reason — the
+ * comment body is the only durable record of which item this duplicates.
+ */
+export function buildDuplicateCommentBody(canonical: {
+  providerItemId: string;
+  title: string;
+}): string {
+  return `Closing as duplicate of ${canonical.providerItemId} — ${canonical.title}.`;
+}
+
 export async function proposeTransition(
   ctx: ProposalContext,
-  args: { providerItemId: string; intent: TransitionIntent },
+  args: {
+    providerItemId: string;
+    intent: TransitionIntent;
+    canonicalItemId?: string;
+  },
 ): Promise<ProposalRow> {
   const row = await loadCachedItem(ctx, args.providerItemId);
   const item = snapshotFromRow(row);
+
+  if (args.intent === "close_duplicate") {
+    if (!args.canonicalItemId) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "close_duplicate requires a canonical item id",
+      });
+    }
+    if (args.canonicalItemId === args.providerItemId) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "An item cannot be a duplicate of itself.",
+      });
+    }
+    const canonicalRow = await loadCachedItem(ctx, args.canonicalItemId);
+    const draft: Omit<StateChangeProposal, "id"> = {
+      kind: "state_change",
+      item,
+      intent: args.intent,
+      canonicalItem: {
+        providerItemId: canonicalRow.providerItemId,
+        title: canonicalRow.title,
+      },
+      postedCommentId: null,
+    };
+    return persist(ctx, draft, args.providerItemId);
+  }
+
+  if (args.canonicalItemId) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "canonicalItemId only applies to close_duplicate transitions",
+    });
+  }
+
   const draft: Omit<StateChangeProposal, "id"> = {
     kind: "state_change",
     item,
     intent: args.intent,
+    canonicalItem: null,
+    postedCommentId: null,
   };
   return persist(ctx, draft, args.providerItemId);
 }
@@ -139,7 +196,18 @@ export function appendPreviousVersionFooter(
 
 export async function proposeDescriptionPatch(
   ctx: ProposalContext,
-  args: { providerItemId: string; newDescription: string },
+  args: {
+    providerItemId: string;
+    newDescription: string;
+    /**
+     * When true, the existing description is appended as a "Previous version"
+     * footer beneath the new content. When omitted, the default depends on
+     * origin: agent-staged rewrites append (the human reviewing the patch
+     * still sees what was replaced); UI-origin edits don't (the user already
+     * saw the body and submits verbatim, or opts in via the editor checkbox).
+     */
+    includePreviousVersion?: boolean;
+  },
 ): Promise<ProposalRow> {
   const row = await loadCachedItem(ctx, args.providerItemId);
   const item = snapshotFromRow(row);
@@ -154,12 +222,22 @@ export async function proposeDescriptionPatch(
   // is verbatim history and should not be re-trimmed every patch.
   const capOptions = await loadCodeSnippetCapOptions(ctx.db, ctx.projectId);
   const capped = capCodeSnippets(args.newDescription, capOptions).text;
-  const merged = appendPreviousVersionFooter(
-    capped,
-    item.description,
-    item.author,
-    item.updatedAt ?? item.createdAt,
-  );
+  // The "Previous version" footer is for agent-staged rewrites where the
+  // human is reviewing a model-authored body and wants the original visible
+  // beneath it. UI-origin edits already saw the full body in the editor and
+  // submit their text verbatim — appending another footer would just stack
+  // duplicates of `item.description` (including any prior footer) on every
+  // save. The UI exposes an opt-in checkbox so a human can request the
+  // footer when they're rewriting and want to preserve the original.
+  const includeFooter = args.includePreviousVersion ?? ctx.origin === "agent";
+  const merged = includeFooter
+    ? appendPreviousVersionFooter(
+        capped,
+        item.description,
+        item.author,
+        item.updatedAt ?? item.createdAt,
+      )
+    : capped;
   const draft: Omit<DescriptionPatchProposal, "id"> = {
     kind: "description_patch",
     item,
@@ -240,6 +318,27 @@ export async function proposeTagsChange(
     kind: "tags_change",
     item,
     nextTags: next,
+  };
+  return persist(ctx, draft, args.providerItemId);
+}
+
+export async function proposeAssigneeChange(
+  ctx: ProposalContext,
+  args: { providerItemId: string; nextAssignee: string | null },
+): Promise<ProposalRow> {
+  const row = await loadCachedItem(ctx, args.providerItemId);
+  const item = snapshotFromRow(row);
+  const next = args.nextAssignee?.trim() || null;
+  if ((item.assignee ?? null) === next) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "assignee_change is a no-op (assignee unchanged)",
+    });
+  }
+  const draft: Omit<AssigneeChangeProposal, "id"> = {
+    kind: "assignee_change",
+    item,
+    nextAssignee: next,
   };
   return persist(ctx, draft, args.providerItemId);
 }
