@@ -62,22 +62,27 @@ export function ProposalCard({
   const autoApplied = autoAppliedRef.current ?? false;
 
   const confirm = trpc.proposals.confirm.useMutation({
-    onSuccess: async () => {
+    onSuccess: async (result) => {
       await Promise.all([
         utils.items.list.invalidate(),
         utils.items.get.invalidate(),
         utils.proposals.list.invalidate(),
         utils.proposals.get.invalidate({ projectSlug, proposalId }),
       ]);
+      // The confirm mutation can resolve with the row bounced back to
+      // `pending` if the provider write failed — keep the card mounted in
+      // that case so the user sees the error and can retry.
+      if (result.status === "confirmed" && result.executedAt !== null) onDismiss();
     },
   });
 
   const reject = trpc.proposals.reject.useMutation({
-    onSuccess: async () => {
+    onSuccess: async (result) => {
       await Promise.all([
         utils.proposals.list.invalidate(),
         utils.proposals.get.invalidate({ projectSlug, proposalId }),
       ]);
+      if (result.status === "rejected") onDismiss();
     },
   });
 

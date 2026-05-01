@@ -1,6 +1,5 @@
 import type { ProposalDiff } from "@/server/proposals/diff";
 import { Badge } from "@/ui/primitives/badge";
-import { ScrollArea } from "@/ui/primitives/scroll-area";
 
 export function ProposalDiffView({ diff }: { diff: ProposalDiff }) {
   switch (diff.kind) {
@@ -202,9 +201,7 @@ function DiffBlock({
   return (
     <div className={`flex min-w-0 flex-col gap-1 rounded-md border ${border} p-2`}>
       <span className="text-muted-foreground text-xs uppercase tracking-wide">{label}</span>
-      <ScrollArea className="max-h-64">
-        <pre className="whitespace-pre-wrap break-words text-xs">{body || "(empty)"}</pre>
-      </ScrollArea>
+      <pre className="whitespace-pre-wrap break-words text-xs">{body || "(empty)"}</pre>
     </div>
   );
 }
