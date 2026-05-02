@@ -15,6 +15,7 @@
 
 import "server-only";
 import { cache } from "react";
+import type { ProjectId, UserId } from "@/core/types";
 import type { db as Db } from "@/server/db";
 import {
   decodeSettingValue,
@@ -52,7 +53,7 @@ export const loadGlobalSetting = cache(async function loadGlobalSetting<K extend
 
 export const loadProjectSetting = cache(async function loadProjectSetting<K extends SettingKey>(
   db: typeof Db,
-  projectId: string,
+  projectId: ProjectId,
   key: K,
 ): Promise<SettingValue<K>> {
   const def = getSettingDef(key);
@@ -69,7 +70,7 @@ export const loadProjectSetting = cache(async function loadProjectSetting<K exte
 
 export const loadUserSetting = cache(async function loadUserSetting<K extends SettingKey>(
   db: typeof Db,
-  userId: string,
+  userId: UserId,
   key: K,
 ): Promise<SettingValue<K>> {
   const def = getSettingDef(key);
@@ -109,12 +110,14 @@ export async function upsertGlobalSetting<K extends SettingKey>(
     await db.setting.update({ where: { id: existing.id }, data: { value: encoded } });
     return;
   }
-  await db.setting.create({ data: { key, value: encoded, scope: "global" } });
+  await db.setting.create({
+    data: { key, value: encoded, scope: "global", userId: null, projectId: null },
+  });
 }
 
 export async function upsertProjectSetting<K extends SettingKey>(
   db: typeof Db,
-  projectId: string,
+  projectId: ProjectId,
   key: K,
   value: SettingValue<K>,
 ): Promise<void> {
@@ -137,7 +140,7 @@ export async function upsertProjectSetting<K extends SettingKey>(
 
 export async function upsertUserSetting<K extends SettingKey>(
   db: typeof Db,
-  userId: string,
+  userId: UserId,
   key: K,
   value: SettingValue<K>,
 ): Promise<void> {

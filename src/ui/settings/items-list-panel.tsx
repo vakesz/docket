@@ -39,6 +39,19 @@ export function ItemsListPanel({ projectSlug }: { projectSlug: string | null }) 
       await utils.settings.list.invalidate();
     },
   });
+  // Avatar-supporting providers come from the registry — adding a third
+  // provider with `avatarFetcher` set picks itself up here. Cached for an
+  // hour: the registry is build-time static.
+  const providerKinds = trpc.projects.kinds.useQuery(undefined, { staleTime: 60 * 60_000 });
+  const avatarProviderNames = (providerKinds.data ?? [])
+    .filter((k) => k.hasAvatarFetcher)
+    .map((k) => k.displayName);
+  const avatarSupportLabel =
+    avatarProviderNames.length === 0
+      ? "No registered providers fetch avatars; assignee chips fall back to colored initials."
+      : avatarProviderNames.length === 1
+        ? `Currently ${avatarProviderNames[0]}-only — providers without an avatar fetcher fall back to a colored initial circle.`
+        : `Supported by ${avatarProviderNames.slice(0, -1).join(", ")} and ${avatarProviderNames.at(-1)}; providers without an avatar fetcher fall back to a colored initial circle.`;
 
   const [recentEnabled, setRecentEnabled] = useRecentEnabled();
   const [recentLimit, setRecentLimit] = useRecentLimit();
@@ -258,9 +271,8 @@ export function ItemsListPanel({ projectSlug }: { projectSlug: string | null }) 
         <div className="flex flex-col gap-1">
           <Label className="font-medium text-foreground text-sm">Show assignee avatars</Label>
           <p className="text-muted-foreground text-xs">
-            When on, assignee chips render with the user's profile picture pulled from the provider.
-            Currently GitHub-only — a deterministic CDN URL, no extra API calls. Other providers
-            fall back to a colored initial circle. Turn off to show only the username.
+            When on, assignee chips render with the user's profile picture pulled from the provider.{" "}
+            {avatarSupportLabel} Turn off to show only the username.
           </p>
           <div className="flex items-center gap-2 text-foreground text-sm">
             <Switch

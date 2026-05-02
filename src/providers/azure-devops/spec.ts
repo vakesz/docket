@@ -1,10 +1,10 @@
-// AreaPath / IterationPath axes use UNDER semantics: a stored `A\B\C`
+// AreaPath / IterationPath facets use UNDER semantics: a stored `A\B\C`
 // matches filter `A` or `A\B`. Matchers/extractors live here (not in
 // `core/`) so the provider-agnostic core stays out of `providerRaw.fields`.
 
 import type {
-  AxisExtractor,
-  AxisMatcher,
+  FacetExtractor,
+  FacetMatcher,
   LabelTemplate,
   ProviderItemNumberCodec,
   ProviderSpec,
@@ -49,10 +49,10 @@ function matchesPath(item: Item, fieldKey: string, expected: string): boolean {
   return value === expected || value.startsWith(`${expected}\\`);
 }
 
-const axisMatcher: AxisMatcher = (item, axisKey, expected) => {
-  if (axisKey === "area_path") return matchesPath(item, "System.AreaPath", expected);
-  if (axisKey === "iteration_path") return matchesPath(item, "System.IterationPath", expected);
-  if (axisKey === "team") {
+const facetMatcher: FacetMatcher = (item, facetKey, expected) => {
+  if (facetKey === "area_path") return matchesPath(item, "System.AreaPath", expected);
+  if (facetKey === "iteration_path") return matchesPath(item, "System.IterationPath", expected);
+  if (facetKey === "team") {
     const fields = fieldsOf(item);
     if (!fields) return false;
     const node = fields["System.NodeName"];
@@ -63,18 +63,18 @@ const axisMatcher: AxisMatcher = (item, axisKey, expected) => {
   return false;
 };
 
-const axisExtract: AxisExtractor = (item, axisKey) => {
+const facetExtract: FacetExtractor = (item, facetKey) => {
   const fields = fieldsOf(item);
   if (!fields) return null;
-  if (axisKey === "area_path") {
+  if (facetKey === "area_path") {
     const v = fields["System.AreaPath"];
     return typeof v === "string" && v ? v : null;
   }
-  if (axisKey === "iteration_path") {
+  if (facetKey === "iteration_path") {
     const v = fields["System.IterationPath"];
     return typeof v === "string" && v ? v : null;
   }
-  if (axisKey === "team") {
+  if (facetKey === "team") {
     const node = fields["System.NodeName"];
     if (typeof node === "string" && node) return node;
     const team = fields["System.TeamProject"];
@@ -116,13 +116,13 @@ export const azureDevOpsSpec = {
     return { orgUrl, project };
   },
   labelTemplate,
-  scopeAxes: [
+  scopeFacets: [
     { key: "area_path", label: "Area path", discoveryStage: null },
     { key: "iteration_path", label: "Iteration", discoveryStage: null },
     { key: "team", label: "Team", discoveryStage: null },
   ],
-  axisMatcher,
-  axisExtract,
+  facetMatcher,
+  facetExtract,
   itemNumberCodec,
   capabilities: {
     supportedReactions: [],

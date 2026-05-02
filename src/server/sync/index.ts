@@ -10,9 +10,14 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
   asProjectId,
+  asProviderItemId,
   type Comment as CanonicalComment,
   type Item as CanonicalItem,
   type ChangedItem,
+  type ItemId,
+  type ProjectId,
+  type ProviderItemId,
+  type UserId,
 } from "@/core/types";
 import { Prisma } from "@/db/generated/client";
 import { warmAvatars } from "@/server/avatars/service";
@@ -157,7 +162,7 @@ function decodeProgress(raw: string | null): SyncProgressSnapshot | null {
 
 async function upsertProgress(
   db: typeof Db,
-  projectId: string,
+  projectId: ProjectId,
   snapshot: SyncProgressSnapshot,
 ): Promise<void> {
   // Resolves the existing row to either a no-op (existing belongs to a
@@ -218,7 +223,7 @@ async function upsertProgress(
 
 export async function loadSyncProgress(
   db: typeof Db,
-  projectId: string,
+  projectId: ProjectId,
 ): Promise<SyncProgressSnapshot | null> {
   const row = await db.setting.findFirst({
     where: {
@@ -264,7 +269,7 @@ export function toSyncProgressLabel(phase: SyncPhase): string {
   }
 }
 
-export function toItemRow(canonical: CanonicalItem, projectId: string, syncedAt: Date) {
+export function toItemRow(canonical: CanonicalItem, projectId: ProjectId, syncedAt: Date) {
   // The plural assignee column always reflects the singular: providers
   // without multi-assignee surface a single login through `assignee`, and
   // we want both columns coherent so callers can transition reads at their
@@ -330,13 +335,13 @@ type UpsertProgressSnapshot = {
  */
 async function processChunk(
   db: typeof Db,
-  projectId: string,
+  projectId: ProjectId,
   bundles: readonly ChangedItem[],
   syncedAt: Date,
   ctx: { syncId: string; chunkIndex: number; providerKind: string },
 ): Promise<ChunkResult> {
   const startedAt = Date.now();
-  const ids = bundles.map((b) => b.item.id);
+  const ids = bundles.map((b) => asProviderItemId(b.item.id));
   const cachedRows = await db.item.findMany({
     where: { projectId, providerItemId: { in: ids } },
     select: {
@@ -352,26 +357,27 @@ async function processChunk(
 
   const toCreate: ReturnType<typeof toItemRow>[] = [];
   const toUpdate: {
-    providerItemId: string;
+    providerItemId: ProviderItemId;
     row: ReturnType<typeof toItemRow>;
   }[] = [];
   const changedExisting: {
-    itemId: string;
-    providerItemId: string;
+    itemId: ItemId;
+    providerItemId: ProviderItemId;
     changes: MaterialChange[];
   }[] = [];
 
   for (const bundle of bundles) {
     const item = bundle.item;
+    const providerItemId = asProviderItemId(item.id);
     const row = toItemRow(item, projectId, syncedAt);
-    const cached = cachedMap.get(item.id);
+    const cached = cachedMap.get(providerItemId);
     if (cached) {
-      toUpdate.push({ providerItemId: item.id, row });
+      toUpdate.push({ providerItemId, row });
       const changes = materialDiff(cached, item);
       if (changes.length > 0) {
         changedExisting.push({
           itemId: cached.id,
-          providerItemId: item.id,
+          providerItemId,
           changes,
         });
       }
@@ -413,7 +419,7 @@ async function processChunk(
     const results = await Promise.all(
       changedExisting.map((c) =>
         injectExternalChange(db, {
-          projectId: asProjectId(projectId),
+          projectId,
           itemId: c.itemId,
           providerItemId: c.providerItemId,
           changes: c.changes,
@@ -608,7 +614,7 @@ export async function reconcileComments(
 
 async function upsertItems(
   db: typeof Db,
-  projectId: string,
+  projectId: ProjectId,
   providerKind: string,
   bundles: AsyncIterable<ChangedItem>,
   syncedAt: Date,
@@ -711,7 +717,7 @@ async function upsertItems(
 
 async function bumpCursor(
   db: typeof Db,
-  projectId: string,
+  projectId: ProjectId,
   watermark: Date | null,
   fullSyncAt: Date | null,
 ): Promise<void> {
@@ -745,16 +751,20 @@ async function bumpCursor(
 async function runSync(
   db: typeof Db,
   project: ProjectArg,
-  userId: string,
+  userId: UserId,
   mode: SyncMode,
 ): Promise<SyncResult> {
+  // Project rows arrive from Prisma with `id: string`; brand it at this
+  // boundary so all downstream sync helpers receive ProjectId without the
+  // caller having to repeat the assertion.
+  const projectId = asProjectId(project.id);
   const syncId = randomUUID();
   const startedAt = Date.now();
   const runStartedAt = new Date(startedAt);
   const baseCtx = {
     syncId,
     mode,
-    projectId: project.id,
+    projectId,
     providerKind: project.providerKind,
     userId,
   };
@@ -779,7 +789,7 @@ async function runSync(
 
   const persistProgress = async () => {
     progress = { ...progress, updatedAt: new Date() };
-    await upsertProgress(db, project.id, progress);
+    await upsertProgress(db, projectId, progress);
   };
 
   try {
@@ -815,7 +825,7 @@ async function runSync(
       itemsSeen,
     } = await upsertItems(
       db,
-      project.id,
+      projectId,
       project.providerKind,
       provider.listChangesSince(watermark),
       syncedAt,
@@ -886,7 +896,7 @@ async function runSync(
     };
     await persistProgress();
 
-    await bumpCursor(db, project.id, newWatermark, mode === "full" ? syncedAt : null);
+    await bumpCursor(db, projectId, newWatermark, mode === "full" ? syncedAt : null);
 
     progress = {
       ...progress,
@@ -945,7 +955,7 @@ async function runSync(
 export function runIncrementalSync(
   db: typeof Db,
   project: ProjectArg,
-  userId: string,
+  userId: UserId,
 ): Promise<SyncResult> {
   return runSync(db, project, userId, "incremental");
 }
@@ -953,7 +963,7 @@ export function runIncrementalSync(
 export function runFullSync(
   db: typeof Db,
   project: ProjectArg,
-  userId: string,
+  userId: UserId,
 ): Promise<SyncResult> {
   return runSync(db, project, userId, "full");
 }

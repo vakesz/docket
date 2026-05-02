@@ -2,7 +2,7 @@
 
 import { Plus, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { displayTag } from "@/lib/format";
 import { trpc } from "@/lib/trpc-client";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/ui/primitives/popover
 
 const MAX_TAG_LEN = 80;
 const MAX_TAGS = 50;
+
+function sameTagsCI(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false;
+  const aLower = new Set(a.map((t) => t.toLowerCase()));
+  return b.every((t) => aLower.has(t.toLowerCase()));
+}
 
 /**
  * Inline tag editor that replaces the read-only chip row in the item detail
@@ -50,25 +56,21 @@ export function TagsEditor({
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+
   // Tracks the baseline draft was last synced from. We only re-baseline
   // when draft still matches it — otherwise a background refetch mid-edit
   // (sync, websocket nudge, or `router.refresh()` after a proposal lands)
-  // would silently overwrite the chips the user is staging.
-  const lastBaselineRef = useRef<readonly string[]>(editableInitial);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: editableInitial is recomputed every render; depend on the source array.
-  useEffect(() => {
-    const prev = lastBaselineRef.current;
-    const draftLower = new Set(draft.map((t) => t.toLowerCase()));
-    const prevLower = new Set(prev.map((t) => t.toLowerCase()));
-    const userIsClean =
-      draftLower.size === prevLower.size && [...draftLower].every((t) => prevLower.has(t));
-    if (userIsClean) {
+  // would silently overwrite the chips the user is staging. setState during
+  // render (guarded by inequality) is the React-recommended substitute for
+  // an effect that derives state from props.
+  const [baseline, setBaseline] = useState<readonly string[]>(editableInitial);
+  if (!sameTagsCI(editableInitial, baseline)) {
+    setBaseline(editableInitial);
+    if (sameTagsCI(draft, baseline)) {
       setDraft(editableInitial);
       setError(null);
     }
-    lastBaselineRef.current = editableInitial;
-  }, [currentTags, stateEncodingTags]);
+  }
 
   const draftSetLower = new Set(draft.map((t) => t.toLowerCase()));
   const initialSetLower = new Set(editableInitial.map((t) => t.toLowerCase()));

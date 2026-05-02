@@ -75,6 +75,7 @@ export function DetailPane({
   capabilities: {
     supportedReactions: readonly string[];
     stateEncodingTags: readonly string[];
+    pullRequestDiffs: boolean;
   };
   providerHasAvatars: boolean;
   item: DetailItem;
@@ -117,6 +118,7 @@ export function DetailPane({
               title={item.title}
               body={item.description}
               commentCount={item.comments.length}
+              pullRequestDiffs={capabilities.pullRequestDiffs}
             />
             <ChatToggleButton />
           </div>

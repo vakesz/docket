@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { LLM_KIND_META, LLM_KINDS } from "@/agent/llm/types";
 import { trpc } from "@/lib/trpc-client";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/primitives/alert";
 import { Badge } from "@/ui/primitives/badge";
@@ -52,27 +53,24 @@ export function LlmProvidersPanel() {
     guardrail: !guardrailRows.some((r) => r.isDefault),
   };
 
+  // Per-vendor onboarding hints (e.g. Azure AI Foundry under `openai`) come
+  // from the `LLM_KIND_META` registry — adding a new vendor with a hint is a
+  // single map entry, no changes here.
+  const foundryHints = LLM_KINDS.flatMap((k) => {
+    const hint = LLM_KIND_META[k].foundryHint;
+    return hint ? [{ kind: k, hint }] : [];
+  });
+
   return (
     <div className="flex flex-col gap-6">
-      <Alert variant="warning">
-        <AlertTitle>Adding an Azure AI Foundry model</AlertTitle>
-        <AlertDescription>
-          <p>
-            Use the project&rsquo;s OpenAI v1 endpoint as the Base URL — the path must end with{" "}
-            <code className="rounded bg-card px-1 py-0.5 font-mono text-foreground">
-              /openai/v1/
-            </code>
-            . Set <span className="font-medium">Model</span> to the deployment name shown in Foundry
-            &rarr; Model deployments (for example <code className="font-mono">gpt-5</code>).
-          </p>
-          <p>
-            Template:{" "}
-            <code className="rounded bg-card px-1 py-0.5 font-mono text-foreground">
-              https://&lt;resource&gt;.services.ai.azure.com/api/projects/&lt;project&gt;/openai/v1/
-            </code>
-          </p>
-        </AlertDescription>
-      </Alert>
+      {foundryHints.map(({ kind, hint }) => (
+        <Alert key={`foundry-${kind}`} variant="warning">
+          <AlertTitle>{hint.title}</AlertTitle>
+          <AlertDescription>
+            <p>{hint.body}</p>
+          </AlertDescription>
+        </Alert>
+      ))}
 
       <Section
         title="Chat models"

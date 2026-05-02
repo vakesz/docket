@@ -22,12 +22,20 @@ export function SuggestActionButton({
   title,
   body,
   commentCount,
+  pullRequestDiffs,
 }: {
   kind: ItemKind | null;
   state: ItemState | null;
   title: string;
   body: string | null;
   commentCount: number;
+  /**
+   * Provider capability — when true, the seed includes a bullet about
+   * researching the fix PR before close_done. Wired from the project's
+   * `capabilities.pullRequestDiffs` so AzDO (work-items only) doesn't
+   * tell the model to call PR-only tools.
+   */
+  pullRequestDiffs: boolean;
 }) {
   const { requestOpenWithSeed, seedPending } = useChatPaneController();
   const globals = trpc.settings.globalList.useQuery();
@@ -39,7 +47,15 @@ export function SuggestActionButton({
   const onClick = () => {
     if (seedPending) return;
     requestOpenWithSeed(
-      buildSuggestSeed({ kind, state, title, body, commentCount, actionBullets }),
+      buildSuggestSeed({
+        kind,
+        state,
+        title,
+        body,
+        commentCount,
+        actionBullets,
+        capabilities: { pullRequestDiffs },
+      }),
     );
   };
 

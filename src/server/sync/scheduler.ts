@@ -8,6 +8,7 @@
 
 import "server-only";
 
+import { asProjectId, asUserId } from "@/core/types";
 import type { Project } from "@/db/generated/client";
 import { db } from "@/server/db";
 import { errFields } from "@/server/log-fields";
@@ -97,14 +98,18 @@ async function supervisorTick(): Promise<void> {
 export async function tickProject(project: SchedulerProject): Promise<void> {
   const state = getState();
   if (state.inFlight.has(project.id)) return;
-  const intervalSeconds = await loadProjectSetting(db, project.id, "sync.interval-seconds");
+  // Project rows arrive from Prisma with plain string ids; brand here so
+  // the typed sync API doesn't have to widen.
+  const projectId = asProjectId(project.id);
+  const ownerUserId = asUserId(project.ownerUserId);
+  const intervalSeconds = await loadProjectSetting(db, projectId, "sync.interval-seconds");
   if (intervalSeconds === 0) return;
   const lastFiredAt = state.lastFiredAt.get(project.id) ?? 0;
   if (Date.now() - lastFiredAt < intervalSeconds * 1000) return;
   state.lastFiredAt.set(project.id, Date.now());
   state.inFlight.add(project.id);
   try {
-    await runIncrementalSync(db, project, project.ownerUserId);
+    await runIncrementalSync(db, project, ownerUserId);
   } catch (err) {
     logger.error({ projectId: project.id, ...errFields(err) }, "sync scheduler: tick failed");
   } finally {

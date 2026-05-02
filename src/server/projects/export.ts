@@ -9,6 +9,11 @@
  * Read-only — runs through `projectScopedProcedure`. The conversations
  * filter by `userId` so a member exporting only sees their own chats;
  * memory + sources are project-wide and visible to every member.
+ *
+ * Paginated. The first page (cursor === null) carries project + memory +
+ * sources + the newest conversations up to a per-page message budget;
+ * later pages omit the meta and continue with older conversations. The
+ * client loops on `nextCursor` and merges into one download.
  */
 
 import "server-only";
@@ -16,7 +21,16 @@ import type { db as Db } from "@/server/db";
 
 type Database = typeof Db;
 
-export type ProjectExport = {
+const EXPORT_CONVERSATIONS_PER_PAGE = 200;
+const EXPORT_MESSAGES_PER_PAGE = 10_000;
+const EXPORT_MESSAGES_PER_CONVERSATION = 5_000;
+
+export type ProjectExportCursor = {
+  startedAt: string;
+  conversationId: string;
+};
+
+export type ProjectExportPage = {
   formatVersion: 1;
   generatedAt: string;
   project: {
@@ -29,7 +43,7 @@ export type ProjectExport = {
     defaultTemperature: number | null;
     createdAt: string;
     updatedAt: string;
-  };
+  } | null;
   memory: Array<{
     id: string;
     title: string;
@@ -76,59 +90,93 @@ export type ProjectExport = {
     conversations: number;
     messages: number;
   };
+  nextCursor: ProjectExportCursor | null;
 };
 
 export async function buildProjectExport(
   db: Database,
   projectId: string,
   userId: string,
-): Promise<ProjectExport> {
+  cursor: ProjectExportCursor | null = null,
+): Promise<ProjectExportPage> {
+  const isFirstPage = cursor === null;
+
+  const conversationWhere = cursor
+    ? {
+        projectId,
+        userId,
+        OR: [
+          { startedAt: { lt: new Date(cursor.startedAt) } },
+          {
+            AND: [{ startedAt: new Date(cursor.startedAt) }, { id: { lt: cursor.conversationId } }],
+          },
+        ],
+      }
+    : { projectId, userId };
+
   const [project, memory, sources, conversations] = await Promise.all([
-    db.project.findUnique({
-      where: { id: projectId },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        providerKind: true,
-        providerScope: true,
-        defaultLlmProviderId: true,
-        defaultTemperature: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    }),
-    db.memoryEntry.findMany({
-      where: { projectId },
-      orderBy: [{ updatedAt: "desc" }],
-    }),
-    db.sourceDoc.findMany({
-      where: { projectId },
-      orderBy: [{ updatedAt: "desc" }],
-    }),
+    isFirstPage
+      ? db.project.findUnique({
+          where: { id: projectId },
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            providerKind: true,
+            providerScope: true,
+            defaultLlmProviderId: true,
+            defaultTemperature: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        })
+      : Promise.resolve(null),
+    isFirstPage
+      ? db.memoryEntry.findMany({
+          where: { projectId },
+          orderBy: [{ updatedAt: "desc" }],
+        })
+      : Promise.resolve([]),
+    isFirstPage
+      ? db.sourceDoc.findMany({
+          where: { projectId },
+          orderBy: [{ updatedAt: "desc" }],
+        })
+      : Promise.resolve([]),
     db.conversation.findMany({
-      where: { projectId, userId },
-      orderBy: [{ startedAt: "desc" }],
-      // Bound the export so a chatty user can't OOM the Node process.
-      // The cap is generous; if anyone hits it we can move to NDJSON streaming.
-      take: 5_000,
+      where: conversationWhere,
+      orderBy: [{ startedAt: "desc" }, { id: "desc" }],
+      take: EXPORT_CONVERSATIONS_PER_PAGE,
       include: {
         messages: {
           orderBy: [{ createdAt: "asc" }],
-          take: 5_000,
+          take: EXPORT_MESSAGES_PER_CONVERSATION,
         },
       },
     }),
   ]);
 
-  if (!project) {
+  if (isFirstPage && !project) {
     throw new Error("project not found");
   }
 
+  // Walk newest-first; once total messages exceed the budget, stop and
+  // emit a cursor at the next conversation. Always include at least one
+  // conversation per page so a single oversized thread can't deadlock.
   let messageCount = 0;
-  const conversationsOut = conversations.map((c) => {
+  let nextCursor: ProjectExportCursor | null = null;
+  const conversationsOut: ProjectExportPage["conversations"] = [];
+
+  for (const c of conversations) {
+    if (
+      conversationsOut.length > 0 &&
+      messageCount + c.messages.length > EXPORT_MESSAGES_PER_PAGE
+    ) {
+      nextCursor = { startedAt: c.startedAt.toISOString(), conversationId: c.id };
+      break;
+    }
     messageCount += c.messages.length;
-    return {
+    conversationsOut.push({
       id: c.id,
       itemId: c.itemId,
       startedAt: c.startedAt.toISOString(),
@@ -148,23 +196,38 @@ export async function buildProjectExport(
         tokensOut: m.tokensOut,
         createdAt: m.createdAt.toISOString(),
       })),
-    };
-  });
+    });
+  }
+
+  // Filled the page batch — assume there might be more, hand back a cursor
+  // pointing past the last conversation we emitted.
+  if (
+    nextCursor === null &&
+    conversations.length === EXPORT_CONVERSATIONS_PER_PAGE &&
+    conversationsOut.length === conversations.length
+  ) {
+    const last = conversations[conversations.length - 1];
+    if (last) {
+      nextCursor = { startedAt: last.startedAt.toISOString(), conversationId: last.id };
+    }
+  }
 
   return {
     formatVersion: 1,
     generatedAt: new Date().toISOString(),
-    project: {
-      id: project.id,
-      name: project.name,
-      description: project.description,
-      providerKind: project.providerKind,
-      providerScope: project.providerScope,
-      defaultLlmProviderId: project.defaultLlmProviderId,
-      defaultTemperature: project.defaultTemperature,
-      createdAt: project.createdAt.toISOString(),
-      updatedAt: project.updatedAt.toISOString(),
-    },
+    project: project
+      ? {
+          id: project.id,
+          name: project.name,
+          description: project.description,
+          providerKind: project.providerKind,
+          providerScope: project.providerScope,
+          defaultLlmProviderId: project.defaultLlmProviderId,
+          defaultTemperature: project.defaultTemperature,
+          createdAt: project.createdAt.toISOString(),
+          updatedAt: project.updatedAt.toISOString(),
+        }
+      : null,
     memory: memory.map((m) => ({
       id: m.id,
       title: m.title,
@@ -191,5 +254,6 @@ export async function buildProjectExport(
       conversations: conversationsOut.length,
       messages: messageCount,
     },
+    nextCursor,
   };
 }

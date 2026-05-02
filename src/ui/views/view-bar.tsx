@@ -26,14 +26,14 @@ const NO_VIEW = "__none";
 /**
  * View bar for the items page.
  *
- * Drives `?viewId`, `?bucket`, `?assignees`, `?axes` URL params — the
+ * Drives `?viewId`, `?bucket`, `?assignees`, `?facets` URL params — the
  * server-rendered items page reads them back and feeds them into
  * `items.list`. Keeping the URL as the source of truth means a saved view
  * is shareable (paste the URL, get the same filtered list) and survives
  * refresh, which the ad-hoc client-state version wouldn't.
  *
  * Today this surface only wires the saved-view picker + bucket pills + a
- * minimal save-as-view form. Per-axis chips with top-N popovers are a
+ * minimal save-as-view form. Per-facet chips with top-N popovers are a
  * follow-up — the underlying router + view filter already support them.
  */
 export function ViewBar({ projectSlug }: Props) {
@@ -96,10 +96,10 @@ export function ViewBar({ projectSlug }: Props) {
       projectSlug,
       name: newName.trim(),
       // Snapshot whatever the URL currently encodes — bucket today; later,
-      // assignees/axes too.
+      // assignees/facets too.
       stateBucket: bucket,
       assignees: [],
-      axes: {},
+      facets: {},
       isDefault: false,
     });
   }

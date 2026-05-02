@@ -6,6 +6,7 @@
 
 import "server-only";
 import type { GuardrailSettings } from "@/agent/guardrail/registry";
+import type { ProjectId } from "@/core/types";
 import type { db as Db } from "@/server/db";
 import { loadProjectSetting } from "@/server/settings/effective";
 
@@ -15,7 +16,7 @@ export type { GuardrailSettings };
 
 export async function loadGuardrailSettings(
   db: Database,
-  projectId: string,
+  projectId: ProjectId,
 ): Promise<GuardrailSettings> {
   const [enabled, kind, blockOnInjection, blockOffTopic, scopeCheckEnabled, outputCheckEnabled] =
     await Promise.all([

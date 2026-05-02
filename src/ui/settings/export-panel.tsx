@@ -11,9 +11,10 @@ type Props = {
 
 /**
  * Project-scoped export. Bundles memory + sources + the caller's
- * conversations into one JSON file via `projects.export`. Triggers a
- * client-side download — nothing is persisted server-side and no third
- * party sees the payload.
+ * conversations into one JSON file via `projects.export`. The server
+ * paginates conversations to bound memory; this panel walks `nextCursor`
+ * until exhausted, merges the pages, and triggers a client-side download.
+ * Nothing is persisted server-side and no third party sees the payload.
  */
 export function ExportPanel({ projectSlug }: Props) {
   const utils = trpc.useUtils();
@@ -29,7 +30,32 @@ export function ExportPanel({ projectSlug }: Props) {
     setLast(null);
     setBusy(true);
     try {
-      const data = await utils.projects.export.fetch({ projectSlug });
+      const firstPage = await utils.projects.export.fetch({ projectSlug, cursor: null });
+      if (!firstPage.project) throw new Error("export missing project metadata");
+
+      const allConversations = [...firstPage.conversations];
+      let cursor = firstPage.nextCursor;
+      while (cursor !== null) {
+        const page = await utils.projects.export.fetch({ projectSlug, cursor });
+        allConversations.push(...page.conversations);
+        cursor = page.nextCursor;
+      }
+
+      const data = {
+        formatVersion: firstPage.formatVersion,
+        generatedAt: firstPage.generatedAt,
+        project: firstPage.project,
+        memory: firstPage.memory,
+        sources: firstPage.sources,
+        conversations: allConversations,
+        counts: {
+          memory: firstPage.counts.memory,
+          sources: firstPage.counts.sources,
+          conversations: allConversations.length,
+          messages: allConversations.reduce((sum, c) => sum + c.messages.length, 0),
+        },
+      };
+
       const json = JSON.stringify(data, null, 2);
       const blob = new Blob([json], { type: "application/json" });
       const url = URL.createObjectURL(blob);

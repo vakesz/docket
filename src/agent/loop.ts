@@ -13,7 +13,7 @@ import { extractUntrustedFields } from "@/agent/guardrail/types";
 import type { LlmAdapter, LlmEvent, LlmMessage, LlmToolCall } from "@/agent/llm/types";
 import { capCodeSnippets } from "@/agent/post/code-snippet-cap";
 import { loadCodeSnippetCapOptions } from "@/agent/post/load-options";
-import { buildSystemPrefix } from "@/agent/prompt";
+import { buildSystemPrefix, NO_PROMPT_CAPABILITIES, type PromptCapabilities } from "@/agent/prompt";
 import { loadPrompts } from "@/agent/prompt-loader";
 import { buildToolRegistry } from "@/agent/tools/registry";
 import type { AgentTool, ToolContext, ToolResult } from "@/agent/tools/types";
@@ -34,6 +34,7 @@ import { appendMessage, getConversation } from "@/server/conversations/storage";
 import type { db as Db } from "@/server/db";
 import { loadGuardrailSettings } from "@/server/guardrail/settings";
 import { logger } from "@/server/logger";
+import { getProviderSpec } from "@/server/provider-registry";
 import { loadUserSetting } from "@/server/settings/effective";
 
 type Database = typeof Db;
@@ -208,7 +209,7 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
   //     long session take effect without reconnecting. A guardrail call
   //     that throws or times out is allowed-by-default inside the adapter
   //     itself — failures are silent, not turn-aborting.
-  const guardrailSettings = await loadGuardrailSettings(db, conv.projectId);
+  const guardrailSettings = await loadGuardrailSettings(db, projectId);
   const guardrail = await selectGuardrailFor(db, {
     project: conv.project,
     settings: guardrailSettings,
@@ -252,7 +253,7 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
   //     this turn already reflects the trimmed history. The compaction
   //     module no-ops when the transcript is below the project's
   //     configured threshold or the toggle is off.
-  const compactionSettings = await loadCompactionSettings(db, conv.projectId);
+  const compactionSettings = await loadCompactionSettings(db, projectId);
   if (compactionSettings.enabled) {
     const compaction = await compactConversation(db, conversationId, compactionSettings);
     if (compaction.compactedCount > 0) {
@@ -274,10 +275,16 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
   //    every Item field we need (summary text + kind + providerItemId).
   const itemContext = await loadItemContext(db, conv);
   const prompts = await loadPrompts(db);
+  const promptCapabilities: PromptCapabilities = (() => {
+    const spec = getProviderSpec(conv.project.providerKind);
+    if (!spec) return NO_PROMPT_CAPABILITIES;
+    return { pullRequestDiffs: spec.capabilities.pullRequestDiffs };
+  })();
   const systemPrefix = buildSystemPrefix({
     itemKind: itemContext.kind,
     itemSummary: itemContext.summary,
     prompts,
+    capabilities: promptCapabilities,
   });
 
   const toolCtx: ToolContext = {

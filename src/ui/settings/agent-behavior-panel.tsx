@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
-import { trpc } from "@/lib/trpc-client";
+import { useId } from "react";
+import { useProjectSettingsForm } from "@/lib/settings-client";
 import { Button } from "@/ui/primitives/button";
 import { Input } from "@/ui/primitives/input";
 import { Label } from "@/ui/primitives/label";
@@ -31,15 +31,35 @@ export function AgentBehaviorPanel({ projectSlug }: { projectSlug: string }) {
 }
 
 function RecommendationsSection({ projectSlug }: { projectSlug: string }) {
-  const utils = trpc.useUtils();
-  const projectSettings = trpc.settings.projectList.useQuery({ projectSlug });
-
-  const [likelyResolvedEnabled, setLikelyResolvedEnabled] = useState(true);
-  const [duplicateEnabled, setDuplicateEnabled] = useState(true);
-  const [codeExamplesEnabled, setCodeExamplesEnabled] = useState(true);
-  const [maxLines, setMaxLines] = useState<string>("20");
-  const [maxSnippets, setMaxSnippets] = useState<string>("2");
-  const [similarityThreshold, setSimilarityThreshold] = useState<string>("70");
+  const { values, setValues, isLoading, save, saveMany } = useProjectSettingsForm({
+    projectSlug,
+    initial: {
+      likelyResolvedEnabled: true,
+      duplicateEnabled: true,
+      codeExamplesEnabled: true,
+      maxLines: "20",
+      maxSnippets: "2",
+      similarityThreshold: "70",
+    },
+    seed: (view) => ({
+      likelyResolvedEnabled: view.bool("recommendations.likely-resolved.enabled", true),
+      duplicateEnabled: view.bool("recommendations.duplicate-detection.enabled", true),
+      codeExamplesEnabled: view.bool("recommendations.code-examples.enabled", true),
+      maxLines: String(view.num("recommendations.code-examples.max-lines", 20)),
+      maxSnippets: String(view.num("recommendations.code-examples.max-snippets-per-reply", 2)),
+      similarityThreshold: String(
+        view.num("recommendations.duplicate-detection.similarity-threshold", 70),
+      ),
+    }),
+  });
+  const {
+    likelyResolvedEnabled,
+    duplicateEnabled,
+    codeExamplesEnabled,
+    maxLines,
+    maxSnippets,
+    similarityThreshold,
+  } = values;
 
   const likelyId = useId();
   const dupId = useId();
@@ -47,32 +67,6 @@ function RecommendationsSection({ projectSlug }: { projectSlug: string }) {
   const maxLinesId = useId();
   const maxSnippetsId = useId();
   const thresholdId = useId();
-
-  const seededForRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (seededForRef.current === projectSlug) return;
-    if (!projectSettings.data) return;
-    const lookup = new Map(projectSettings.data.map((row) => [row.key, row.value]));
-    const lr = lookup.get("recommendations.likely-resolved.enabled");
-    const dup = lookup.get("recommendations.duplicate-detection.enabled");
-    const ce = lookup.get("recommendations.code-examples.enabled");
-    const ml = lookup.get("recommendations.code-examples.max-lines");
-    const ms = lookup.get("recommendations.code-examples.max-snippets-per-reply");
-    const th = lookup.get("recommendations.duplicate-detection.similarity-threshold");
-    setLikelyResolvedEnabled(typeof lr === "boolean" ? lr : true);
-    setDuplicateEnabled(typeof dup === "boolean" ? dup : true);
-    setCodeExamplesEnabled(typeof ce === "boolean" ? ce : true);
-    setMaxLines(typeof ml === "number" ? String(ml) : "20");
-    setMaxSnippets(typeof ms === "number" ? String(ms) : "2");
-    setSimilarityThreshold(typeof th === "number" ? String(th) : "70");
-    seededForRef.current = projectSlug;
-  }, [projectSettings.data, projectSlug]);
-
-  const save = trpc.settings.projectUpdate.useMutation({
-    onSuccess: async () => {
-      await utils.settings.projectList.invalidate({ projectSlug });
-    },
-  });
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,41 +76,17 @@ function RecommendationsSection({ projectSlug }: { projectSlug: string }) {
     if (!Number.isFinite(maxLinesNum) || maxLinesNum < 1 || maxLinesNum > 40) return;
     if (!Number.isFinite(maxSnippetsNum) || maxSnippetsNum < 0 || maxSnippetsNum > 4) return;
     if (!Number.isFinite(thresholdNum) || thresholdNum < 50 || thresholdNum > 95) return;
-    await Promise.all([
-      save.mutateAsync({
-        projectSlug,
-        key: "recommendations.likely-resolved.enabled",
-        value: likelyResolvedEnabled,
-      }),
-      save.mutateAsync({
-        projectSlug,
-        key: "recommendations.duplicate-detection.enabled",
-        value: duplicateEnabled,
-      }),
-      save.mutateAsync({
-        projectSlug,
-        key: "recommendations.code-examples.enabled",
-        value: codeExamplesEnabled,
-      }),
-      save.mutateAsync({
-        projectSlug,
-        key: "recommendations.code-examples.max-lines",
-        value: maxLinesNum,
-      }),
-      save.mutateAsync({
-        projectSlug,
-        key: "recommendations.code-examples.max-snippets-per-reply",
-        value: maxSnippetsNum,
-      }),
-      save.mutateAsync({
-        projectSlug,
-        key: "recommendations.duplicate-detection.similarity-threshold",
-        value: thresholdNum,
-      }),
+    await saveMany([
+      { key: "recommendations.likely-resolved.enabled", value: likelyResolvedEnabled },
+      { key: "recommendations.duplicate-detection.enabled", value: duplicateEnabled },
+      { key: "recommendations.code-examples.enabled", value: codeExamplesEnabled },
+      { key: "recommendations.code-examples.max-lines", value: maxLinesNum },
+      { key: "recommendations.code-examples.max-snippets-per-reply", value: maxSnippetsNum },
+      { key: "recommendations.duplicate-detection.similarity-threshold", value: thresholdNum },
     ]);
   };
 
-  if (projectSettings.isPending) {
+  if (isLoading) {
     return <p className="text-muted-foreground/70 text-sm">Loading…</p>;
   }
 
@@ -136,7 +106,9 @@ function RecommendationsSection({ projectSlug }: { projectSlug: string }) {
             id={likelyId}
             checked={likelyResolvedEnabled}
             disabled={save.isPending}
-            onCheckedChange={setLikelyResolvedEnabled}
+            onCheckedChange={(next) =>
+              setValues((prev) => ({ ...prev, likelyResolvedEnabled: next }))
+            }
           />
           <Label htmlFor={likelyId}>Likely-resolved detection</Label>
         </div>
@@ -153,7 +125,7 @@ function RecommendationsSection({ projectSlug }: { projectSlug: string }) {
             id={dupId}
             checked={duplicateEnabled}
             disabled={save.isPending}
-            onCheckedChange={setDuplicateEnabled}
+            onCheckedChange={(next) => setValues((prev) => ({ ...prev, duplicateEnabled: next }))}
           />
           <Label htmlFor={dupId}>Duplicate-detection recommendations</Label>
         </div>
@@ -182,7 +154,7 @@ function RecommendationsSection({ projectSlug }: { projectSlug: string }) {
           step={1}
           value={similarityThreshold}
           disabled={save.isPending}
-          onChange={(e) => setSimilarityThreshold(e.target.value)}
+          onChange={(e) => setValues((prev) => ({ ...prev, similarityThreshold: e.target.value }))}
           className="max-w-[8rem]"
         />
       </div>
@@ -193,7 +165,9 @@ function RecommendationsSection({ projectSlug }: { projectSlug: string }) {
             id={codeId}
             checked={codeExamplesEnabled}
             disabled={save.isPending}
-            onCheckedChange={setCodeExamplesEnabled}
+            onCheckedChange={(next) =>
+              setValues((prev) => ({ ...prev, codeExamplesEnabled: next }))
+            }
           />
           <Label htmlFor={codeId}>Allow short code snippets in replies</Label>
         </div>
@@ -221,7 +195,7 @@ function RecommendationsSection({ projectSlug }: { projectSlug: string }) {
           step={1}
           value={maxLines}
           disabled={save.isPending || !codeExamplesEnabled}
-          onChange={(e) => setMaxLines(e.target.value)}
+          onChange={(e) => setValues((prev) => ({ ...prev, maxLines: e.target.value }))}
           className="max-w-[8rem]"
         />
       </div>
@@ -243,7 +217,7 @@ function RecommendationsSection({ projectSlug }: { projectSlug: string }) {
           step={1}
           value={maxSnippets}
           disabled={save.isPending || !codeExamplesEnabled}
-          onChange={(e) => setMaxSnippets(e.target.value)}
+          onChange={(e) => setValues((prev) => ({ ...prev, maxSnippets: e.target.value }))}
           className="max-w-[8rem]"
         />
       </div>
@@ -256,14 +230,16 @@ function RecommendationsSection({ projectSlug }: { projectSlug: string }) {
           type="button"
           variant="secondary"
           disabled={save.isPending}
-          onClick={() => {
-            setLikelyResolvedEnabled(true);
-            setDuplicateEnabled(true);
-            setCodeExamplesEnabled(true);
-            setMaxLines("20");
-            setMaxSnippets("2");
-            setSimilarityThreshold("70");
-          }}
+          onClick={() =>
+            setValues({
+              likelyResolvedEnabled: true,
+              duplicateEnabled: true,
+              codeExamplesEnabled: true,
+              maxLines: "20",
+              maxSnippets: "2",
+              similarityThreshold: "70",
+            })
+          }
         >
           Reset to defaults
         </Button>
@@ -294,52 +270,38 @@ const AUTO_ACCEPT_KINDS: readonly AutoAcceptKind[] = [
 ];
 
 function AutoAcceptSection({ projectSlug }: { projectSlug: string }) {
-  const utils = trpc.useUtils();
-  const projectSettings = trpc.settings.projectList.useQuery({ projectSlug });
-
-  const [selected, setSelected] = useState<Set<string>>(() => new Set());
-
-  const seededForRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (seededForRef.current === projectSlug) return;
-    if (!projectSettings.data) return;
-    const row = projectSettings.data.find((r) => r.key === "proposals.auto-accept-extra-kinds");
-    setSelected(Array.isArray(row?.value) ? new Set(row.value as string[]) : new Set<string>());
-    seededForRef.current = projectSlug;
-  }, [projectSettings.data, projectSlug]);
-
-  const save = trpc.settings.projectUpdate.useMutation({
-    onSuccess: async () => {
-      await utils.settings.projectList.invalidate({ projectSlug });
+  const { view, values, setValues, isLoading, save, saveMany } = useProjectSettingsForm({
+    projectSlug,
+    initial: { selected: new Set<string>() },
+    seed: (v) => {
+      const raw = v.raw("proposals.auto-accept-extra-kinds");
+      return { selected: Array.isArray(raw) ? new Set(raw as string[]) : new Set<string>() };
     },
   });
+  const { selected } = values;
 
   const isDirty = (() => {
-    const row = projectSettings.data?.find((r) => r.key === "proposals.auto-accept-extra-kinds");
-    const stored = Array.isArray(row?.value) ? new Set(row.value as string[]) : new Set<string>();
+    const raw = view.raw("proposals.auto-accept-extra-kinds");
+    const stored = Array.isArray(raw) ? new Set(raw as string[]) : new Set<string>();
     if (stored.size !== selected.size) return true;
     for (const k of stored) if (!selected.has(k)) return true;
     return false;
   })();
 
   const toggle = (key: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
+    setValues((prev) => {
+      const next = new Set(prev.selected);
       if (next.has(key)) next.delete(key);
       else next.add(key);
-      return next;
+      return { selected: next };
     });
   };
 
   const onSave = async () => {
-    await save.mutateAsync({
-      projectSlug,
-      key: "proposals.auto-accept-extra-kinds",
-      value: Array.from(selected),
-    });
+    await saveMany([{ key: "proposals.auto-accept-extra-kinds", value: Array.from(selected) }]);
   };
 
-  if (projectSettings.isPending) {
+  if (isLoading) {
     return <p className="text-muted-foreground/70 text-sm">Loading…</p>;
   }
 
@@ -376,7 +338,7 @@ function AutoAcceptSection({ projectSlug }: { projectSlug: string }) {
           type="button"
           variant="secondary"
           disabled={save.isPending}
-          onClick={() => setSelected(new Set())}
+          onClick={() => setValues({ selected: new Set() })}
         >
           Disable all
         </Button>

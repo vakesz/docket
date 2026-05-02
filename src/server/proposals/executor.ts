@@ -22,6 +22,7 @@ import { assertFound } from "@/server/errors";
 import { errFields } from "@/server/log-fields";
 import { logger } from "@/server/logger";
 import { buildDuplicateCommentBody, hydrateProposal } from "@/server/proposals/builders";
+import { toJsonProposalPayload } from "@/server/proposals/schema";
 import { buildProviderForUser } from "@/server/providers/build";
 import {
   AUTO_ACCEPT_EXTRA_ELIGIBLE_KINDS_LIST,
@@ -218,7 +219,7 @@ export async function confirmProposal(
               }
               await tx.proposal.update({
                 where: { id: row.id },
-                data: { payload: nextPayload as unknown as Prisma.InputJsonValue },
+                data: { payload: toJsonProposalPayload(nextPayload) },
               });
             });
             proposal.postedCommentId = comment.id;

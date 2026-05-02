@@ -1,7 +1,8 @@
 "use client";
 
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { usePathname } from "next/navigation";
-import { useDeferredValue, useEffect, useState } from "react";
+import { useDeferredValue, useEffect, useRef, useState } from "react";
 import type { BacklogBucket, ItemKind } from "@/core/types";
 import { useRecentItemNumbers } from "@/lib/recent-items";
 import { useSettingsMap } from "@/lib/settings-client";
@@ -25,8 +26,8 @@ const PINNED_QUERY_LIMIT = 50;
  *
  * Filters split server-side vs client-side by who pays for them:
  * - `bucket` reshapes the server query (sent through tRPC). It encodes
- *   open/closed/archived/all as a single axis; the router maps it onto a
- *   state-bucket + archived-flag pair.
+ *   open/closed/archived/all as a single dimension; the router maps it onto
+ *   a state-bucket + archived-flag pair.
  * - `kind`, `tag`, and search live in component state and just decide
  *   which already-fetched rows render.
  */
@@ -135,6 +136,8 @@ export function BacklogPane({
     return { visibleKinds, tagCounts, assigneeCounts };
   })();
 
+  const scrollViewportRef = useRef<HTMLDivElement>(null);
+
   const filtered = (() => {
     const q = deferredQuery.trim().toLowerCase();
     return data.filter((it) => {
@@ -173,6 +176,18 @@ export function BacklogPane({
       return true;
     });
   })();
+
+  // Virtualize the cached list — at limit=200 the rows are heavy enough
+  // (Link wrappers, conditional meta line, tag chips) that rendering them
+  // all on every reflow noticeably starves click handlers during sync swaps.
+  // Items have a 1- or 2-row layout depending on whether they have meta;
+  // 56px is a working estimate that the measureElement pass corrects per row.
+  const rowVirtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => scrollViewportRef.current,
+    estimateSize: () => 56,
+    overscan: 8,
+  });
 
   return (
     <div className="flex h-full flex-col bg-background">
@@ -244,7 +259,7 @@ export function BacklogPane({
         </div>
       )}
 
-      <ScrollArea className="min-h-0 flex-1">
+      <ScrollArea viewportRef={scrollViewportRef} className="min-h-0 flex-1">
         {items.isPending ? (
           <EmptyMessage text="Loading…" />
         ) : items.error ? (
@@ -252,17 +267,30 @@ export function BacklogPane({
         ) : filtered.length === 0 ? (
           <EmptyMessage text="No items in this view." />
         ) : (
-          filtered.map((it) => (
-            <ItemRow
-              key={it.id}
-              projectSlug={projectSlug}
-              item={it}
-              pinned={pinnedIds.has(it.id)}
-              selected={selectedNumber === it.itemNumber}
-              staleThresholdDays={staleThresholdDays}
-              maxVisibleTags={maxVisibleTags}
-            />
-          ))
+          <div className="relative w-full" style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const it = filtered[virtualRow.index];
+              if (!it) return null;
+              return (
+                <div
+                  key={virtualRow.key}
+                  data-index={virtualRow.index}
+                  ref={rowVirtualizer.measureElement}
+                  className="absolute top-0 left-0 w-full"
+                  style={{ transform: `translateY(${virtualRow.start}px)` }}
+                >
+                  <ItemRow
+                    projectSlug={projectSlug}
+                    item={it}
+                    pinned={pinnedIds.has(it.id)}
+                    selected={selectedNumber === it.itemNumber}
+                    staleThresholdDays={staleThresholdDays}
+                    maxVisibleTags={maxVisibleTags}
+                  />
+                </div>
+              );
+            })}
+          </div>
         )}
       </ScrollArea>
     </div>

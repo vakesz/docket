@@ -15,6 +15,8 @@
  *   3. GIN trgm indexes on `Item.title` and `Item.description` to back
  *      the ILIKE-style search (`title contains`, `description contains`)
  *      run by the items router and the agent's `search_items` tool.
+ *   4. GIN trgm indexes on `MemoryEntry.title` and `MemoryEntry.body` to
+ *      back the agent's `list_memory` ILIKE search.
  *
  * Missing env or unavailable DB just logs a warning and exits 0 — never
  * blocks the server.
@@ -123,7 +125,18 @@ async function main() {
       `CREATE INDEX CONCURRENTLY IF NOT EXISTS "Item_description_trgm_idx" ON "Item" USING GIN ("description" gin_trgm_ops)`,
     );
 
-    console.log("[apply-raw-sql] Applied pg_trgm + Setting partial uniques + Item trgm indexes.");
+    // GIN trgm indexes for ILIKE search on MemoryEntry title + body — same
+    // pattern as Item, backs the agent's `list_memory` search.
+    await db.$executeRawUnsafe(
+      `CREATE INDEX CONCURRENTLY IF NOT EXISTS "MemoryEntry_title_trgm_idx" ON "MemoryEntry" USING GIN ("title" gin_trgm_ops)`,
+    );
+    await db.$executeRawUnsafe(
+      `CREATE INDEX CONCURRENTLY IF NOT EXISTS "MemoryEntry_body_trgm_idx" ON "MemoryEntry" USING GIN ("body" gin_trgm_ops)`,
+    );
+
+    console.log(
+      "[apply-raw-sql] Applied pg_trgm + Setting partial uniques + Item/MemoryEntry trgm indexes.",
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.warn(`[apply-raw-sql] Skipped: ${message}`);

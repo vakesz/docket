@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useId, useRef, useState } from "react";
+import { useId } from "react";
+import { useProjectSettingsForm } from "@/lib/settings-client";
 import { trpc } from "@/lib/trpc-client";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/primitives/alert";
 import { Button } from "@/ui/primitives/button";
@@ -57,16 +58,34 @@ const KIND_OPTIONS: { value: GuardrailKind; label: string; hint: string }[] = [
  * defense-in-depth feature, not a regex toy.
  */
 export function GuardrailPanel({ projectSlug }: { projectSlug: string }) {
-  const utils = trpc.useUtils();
-  const projectSettings = trpc.settings.projectList.useQuery({ projectSlug });
   const providers = trpc.llmProviders.list.useQuery();
-
-  const [enabled, setEnabled] = useState(true);
-  const [kind, setKind] = useState<GuardrailKind>("composite");
-  const [blockOnInjection, setBlockOnInjection] = useState(true);
-  const [blockOffTopic, setBlockOffTopic] = useState(true);
-  const [scopeCheckEnabled, setScopeCheckEnabled] = useState(true);
-  const [outputCheckEnabled, setOutputCheckEnabled] = useState(false);
+  const { values, setValues, isLoading, save, saveMany } = useProjectSettingsForm({
+    projectSlug,
+    initial: {
+      enabled: true,
+      kind: "composite" as GuardrailKind,
+      blockOnInjection: true,
+      blockOffTopic: true,
+      scopeCheckEnabled: true,
+      outputCheckEnabled: false,
+    },
+    seed: (view) => {
+      const k = view.raw("guardrail.kind");
+      return {
+        enabled: view.bool("guardrail.enabled", true),
+        kind:
+          k === "noop" || k === "pattern" || k === "llm-judge" || k === "composite"
+            ? (k as GuardrailKind)
+            : ("composite" as GuardrailKind),
+        blockOnInjection: view.bool("guardrail.block-on-injection", true),
+        blockOffTopic: view.bool("guardrail.block-off-topic", true),
+        scopeCheckEnabled: view.bool("guardrail.scope-check-enabled", true),
+        outputCheckEnabled: view.bool("guardrail.output-check-enabled", false),
+      };
+    },
+  });
+  const { enabled, kind, blockOnInjection, blockOffTopic, scopeCheckEnabled, outputCheckEnabled } =
+    values;
 
   const enabledId = useId();
   const kindId = useId();
@@ -74,39 +93,6 @@ export function GuardrailPanel({ projectSlug }: { projectSlug: string }) {
   const offTopicId = useId();
   const scopeId = useId();
   const outputId = useId();
-
-  // Seed once per project. Parallel mutateAsync calls below would
-  // otherwise let an intermediate refetch (after one mutation lands but
-  // before the others) clobber whatever the user is still editing.
-  // Switching projects in-place must re-seed from the new project's
-  // settings instead of keeping the previous project's state.
-  const seededForRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (seededForRef.current === projectSlug) return;
-    if (!projectSettings.data) return;
-    const lookup = new Map(projectSettings.data.map((row) => [row.key, row.value]));
-    const e = lookup.get("guardrail.enabled");
-    const k = lookup.get("guardrail.kind");
-    const boi = lookup.get("guardrail.block-on-injection");
-    const bot = lookup.get("guardrail.block-off-topic");
-    const sce = lookup.get("guardrail.scope-check-enabled");
-    const oce = lookup.get("guardrail.output-check-enabled");
-    setEnabled(typeof e === "boolean" ? e : true);
-    setKind(
-      k === "noop" || k === "pattern" || k === "llm-judge" || k === "composite" ? k : "composite",
-    );
-    setBlockOnInjection(typeof boi === "boolean" ? boi : true);
-    setBlockOffTopic(typeof bot === "boolean" ? bot : true);
-    setScopeCheckEnabled(typeof sce === "boolean" ? sce : true);
-    setOutputCheckEnabled(typeof oce === "boolean" ? oce : false);
-    seededForRef.current = projectSlug;
-  }, [projectSettings.data, projectSlug]);
-
-  const save = trpc.settings.projectUpdate.useMutation({
-    onSuccess: async () => {
-      await utils.settings.projectList.invalidate({ projectSlug });
-    },
-  });
 
   const guardrailProviders =
     providers.data?.filter((p) => p.role === "guardrail" && p.enabled) ?? [];
@@ -117,29 +103,17 @@ export function GuardrailPanel({ projectSlug }: { projectSlug: string }) {
     e.preventDefault();
     // Defense in depth: never persist enabled=true without a guardrail row.
     const safeEnabled = hasGuardrailProvider ? enabled : false;
-    await Promise.all([
-      save.mutateAsync({ projectSlug, key: "guardrail.enabled", value: safeEnabled }),
-      save.mutateAsync({ projectSlug, key: "guardrail.kind", value: kind }),
-      save.mutateAsync({
-        projectSlug,
-        key: "guardrail.block-on-injection",
-        value: blockOnInjection,
-      }),
-      save.mutateAsync({ projectSlug, key: "guardrail.block-off-topic", value: blockOffTopic }),
-      save.mutateAsync({
-        projectSlug,
-        key: "guardrail.scope-check-enabled",
-        value: scopeCheckEnabled,
-      }),
-      save.mutateAsync({
-        projectSlug,
-        key: "guardrail.output-check-enabled",
-        value: outputCheckEnabled,
-      }),
+    await saveMany([
+      { key: "guardrail.enabled", value: safeEnabled },
+      { key: "guardrail.kind", value: kind },
+      { key: "guardrail.block-on-injection", value: blockOnInjection },
+      { key: "guardrail.block-off-topic", value: blockOffTopic },
+      { key: "guardrail.scope-check-enabled", value: scopeCheckEnabled },
+      { key: "guardrail.output-check-enabled", value: outputCheckEnabled },
     ]);
   };
 
-  if (projectSettings.isPending || providers.isPending) {
+  if (isLoading || providers.isPending) {
     return <p className="text-muted-foreground/70 text-sm">Loading…</p>;
   }
 
@@ -175,7 +149,7 @@ export function GuardrailPanel({ projectSlug }: { projectSlug: string }) {
             id={enabledId}
             checked={hasGuardrailProvider && enabled}
             disabled={!hasGuardrailProvider || save.isPending}
-            onCheckedChange={setEnabled}
+            onCheckedChange={(next) => setValues((prev) => ({ ...prev, enabled: next }))}
           />
           <Label htmlFor={enabledId}>Enable chat guardrails</Label>
         </div>
@@ -204,7 +178,9 @@ export function GuardrailPanel({ projectSlug }: { projectSlug: string }) {
         <Select
           value={kind}
           disabled={knobsDisabled}
-          onValueChange={(value) => setKind(value as GuardrailKind)}
+          onValueChange={(value) =>
+            setValues((prev) => ({ ...prev, kind: value as GuardrailKind }))
+          }
         >
           <SelectTrigger id={kindId} className="max-w-md">
             <SelectValue />
@@ -230,7 +206,7 @@ export function GuardrailPanel({ projectSlug }: { projectSlug: string }) {
             id={injectionId}
             checked={blockOnInjection}
             disabled={knobsDisabled}
-            onCheckedChange={setBlockOnInjection}
+            onCheckedChange={(next) => setValues((prev) => ({ ...prev, blockOnInjection: next }))}
           />
           <div className="flex flex-col gap-0.5">
             <Label htmlFor={injectionId}>Block prompt-injection attempts</Label>
@@ -246,7 +222,7 @@ export function GuardrailPanel({ projectSlug }: { projectSlug: string }) {
             id={offTopicId}
             checked={blockOffTopic}
             disabled={knobsDisabled}
-            onCheckedChange={setBlockOffTopic}
+            onCheckedChange={(next) => setValues((prev) => ({ ...prev, blockOffTopic: next }))}
           />
           <div className="flex flex-col gap-0.5">
             <Label htmlFor={offTopicId}>Block off-topic chat</Label>
@@ -270,7 +246,7 @@ export function GuardrailPanel({ projectSlug }: { projectSlug: string }) {
             id={scopeId}
             checked={scopeCheckEnabled}
             disabled={subKnobsDisabled}
-            onCheckedChange={setScopeCheckEnabled}
+            onCheckedChange={(next) => setValues((prev) => ({ ...prev, scopeCheckEnabled: next }))}
           />
           <div className="flex flex-col gap-0.5">
             <Label htmlFor={scopeId}>Scope-check user input</Label>
@@ -286,7 +262,7 @@ export function GuardrailPanel({ projectSlug }: { projectSlug: string }) {
             id={outputId}
             checked={outputCheckEnabled}
             disabled={subKnobsDisabled}
-            onCheckedChange={setOutputCheckEnabled}
+            onCheckedChange={(next) => setValues((prev) => ({ ...prev, outputCheckEnabled: next }))}
           />
           <div className="flex flex-col gap-0.5">
             <Label htmlFor={outputId}>Output safety check</Label>
@@ -307,14 +283,16 @@ export function GuardrailPanel({ projectSlug }: { projectSlug: string }) {
           type="button"
           variant="secondary"
           disabled={save.isPending}
-          onClick={() => {
-            setEnabled(true);
-            setKind("composite");
-            setBlockOnInjection(true);
-            setBlockOffTopic(true);
-            setScopeCheckEnabled(true);
-            setOutputCheckEnabled(false);
-          }}
+          onClick={() =>
+            setValues({
+              enabled: true,
+              kind: "composite",
+              blockOnInjection: true,
+              blockOffTopic: true,
+              scopeCheckEnabled: true,
+              outputCheckEnabled: false,
+            })
+          }
         >
           Reset to defaults
         </Button>

@@ -17,15 +17,15 @@ import {
 const StateBucketEnum = z.enum(STATE_BUCKETS);
 
 const AssigneeList = z.array(z.string().min(0).max(200)).max(50).default([]);
-const AxesMap = z.record(z.string().min(1).max(64), z.string().max(500)).default({});
+const FacetsMap = z.record(z.string().min(1).max(64), z.string().max(500)).default({});
 
 /**
- * Safe parser for the `SavedView.axes` JSON column. Inputs flow through
- * `AxesMap` at write time, but a corrupt or hand-edited row should still
- * read back as an empty axes map rather than crashing the items query.
+ * Safe parser for the `SavedView.facets` JSON column. Inputs flow through
+ * `FacetsMap` at write time, but a corrupt or hand-edited row should still
+ * read back as an empty facets map rather than crashing the items query.
  */
-export function parseSavedViewAxes(raw: unknown): Record<string, string> {
-  const parsed = AxesMap.safeParse(raw ?? {});
+export function parseSavedViewFacets(raw: unknown): Record<string, string> {
+  const parsed = FacetsMap.safeParse(raw ?? {});
   return parsed.success ? parsed.data : {};
 }
 
@@ -35,7 +35,7 @@ const CreateInput = projectSlugSchema.extend({
   name: z.string().min(1).max(80),
   stateBucket: StateBucketEnum.default("open"),
   assignees: AssigneeList,
-  axes: AxesMap,
+  facets: FacetsMap,
   isDefault: z.boolean().default(false),
 });
 
@@ -45,15 +45,15 @@ const UpdateInput = projectSlugSchema
     name: z.string().min(1).max(80).optional(),
     stateBucket: StateBucketEnum.optional(),
     assignees: AssigneeList.optional(),
-    axes: AxesMap.optional(),
+    facets: FacetsMap.optional(),
   })
   .refine(
     (input) =>
       input.name !== undefined ||
       input.stateBucket !== undefined ||
       input.assignees !== undefined ||
-      input.axes !== undefined,
-    { message: "at least one field (name, stateBucket, assignees, axes) must be supplied" },
+      input.facets !== undefined,
+    { message: "at least one field (name, stateBucket, assignees, facets) must be supplied" },
   );
 
 export const viewsRouter = router({
@@ -91,7 +91,7 @@ export const viewsRouter = router({
           name: input.name,
           stateBucket: input.stateBucket,
           assignees: [...input.assignees],
-          axes: input.axes,
+          facets: input.facets,
           isDefault: input.isDefault,
         },
       });
@@ -106,7 +106,7 @@ export const viewsRouter = router({
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(input.stateBucket !== undefined ? { stateBucket: input.stateBucket } : {}),
         ...(input.assignees !== undefined ? { assignees: [...input.assignees] } : {}),
-        ...(input.axes !== undefined ? { axes: input.axes } : {}),
+        ...(input.facets !== undefined ? { facets: input.facets } : {}),
       },
     });
     if (result.count === 0) {

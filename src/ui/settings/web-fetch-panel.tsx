@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
-import { useProjectSettingsMap } from "@/lib/settings-client";
-import { trpc } from "@/lib/trpc-client";
+import { useId } from "react";
+import { useProjectSettingsForm } from "@/lib/settings-client";
 import { Button } from "@/ui/primitives/button";
 import { Input } from "@/ui/primitives/input";
 import { Label } from "@/ui/primitives/label";
@@ -20,38 +19,23 @@ import { Textarea } from "@/ui/primitives/textarea";
  *   - `web-fetch.max-bytes` — body cap before truncation.
  */
 export function WebFetchPanel({ projectSlug }: { projectSlug: string }) {
-  const utils = trpc.useUtils();
-  const projectSettings = useProjectSettingsMap({ projectSlug });
-
-  const [enabled, setEnabled] = useState(true);
-  const [hostsText, setHostsText] = useState("");
-  const [maxBytes, setMaxBytes] = useState<string>("1000000");
+  const { values, setValues, isLoading, save, saveMany } = useProjectSettingsForm({
+    projectSlug,
+    initial: { enabled: true, hostsText: "", maxBytes: "1000000" },
+    seed: (view) => {
+      const hosts = view.raw("web-fetch.allowed-hosts");
+      return {
+        enabled: view.bool("web-fetch.enabled", true),
+        hostsText: Array.isArray(hosts) ? hosts.join("\n") : "",
+        maxBytes: String(view.num("web-fetch.max-bytes", 1_000_000)),
+      };
+    },
+  });
+  const { enabled, hostsText, maxBytes } = values;
 
   const enabledId = useId();
   const hostsId = useId();
   const maxBytesId = useId();
-
-  // Seed once per project. Parallel mutateAsync calls below would
-  // otherwise let an intermediate refetch (after one mutation lands but
-  // before the others) clobber whatever the user is still editing.
-  // Switching projects in-place must re-seed from the new project's
-  // settings instead of keeping the previous project's state.
-  const seededForRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (seededForRef.current === projectSlug) return;
-    if (!projectSettings.list.data) return;
-    setEnabled(projectSettings.bool("web-fetch.enabled", true));
-    const hosts = projectSettings.raw("web-fetch.allowed-hosts");
-    setHostsText(Array.isArray(hosts) ? hosts.join("\n") : "");
-    setMaxBytes(String(projectSettings.num("web-fetch.max-bytes", 1_000_000)));
-    seededForRef.current = projectSlug;
-  }, [projectSettings, projectSlug]);
-
-  const save = trpc.settings.projectUpdate.useMutation({
-    onSuccess: async () => {
-      await utils.settings.projectList.invalidate({ projectSlug });
-    },
-  });
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,14 +45,14 @@ export function WebFetchPanel({ projectSlug }: { projectSlug: string }) {
       .filter((h) => h.length > 0);
     const maxBytesNum = Number.parseInt(maxBytes, 10);
     if (!Number.isFinite(maxBytesNum) || maxBytesNum < 64_000 || maxBytesNum > 8_000_000) return;
-    await Promise.all([
-      save.mutateAsync({ projectSlug, key: "web-fetch.enabled", value: enabled }),
-      save.mutateAsync({ projectSlug, key: "web-fetch.allowed-hosts", value: hosts }),
-      save.mutateAsync({ projectSlug, key: "web-fetch.max-bytes", value: maxBytesNum }),
+    await saveMany([
+      { key: "web-fetch.enabled", value: enabled },
+      { key: "web-fetch.allowed-hosts", value: hosts },
+      { key: "web-fetch.max-bytes", value: maxBytesNum },
     ]);
   };
 
-  if (projectSettings.list.isPending) {
+  if (isLoading) {
     return <p className="text-muted-foreground/70 text-sm">Loading…</p>;
   }
 
@@ -80,7 +64,7 @@ export function WebFetchPanel({ projectSlug }: { projectSlug: string }) {
             id={enabledId}
             checked={enabled}
             disabled={save.isPending}
-            onCheckedChange={setEnabled}
+            onCheckedChange={(next) => setValues((prev) => ({ ...prev, enabled: next }))}
           />
           <Label htmlFor={enabledId}>Allow agent to fetch web pages</Label>
         </div>
@@ -103,7 +87,7 @@ export function WebFetchPanel({ projectSlug }: { projectSlug: string }) {
           id={hostsId}
           value={hostsText}
           disabled={save.isPending}
-          onChange={(e) => setHostsText(e.target.value)}
+          onChange={(e) => setValues((prev) => ({ ...prev, hostsText: e.target.value }))}
           placeholder="docs.python.org&#10;learn.microsoft.com&#10;www.rfc-editor.org"
           className="min-h-32 max-w-xl font-mono text-xs"
         />
@@ -126,7 +110,7 @@ export function WebFetchPanel({ projectSlug }: { projectSlug: string }) {
           step={1_000}
           value={maxBytes}
           disabled={save.isPending}
-          onChange={(e) => setMaxBytes(e.target.value)}
+          onChange={(e) => setValues((prev) => ({ ...prev, maxBytes: e.target.value }))}
           className="max-w-[12rem]"
         />
       </div>
@@ -139,11 +123,7 @@ export function WebFetchPanel({ projectSlug }: { projectSlug: string }) {
           type="button"
           variant="secondary"
           disabled={save.isPending}
-          onClick={() => {
-            setEnabled(true);
-            setHostsText("");
-            setMaxBytes("1000000");
-          }}
+          onClick={() => setValues({ enabled: true, hostsText: "", maxBytes: "1000000" })}
         >
           Reset to defaults
         </Button>

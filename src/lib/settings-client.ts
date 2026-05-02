@@ -13,6 +13,7 @@
  * callers can switch scope without touching read sites.
  */
 
+import { type Dispatch, type SetStateAction, useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc-client";
 
 type AnyQuery = { data: ReadonlyArray<{ key: string; value: unknown }> | undefined } & {
@@ -66,4 +67,67 @@ export function useProjectSettingsMap(
       { ...opts, enabled: args.projectSlug !== null },
     ),
   );
+}
+
+type ProjectSettingsView = ReturnType<typeof useProjectSettingsMap>;
+
+/**
+ * Per-project settings form bundle.
+ *
+ * Wraps the three-step pattern every project-scoped settings panel
+ * repeats: load the project's settings, seed local form state once per
+ * project (re-seeding on every refetch would clobber in-flight edits —
+ * including the partial-state window during parallel-mutation submits),
+ * and bind a save mutation that auto-invalidates the list on success.
+ *
+ * `seed` runs once after the first load for each `projectSlug`; switching
+ * projects re-runs it against the new project's data. `initial` is the
+ * value used before the load completes.
+ */
+export function useProjectSettingsForm<T>(args: {
+  projectSlug: string;
+  initial: T;
+  seed: (view: ProjectSettingsView) => T;
+}): {
+  view: ProjectSettingsView;
+  values: T;
+  setValues: Dispatch<SetStateAction<T>>;
+  isLoading: boolean;
+  save: ReturnType<typeof trpc.settings.projectUpdate.useMutation>;
+  saveMany: (entries: ReadonlyArray<{ key: string; value: unknown }>) => Promise<void>;
+} {
+  const utils = trpc.useUtils();
+  const view = useProjectSettingsMap({ projectSlug: args.projectSlug });
+  const [values, setValues] = useState<T>(args.initial);
+
+  const seedRef = useRef(args.seed);
+  seedRef.current = args.seed;
+  const seededForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (seededForRef.current === args.projectSlug) return;
+    if (!view.list.data) return;
+    setValues(seedRef.current(view));
+    seededForRef.current = args.projectSlug;
+  }, [view, args.projectSlug]);
+
+  const save = trpc.settings.projectUpdate.useMutation({
+    onSuccess: async () => {
+      await utils.settings.projectList.invalidate({ projectSlug: args.projectSlug });
+    },
+  });
+
+  const saveMany = async (entries: ReadonlyArray<{ key: string; value: unknown }>) => {
+    await Promise.all(
+      entries.map((e) => save.mutateAsync({ projectSlug: args.projectSlug, ...e })),
+    );
+  };
+
+  return {
+    view,
+    values,
+    setValues,
+    isLoading: view.list.isPending,
+    save,
+    saveMany,
+  };
 }

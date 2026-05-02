@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { Session } from "next-auth";
 import { cache } from "react";
+import { asProjectId, asUserId } from "@/core/types";
 import { resolveEffectiveStaleThreshold } from "@/lib/staleness";
 import { auth } from "@/server/auth";
 import { db } from "@/server/db";
@@ -84,13 +85,18 @@ export default async function ItemDetailPage({
   }
 
   const userId = session?.user?.id ?? null;
+  const brandedUserId = userId ? asUserId(userId) : null;
   const [projectStale, userStale, showHeaderReactions, showCommentReactions] = await Promise.all([
-    loadProjectSetting(db, project.id, "items.stale-after-days"),
-    userId
-      ? loadUserSetting(db, userId, "items.stale-after-days.user")
+    loadProjectSetting(db, asProjectId(project.id), "items.stale-after-days"),
+    brandedUserId
+      ? loadUserSetting(db, brandedUserId, "items.stale-after-days.user")
       : Promise.resolve<number>(-1),
-    userId ? loadUserSetting(db, userId, "items.show-reactions-header") : Promise.resolve(true),
-    userId ? loadUserSetting(db, userId, "items.show-reactions-comments") : Promise.resolve(true),
+    brandedUserId
+      ? loadUserSetting(db, brandedUserId, "items.show-reactions-header")
+      : Promise.resolve(true),
+    brandedUserId
+      ? loadUserSetting(db, brandedUserId, "items.show-reactions-comments")
+      : Promise.resolve(true),
   ]);
   const staleThresholdDays = resolveEffectiveStaleThreshold(userStale, projectStale);
 

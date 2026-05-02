@@ -2,7 +2,7 @@
 
 import { Pencil } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useState } from "react";
+import { useId, useState } from "react";
 import { trpc } from "@/lib/trpc-client";
 import { Markdown } from "@/ui/markdown/markdown";
 import { Button } from "@/ui/primitives/button";
@@ -43,10 +43,14 @@ export function DescriptionEditor({
 
   // Sync only when the editor is closed — otherwise a background refetch
   // mid-edit (server-side sync just landed, or a websocket nudge) would
-  // silently stomp the user's in-progress draft.
-  useEffect(() => {
-    if (!editing) setDraft(description ?? "");
-  }, [description, editing]);
+  // silently stomp the user's in-progress draft. setState during render
+  // (guarded by inequality) is the React-recommended substitute for an
+  // effect that derives state from props.
+  const [lastSyncedDescription, setLastSyncedDescription] = useState(description);
+  if (!editing && description !== lastSyncedDescription) {
+    setLastSyncedDescription(description);
+    setDraft(description ?? "");
+  }
 
   const propose = trpc.proposals.proposeDescriptionPatch.useMutation({
     onSuccess: async (res) => {

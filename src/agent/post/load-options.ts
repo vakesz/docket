@@ -8,12 +8,13 @@
 
 import "server-only";
 import type { CodeSnippetCapOptions } from "@/agent/post/code-snippet-cap";
+import type { ProjectId } from "@/core/types";
 import type { db as Db } from "@/server/db";
 import { loadProjectSetting } from "@/server/settings/effective";
 
 export async function loadCodeSnippetCapOptions(
   db: typeof Db,
-  projectId: string,
+  projectId: ProjectId,
 ): Promise<CodeSnippetCapOptions> {
   const [enabled, maxLines, maxSnippetsPerReply] = await Promise.all([
     loadProjectSetting(db, projectId, "recommendations.code-examples.enabled"),

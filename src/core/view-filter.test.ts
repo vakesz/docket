@@ -5,7 +5,7 @@ import {
   applyViewFilter,
   EMPTY_VIEW_FILTER,
   filterByAssignees,
-  filterByAxes,
+  filterByFacets,
   filterByStateBucket,
   STATE_BUCKET_MEMBERS,
   type ViewFilter,
@@ -94,46 +94,46 @@ describe("filterByAssignees", () => {
   });
 });
 
-describe("filterByAxes", () => {
+describe("filterByFacets", () => {
   const items = [
     fakeItem({ id: "x", providerRaw: { area: "A\\B" } }),
     fakeItem({ id: "y", providerRaw: { area: "A\\C" } }),
     fakeItem({ id: "z", providerRaw: { area: "Q" } }),
   ];
-  const matcher = (item: Item, axisKey: string, expected: string) => {
-    const v = (item.providerRaw as Record<string, unknown>)[axisKey];
+  const matcher = (item: Item, facetKey: string, expected: string) => {
+    const v = (item.providerRaw as Record<string, unknown>)[facetKey];
     return typeof v === "string" && v.startsWith(expected);
   };
 
-  it("null matcher is identity (no axes to match)", () => {
-    expect(filterByAxes(items, { area: "A" }, null).map((x) => x.id)).toEqual(["x", "y", "z"]);
+  it("null matcher is identity (no facets to match)", () => {
+    expect(filterByFacets(items, { area: "A" }, null).map((x) => x.id)).toEqual(["x", "y", "z"]);
   });
 
-  it("empty axes is identity", () => {
-    expect(filterByAxes(items, {}, matcher).map((x) => x.id)).toEqual(["x", "y", "z"]);
+  it("empty facets is identity", () => {
+    expect(filterByFacets(items, {}, matcher).map((x) => x.id)).toEqual(["x", "y", "z"]);
   });
 
-  it("empty axis values are skipped (treated as 'no constraint')", () => {
-    expect(filterByAxes(items, { area: "" }, matcher).map((x) => x.id)).toEqual(["x", "y", "z"]);
+  it("empty facet values are skipped (treated as 'no constraint')", () => {
+    expect(filterByFacets(items, { area: "" }, matcher).map((x) => x.id)).toEqual(["x", "y", "z"]);
   });
 
   it("matches via the spec's matcher (UNDER semantics here)", () => {
-    expect(filterByAxes(items, { area: "A" }, matcher).map((x) => x.id)).toEqual(["x", "y"]);
+    expect(filterByFacets(items, { area: "A" }, matcher).map((x) => x.id)).toEqual(["x", "y"]);
   });
 
-  it("AND across multiple axes", () => {
+  it("AND across multiple facets", () => {
     const items2 = [
       fakeItem({ id: "p", providerRaw: { area: "A", iter: "Sprint 1" } }),
       fakeItem({ id: "q", providerRaw: { area: "A", iter: "Sprint 2" } }),
     ];
-    expect(filterByAxes(items2, { area: "A", iter: "Sprint 1" }, matcher).map((x) => x.id)).toEqual(
-      ["p"],
-    );
+    expect(
+      filterByFacets(items2, { area: "A", iter: "Sprint 1" }, matcher).map((x) => x.id),
+    ).toEqual(["p"]);
   });
 });
 
 describe("applyViewFilter", () => {
-  it("composes bucket + assignees + axes", () => {
+  it("composes bucket + assignees + facets", () => {
     const items = [
       fakeItem({ id: "1", state: "active", assignee: "alice", providerRaw: { area: "A" } }),
       fakeItem({ id: "2", state: "active", assignee: "bob", providerRaw: { area: "A" } }),
@@ -143,10 +143,10 @@ describe("applyViewFilter", () => {
     const view: ViewFilter = {
       stateBucket: "open",
       assignees: ["alice"],
-      axes: { area: "A" },
+      facets: { area: "A" },
     };
-    const matcher = (item: Item, axisKey: string, expected: string) =>
-      (item.providerRaw as Record<string, unknown>)[axisKey] === expected;
+    const matcher = (item: Item, facetKey: string, expected: string) =>
+      (item.providerRaw as Record<string, unknown>)[facetKey] === expected;
 
     expect(applyViewFilter(items, view, matcher).map((x) => x.id)).toEqual(["1"]);
   });

@@ -1,27 +1,9 @@
 "use client";
+import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
-import { McpPane } from "@/ui/mcp/mcp-pane";
-import { MemoryPane } from "@/ui/memory/memory-pane";
 import { ScrollArea } from "@/ui/primitives/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/ui/primitives/sheet";
-import { AgentBehaviorPanel } from "@/ui/settings/agent-behavior-panel";
-import { AnalyticsPanel } from "@/ui/settings/analytics-panel";
-import { BudgetAuditPanel } from "@/ui/settings/budget-audit-panel";
-import { ChatDisplayPanel } from "@/ui/settings/chat-display-panel";
-import { ExportPanel } from "@/ui/settings/export-panel";
-import { GuardrailPanel } from "@/ui/settings/guardrail-panel";
-import { ItemDetailPanel } from "@/ui/settings/item-detail-panel";
-import { ItemsListPanel } from "@/ui/settings/items-list-panel";
-import { LlmProvidersPanel } from "@/ui/settings/llm-providers-panel";
-import { MembersPanel } from "@/ui/settings/members-panel";
-import { OauthProvidersPanel } from "@/ui/settings/oauth-providers-panel";
-import { ProfilePanel } from "@/ui/settings/profile-panel";
-import { ProjectItemsPanel } from "@/ui/settings/project-items-panel";
-import { ProjectLlmPanel } from "@/ui/settings/project-llm-panel";
-import { ProjectsPanel } from "@/ui/settings/projects-panel";
-import { PromptsPanel } from "@/ui/settings/prompts-panel";
-import { ReadOnlyModePanel } from "@/ui/settings/read-only-mode-panel";
 import {
   readPersistedSection,
   SECTION_STORAGE_KEY,
@@ -29,9 +11,91 @@ import {
   type SectionKey,
 } from "@/ui/settings/sections";
 import { SettingsSidebar } from "@/ui/settings/settings-sidebar";
-import { WebFetchPanel } from "@/ui/settings/web-fetch-panel";
 import { useRegisterSidebarMount, useSidebarDrawer } from "@/ui/shell/sidebar-drawer-context";
-import { SourcesPane } from "@/ui/sources/sources-pane";
+
+// Each pane is lazy-loaded so the initial settings JS bundle stays light —
+// only the one selected pane (and its tRPC dependencies) ships per session.
+const panelLoading = () => <p className="text-muted-foreground/70 text-sm">Loading…</p>;
+const McpPane = dynamic(() => import("@/ui/mcp/mcp-pane").then((m) => m.McpPane), {
+  loading: panelLoading,
+});
+const MemoryPane = dynamic(() => import("@/ui/memory/memory-pane").then((m) => m.MemoryPane), {
+  loading: panelLoading,
+});
+const AgentBehaviorPanel = dynamic(
+  () => import("@/ui/settings/agent-behavior-panel").then((m) => m.AgentBehaviorPanel),
+  { loading: panelLoading },
+);
+const AnalyticsPanel = dynamic(
+  () => import("@/ui/settings/analytics-panel").then((m) => m.AnalyticsPanel),
+  { loading: panelLoading },
+);
+const BudgetAuditPanel = dynamic(
+  () => import("@/ui/settings/budget-audit-panel").then((m) => m.BudgetAuditPanel),
+  { loading: panelLoading },
+);
+const ChatDisplayPanel = dynamic(
+  () => import("@/ui/settings/chat-display-panel").then((m) => m.ChatDisplayPanel),
+  { loading: panelLoading },
+);
+const ExportPanel = dynamic(() => import("@/ui/settings/export-panel").then((m) => m.ExportPanel), {
+  loading: panelLoading,
+});
+const GuardrailPanel = dynamic(
+  () => import("@/ui/settings/guardrail-panel").then((m) => m.GuardrailPanel),
+  { loading: panelLoading },
+);
+const ItemDetailPanel = dynamic(
+  () => import("@/ui/settings/item-detail-panel").then((m) => m.ItemDetailPanel),
+  { loading: panelLoading },
+);
+const ItemsListPanel = dynamic(
+  () => import("@/ui/settings/items-list-panel").then((m) => m.ItemsListPanel),
+  { loading: panelLoading },
+);
+const LlmProvidersPanel = dynamic(
+  () => import("@/ui/settings/llm-providers-panel").then((m) => m.LlmProvidersPanel),
+  { loading: panelLoading },
+);
+const MembersPanel = dynamic(
+  () => import("@/ui/settings/members-panel").then((m) => m.MembersPanel),
+  { loading: panelLoading },
+);
+const OauthProvidersPanel = dynamic(
+  () => import("@/ui/settings/oauth-providers-panel").then((m) => m.OauthProvidersPanel),
+  { loading: panelLoading },
+);
+const ProfilePanel = dynamic(
+  () => import("@/ui/settings/profile-panel").then((m) => m.ProfilePanel),
+  { loading: panelLoading },
+);
+const ProjectItemsPanel = dynamic(
+  () => import("@/ui/settings/project-items-panel").then((m) => m.ProjectItemsPanel),
+  { loading: panelLoading },
+);
+const ProjectLlmPanel = dynamic(
+  () => import("@/ui/settings/project-llm-panel").then((m) => m.ProjectLlmPanel),
+  { loading: panelLoading },
+);
+const ProjectsPanel = dynamic(
+  () => import("@/ui/settings/projects-panel").then((m) => m.ProjectsPanel),
+  { loading: panelLoading },
+);
+const PromptsPanel = dynamic(
+  () => import("@/ui/settings/prompts-panel").then((m) => m.PromptsPanel),
+  { loading: panelLoading },
+);
+const ReadOnlyModePanel = dynamic(
+  () => import("@/ui/settings/read-only-mode-panel").then((m) => m.ReadOnlyModePanel),
+  { loading: panelLoading },
+);
+const WebFetchPanel = dynamic(
+  () => import("@/ui/settings/web-fetch-panel").then((m) => m.WebFetchPanel),
+  { loading: panelLoading },
+);
+const SourcesPane = dynamic(() => import("@/ui/sources/sources-pane").then((m) => m.SourcesPane), {
+  loading: panelLoading,
+});
 
 type Props = {
   publicBase: string;

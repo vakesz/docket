@@ -3,19 +3,19 @@
  *
  * Sync pulls everything the credentials see; this module decides what
  * actually renders for a given saved view. State bucket, assignees, and
- * provider-specific axes are all visual (post-cache) — there is no
+ * provider-specific facets are all visual (post-cache) — there is no
  * server-side filter pushdown to the provider, by design (the cache is the
  * boundary, providers see whole-scope queries).
  *
  * Pure module, no I/O, no Prisma — drives both the items page on the server
  * (where the row is the Prisma `Item` shape) and any other surface that
  * holds canonical `Item` rows. The arch test forbids importing from
- * `@/server/**` or `@/providers/**` here; provider-specific axis matching
- * goes through `ProviderSpec.axisMatcher`, which is the indirection that
+ * `@/server/**` or `@/providers/**` here; provider-specific facet matching
+ * goes through `ProviderSpec.facetMatcher`, which is the indirection that
  * lets `core/` stay provider-agnostic.
  */
 
-import type { AxisMatcher } from "@/core/provider";
+import type { FacetMatcher } from "@/core/provider";
 import type { Item, ItemState, StateBucket } from "@/core/types";
 
 /**
@@ -38,25 +38,25 @@ export const STATE_BUCKET_MEMBERS: Readonly<
  * filter consumes data from any source (DB row, URL query, in-memory
  * default) without an adapter layer.
  *
- * `axes` keys map to `ProviderSpec.scopeAxes[].key`; empty-string values
+ * `facets` keys map to `ProviderSpec.scopeFacets[].key`; empty-string values
  * are treated as "no constraint" by the matcher contract.
  */
 export type ViewFilter = {
   stateBucket: StateBucket;
   assignees: readonly string[];
-  axes: Readonly<Record<string, string>>;
+  facets: Readonly<Record<string, string>>;
 };
 
 export const EMPTY_VIEW_FILTER: ViewFilter = {
   stateBucket: "open",
   assignees: [],
-  axes: {},
+  facets: {},
 };
 
 /**
  * Narrow `items` to those whose canonical state belongs to `bucket`.
  * `bucket === "all"` is the identity. Use this directly when an upstream
- * has already constrained one of the other axes (e.g. SQL pre-filter).
+ * has already constrained one of the other dimensions (e.g. SQL pre-filter).
  */
 export function filterByStateBucket<T extends Pick<Item, "state">>(
   items: readonly T[],
@@ -86,40 +86,40 @@ export function filterByAssignees<T extends Pick<Item, "assignee">>(
 }
 
 /**
- * Narrow by provider-specific axes via the spec's `axisMatcher`. Empty
- * `axes` (or all empty values) is the identity. Items must satisfy *every*
- * declared axis (AND semantics across axes — the surface picks one value
- * per axis, the row has to match all of them).
+ * Narrow by provider-specific facets via the spec's `facetMatcher`. Empty
+ * `facets` (or all empty values) is the identity. Items must satisfy *every*
+ * declared facet (AND semantics across facets — the surface picks one value
+ * per facet, the row has to match all of them).
  *
- * `matcher === null` is allowed and treated as "axes don't apply" (returns
+ * `matcher === null` is allowed and treated as "facets don't apply" (returns
  * items unchanged); that matches the contract on `ProviderSpec` where a
- * spec with empty `scopeAxes` carries `axisMatcher: null`.
+ * spec with empty `scopeFacets` carries `facetMatcher: null`.
  */
-export function filterByAxes(
+export function filterByFacets(
   items: readonly Item[],
-  axes: Readonly<Record<string, string>>,
-  matcher: AxisMatcher | null,
+  facets: Readonly<Record<string, string>>,
+  matcher: FacetMatcher | null,
 ): Item[] {
   if (matcher === null) return items.slice();
-  const entries = Object.entries(axes).filter(([, v]) => v !== "");
+  const entries = Object.entries(facets).filter(([, v]) => v !== "");
   if (entries.length === 0) return items.slice();
   return items.filter((item) => entries.every(([key, expected]) => matcher(item, key, expected)));
 }
 
 /**
- * Apply a complete view filter — bucket → assignees → axes. The chain is
+ * Apply a complete view filter — bucket → assignees → facets. The chain is
  * left-to-right; each step narrows the set passed to the next. State and
  * assignee live on the canonical `Item` row, so they don't need the
- * matcher; axes do.
+ * matcher; facets do.
  */
 export function applyViewFilter(
   items: readonly Item[],
   view: ViewFilter,
-  matcher: AxisMatcher | null,
+  matcher: FacetMatcher | null,
 ): Item[] {
-  return filterByAxes(
+  return filterByFacets(
     filterByAssignees(filterByStateBucket(items, view.stateBucket), view.assignees),
-    view.axes,
+    view.facets,
     matcher,
   );
 }

@@ -81,10 +81,24 @@ export const conversationsRouter = router({
   }),
 
   get: projectScopedProcedure.input(ConversationRef).query(async ({ ctx, input }) => {
+    // findFirst + scoped where collapses the ownership double-check into the
+    // SQL filter, so we never serialize projectId/userId we'd only re-validate.
+    // The narrow `select` carries exactly what chat-pane reads — full Message
+    // rows include tokensIn/tokensOut/createdAt/conversationId/compacted that
+    // the UI never touches, and skipping them shrinks every transcript fetch.
     const conv = assertFound(
-      await ctx.db.conversation.findUnique({
-        where: { id: input.conversationId },
-        include: {
+      await ctx.db.conversation.findFirst({
+        where: {
+          id: input.conversationId,
+          projectId: ctx.projectId,
+          userId: ctx.userId,
+        },
+        select: {
+          id: true,
+          tokensIn: true,
+          tokensOut: true,
+          costCents: true,
+          llmProviderIdOverride: true,
           messages: {
             where: { compacted: false },
             // Latest-N descending then reverse — same defense-in-depth cap as
@@ -94,16 +108,19 @@ export const conversationsRouter = router({
             // past compaction.
             orderBy: [{ createdAt: "desc" }, { id: "desc" }],
             take: 500,
+            select: {
+              id: true,
+              role: true,
+              content: true,
+              toolName: true,
+              toolCallId: true,
+              toolCallsJson: true,
+            },
           },
         },
       }),
       "conversation not found",
     );
-    if (conv.projectId !== ctx.projectId || conv.userId !== ctx.userId) {
-      // Treat the row as nonexistent for callers — same surface as the prior
-      // findFirst with the ownership filter built in.
-      throw new TRPCError({ code: "NOT_FOUND", message: "conversation not found" });
-    }
     return { ...conv, messages: conv.messages.slice().reverse() };
   }),
 

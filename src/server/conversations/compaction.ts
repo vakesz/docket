@@ -5,6 +5,7 @@
 // in `src/agent/prompt.ts` — adding to that prefix would break the cache.
 
 import "server-only";
+import type { ProjectId } from "@/core/types";
 import type { Message } from "@/db/generated/client";
 import type { db as Db } from "@/server/db";
 import { loadProjectSetting } from "@/server/settings/effective";
@@ -20,7 +21,7 @@ export type CompactionSettings = {
 
 export async function loadCompactionSettings(
   db: Database,
-  projectId: string,
+  projectId: ProjectId,
 ): Promise<CompactionSettings> {
   const [enabled, tokenThreshold, keepRecentTurns, strategy] = await Promise.all([
     loadProjectSetting(db, projectId, "llm.compaction.enabled"),

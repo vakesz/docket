@@ -1,5 +1,5 @@
 /**
- * Static metadata for the GitHub provider type — declares scope axes,
+ * Static metadata for the GitHub provider type — declares scope facets,
  * setup fields, label template, and the factory that constructs a live
  * `WorkItemProvider` from a config object.
  *
@@ -84,9 +84,9 @@ export const githubSpec = {
     return { owner, repo };
   },
   labelTemplate,
-  scopeAxes: [],
-  axisMatcher: null,
-  axisExtract: null,
+  scopeFacets: [],
+  facetMatcher: null,
+  facetExtract: null,
   itemNumberCodec,
   capabilities: {
     supportedReactions: GITHUB_REACTION_KINDS,

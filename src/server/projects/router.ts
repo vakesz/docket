@@ -333,14 +333,26 @@ export const projectsRouter = router({
     }),
 
   /**
-   * Export project knowledge + the caller's conversations as a single
-   * JSON blob. Read-only; runs through `projectScopedProcedure` so any
-   * member can pull their own archive.
+   * Export project knowledge + the caller's conversations. Cursor-paginated
+   * so the server doesn't have to materialize a chatty user's entire history
+   * in one shot — the client loops on `nextCursor` and merges the pages into
+   * a single download. Read-only; runs through `projectScopedProcedure` so
+   * any member can pull their own archive.
    */
-  export: projectScopedProcedure.input(projectSlugSchema).query(async ({ ctx }) => {
-    const userId = ctx.userId;
-    return buildProjectExport(ctx.db, ctx.projectId, userId);
-  }),
+  export: projectScopedProcedure
+    .input(
+      projectSlugSchema.extend({
+        cursor: z
+          .object({
+            startedAt: z.string(),
+            conversationId: z.string(),
+          })
+          .nullish(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      return buildProjectExport(ctx.db, ctx.projectId, ctx.userId, input.cursor ?? null);
+    }),
 
   /**
    * List members of a project. Any member can read the roster — knowing

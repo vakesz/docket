@@ -13,6 +13,7 @@
 
 import "server-only";
 import { ProviderAuthError, ProviderError, type WorkItemProvider } from "@/core/provider";
+import type { UserId } from "@/core/types";
 import type { Project } from "@/db/generated/client";
 import { asPlainObject } from "@/lib/json";
 import type { db as Db } from "@/server/db";
@@ -21,7 +22,7 @@ import { getProviderSpec } from "@/server/provider-registry";
 export async function buildProviderForUser(
   db: typeof Db,
   project: Pick<Project, "id" | "providerKind" | "providerScope" | "name">,
-  userId: string,
+  userId: UserId,
 ): Promise<WorkItemProvider> {
   const spec = getProviderSpec(project.providerKind);
   if (!spec) {

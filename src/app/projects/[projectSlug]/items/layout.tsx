@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
+import { asProjectId, asUserId } from "@/core/types";
 import { resolveEffectiveStaleThreshold } from "@/lib/staleness";
 import { auth } from "@/server/auth";
 import { db } from "@/server/db";
@@ -35,9 +36,9 @@ export default async function ItemsLayout({
   const userId = session?.user?.id ?? null;
 
   const [projectStale, userStale] = await Promise.all([
-    loadProjectSetting(db, project.id, "items.stale-after-days"),
+    loadProjectSetting(db, asProjectId(project.id), "items.stale-after-days"),
     userId
-      ? loadUserSetting(db, userId, "items.stale-after-days.user")
+      ? loadUserSetting(db, asUserId(userId), "items.stale-after-days.user")
       : Promise.resolve<number>(-1),
   ]);
   const staleThresholdDays = resolveEffectiveStaleThreshold(userStale, projectStale);

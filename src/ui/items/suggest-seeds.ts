@@ -2,9 +2,15 @@
 // concatenated into the byte-stable prefix in `prompt.ts`. The middle
 // (`DEFAULT_SUGGEST_ACTION_BULLETS`) is operator-overridable; dynamic
 // interpolation stays in code so the override is plain prose, not a
-// template language.
+// template language. Capability-tied PR guidance lives in
+// `PR_TOOLS_SUGGEST_BULLET` and is appended after the operator's bullet
+// block when the project's provider exposes PR diffs.
 
-import { DEFAULT_SUGGEST_ACTION_BULLETS } from "@/agent/prompt";
+import {
+  DEFAULT_SUGGEST_ACTION_BULLETS,
+  PR_TOOLS_SUGGEST_BULLET,
+  type PromptCapabilities,
+} from "@/agent/prompt";
 import type { ItemKind, ItemState } from "@/core/types";
 
 export { DEFAULT_SUGGEST_ACTION_BULLETS };
@@ -50,8 +56,14 @@ export function buildSuggestSeed(args: {
    * fetched yet, or the operator left the field blank).
    */
   actionBullets?: string | null;
+  /**
+   * Provider capability flags. When omitted (e.g. tests) every flag
+   * defaults to false and the seed carries only the provider-agnostic
+   * bullets.
+   */
+  capabilities?: PromptCapabilities;
 }): string {
-  const { kind, state, title, body: rawBody, commentCount, actionBullets } = args;
+  const { kind, state, title, body: rawBody, commentCount, actionBullets, capabilities } = args;
   const kindHint = kind ? KIND_HINTS[kind] : null;
   const stateHint = state ? STATE_HINTS[state] : null;
   const body = excerpt(rawBody);
@@ -66,8 +78,11 @@ export function buildSuggestSeed(args: {
     `What's the next concrete action on "${title}"?${kindHint ? ` (${kindHint})` : ""}${stateHint ? ` — ${stateHint}.` : ""}`,
     "",
     bullets,
-    "",
   ];
+  if (capabilities?.pullRequestDiffs) {
+    lines.push("", PR_TOOLS_SUGGEST_BULLET);
+  }
+  lines.push("");
 
   if (commentCount === 0) {
     lines.push(

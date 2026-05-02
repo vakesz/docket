@@ -406,13 +406,13 @@ model WatchlistEntry {
 //
 // Every narrowing dimension is a *visual* (post-cache) filter — sync pulls
 // everything the credentials see, and `view-filter.ts`
-// decides what renders. A SavedView captures the three filter axes the
-// product surfaces:
+// decides what renders. A SavedView captures the three filter dimensions
+// the product surfaces:
 //   - state bucket (open / closed / all) — over the canonical ItemState enum
 //   - assignees (set of usernames; empty = no filter, "" entries match
 //     unassigned)
-//   - axes (per-provider-spec narrowing — area path / iteration / repo /
-//     team / etc; declared by `ProviderSpec.scopeAxes`)
+//   - facets (per-provider-spec narrowing — area path / iteration / repo /
+//     team / etc; declared by `ProviderSpec.scopeFacets`)
 //
 // One row per (user, project, name). One row per (user, project) may have
 // `isDefault = true`; the application enforces this — no DB partial unique
@@ -431,10 +431,10 @@ model SavedView {
   /// in the list means "unassigned" (so the user can pin "show me unassigned
   /// items only").
   assignees   String[] @default([])
-  /// Per-provider axis selections — `{ axisKey: expectedValue }`. The
-  /// `ProviderSpec.axisMatcher` interprets each axis. Empty object means no
-  /// axis filter.
-  axes        Json     @default("{}")
+  /// Per-provider facet selections — `{ facetKey: expectedValue }`. The
+  /// `ProviderSpec.facetMatcher` interprets each facet. Empty object means
+  /// no facet filter.
+  facets      Json     @default("{}")
   isDefault   Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

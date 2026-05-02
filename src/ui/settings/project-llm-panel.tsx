@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { useProjectSettingsMap } from "@/lib/settings-client";
+import { useProjectSettingsForm } from "@/lib/settings-client";
 import { trpc } from "@/lib/trpc-client";
 import { Alert, AlertDescription } from "@/ui/primitives/alert";
 import { Button } from "@/ui/primitives/button";
@@ -29,16 +29,35 @@ export function ProjectLlmPanel({ projectSlug }: { projectSlug: string }) {
   const utils = trpc.useUtils();
   const projectsList = trpc.projects.list.useQuery();
   const providers = trpc.llmProviders.list.useQuery();
-  const projectSettings = useProjectSettingsMap({ projectSlug });
 
   const project = projectsList.data?.find((p) => p.slug === projectSlug) ?? null;
 
   const [providerId, setProviderId] = useState<string | "">("");
   const [temperature, setTemperature] = useState<string>("");
-  const [compactEnabled, setCompactEnabled] = useState(false);
-  const [compactThreshold, setCompactThreshold] = useState<string>("60000");
-  const [compactKeep, setCompactKeep] = useState<string>("8");
-  const [compactStrategy, setCompactStrategy] = useState<CompactionStrategy>("summary");
+
+  const {
+    values: compactionValues,
+    setValues: setCompactionValues,
+    isLoading: compactionLoading,
+    save: saveSetting,
+    saveMany: saveCompaction,
+  } = useProjectSettingsForm({
+    projectSlug,
+    initial: {
+      compactEnabled: false,
+      compactThreshold: "60000",
+      compactKeep: "8",
+      compactStrategy: "summary" as CompactionStrategy,
+    },
+    seed: (view) => ({
+      compactEnabled: view.bool("llm.compaction.enabled", false),
+      compactThreshold: String(view.num("llm.compaction.token-threshold", 60_000)),
+      compactKeep: String(view.num("llm.compaction.keep-recent-turns", 8)),
+      compactStrategy:
+        view.str("llm.compaction.strategy", "summary") === "drop-tools" ? "drop-tools" : "summary",
+    }),
+  });
+  const { compactEnabled, compactThreshold, compactKeep, compactStrategy } = compactionValues;
 
   const providerSelectId = useId();
   const temperatureId = useId();
@@ -47,12 +66,9 @@ export function ProjectLlmPanel({ projectSlug }: { projectSlug: string }) {
   const keepId = useId();
   const strategyId = useId();
 
-  // Seed the form once per project. Re-seeding on every refetch would
-  // clobber in-flight user edits — including the partial-state window
-  // during the parallel-mutation submit below, where one mutation's
-  // invalidate fires a refetch before the others have written their rows.
-  // Switching projects in-place must re-seed from the new project's
-  // settings instead of keeping the previous project's state.
+  // Seed the LLM-provider form once per project. The compaction half lives
+  // inside `useProjectSettingsForm` and seeds itself; this ref only guards
+  // the provider+temperature pair, which comes from the projects router.
   const seededProjectFor = useRef<string | null>(null);
   useEffect(() => {
     if (seededProjectFor.current === projectSlug) return;
@@ -66,30 +82,9 @@ export function ProjectLlmPanel({ projectSlug }: { projectSlug: string }) {
     seededProjectFor.current = projectSlug;
   }, [project, projectSlug]);
 
-  const seededSettingsFor = useRef<string | null>(null);
-  useEffect(() => {
-    if (seededSettingsFor.current === projectSlug) return;
-    if (!projectSettings.list.data) return;
-    setCompactEnabled(projectSettings.bool("llm.compaction.enabled", false));
-    setCompactThreshold(String(projectSettings.num("llm.compaction.token-threshold", 60_000)));
-    setCompactKeep(String(projectSettings.num("llm.compaction.keep-recent-turns", 8)));
-    setCompactStrategy(
-      projectSettings.str("llm.compaction.strategy", "summary") === "drop-tools"
-        ? "drop-tools"
-        : "summary",
-    );
-    seededSettingsFor.current = projectSlug;
-  }, [projectSettings, projectSlug]);
-
   const saveLlm = trpc.projects.setLlmDefaults.useMutation({
     onSuccess: async () => {
       await utils.projects.list.invalidate();
-    },
-  });
-
-  const saveSetting = trpc.settings.projectUpdate.useMutation({
-    onSuccess: async () => {
-      await utils.settings.projectList.invalidate({ projectSlug });
     },
   });
 
@@ -112,31 +107,15 @@ export function ProjectLlmPanel({ projectSlug }: { projectSlug: string }) {
     const keepNum = Number.parseInt(compactKeep, 10);
     if (!Number.isFinite(thresholdNum) || thresholdNum < 1_000 || thresholdNum > 500_000) return;
     if (!Number.isFinite(keepNum) || keepNum < 2 || keepNum > 50) return;
-    await Promise.all([
-      saveSetting.mutateAsync({
-        projectSlug,
-        key: "llm.compaction.enabled",
-        value: compactEnabled,
-      }),
-      saveSetting.mutateAsync({
-        projectSlug,
-        key: "llm.compaction.token-threshold",
-        value: thresholdNum,
-      }),
-      saveSetting.mutateAsync({
-        projectSlug,
-        key: "llm.compaction.keep-recent-turns",
-        value: keepNum,
-      }),
-      saveSetting.mutateAsync({
-        projectSlug,
-        key: "llm.compaction.strategy",
-        value: compactStrategy,
-      }),
+    await saveCompaction([
+      { key: "llm.compaction.enabled", value: compactEnabled },
+      { key: "llm.compaction.token-threshold", value: thresholdNum },
+      { key: "llm.compaction.keep-recent-turns", value: keepNum },
+      { key: "llm.compaction.strategy", value: compactStrategy },
     ]);
   };
 
-  if (projectsList.isPending || providers.isPending || projectSettings.list.isPending) {
+  if (projectsList.isPending || providers.isPending || compactionLoading) {
     return <p className="text-muted-foreground/70 text-sm">Loading…</p>;
   }
   if (!project) {
@@ -231,7 +210,9 @@ export function ProjectLlmPanel({ projectSlug }: { projectSlug: string }) {
             id={compactEnabledId}
             checked={compactEnabled}
             disabled={saveSetting.isPending}
-            onCheckedChange={setCompactEnabled}
+            onCheckedChange={(next) =>
+              setCompactionValues((prev) => ({ ...prev, compactEnabled: next }))
+            }
           />
           <Label htmlFor={compactEnabledId}>Auto-compact long conversations</Label>
         </div>
@@ -253,7 +234,9 @@ export function ProjectLlmPanel({ projectSlug }: { projectSlug: string }) {
             step={1_000}
             value={compactThreshold}
             disabled={saveSetting.isPending}
-            onChange={(e) => setCompactThreshold(e.target.value)}
+            onChange={(e) =>
+              setCompactionValues((prev) => ({ ...prev, compactThreshold: e.target.value }))
+            }
             className="max-w-[10rem]"
           />
         </div>
@@ -274,7 +257,9 @@ export function ProjectLlmPanel({ projectSlug }: { projectSlug: string }) {
             step={1}
             value={compactKeep}
             disabled={saveSetting.isPending}
-            onChange={(e) => setCompactKeep(e.target.value)}
+            onChange={(e) =>
+              setCompactionValues((prev) => ({ ...prev, compactKeep: e.target.value }))
+            }
             className="max-w-[8rem]"
           />
         </div>
@@ -291,7 +276,12 @@ export function ProjectLlmPanel({ projectSlug }: { projectSlug: string }) {
           <Select
             value={compactStrategy}
             disabled={saveSetting.isPending}
-            onValueChange={(value) => setCompactStrategy(value as CompactionStrategy)}
+            onValueChange={(value) =>
+              setCompactionValues((prev) => ({
+                ...prev,
+                compactStrategy: value as CompactionStrategy,
+              }))
+            }
           >
             <SelectTrigger id={strategyId} className="max-w-[14rem]">
               <SelectValue />

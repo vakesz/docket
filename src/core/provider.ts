@@ -1,7 +1,7 @@
 /**
  * Provider-agnostic interface for work-item systems.
  *
- * The `WorkItemProvider` shape — and everything around it (specs, axes,
+ * The `WorkItemProvider` shape — and everything around it (specs, facets,
  * setup fields, factories) — lives in `src/core/` so it can be referenced by
  * the registry, by tRPC routers, and by the agent loop without dragging any
  * concrete provider in. Concrete provider modules in `src/providers/<name>/`
@@ -27,29 +27,29 @@ import type {
 } from "@/core/types";
 
 /**
- * View-time matcher for a single scope-axis value against a cached item.
+ * View-time matcher for a single scope-facet value against a cached item.
  *
- * Receives `(item, axisKey, expected)` and returns true when the item should
- * be included. Providers register one matcher per spec covering every axis
- * they declare in `scopeAxes`; the visual-filter layer iterates declared
- * axes and calls the matcher for whichever ones the user constrained. Empty
- * string is treated as "don't filter" before the matcher is invoked, so
- * matchers can assume `expected` is a concrete value.
+ * Receives `(item, facetKey, expected)` and returns true when the item
+ * should be included. Providers register one matcher per spec covering every
+ * facet they declare in `scopeFacets`; the visual-filter layer iterates
+ * declared facets and calls the matcher for whichever ones the user
+ * constrained. Empty string is treated as "don't filter" before the matcher
+ * is invoked, so matchers can assume `expected` is a concrete value.
  */
-export type AxisMatcher = (item: Item, axisKey: string, expected: string) => boolean;
+export type FacetMatcher = (item: Item, facetKey: string, expected: string) => boolean;
 
 /**
- * View-time value extractor for a single scope-axis on a cached item.
+ * View-time value extractor for a single scope-facet on a cached item.
  *
- * Receives `(item, axisKey)` and returns the canonical string value the
- * item carries for that axis (or null if absent). The visual-filter layer
- * calls this once per cached item per declared axis to populate the chip
+ * Receives `(item, facetKey)` and returns the canonical string value the
+ * item carries for that facet (or null if absent). The visual-filter layer
+ * calls this once per cached item per declared facet to populate the chip
  * popovers (top-N values + counts). Implementations read from
  * `item.providerRaw` so `core/` stays provider-agnostic — the same place
- * `axisMatcher` looks. Return null for items the axis doesn't apply to;
+ * `facetMatcher` looks. Return null for items the facet doesn't apply to;
  * the facet computation skips nulls rather than counting them as a value.
  */
-export type AxisExtractor = (item: Item, axisKey: string) => string | null;
+export type FacetExtractor = (item: Item, facetKey: string) => string | null;
 
 /**
  * Base class for provider-layer errors surfaced to core.
@@ -382,19 +382,20 @@ export type ProviderAvatarFetcher = (
 ) => Promise<ProviderAvatarFetched | null>;
 
 /**
- * One provider-defined axis for the visual scope filter.
+ * One provider-defined facet for the visual scope filter.
  *
- * `key` is the wire/storage identifier persisted in the saved view's `axes`
- * map (e.g. `"area_path"`). `label` is rendered to humans. `discoveryStage`
- * — when set — names the wizard `discover` stage that lists candidate
- * values for this axis; callers wire datalist/combobox autocomplete against
- * it. Leave it null for free-form axes the provider can't enumerate.
+ * `key` is the wire/storage identifier persisted in the saved view's
+ * `facets` map (e.g. `"area_path"`). `label` is rendered to humans.
+ * `discoveryStage` — when set — names the wizard `discover` stage that
+ * lists candidate values for this facet; callers wire datalist/combobox
+ * autocomplete against it. Leave it null for free-form facets the provider
+ * can't enumerate.
  *
- * Assignee is intentionally NOT modeled as an axis — it has special `@me`
+ * Assignee is intentionally NOT modeled as a facet — it has special `@me`
  * resolution against `WorkItemProvider.currentUserIdentity` and matches the
  * dedicated `Item.assignee` column rather than `providerRaw`.
  */
-export type ScopeAxis = {
+export type ScopeFacet = {
   key: string;
   label: string;
   discoveryStage: string | null;
@@ -411,12 +412,12 @@ export type ScopeAxis = {
  * `GroupingStrategy`). Defaulting to `"by_kind"` keeps the existing AzDO
  * behavior for any spec that doesn't explicitly opt in.
  *
- * `scopeAxes` declares the provider-defined narrowing axes alongside the
- * reserved `assignee`, `state`, and `tags` chips. Empty `[]` means only the
- * reserved chips render.
+ * `scopeFacets` declares the provider-defined narrowing facets alongside
+ * the reserved `assignee`, `state`, and `tags` chips. Empty `[]` means only
+ * the reserved chips render.
  *
- * `axisMatcher` and `axisExtract` must both be set whenever `scopeAxes` is
- * non-empty — if you can match an axis you can extract it.
+ * `facetMatcher` and `facetExtract` must both be set whenever `scopeFacets`
+ * is non-empty — if you can match a facet you can extract it.
  */
 /**
  * Per-provider capability flags. The UI reads these to decide whether to
@@ -494,9 +495,9 @@ export type ProviderSpec = {
   grouping: GroupingStrategy;
   normalizeConfig: ProviderConfigNormalizer | null;
   labelTemplate: LabelTemplate | null;
-  scopeAxes: readonly ScopeAxis[];
-  axisMatcher: AxisMatcher | null;
-  axisExtract: AxisExtractor | null;
+  scopeFacets: readonly ScopeFacet[];
+  facetMatcher: FacetMatcher | null;
+  facetExtract: FacetExtractor | null;
   /**
    * URL ↔ providerItemId codec. Required on every spec — items are routed
    * by their URL number, so there's nowhere to fall back to.

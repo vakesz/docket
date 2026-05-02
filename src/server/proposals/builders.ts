@@ -32,11 +32,11 @@ import type {
   TagsChangeProposal,
 } from "@/core/proposal-types";
 import type { CreateFields, ItemKind, ProjectId, TransitionIntent, UserId } from "@/core/types";
-import type { Prisma, Proposal as ProposalRow } from "@/db/generated/client";
+import type { Proposal as ProposalRow } from "@/db/generated/client";
 import type { db as Db } from "@/server/db";
 import { assertFound } from "@/server/errors";
 import { snapshotFromRow } from "@/server/proposals/item-snapshot";
-import { proposalPayloadSchema } from "@/server/proposals/schema";
+import { proposalPayloadSchema, toJsonProposalPayload } from "@/server/proposals/schema";
 import { jaccardSimilarity } from "@/server/recommendations/similarity";
 
 /**
@@ -67,8 +67,10 @@ async function persist(
       origin: ctx.origin,
       providerItemId,
       // The row's own surrogate id is canonical; the payload omits it and
-      // `hydrateProposal` re-attaches `row.id` on load.
-      payload: draft as unknown as Prisma.InputJsonValue,
+      // `hydrateProposal` re-attaches `row.id` on load. `toJsonProposalPayload`
+      // validates against the same discriminated-union schema we hydrate
+      // through — a builder shape bug fails here, not in the executor.
+      payload: toJsonProposalPayload(draft),
       status: "pending",
       advisory,
     },

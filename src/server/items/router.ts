@@ -10,8 +10,9 @@ import {
   type StateBucket,
 } from "@/core/types";
 import { applyViewFilter, STATE_BUCKET_MEMBERS, type ViewFilter } from "@/core/view-filter";
-import type { Prisma, Item as PrismaItem } from "@/db/generated/client";
+import type { Prisma } from "@/db/generated/client";
 import { asPlainObject } from "@/lib/json";
+import type { db as Db } from "@/server/db";
 import { injectExternalChange, materialDiff } from "@/server/inbound-changes/inject";
 import { getProviderSpec } from "@/server/provider-registry";
 import { buildProviderForUser } from "@/server/providers/build";
@@ -24,7 +25,7 @@ import {
   toSyncProgressLabel,
 } from "@/server/sync";
 import { assertFound, projectScopedProcedure, projectSlugSchema, router } from "@/server/trpc";
-import { parseSavedViewAxes } from "@/server/views/router";
+import { parseSavedViewFacets } from "@/server/views/router";
 
 /**
  * Translate the URL-facing `itemNumber` into the provider's stored
@@ -65,16 +66,16 @@ const ListInput = projectSlugSchema.extend({
   state: z.string().optional(),
   bucket: BacklogBucketEnum.default("open"),
   /// Optional saved view to apply on top of the inline filters. When set,
-  /// the view's stateBucket/assignees/axes win over `bucket` and the inline
-  /// `assignees`/`axes` inputs (the surface either drives a saved view or
-  /// drives ad-hoc knobs — never both at once).
+  /// the view's stateBucket/assignees/facets win over `bucket` and the
+  /// inline `assignees`/`facets` inputs (the surface either drives a saved
+  /// view or drives ad-hoc knobs — never both at once).
   viewId: z.string().min(1).optional(),
   /// Inline assignee filter — applied when `viewId` is unset. Empty list =
   /// no constraint. An empty string element means "unassigned".
   assignees: z.array(z.string().min(0).max(200)).max(50).default([]),
-  /// Inline per-axis filter — applied when `viewId` is unset. Empty values
+  /// Inline per-facet filter — applied when `viewId` is unset. Empty values
   /// are treated as "no constraint" by the view-filter layer.
-  axes: z.record(z.string().min(1).max(64), z.string().max(500)).default({}),
+  facets: z.record(z.string().min(1).max(64), z.string().max(500)).default({}),
   search: z.string().max(200).optional(),
   limit: z.number().int().min(1).max(200).default(100),
 });
@@ -92,7 +93,7 @@ type ResolvedFilter = {
   /// `true` = only archived rows, `false` = only non-archived, `undefined`
   /// = no archived clause (both kinds visible). Saved views default to
   /// non-archived since they store a canonical `StateBucket` and never the
-  /// cache-only archived axis.
+  /// cache-only archived dimension.
   archivedFlag: boolean | undefined;
 };
 
@@ -139,7 +140,7 @@ async function resolveViewFilter(
       view: {
         stateBucket: row.stateBucket as StateBucket,
         assignees: row.assignees,
-        axes: parseSavedViewAxes(row.axes),
+        facets: parseSavedViewFacets(row.facets),
       },
       archivedFlag: false,
     };
@@ -149,7 +150,7 @@ async function resolveViewFilter(
     view: {
       stateBucket,
       assignees: input.assignees,
-      axes: input.axes,
+      facets: input.facets,
     },
     archivedFlag,
   };
@@ -158,7 +159,7 @@ async function resolveViewFilter(
 /**
  * Cheap SQL pre-filters that don't need the provider matcher: state bucket
  * (resolves to an `IN` clause via `STATE_BUCKET_MEMBERS`), assignees,
- * archived flag, kind, search. Axes need spec.axisMatcher and are applied
+ * archived flag, kind, search. Facets need spec.facetMatcher and are applied
  * in-app downstream.
  *
  * Inline `state` (a single canonical state) wins over the bucket — it's an
@@ -205,29 +206,74 @@ function buildItemListWhere(
   };
 }
 
-function hasAxisFilter(view: ViewFilter): boolean {
-  return Object.values(view.axes).some((v) => v !== "");
+function hasFacetFilter(view: ViewFilter): boolean {
+  return Object.values(view.facets).some((v) => v !== "");
 }
 
 /**
- * Apply provider-axis post-cache narrowing via the spec's matcher. When the
- * provider has no spec or no axis matcher (declared `scopeAxes: []`), this
- * is the identity — same contract as `filterByAxes` in `view-filter.ts`.
+ * Wide-select fields the facet-filter path reads off each row. Extracted to
+ * a const so `ListRow` derives directly from the select shape — and goes
+ * through the *extended* client so branded id fields (`ItemId`,
+ * `ProviderItemId`) flow through. `Prisma.ItemGetPayload` would lose the
+ * brands because it's generated against the unextended client; we sample
+ * `db.item.findMany` instead so the result extension applies.
+ */
+const LIST_ROW_SELECT = {
+  id: true,
+  projectId: true,
+  providerItemId: true,
+  kind: true,
+  title: true,
+  description: true,
+  state: true,
+  assignee: true,
+  author: true,
+  parentId: true,
+  tags: true,
+  url: true,
+  createdAt: true,
+  updatedAt: true,
+  syncedAt: true,
+  repositoryUrl: true,
+  providerRaw: true,
+} as const satisfies Prisma.ItemSelect;
+
+const LIST_NARROW_SELECT = {
+  id: true,
+  providerItemId: true,
+  kind: true,
+  title: true,
+  state: true,
+  assignee: true,
+  author: true,
+  tags: true,
+  url: true,
+  updatedAt: true,
+  syncedAt: true,
+} as const satisfies Prisma.ItemSelect;
+
+type ListRow = Prisma.Result<
+  (typeof Db)["item"],
+  { select: typeof LIST_ROW_SELECT },
+  "findMany"
+>[number];
+
+/**
+ * Apply provider-facet post-cache narrowing via the spec's matcher. When the
+ * provider has no spec or no facet matcher (declared `scopeFacets: []`),
+ * this is the identity — same contract as `filterByFacets` in
+ * `view-filter.ts`.
  *
  * Cached `Item` rows are Prisma rows, not the canonical `Item` shape, so
- * we lift them through a thin adapter that mirrors what each axisExtract /
- * axisMatcher actually reads off the row. In practice that's just
+ * we lift them through a thin adapter that mirrors what each facetExtract /
+ * facetMatcher actually reads off the row. In practice that's just
  * `providerRaw` plus the canonical state/assignee fields the matcher might
  * cross-reference — wide enough that a typical matcher Just Works.
  */
-function filterRowsByAxes(
-  rows: PrismaItem[],
-  view: ViewFilter,
-  providerKind: string,
-): PrismaItem[] {
-  if (!hasAxisFilter(view)) return rows;
+function filterRowsByFacets(rows: ListRow[], view: ViewFilter, providerKind: string): ListRow[] {
+  if (!hasFacetFilter(view)) return rows;
   const spec = getProviderSpec(providerKind);
-  if (!spec || spec.axisMatcher === null) return rows;
+  if (!spec || spec.facetMatcher === null) return rows;
   // Build a (row, lifted) zip so we can keep the original row identity
   // around for the projection step while passing the canonical shape into
   // the matcher.
@@ -237,14 +283,14 @@ function filterRowsByAxes(
   }));
   const filtered = applyViewFilter(
     lifted.map((x) => x.item),
-    { stateBucket: "all", assignees: [], axes: view.axes },
-    spec.axisMatcher,
+    { stateBucket: "all", assignees: [], facets: view.facets },
+    spec.facetMatcher,
   );
   const keep = new Set(filtered.map((i) => i.id));
   return lifted.filter((x) => keep.has(x.item.id)).map((x) => x.row);
 }
 
-function liftRowToCanonical(row: PrismaItem, providerKind: string): Item {
+function liftRowToCanonical(row: ListRow, providerKind: string): Item {
   const providerRaw = asPlainObject(row.providerRaw);
   return {
     id: row.id,
@@ -273,8 +319,8 @@ function liftRowToCanonical(row: PrismaItem, providerKind: string): Item {
  * outbound provider call. The cache is filled by `items.runSync`, which
  * the UI exposes as a "Refresh" button on the items page. Saved-view
  * application — `viewId` resolves to a stored `(stateBucket, assignees,
- * axes)` tuple that narrows the cache the same way inline
- * `bucket`/`assignees`/`axes` would.
+ * facets)` tuple that narrows the cache the same way inline
+ * `bucket`/`assignees`/`facets` would.
  *
  * Project membership is enforced by `projectScopedProcedure`, which also
  * injects `ctx.project` so the mutating procedures don't need a second
@@ -285,57 +331,27 @@ export const itemsRouter = router({
     const userId = ctx.userId;
     const { view, archivedFlag } = await resolveViewFilter(ctx.db, ctx.projectId, userId, input);
     const where = buildItemListWhere(ctx.projectId, input, view, archivedFlag);
-    const axesActive = hasAxisFilter(view);
-    // Both paths return the same response shape — only the axes-active path
-    // has to keep `providerRaw` plus the canonical fields the matcher reads
-    // off the row. The no-axes path drops providerRaw (often kilobytes per
-    // row of unfiltered provider response).
-    const rows = axesActive
+    const facetsActive = hasFacetFilter(view);
+    // Both paths return the same response shape — only the facets-active
+    // path has to keep `providerRaw` plus the canonical fields the matcher
+    // reads off the row. The no-facets path drops providerRaw (often
+    // kilobytes per row of unfiltered provider response).
+    const rows = facetsActive
       ? await ctx.db.item.findMany({
           where,
           orderBy: [{ updatedAt: "desc" }],
           take: Math.min(input.limit * 4, 800),
-          select: {
-            id: true,
-            projectId: true,
-            providerItemId: true,
-            kind: true,
-            title: true,
-            description: true,
-            state: true,
-            assignee: true,
-            author: true,
-            parentId: true,
-            tags: true,
-            url: true,
-            createdAt: true,
-            updatedAt: true,
-            syncedAt: true,
-            repositoryUrl: true,
-            providerRaw: true,
-          },
+          select: LIST_ROW_SELECT,
         })
       : await ctx.db.item.findMany({
           where,
           orderBy: [{ updatedAt: "desc" }],
           take: input.limit,
-          select: {
-            id: true,
-            providerItemId: true,
-            kind: true,
-            title: true,
-            state: true,
-            assignee: true,
-            author: true,
-            tags: true,
-            url: true,
-            updatedAt: true,
-            syncedAt: true,
-          },
+          select: LIST_NARROW_SELECT,
         });
 
-    const filteredRows = axesActive
-      ? filterRowsByAxes(rows as PrismaItem[], view, ctx.project.providerKind).slice(0, input.limit)
+    const filteredRows = facetsActive
+      ? filterRowsByFacets(rows as ListRow[], view, ctx.project.providerKind).slice(0, input.limit)
       : rows;
 
     const spec = getProviderSpec(ctx.project.providerKind);
