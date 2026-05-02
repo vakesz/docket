@@ -20,7 +20,6 @@ import { TagsEditor } from "@/ui/items/tags-editor";
 import { TransitionActions } from "@/ui/items/transition-actions";
 import { Markdown } from "@/ui/markdown/markdown";
 import { ScrollArea } from "@/ui/primitives/scroll-area";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/ui/primitives/tooltip";
 
 type Comment = {
   id: string;
@@ -129,20 +128,16 @@ export function DetailPane({
           <h1 className="font-semibold text-foreground text-lg leading-snug">
             {item.title}
             {item.url ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <a
-                    href={item.url}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    aria-label="Open in provider"
-                    className="ml-1.5 inline-flex size-4 translate-y-[-1px] items-center justify-center align-middle text-muted-foreground hover:text-primary"
-                  >
-                    <ExternalLink aria-hidden="true" className="size-3.5" />
-                  </a>
-                </TooltipTrigger>
-                <TooltipContent side="top">Open in provider</TooltipContent>
-              </Tooltip>
+              <a
+                href={item.url}
+                target="_blank"
+                rel="noreferrer noopener"
+                aria-label="Open in provider"
+                title="Open in provider"
+                className="ml-1.5 inline-flex size-4 translate-y-[-1px] items-center justify-center align-middle text-muted-foreground hover:text-primary"
+              >
+                <ExternalLink aria-hidden="true" className="size-3.5" />
+              </a>
             ) : null}
           </h1>
 
