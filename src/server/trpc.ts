@@ -1,11 +1,13 @@
 import "server-only";
 import { initTRPC, TRPCError } from "@trpc/server";
+import { and, eq } from "drizzle-orm";
 import type { Session } from "next-auth";
 import superjson from "superjson";
 import { ZodError, z } from "zod";
 import { asUserId, type UserId } from "@/core/types";
+import { db } from "@/db";
+import { projectMemberships } from "@/db/schema";
 import { auth } from "@/server/auth";
-import { db } from "@/server/db";
 import { assertFound } from "@/server/errors";
 import { logger } from "@/server/logger";
 import { type AuthorizedProject, projectForUser } from "@/server/projects/access";
@@ -189,9 +191,9 @@ async function effectiveProjectRole(
     });
   }
   if (project.ownerUserId === userId) return "owner";
-  const membership = await ctx.db.projectMembership.findUnique({
-    where: { projectId_userId: { projectId: project.id, userId } },
-    select: { role: true },
+  const membership = await ctx.db.query.projectMemberships.findFirst({
+    where: and(eq(projectMemberships.projectId, project.id), eq(projectMemberships.userId, userId)),
+    columns: { role: true },
   });
   if (!membership) return null;
   if (membership.role === "approver") return "approver";

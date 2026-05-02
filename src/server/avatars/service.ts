@@ -2,8 +2,10 @@
 // and backs off for an hour to avoid hammering a briefly-down provider.
 
 import "server-only";
+import { and, eq, inArray } from "drizzle-orm";
+import type { Db } from "@/db";
+import { avatars } from "@/db/schema";
 import { fetchAvatarFromProvider } from "@/server/avatars/fetchers";
-import type { db as Db } from "@/server/db";
 import { logger } from "@/server/logger";
 
 const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -35,7 +37,7 @@ export type ServeResult =
  * trip.
  */
 export async function serveAvatar(
-  db: typeof Db,
+  db: Db,
   opts: {
     providerKind: string;
     identifier: string;
@@ -43,14 +45,12 @@ export async function serveAvatar(
     isSelf?: boolean;
   },
 ): Promise<ServeResult> {
-  const row = await db.avatar.findUnique({
-    where: {
-      providerKind_identifier: {
-        providerKind: opts.providerKind,
-        identifier: opts.identifier,
-      },
-    },
-    select: {
+  const row = await db.query.avatars.findFirst({
+    where: and(
+      eq(avatars.providerKind, opts.providerKind),
+      eq(avatars.identifier, opts.identifier),
+    ),
+    columns: {
       bytes: true,
       contentType: true,
       etag: true,
@@ -70,8 +70,6 @@ export async function serveAvatar(
         fetchedAt: row.fetchedAt,
       };
     }
-    // Confirmed-missing or recently-failed; back off rather than retrying
-    // on every request.
     if (row.failedAt && Date.now() - row.failedAt.getTime() < FAILURE_BACKOFF_MS) {
       return { kind: "missing" };
     }
@@ -104,7 +102,7 @@ export async function serveAvatar(
  * round-trip through the lazy path.
  */
 export async function persistAvatar(
-  db: typeof Db,
+  db: Db,
   opts: {
     providerKind: string;
     identifier: string;
@@ -113,42 +111,35 @@ export async function persistAvatar(
     etag?: string | null;
   },
 ): Promise<void> {
-  await db.avatar.upsert({
-    where: {
-      providerKind_identifier: {
-        providerKind: opts.providerKind,
-        identifier: opts.identifier,
-      },
-    },
-    create: {
+  const bytes = opts.bytes ?? null;
+  const contentType = opts.contentType ?? null;
+  const etag = opts.etag ?? null;
+  await db
+    .insert(avatars)
+    .values({
       providerKind: opts.providerKind,
       identifier: opts.identifier,
-      bytes: opts.bytes ? Buffer.from(opts.bytes) : null,
-      contentType: opts.contentType ?? null,
-      etag: opts.etag ?? null,
+      bytes,
+      contentType,
+      etag,
       failedAt: null,
-    },
-    update: {
-      bytes: opts.bytes ? Buffer.from(opts.bytes) : null,
-      contentType: opts.contentType ?? null,
-      etag: opts.etag ?? null,
-      fetchedAt: new Date(),
-      failedAt: null,
-    },
-  });
+    })
+    .onConflictDoUpdate({
+      target: [avatars.providerKind, avatars.identifier],
+      set: {
+        bytes,
+        contentType,
+        etag,
+        fetchedAt: new Date(),
+        failedAt: null,
+      },
+    });
 }
 
-/**
- * Best-effort bulk warm. Caller passes the assignees from a freshly synced
- * chunk; this function fans out into per-identifier fetches with light
- * concurrency. Identifiers already cached + fresh are skipped. Failures
- * are logged and never thrown — sync should not fail because an avatar
- * fetch did.
- */
 const WARM_CONCURRENCY = 4;
 
 export async function warmAvatars(
-  db: typeof Db,
+  db: Db,
   opts: {
     providerKind: string;
     identifiers: readonly string[];
@@ -159,9 +150,9 @@ export async function warmAvatars(
   const unique = Array.from(new Set(opts.identifiers.filter((s) => s.length > 0)));
   if (unique.length === 0) return;
 
-  const existing = await db.avatar.findMany({
-    where: { providerKind: opts.providerKind, identifier: { in: unique } },
-    select: { identifier: true, fetchedAt: true, bytes: true, failedAt: true },
+  const existing = await db.query.avatars.findMany({
+    where: and(eq(avatars.providerKind, opts.providerKind), inArray(avatars.identifier, unique)),
+    columns: { identifier: true, fetchedAt: true, bytes: true, failedAt: true },
   });
   const skipSet = new Set<string>();
   const now = Date.now();
@@ -234,58 +225,50 @@ async function tryFetch(opts: {
 }
 
 async function persistResult(
-  db: typeof Db,
+  db: Db,
   opts: { providerKind: string; identifier: string },
   fetched: { bytes: Uint8Array | null; contentType: string | null; etag: string | null } | null,
 ): Promise<void> {
+  const now = new Date();
   if (fetched === null) {
-    await db.avatar.upsert({
-      where: {
-        providerKind_identifier: {
-          providerKind: opts.providerKind,
-          identifier: opts.identifier,
-        },
-      },
-      create: {
+    await db
+      .insert(avatars)
+      .values({
         providerKind: opts.providerKind,
         identifier: opts.identifier,
         bytes: null,
-        failedAt: new Date(),
-      },
-      update: {
-        failedAt: new Date(),
-        fetchedAt: new Date(),
-      },
-    });
+        failedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [avatars.providerKind, avatars.identifier],
+        set: { failedAt: now, fetchedAt: now },
+      });
     return;
   }
-  await db.avatar.upsert({
-    where: {
-      providerKind_identifier: {
-        providerKind: opts.providerKind,
-        identifier: opts.identifier,
-      },
-    },
-    create: {
+  await db
+    .insert(avatars)
+    .values({
       providerKind: opts.providerKind,
       identifier: opts.identifier,
-      bytes: fetched.bytes ? Buffer.from(fetched.bytes) : null,
+      bytes: fetched.bytes,
       contentType: fetched.contentType,
       etag: fetched.etag,
       failedAt: null,
-    },
-    update: {
-      bytes: fetched.bytes ? Buffer.from(fetched.bytes) : null,
-      contentType: fetched.contentType,
-      etag: fetched.etag,
-      fetchedAt: new Date(),
-      failedAt: null,
-    },
-  });
+    })
+    .onConflictDoUpdate({
+      target: [avatars.providerKind, avatars.identifier],
+      set: {
+        bytes: fetched.bytes,
+        contentType: fetched.contentType,
+        etag: fetched.etag,
+        fetchedAt: now,
+        failedAt: null,
+      },
+    });
 }
 
 function maybeRefreshInBackground(
-  db: typeof Db,
+  db: Db,
   opts: {
     providerKind: string;
     identifier: string;
@@ -296,8 +279,6 @@ function maybeRefreshInBackground(
 ): void {
   if (row.failedAt && Date.now() - row.failedAt.getTime() < FAILURE_BACKOFF_MS) return;
   if (Date.now() - row.fetchedAt.getTime() < REFRESH_TTL_MS) return;
-  // Fire and forget — the current request is already serving the stale
-  // bytes; the refresh result will land for the next request.
   void (async () => {
     try {
       const fetched = await tryFetch(opts);
@@ -315,7 +296,6 @@ function maybeRefreshInBackground(
   })();
 }
 
-function ensureUint8Array(value: Uint8Array | Buffer): Uint8Array {
-  if (value instanceof Uint8Array) return value;
-  return Uint8Array.from(value);
+function ensureUint8Array(value: Uint8Array): Uint8Array {
+  return value instanceof Uint8Array ? value : Uint8Array.from(value as ArrayLike<number>);
 }

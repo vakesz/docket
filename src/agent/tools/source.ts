@@ -9,9 +9,11 @@
  */
 
 import "server-only";
+import { and, arrayContains, desc, eq, ilike, or } from "drizzle-orm";
 import { z } from "zod";
 import type { ToolFactory } from "@/agent/tools/types";
 import { defineTool, fail, ok } from "@/agent/tools/types";
+import { sourceDocs } from "@/db/schema";
 
 export const listSourcesTool: ToolFactory = (ctx) =>
   defineTool({
@@ -27,30 +29,32 @@ export const listSourcesTool: ToolFactory = (ctx) =>
     // is author-controlled prose. Body markdown is fetched separately.
     guardrailScan: { mode: "fields", untrusted: ["[].title"] },
     handler: async (args) => {
-      const rows = await ctx.db.sourceDoc.findMany({
-        where: {
-          projectId: ctx.projectId,
-          ...(args.kind ? { kind: args.kind } : {}),
-          ...(args.tag ? { tags: { has: args.tag } } : {}),
-        },
-        orderBy: [{ updatedAt: "desc" }],
-        take: args.limit,
-        select: {
-          id: true,
-          title: true,
-          kind: true,
-          uri: true,
-          tags: true,
-          updatedAt: true,
-        },
-      });
+      const rows = await ctx.db
+        .select({
+          id: sourceDocs.id,
+          title: sourceDocs.title,
+          kind: sourceDocs.kind,
+          uri: sourceDocs.uri,
+          tags: sourceDocs.tags,
+          updatedAt: sourceDocs.updatedAt,
+        })
+        .from(sourceDocs)
+        .where(
+          and(
+            eq(sourceDocs.projectId, ctx.projectId),
+            ...(args.kind ? [eq(sourceDocs.kind, args.kind)] : []),
+            ...(args.tag ? [arrayContains(sourceDocs.tags, [args.tag])] : []),
+          ),
+        )
+        .orderBy(desc(sourceDocs.updatedAt))
+        .limit(args.limit);
       return ok(
         rows.map((r) => ({
           id: r.id,
           title: r.title,
           kind: r.kind,
           uri: r.uri,
-          tags: r.tags,
+          tags: [...r.tags],
           updated_at: r.updatedAt,
         })),
       );
@@ -66,8 +70,8 @@ export const getSourceTool: ToolFactory = (ctx) =>
     // (id/kind/uri/tags/updated_at) is server / project metadata.
     guardrailScan: { mode: "fields", untrusted: ["title", "body"] },
     handler: async ({ source_id: sourceId }) => {
-      const row = await ctx.db.sourceDoc.findFirst({
-        where: { id: sourceId, projectId: ctx.projectId },
+      const row = await ctx.db.query.sourceDocs.findFirst({
+        where: and(eq(sourceDocs.id, sourceId), eq(sourceDocs.projectId, ctx.projectId)),
       });
       if (!row) return fail(`source '${sourceId}' not found in this project`);
       return ok({
@@ -75,7 +79,7 @@ export const getSourceTool: ToolFactory = (ctx) =>
         title: row.title,
         kind: row.kind,
         uri: row.uri,
-        tags: row.tags,
+        tags: [...row.tags],
         body: row.body,
         updated_at: row.updatedAt,
       });
@@ -94,32 +98,30 @@ export const searchSourcesTool: ToolFactory = (ctx) =>
     // Same shape as list_sources — title is the only author-authored field.
     guardrailScan: { mode: "fields", untrusted: ["[].title"] },
     handler: async (args) => {
-      const rows = await ctx.db.sourceDoc.findMany({
-        where: {
-          projectId: ctx.projectId,
-          OR: [
-            { title: { contains: args.query, mode: "insensitive" } },
-            { body: { contains: args.query, mode: "insensitive" } },
-          ],
-        },
-        orderBy: [{ updatedAt: "desc" }],
-        take: args.limit,
-        select: {
-          id: true,
-          title: true,
-          kind: true,
-          uri: true,
-          tags: true,
-          updatedAt: true,
-        },
-      });
+      const pattern = `%${args.query}%`;
+      const searchClause = or(ilike(sourceDocs.title, pattern), ilike(sourceDocs.body, pattern));
+      const rows = await ctx.db
+        .select({
+          id: sourceDocs.id,
+          title: sourceDocs.title,
+          kind: sourceDocs.kind,
+          uri: sourceDocs.uri,
+          tags: sourceDocs.tags,
+          updatedAt: sourceDocs.updatedAt,
+        })
+        .from(sourceDocs)
+        .where(
+          and(eq(sourceDocs.projectId, ctx.projectId), ...(searchClause ? [searchClause] : [])),
+        )
+        .orderBy(desc(sourceDocs.updatedAt))
+        .limit(args.limit);
       return ok(
         rows.map((r) => ({
           id: r.id,
           title: r.title,
           kind: r.kind,
           uri: r.uri,
-          tags: r.tags,
+          tags: [...r.tags],
           updated_at: r.updatedAt,
         })),
       );

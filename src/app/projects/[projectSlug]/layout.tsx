@@ -1,8 +1,8 @@
 import { TRPCError } from "@trpc/server";
 import { notFound, redirect } from "next/navigation";
 import type { ReactNode } from "react";
+import { db } from "@/db";
 import { auth } from "@/server/auth";
-import { db } from "@/server/db";
 import { loadGlobalSetting } from "@/server/settings/effective";
 import { requireSetupComplete } from "@/server/setup/guard";
 import { createCaller } from "@/server/trpc-caller";

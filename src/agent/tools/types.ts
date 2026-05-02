@@ -8,21 +8,23 @@
  * of bare arguments.
  */
 
+import { eq } from "drizzle-orm";
 import type { z } from "zod";
 import type { LlmToolDef } from "@/agent/llm/types";
 import { zodToJsonSchema } from "@/agent/tools/schema";
-import type { ProjectId, UserId } from "@/core/types";
-import type { db as Db } from "@/server/db";
+import type { ItemId, ProjectId, ProviderItemId, UserId } from "@/core/types";
+import type { Db } from "@/db";
+import { projects } from "@/db/schema";
 import { buildProviderForUser } from "@/server/providers/build";
 
 export type ToolContext = {
-  db: typeof Db;
+  db: Db;
   projectId: ProjectId;
   userId: UserId;
   /** Optional item this conversation is anchored on. */
-  itemId: string | null;
+  itemId: ItemId | null;
   /** The item's providerItemId, when itemId is set. Convenience for tools. */
-  providerItemId: string | null;
+  providerItemId: ProviderItemId | null;
 };
 
 /**
@@ -91,7 +93,9 @@ export async function withProvider<T>(
   ctx: ToolContext,
   fn: (provider: Awaited<ReturnType<typeof buildProviderForUser>>) => Promise<T>,
 ): Promise<T> {
-  const project = await ctx.db.project.findUnique({ where: { id: ctx.projectId } });
+  const project = await ctx.db.query.projects.findFirst({
+    where: eq(projects.id, ctx.projectId),
+  });
   if (!project) throw new Error(`project ${ctx.projectId} not found`);
   const provider = await buildProviderForUser(ctx.db, project, ctx.userId);
   return fn(provider);

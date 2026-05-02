@@ -17,9 +17,10 @@
  */
 
 import "server-only";
-import type { db as Db } from "@/server/db";
-
-type Database = typeof Db;
+import { and, desc, eq, lt, or } from "drizzle-orm";
+import type { ConversationId, ProjectId, UserId } from "@/core/types";
+import type { Db } from "@/db";
+import { conversations, memoryEntries, projects, sourceDocs } from "@/db/schema";
 
 const EXPORT_CONVERSATIONS_PER_PAGE = 200;
 const EXPORT_MESSAGES_PER_PAGE = 10_000;
@@ -27,7 +28,7 @@ const EXPORT_MESSAGES_PER_CONVERSATION = 5_000;
 
 export type ProjectExportCursor = {
   startedAt: string;
-  conversationId: string;
+  conversationId: ConversationId;
 };
 
 export type ProjectExportPage = {
@@ -94,31 +95,36 @@ export type ProjectExportPage = {
 };
 
 export async function buildProjectExport(
-  db: Database,
-  projectId: string,
-  userId: string,
+  db: Db,
+  projectId: ProjectId,
+  userId: UserId,
   cursor: ProjectExportCursor | null = null,
 ): Promise<ProjectExportPage> {
   const isFirstPage = cursor === null;
 
-  const conversationWhere = cursor
-    ? {
-        projectId,
-        userId,
-        OR: [
-          { startedAt: { lt: new Date(cursor.startedAt) } },
-          {
-            AND: [{ startedAt: new Date(cursor.startedAt) }, { id: { lt: cursor.conversationId } }],
-          },
-        ],
-      }
-    : { projectId, userId };
+  // Composite cursor: order by (startedAt DESC, id DESC) means the next page
+  // is "row whose startedAt is strictly less, OR same-startedAt but lower id".
+  const cursorWhere = cursor
+    ? or(
+        lt(conversations.startedAt, new Date(cursor.startedAt)),
+        and(
+          eq(conversations.startedAt, new Date(cursor.startedAt)),
+          lt(conversations.id, cursor.conversationId),
+        ),
+      )
+    : undefined;
 
-  const [project, memory, sources, conversations] = await Promise.all([
+  const baseConvWhere = and(
+    eq(conversations.projectId, projectId),
+    eq(conversations.userId, userId),
+    ...(cursorWhere ? [cursorWhere] : []),
+  );
+
+  const [project, memory, sources, conversationRows] = await Promise.all([
     isFirstPage
-      ? db.project.findUnique({
-          where: { id: projectId },
-          select: {
+      ? db.query.projects.findFirst({
+          where: eq(projects.id, projectId),
+          columns: {
             id: true,
             name: true,
             description: true,
@@ -130,27 +136,27 @@ export async function buildProjectExport(
             updatedAt: true,
           },
         })
-      : Promise.resolve(null),
+      : Promise.resolve(undefined),
     isFirstPage
-      ? db.memoryEntry.findMany({
-          where: { projectId },
-          orderBy: [{ updatedAt: "desc" }],
+      ? db.query.memoryEntries.findMany({
+          where: eq(memoryEntries.projectId, projectId),
+          orderBy: [desc(memoryEntries.updatedAt)],
         })
       : Promise.resolve([]),
     isFirstPage
-      ? db.sourceDoc.findMany({
-          where: { projectId },
-          orderBy: [{ updatedAt: "desc" }],
+      ? db.query.sourceDocs.findMany({
+          where: eq(sourceDocs.projectId, projectId),
+          orderBy: [desc(sourceDocs.updatedAt)],
         })
       : Promise.resolve([]),
-    db.conversation.findMany({
-      where: conversationWhere,
-      orderBy: [{ startedAt: "desc" }, { id: "desc" }],
-      take: EXPORT_CONVERSATIONS_PER_PAGE,
-      include: {
+    db.query.conversations.findMany({
+      where: baseConvWhere,
+      orderBy: [desc(conversations.startedAt), desc(conversations.id)],
+      limit: EXPORT_CONVERSATIONS_PER_PAGE,
+      with: {
         messages: {
-          orderBy: [{ createdAt: "asc" }],
-          take: EXPORT_MESSAGES_PER_CONVERSATION,
+          orderBy: (msg, { asc: ascOrd }) => [ascOrd(msg.createdAt)],
+          limit: EXPORT_MESSAGES_PER_CONVERSATION,
         },
       },
     }),
@@ -167,7 +173,7 @@ export async function buildProjectExport(
   let nextCursor: ProjectExportCursor | null = null;
   const conversationsOut: ProjectExportPage["conversations"] = [];
 
-  for (const c of conversations) {
+  for (const c of conversationRows) {
     if (
       conversationsOut.length > 0 &&
       messageCount + c.messages.length > EXPORT_MESSAGES_PER_PAGE
@@ -199,14 +205,12 @@ export async function buildProjectExport(
     });
   }
 
-  // Filled the page batch — assume there might be more, hand back a cursor
-  // pointing past the last conversation we emitted.
   if (
     nextCursor === null &&
-    conversations.length === EXPORT_CONVERSATIONS_PER_PAGE &&
-    conversationsOut.length === conversations.length
+    conversationRows.length === EXPORT_CONVERSATIONS_PER_PAGE &&
+    conversationsOut.length === conversationRows.length
   ) {
-    const last = conversations[conversations.length - 1];
+    const last = conversationRows[conversationRows.length - 1];
     if (last) {
       nextCursor = { startedAt: last.startedAt.toISOString(), conversationId: last.id };
     }
@@ -232,7 +236,7 @@ export async function buildProjectExport(
       id: m.id,
       title: m.title,
       body: m.body,
-      tags: m.tags,
+      tags: [...m.tags],
       source: m.source,
       createdAt: m.createdAt.toISOString(),
       updatedAt: m.updatedAt.toISOString(),
@@ -243,7 +247,7 @@ export async function buildProjectExport(
       kind: s.kind,
       uri: s.uri,
       body: s.body,
-      tags: s.tags,
+      tags: [...s.tags],
       createdAt: s.createdAt.toISOString(),
       updatedAt: s.updatedAt.toISOString(),
     })),

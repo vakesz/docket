@@ -1,12 +1,13 @@
 // `runFullSync` archives any cached row not seen in the walk — that's
 // what makes "closed at the provider but never re-synced" observable.
 // Items are drained in `CHUNK_SIZE` batches: one findMany per chunk to
-// load existing rows, createMany for new ids, then a single $transaction
+// load existing rows, drizzle insert for new ids, then a parallel set
 // of updates — bulk pipelining beats thousands of sequential round-trips
 // on first-time / full syncs.
 
 import "server-only";
 import { randomUUID } from "node:crypto";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   asProjectId,
@@ -19,9 +20,9 @@ import {
   type ProviderItemId,
   type UserId,
 } from "@/core/types";
-import { Prisma } from "@/db/generated/client";
+import type { Db, DbTx } from "@/db";
+import { comments, items, settings, syncCursors } from "@/db/schema";
 import { warmAvatars } from "@/server/avatars/service";
-import type { db as Db } from "@/server/db";
 import {
   injectExternalChange,
   type MaterialChange,
@@ -148,7 +149,7 @@ function encodeProgress(snapshot: SyncProgressSnapshot): string {
   return JSON.stringify(persisted);
 }
 
-function decodeProgress(raw: string | null): SyncProgressSnapshot | null {
+function decodeProgress(raw: string | null | undefined): SyncProgressSnapshot | null {
   if (!raw) return null;
   let parsed: unknown;
   try {
@@ -161,81 +162,96 @@ function decodeProgress(raw: string | null): SyncProgressSnapshot | null {
 }
 
 async function upsertProgress(
-  db: typeof Db,
+  db: Db,
   projectId: ProjectId,
   snapshot: SyncProgressSnapshot,
 ): Promise<void> {
   // Resolves the existing row to either a no-op (existing belongs to a
-  // strictly newer run) or an update; returns true if no row was found.
-  // Same runId always passes: own-row writes (chunk updates, self-heal)
-  // never trip the guard. Older/undecodable rows get taken over so a
-  // brand-new run can replace a finished one.
-  const tryUpdate = async (): Promise<boolean> => {
-    const existing = await db.setting.findFirst({
-      where: {
-        key: SYNC_PROGRESS_KEY,
-        scope: "project",
-        projectId,
-        userId: null,
-      },
-      orderBy: { updatedAt: "desc" },
-      select: { id: true, value: true },
-    });
-    if (!existing) return false;
+  // strictly newer run) or an update; falls through to insert if no row was
+  // found. Same runId always passes: own-row writes (chunk updates,
+  // self-heal) never trip the guard. Older/undecodable rows get taken over
+  // so a brand-new run can replace a finished one.
+  const existing = await db.query.settings.findFirst({
+    where: and(
+      eq(settings.key, SYNC_PROGRESS_KEY),
+      eq(settings.scope, "project"),
+      eq(settings.projectId, projectId),
+    ),
+    orderBy: (s, { desc }) => [desc(s.updatedAt)],
+    columns: { id: true, value: true },
+  });
+  const encoded = encodeProgress(snapshot);
+  if (existing) {
     const current = decodeProgress(existing.value);
     if (
       current &&
       current.runId !== snapshot.runId &&
       current.startedAt.getTime() > snapshot.startedAt.getTime()
     ) {
-      return true;
+      return;
     }
-    await db.setting.update({
-      where: { id: existing.id },
-      data: { value: encodeProgress(snapshot) },
-    });
-    return true;
-  };
-
-  if (await tryUpdate()) return;
-
+    await db
+      .update(settings)
+      .set({ value: encoded, updatedAt: new Date() })
+      .where(eq(settings.id, existing.id));
+    return;
+  }
+  // Race-safe: if a concurrent first-write inserted between findFirst and
+  // here, the partial unique on (key, projectId) for project-scope rows
+  // raises 23505. Catch it and re-resolve through the update path so this
+  // run's progress still lands.
   try {
-    await db.setting.create({
-      data: {
-        key: SYNC_PROGRESS_KEY,
-        scope: "project",
-        projectId,
-        value: encodeProgress(snapshot),
-      },
+    await db.insert(settings).values({
+      key: SYNC_PROGRESS_KEY,
+      scope: "project",
+      projectId,
+      value: encoded,
     });
   } catch (err) {
-    // The partial unique on (key, projectId) for project-scope rows means
-    // a concurrent first-write can race in between our findFirst and
-    // create. Re-resolve through the update path so this run's progress
-    // still lands.
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
-      await tryUpdate();
+    if (isUniqueViolation(err)) {
+      const retry = await db.query.settings.findFirst({
+        where: and(
+          eq(settings.key, SYNC_PROGRESS_KEY),
+          eq(settings.scope, "project"),
+          eq(settings.projectId, projectId),
+        ),
+        columns: { id: true },
+      });
+      if (retry) {
+        await db
+          .update(settings)
+          .set({ value: encoded, updatedAt: new Date() })
+          .where(eq(settings.id, retry.id));
+      }
       return;
     }
     throw err;
   }
 }
 
+function isUniqueViolation(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code: string }).code === "23505"
+  );
+}
+
 export async function loadSyncProgress(
-  db: typeof Db,
+  db: Db,
   projectId: ProjectId,
 ): Promise<SyncProgressSnapshot | null> {
-  const row = await db.setting.findFirst({
-    where: {
-      key: SYNC_PROGRESS_KEY,
-      scope: "project",
-      projectId,
-      userId: null,
-    },
-    orderBy: { updatedAt: "desc" },
-    select: { value: true },
+  const row = await db.query.settings.findFirst({
+    where: and(
+      eq(settings.key, SYNC_PROGRESS_KEY),
+      eq(settings.scope, "project"),
+      eq(settings.projectId, projectId),
+    ),
+    orderBy: (s, { desc }) => [desc(s.updatedAt)],
+    columns: { value: true },
   });
-  const snapshot = decodeProgress(row?.value ?? null);
+  const snapshot = decodeProgress(row?.value);
   if (!snapshot) return null;
 
   if (
@@ -269,43 +285,62 @@ export function toSyncProgressLabel(phase: SyncPhase): string {
   }
 }
 
-export function toItemRow(canonical: CanonicalItem, projectId: ProjectId, syncedAt: Date) {
-  // The plural assignee column always reflects the singular: providers
-  // without multi-assignee surface a single login through `assignee`, and
-  // we want both columns coherent so callers can transition reads at their
-  // own pace.
+export type ItemRow = {
+  projectId: ProjectId;
+  providerItemId: ProviderItemId;
+  kind: CanonicalItem["kind"];
+  title: string;
+  description: string;
+  state: CanonicalItem["state"];
+  assignees: string[];
+  reviewers: string[];
+  linkedItemIds: string[];
+  author: string | null;
+  parentId: ProviderItemId | null;
+  tags: string[];
+  providerRaw: Record<string, unknown>;
+  url: string | null;
+  repositoryUrl: string | null;
+  createdAt: Date | null;
+  updatedAt: Date;
+  closedAt: Date | null;
+  syncedAt: Date;
+  archived: boolean;
+  reactions: CanonicalItem["reactions"] | null;
+  milestone: string | null;
+  iteration: string | null;
+  area: string | null;
+  ciSummary: CanonicalItem["ciSummary"] | null;
+};
+
+export function toItemRow(canonical: CanonicalItem, projectId: ProjectId, syncedAt: Date): ItemRow {
   const assignees = canonical.assignees ?? (canonical.assignee ? [canonical.assignee] : []);
   return {
     projectId,
-    providerItemId: canonical.id,
+    providerItemId: asProviderItemId(canonical.id),
     kind: canonical.kind,
     title: canonical.title,
     description: canonical.description,
     state: canonical.state,
-    assignee: canonical.assignee,
-    assignees,
-    reviewers: canonical.reviewers ?? [],
-    linkedItemIds: canonical.linkedItemIds ?? [],
-    author: canonical.author,
-    parentId: canonical.parentId,
-    tags: canonical.tags,
-    providerRaw: canonical.providerRaw as Prisma.InputJsonValue,
-    url: canonical.url,
-    repositoryUrl: canonical.repositoryUrl,
-    createdAt: canonical.createdAt,
+    assignees: [...assignees],
+    reviewers: [...(canonical.reviewers ?? [])],
+    linkedItemIds: [...(canonical.linkedItemIds ?? [])],
+    author: canonical.author ?? null,
+    parentId: canonical.parentId ? asProviderItemId(canonical.parentId) : null,
+    tags: [...canonical.tags],
+    providerRaw: canonical.providerRaw as Record<string, unknown>,
+    url: canonical.url ?? null,
+    repositoryUrl: canonical.repositoryUrl ?? null,
+    createdAt: canonical.createdAt ?? null,
     updatedAt: canonical.updatedAt ?? syncedAt,
     closedAt: canonical.closedAt ?? null,
     syncedAt,
     archived: false,
-    reactions: (canonical.reactions ?? Prisma.JsonNull) as
-      | Prisma.InputJsonValue
-      | typeof Prisma.JsonNull,
+    reactions: canonical.reactions ?? null,
     milestone: canonical.milestone ?? null,
     iteration: canonical.iteration ?? null,
     area: canonical.area ?? null,
-    ciSummary: (canonical.ciSummary ?? Prisma.JsonNull) as
-      | Prisma.InputJsonValue
-      | typeof Prisma.JsonNull,
+    ciSummary: canonical.ciSummary ?? null,
   };
 }
 
@@ -334,7 +369,7 @@ type UpsertProgressSnapshot = {
  * reconcile against the cache with a per-comment skip-rewrite.
  */
 async function processChunk(
-  db: typeof Db,
+  db: Db,
   projectId: ProjectId,
   bundles: readonly ChangedItem[],
   syncedAt: Date,
@@ -342,24 +377,21 @@ async function processChunk(
 ): Promise<ChunkResult> {
   const startedAt = Date.now();
   const ids = bundles.map((b) => asProviderItemId(b.item.id));
-  const cachedRows = await db.item.findMany({
-    where: { projectId, providerItemId: { in: ids } },
-    select: {
-      id: true,
-      providerItemId: true,
-      state: true,
-      title: true,
-      description: true,
-      assignee: true,
-    },
-  });
+  const cachedRows = await db
+    .select({
+      id: items.id,
+      providerItemId: items.providerItemId,
+      state: items.state,
+      title: items.title,
+      description: items.description,
+      assignees: items.assignees,
+    })
+    .from(items)
+    .where(and(eq(items.projectId, projectId), inArray(items.providerItemId, ids)));
   const cachedMap = new Map(cachedRows.map((r) => [r.providerItemId, r]));
 
-  const toCreate: ReturnType<typeof toItemRow>[] = [];
-  const toUpdate: {
-    providerItemId: ProviderItemId;
-    row: ReturnType<typeof toItemRow>;
-  }[] = [];
+  const toCreate: ItemRow[] = [];
+  const toUpdate: { providerItemId: ProviderItemId; row: ItemRow }[] = [];
   const changedExisting: {
     itemId: ItemId;
     providerItemId: ProviderItemId;
@@ -388,27 +420,28 @@ async function processChunk(
 
   let upserted = 0;
   if (toCreate.length > 0) {
-    // skipDuplicates guards against a concurrent insert sneaking in
-    // between the findMany above and this createMany.
-    const created = await db.item.createMany({
-      data: toCreate,
-      skipDuplicates: true,
-    });
-    upserted += created.count;
+    // onConflictDoNothing guards against a concurrent insert sneaking in
+    // between the select above and this insert.
+    const inserted = await db
+      .insert(items)
+      .values(toCreate)
+      .onConflictDoNothing({
+        target: [items.projectId, items.providerItemId],
+      })
+      .returning({ id: items.id });
+    upserted += inserted.length;
   }
   if (toUpdate.length > 0) {
     // Each item update is independent — a partial failure leaves the cache
-    // out of date for that row, which the next sync cycle reconciles. The
-    // previous $transaction wrapper serialized the writes inside Postgres
-    // for no benefit; Promise.all hands them all to the pg pool and lets it
-    // pipeline. MAX_INFLIGHT_CHUNKS keeps overall fan-out bounded.
+    // out of date for that row, which the next sync cycle reconciles.
+    // Promise.all hands them all to the pg pool and lets it pipeline.
+    // MAX_INFLIGHT_CHUNKS keeps overall fan-out bounded.
     await Promise.all(
       toUpdate.map(({ providerItemId, row }) =>
-        db.item.update({
-          where: { projectId_providerItemId: { projectId, providerItemId } },
-          data: { ...row, archived: false },
-          select: { id: true },
-        }),
+        db
+          .update(items)
+          .set({ ...row, archived: false })
+          .where(and(eq(items.projectId, projectId), eq(items.providerItemId, providerItemId))),
       ),
     );
     upserted += toUpdate.length;
@@ -433,18 +466,18 @@ async function processChunk(
   const bundlesWithComments = bundles.filter((b) => b.comments !== null);
   if (bundlesWithComments.length > 0) {
     // Surrogates: existing rows already came back in `cachedMap` with their
-    // ids — we only need a refetch for the freshly-created ones, since
-    // `createMany` doesn't return them. Saves one full-chunk findMany on
-    // every chunk where we've seen the items before (the common case after
-    // the first sync).
-    const surrogateMap = new Map<string, string>();
+    // ids — we only need a refetch for the freshly-created ones, since the
+    // batched insert above doesn't return id-by-providerItemId. Saves one
+    // full-chunk select on every chunk where we've seen the items before
+    // (the common case after the first sync).
+    const surrogateMap = new Map<string, ItemId>();
     for (const r of cachedRows) surrogateMap.set(r.providerItemId, r.id);
     const newIds = toCreate.map((r) => r.providerItemId).filter((id) => !surrogateMap.has(id));
     if (newIds.length > 0) {
-      const newRows = await db.item.findMany({
-        where: { projectId, providerItemId: { in: newIds } },
-        select: { id: true, providerItemId: true },
-      });
+      const newRows = await db
+        .select({ id: items.id, providerItemId: items.providerItemId })
+        .from(items)
+        .where(and(eq(items.projectId, projectId), inArray(items.providerItemId, newIds)));
       for (const r of newRows) surrogateMap.set(r.providerItemId, r.id);
     }
     const reconcileBundles: CommentReconcileBundle[] = [];
@@ -461,11 +494,11 @@ async function processChunk(
   // the lazy-fetch path. Best-effort + fire-and-forget — sync should never
   // fail because an avatar fetch did, and the loop itself bounds
   // concurrency internally.
-  const assignees = collectAssignees(bundles);
-  if (assignees.length > 0) {
+  const assigneeLogins = collectAssignees(bundles);
+  if (assigneeLogins.length > 0) {
     void warmAvatars(db, {
       providerKind: ctx.providerKind,
-      identifiers: assignees,
+      identifiers: assigneeLogins,
     }).catch((err) => {
       logger.warn(
         {
@@ -512,8 +545,8 @@ function collectAssignees(bundles: readonly ChangedItem[]): string[] {
 
 /**
  * Reconcile cached comments against provider snapshots, batched over
- * arbitrary many items. One `findMany` covers every item in the call, then
- * per-comment upserts fan out in a single `Promise.all`. Skip-rewrite:
+ * arbitrary many items. One select covers every item in the call, then
+ * per-comment writes fan out in a single `Promise.all`. Skip-rewrite:
  * comments whose `providerUpdatedAt` matches the cached row (and whose body
  * matches) are left untouched. Returns the total number of writes.
  *
@@ -523,22 +556,29 @@ function collectAssignees(bundles: readonly ChangedItem[]): string[] {
  * stricter reconciliation if/when needed.
  */
 export type CommentReconcileBundle = {
-  itemSurrogate: string;
+  itemSurrogate: ItemId;
   comments: readonly CanonicalComment[];
 };
 
+type CommentInsertRow = typeof comments.$inferInsert;
+
 export async function reconcileComments(
-  db: typeof Db,
+  db: Db | DbTx,
   bundles: readonly CommentReconcileBundle[],
 ): Promise<number> {
   const nonEmpty = bundles.filter((b) => b.comments.length > 0);
   if (nonEmpty.length === 0) return 0;
   const itemIds = nonEmpty.map((b) => b.itemSurrogate);
-  const allExisting = await db.comment.findMany({
-    where: { itemId: { in: itemIds } },
-    select: { itemId: true, providerCommentId: true, providerUpdatedAt: true, body: true },
-  });
-  const byItem = new Map<string, Map<string, { providerUpdatedAt: Date | null; body: string }>>();
+  const allExisting = await db
+    .select({
+      itemId: comments.itemId,
+      providerCommentId: comments.providerCommentId,
+      providerUpdatedAt: comments.providerUpdatedAt,
+      body: comments.body,
+    })
+    .from(comments)
+    .where(inArray(comments.itemId, itemIds));
+  const byItem = new Map<ItemId, Map<string, { providerUpdatedAt: Date | null; body: string }>>();
   for (const row of allExisting) {
     let slot = byItem.get(row.itemId);
     if (!slot) {
@@ -550,41 +590,34 @@ export async function reconcileComments(
       body: row.body,
     });
   }
-  // Split into "new rows" (one createMany) and "changed rows" (per-row
+  // Split into "new rows" (one batched insert) and "changed rows" (per-row
   // updates in parallel). Avoids N upserts on the typical first-sync case
   // where every comment is new.
-  const inserts: Prisma.CommentCreateManyInput[] = [];
+  const inserts: CommentInsertRow[] = [];
   const updates: Promise<unknown>[] = [];
   let touched = 0;
-  for (const { itemSurrogate, comments } of nonEmpty) {
+  for (const { itemSurrogate, comments: incomingComments } of nonEmpty) {
     const existing = byItem.get(itemSurrogate);
-    for (const c of comments) {
+    for (const c of incomingComments) {
       const prev = existing?.get(c.id);
       const incomingPu = c.updatedAt ?? null;
-      const reactions = (c.reactions ?? Prisma.JsonNull) as
-        | Prisma.InputJsonValue
-        | typeof Prisma.JsonNull;
+      const reactions = c.reactions ?? null;
       if (prev) {
         const prevMs = prev.providerUpdatedAt?.getTime() ?? null;
         const incMs = incomingPu?.getTime() ?? null;
         if (prevMs === incMs && prev.body === c.body) continue;
         updates.push(
-          db.comment.update({
-            where: {
-              itemId_providerCommentId: {
-                itemId: itemSurrogate,
-                providerCommentId: c.id,
-              },
-            },
-            data: {
+          db
+            .update(comments)
+            .set({
               author: c.author,
               body: c.body,
               createdAt: c.createdAt,
               providerUpdatedAt: incomingPu,
               edited: c.edited ?? false,
               reactions,
-            },
-          }),
+            })
+            .where(and(eq(comments.itemId, itemSurrogate), eq(comments.providerCommentId, c.id))),
         );
         touched++;
       } else {
@@ -605,7 +638,10 @@ export async function reconcileComments(
   if (touched === 0) return 0;
   await Promise.all([
     inserts.length > 0
-      ? db.comment.createMany({ data: inserts, skipDuplicates: true })
+      ? db
+          .insert(comments)
+          .values(inserts)
+          .onConflictDoNothing({ target: [comments.itemId, comments.providerCommentId] })
       : Promise.resolve(),
     ...updates,
   ]);
@@ -613,7 +649,7 @@ export async function reconcileComments(
 }
 
 async function upsertItems(
-  db: typeof Db,
+  db: Db,
   projectId: ProjectId,
   providerKind: string,
   bundles: AsyncIterable<ChangedItem>,
@@ -716,30 +752,32 @@ async function upsertItems(
 }
 
 async function bumpCursor(
-  db: typeof Db,
+  db: Db,
   projectId: ProjectId,
   watermark: Date | null,
   fullSyncAt: Date | null,
 ): Promise<void> {
-  await db.syncCursor.upsert({
-    where: { projectId },
-    create: {
+  await db
+    .insert(syncCursors)
+    .values({
       projectId,
       watermark,
       lastFullSyncAt: fullSyncAt,
-    },
-    update: {
-      ...(watermark ? { watermark } : {}),
-      ...(fullSyncAt ? { lastFullSyncAt: fullSyncAt } : {}),
-    },
-  });
+    })
+    .onConflictDoUpdate({
+      target: syncCursors.projectId,
+      set: {
+        ...(watermark ? { watermark } : {}),
+        ...(fullSyncAt ? { lastFullSyncAt: fullSyncAt } : {}),
+      },
+    });
 }
 
 /**
  * One sync run. Both modes share the same envelope (progress journal,
  * baseCtx, error reporting); only three things differ:
  *
- *   - `mode: "incremental"` reads `SyncCursor.watermark` and asks the
+ *   - `mode: "incremental"` reads `syncCursors.watermark` and asks the
  *     provider for changes after it; cursor bump leaves `lastFullSyncAt`
  *     alone (passed as `null` to `bumpCursor`).
  *   - `mode: "full"` ignores the watermark, then archives every cached row
@@ -749,14 +787,11 @@ async function bumpCursor(
  * concerns (tracing, retry, watch hooks) only land in one spot.
  */
 async function runSync(
-  db: typeof Db,
+  db: Db,
   project: ProjectArg,
   userId: UserId,
   mode: SyncMode,
 ): Promise<SyncResult> {
-  // Project rows arrive from Prisma with `id: string`; brand it at this
-  // boundary so all downstream sync helpers receive ProjectId without the
-  // caller having to repeat the assertion.
   const projectId = asProjectId(project.id);
   const syncId = randomUUID();
   const startedAt = Date.now();
@@ -797,11 +832,14 @@ async function runSync(
 
     const provider = await buildProviderForUser(db, project, userId);
     const syncedAt = new Date();
-    const watermark =
+    const cursorRow =
       mode === "incremental"
-        ? ((await db.syncCursor.findUnique({ where: { projectId: project.id } }))?.watermark ??
-          null)
+        ? await db.query.syncCursors.findFirst({
+            where: eq(syncCursors.projectId, projectId),
+            columns: { watermark: true },
+          })
         : null;
+    const watermark = mode === "incremental" ? (cursorRow?.watermark ?? null) : null;
 
     if (mode === "incremental") {
       progress = { ...progress, watermark };
@@ -867,19 +905,23 @@ async function runSync(
       };
       await persistProgress();
 
-      // Raw SQL with `<> ALL($1::text[])` so the parameter list stays a
-      // single array regardless of `seenIds` cardinality — Prisma's `notIn`
-      // can fan out to N positional parameters and trip Postgres's 65K
-      // limit on full syncs of large repos.
+      // Single-array binding via `<> ALL($1::text[])` keeps the parameter
+      // count constant regardless of `seenIds` cardinality — a positional-
+      // parameter `notIn` would fan out to N positional parameters and trip
+      // Postgres's 65K parameter limit on full syncs of large repos.
       const seenArr = Array.from(seenIds);
-      const archive = await db.$executeRaw`
-        UPDATE "Item"
-        SET "archived" = true
-        WHERE "projectId" = ${project.id}
-          AND "archived" = false
-          AND "providerItemId" <> ALL(${seenArr}::text[])
-      `;
-      archived = Number(archive);
+      const archived_ids = await db
+        .update(items)
+        .set({ archived: true })
+        .where(
+          and(
+            eq(items.projectId, projectId),
+            eq(items.archived, false),
+            sql`${items.providerItemId} <> ALL(${seenArr}::text[])`,
+          ),
+        )
+        .returning({ id: items.id });
+      archived = archived_ids.length;
     }
 
     phase = "cursor";
@@ -953,17 +995,13 @@ async function runSync(
 }
 
 export function runIncrementalSync(
-  db: typeof Db,
+  db: Db,
   project: ProjectArg,
   userId: UserId,
 ): Promise<SyncResult> {
   return runSync(db, project, userId, "incremental");
 }
 
-export function runFullSync(
-  db: typeof Db,
-  project: ProjectArg,
-  userId: UserId,
-): Promise<SyncResult> {
+export function runFullSync(db: Db, project: ProjectArg, userId: UserId): Promise<SyncResult> {
   return runSync(db, project, userId, "full");
 }

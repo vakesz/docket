@@ -7,9 +7,12 @@
  */
 
 import "server-only";
+import { and, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import { z } from "zod";
 import type { AgentTool, ToolContext, ToolFactory } from "@/agent/tools/types";
 import { defineTool, fail, ok, withProvider } from "@/agent/tools/types";
+import { asProposalId, type ItemState } from "@/core/types";
+import { audits, items as itemsTable } from "@/db/schema";
 
 export const searchItemsTool: ToolFactory = (ctx) =>
   defineTool({
@@ -25,40 +28,46 @@ export const searchItemsTool: ToolFactory = (ctx) =>
     // content. The query echoes the agent's own argument back.
     guardrailScan: { mode: "fields", untrusted: ["items[].title"] },
     handler: async (args) => {
-      const items = await ctx.db.item.findMany({
-        where: {
-          projectId: ctx.projectId,
-          archived: false,
-          ...(args.bucket === "open"
-            ? { state: { in: ["new", "active", "blocked", "needs_info"] } }
-            : args.bucket === "closed"
-              ? { state: { in: ["resolved", "closed"] } }
-              : {}),
-          OR: [
-            { title: { contains: args.query, mode: "insensitive" } },
-            { description: { contains: args.query, mode: "insensitive" } },
-          ],
-        },
-        orderBy: [{ updatedAt: "desc" }],
-        take: args.limit,
-        select: {
-          providerItemId: true,
-          kind: true,
-          title: true,
-          state: true,
-          assignee: true,
-          url: true,
-        },
-      });
+      const openStates: ItemState[] = ["new", "active", "blocked", "needs_info"];
+      const closedStates: ItemState[] = ["resolved", "closed"];
+      const pattern = `%${args.query}%`;
+      const searchClause = or(
+        ilike(itemsTable.title, pattern),
+        ilike(itemsTable.description, pattern),
+      );
+      const rows = await ctx.db
+        .select({
+          providerItemId: itemsTable.providerItemId,
+          kind: itemsTable.kind,
+          title: itemsTable.title,
+          state: itemsTable.state,
+          assignees: itemsTable.assignees,
+          url: itemsTable.url,
+        })
+        .from(itemsTable)
+        .where(
+          and(
+            eq(itemsTable.projectId, ctx.projectId),
+            eq(itemsTable.archived, false),
+            ...(args.bucket === "open"
+              ? [inArray(itemsTable.state, openStates)]
+              : args.bucket === "closed"
+                ? [inArray(itemsTable.state, closedStates)]
+                : []),
+            ...(searchClause ? [searchClause] : []),
+          ),
+        )
+        .orderBy(desc(itemsTable.updatedAt))
+        .limit(args.limit);
       return ok({
         query: args.query,
-        count: items.length,
-        items: items.map((i) => ({
+        count: rows.length,
+        items: rows.map((i) => ({
           item_id: i.providerItemId,
           kind: i.kind,
           title: i.title,
           state: i.state,
-          assignee: i.assignee,
+          assignee: i.assignees[0] ?? null,
           url: i.url,
         })),
       });
@@ -72,7 +81,7 @@ export const listAuditLogTool: ToolFactory = (ctx) =>
       "Read the project's append-only audit log of confirmed/rejected proposals. Use this to answer 'what was changed recently?' or to check whether a specific proposal kind has fired. Filter by `action` (e.g. 'proposal.confirm', 'proposal.reject', 'proposal.auto_confirm', 'proposal.confirm.failed') or by `proposal_id` for a single proposal's trail.",
     schema: z.object({
       action: z.string().min(1).max(64).optional(),
-      proposal_id: z.string().min(1).optional(),
+      proposal_id: z.string().min(1).transform(asProposalId).optional(),
       limit: z.number().int().min(1).max(100).default(25),
     }),
     // The audit envelope is server-controlled, but `payload` is a JSON blob
@@ -80,22 +89,24 @@ export const listAuditLogTool: ToolFactory = (ctx) =>
     // contain comment markdown / description patches. Scan only that field.
     guardrailScan: { mode: "fields", untrusted: ["rows[].payload"] },
     handler: async (args) => {
-      const rows = await ctx.db.audit.findMany({
-        where: {
-          projectId: ctx.projectId,
-          ...(args.action ? { action: args.action } : {}),
-          ...(args.proposal_id ? { proposalId: args.proposal_id } : {}),
-        },
-        orderBy: [{ createdAt: "desc" }],
-        take: args.limit,
-        select: {
-          id: true,
-          action: true,
-          proposalId: true,
-          createdAt: true,
-          payload: true,
-        },
-      });
+      const rows = await ctx.db
+        .select({
+          id: audits.id,
+          action: audits.action,
+          proposalId: audits.proposalId,
+          createdAt: audits.createdAt,
+          payload: audits.payload,
+        })
+        .from(audits)
+        .where(
+          and(
+            eq(audits.projectId, ctx.projectId),
+            ...(args.action ? [eq(audits.action, args.action)] : []),
+            ...(args.proposal_id ? [eq(audits.proposalId, args.proposal_id)] : []),
+          ),
+        )
+        .orderBy(desc(audits.createdAt))
+        .limit(args.limit);
       return ok({
         count: rows.length,
         rows: rows.map((r) => ({

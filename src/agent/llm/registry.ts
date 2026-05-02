@@ -6,12 +6,10 @@ import "server-only";
 import { AnthropicAdapter } from "@/agent/llm/anthropic";
 import { OpenAiAdapter } from "@/agent/llm/openai";
 import type { LlmAdapter } from "@/agent/llm/types";
-import type { LlmProvider, Project } from "@/db/generated/client";
-import type { db as Db } from "@/server/db";
+import type { Db } from "@/db";
+import type { LlmProvider, Project } from "@/db/schema/types";
 import { resolveProviderForRole } from "@/server/llm/lookup";
 import { decryptSecret } from "@/server/secrets/encryption";
-
-type Database = typeof Db;
 
 export class LlmConfigError extends Error {
   constructor(message: string) {
@@ -27,7 +25,7 @@ export type AdapterContext = {
   overrideId?: string | null;
 };
 
-export async function selectAdapterFor(db: Database, ctx: AdapterContext): Promise<LlmAdapter> {
+export async function selectAdapterFor(db: Db, ctx: AdapterContext): Promise<LlmAdapter> {
   const row = await resolveProviderForRole(db, "chat", [
     ctx.overrideId,
     ctx.project.defaultLlmProviderId,
@@ -54,11 +52,19 @@ export async function selectAdapterFor(db: Database, ctx: AdapterContext): Promi
  */
 const SUPPORTED_KINDS = ["openai", "anthropic"] as const;
 
+function decimalToNumber(value: string | null): number | null {
+  if (value === null) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function buildAdapter(
   row: LlmProvider,
   opts: { defaultTemperature?: number | null } = {},
 ): LlmAdapter {
   const apiKey = decryptSecret(row.apiKey);
+  const inputPriceCentsPerMtok = decimalToNumber(row.inputPriceCentsPerMtok);
+  const outputPriceCentsPerMtok = decimalToNumber(row.outputPriceCentsPerMtok);
   switch (row.kind) {
     case "openai":
       return new OpenAiAdapter({
@@ -69,8 +75,8 @@ export function buildAdapter(
         ...(opts.defaultTemperature !== undefined && opts.defaultTemperature !== null
           ? { defaultTemperature: opts.defaultTemperature }
           : {}),
-        inputPriceCentsPerMtok: row.inputPriceCentsPerMtok?.toNumber() ?? null,
-        outputPriceCentsPerMtok: row.outputPriceCentsPerMtok?.toNumber() ?? null,
+        inputPriceCentsPerMtok,
+        outputPriceCentsPerMtok,
       });
     case "anthropic":
       return new AnthropicAdapter({
@@ -81,8 +87,8 @@ export function buildAdapter(
         ...(opts.defaultTemperature !== undefined && opts.defaultTemperature !== null
           ? { defaultTemperature: opts.defaultTemperature }
           : {}),
-        inputPriceCentsPerMtok: row.inputPriceCentsPerMtok?.toNumber() ?? null,
-        outputPriceCentsPerMtok: row.outputPriceCentsPerMtok?.toNumber() ?? null,
+        inputPriceCentsPerMtok,
+        outputPriceCentsPerMtok,
       });
     default:
       throw new LlmConfigError(

@@ -16,6 +16,7 @@
 
 import "server-only";
 import { TRPCError } from "@trpc/server";
+import { and, eq } from "drizzle-orm";
 import { capCodeSnippets } from "@/agent/post/code-snippet-cap";
 import { loadCodeSnippetCapOptions } from "@/agent/post/load-options";
 import type {
@@ -31,9 +32,17 @@ import type {
   StateChangeProposal,
   TagsChangeProposal,
 } from "@/core/proposal-types";
-import type { CreateFields, ItemKind, ProjectId, TransitionIntent, UserId } from "@/core/types";
-import type { Proposal as ProposalRow } from "@/db/generated/client";
-import type { db as Db } from "@/server/db";
+import type {
+  CreateFields,
+  ItemKind,
+  ProjectId,
+  ProviderItemId,
+  TransitionIntent,
+  UserId,
+} from "@/core/types";
+import type { Db } from "@/db";
+import { items, memoryEntries, proposals } from "@/db/schema";
+import type { Proposal as ProposalRow } from "@/db/schema/types";
 import { assertFound } from "@/server/errors";
 import { snapshotFromRow } from "@/server/proposals/item-snapshot";
 import { proposalPayloadSchema, toJsonProposalPayload } from "@/server/proposals/schema";
@@ -47,7 +56,7 @@ import { jaccardSimilarity } from "@/server/recommendations/similarity";
  * `Proposal` row so an audit query later can answer "who staged this".
  */
 type ProposalContext = {
-  db: typeof Db;
+  db: Db;
   projectId: ProjectId;
   userId: UserId;
   origin: ProposalOrigin;
@@ -59,22 +68,25 @@ async function persist(
   providerItemId: string | null,
   advisory: string | null = null,
 ): Promise<ProposalRow> {
-  return ctx.db.proposal.create({
-    data: {
+  // The row's own surrogate id is canonical; the payload omits it and
+  // `hydrateProposal` re-attaches `row.id` on load. `toJsonProposalPayload`
+  // validates against the same discriminated-union schema we hydrate
+  // through — a builder shape bug fails here, not in the executor.
+  const [row] = await ctx.db
+    .insert(proposals)
+    .values({
       projectId: ctx.projectId,
       userId: ctx.userId,
       kind: draft.kind,
       origin: ctx.origin,
-      providerItemId,
-      // The row's own surrogate id is canonical; the payload omits it and
-      // `hydrateProposal` re-attaches `row.id` on load. `toJsonProposalPayload`
-      // validates against the same discriminated-union schema we hydrate
-      // through — a builder shape bug fails here, not in the executor.
+      providerItemId: providerItemId as ProposalRow["providerItemId"],
       payload: toJsonProposalPayload(draft),
       status: "pending",
       advisory,
-    },
-  });
+    })
+    .returning();
+  if (!row) throw new Error("persist: insert returned no row");
+  return row;
 }
 
 const COMMENT_ECHO_THRESHOLD = 0.6;
@@ -88,12 +100,14 @@ const COMMENT_ECHO_THRESHOLD = 0.6;
 const MEMORY_BODY_ADVISORY_BYTES = 4096;
 
 async function loadCachedItem(ctx: ProposalContext, providerItemId: string) {
-  // (projectId, providerItemId) is the canonical compound unique on `Item`
-  // — using findUnique lets Postgres hit the unique index directly instead
-  // of running a generic equality plan via findFirst.
+  // (projectId, providerItemId) is the canonical compound unique on `Item` —
+  // a `findFirst` against both columns hits the same unique index.
   return assertFound(
-    await ctx.db.item.findUnique({
-      where: { projectId_providerItemId: { projectId: ctx.projectId, providerItemId } },
+    await ctx.db.query.items.findFirst({
+      where: and(
+        eq(items.projectId, ctx.projectId),
+        eq(items.providerItemId, providerItemId as ProviderItemId),
+      ),
     }),
     `Item '${providerItemId}' not found in cache; sync the project first.`,
   );
@@ -401,7 +415,9 @@ export async function proposeMemoryWrite(
   let previousBody = "";
   if (args.memoryId) {
     const existing = assertFound(
-      await ctx.db.memoryEntry.findUnique({ where: { id: args.memoryId } }),
+      await ctx.db.query.memoryEntries.findFirst({
+        where: eq(memoryEntries.id, args.memoryId),
+      }),
       `memory entry '${args.memoryId}' not found`,
     );
     if (existing.projectId !== ctx.projectId) {
@@ -443,7 +459,9 @@ export async function proposeMemoryDelete(
   args: { memoryId: string },
 ): Promise<ProposalRow> {
   const existing = assertFound(
-    await ctx.db.memoryEntry.findUnique({ where: { id: args.memoryId } }),
+    await ctx.db.query.memoryEntries.findFirst({
+      where: eq(memoryEntries.id, args.memoryId),
+    }),
     `memory entry '${args.memoryId}' not found`,
   );
   if (existing.projectId !== ctx.projectId) {

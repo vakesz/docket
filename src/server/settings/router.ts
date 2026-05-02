@@ -13,7 +13,9 @@
  */
 
 import "server-only";
+import { and, count, desc, eq, inArray, isNull, lt } from "drizzle-orm";
 import { z } from "zod";
+import { audits, settings } from "@/db/schema";
 import { getBudgetStatus } from "@/server/billing/budget";
 import { logger } from "@/server/logger";
 import { pruneAuditOlderThan } from "@/server/proposals/executor";
@@ -154,9 +156,13 @@ export const settingsRouter = router({
   list: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.userId;
     const userKeys = SETTING_KEYS.filter((k) => SETTINGS_CATALOG[k].scope === "user");
-    const rows = await ctx.db.setting.findMany({
-      where: { userId, scope: "user", key: { in: userKeys } },
-      select: { key: true, value: true },
+    const rows = await ctx.db.query.settings.findMany({
+      where: and(
+        eq(settings.userId, userId),
+        eq(settings.scope, "user"),
+        inArray(settings.key, userKeys),
+      ),
+      columns: { key: true, value: true },
     });
     const byKey = new Map(rows.map((r) => [r.key, r.value]));
     return userKeys.map((key) => ({
@@ -173,9 +179,11 @@ export const settingsRouter = router({
   reset: mutationProcedure.input(UserResetInput).mutation(async ({ ctx, input }) => {
     const userId = ctx.userId;
     const def = getSettingDef(input.key);
-    await ctx.db.setting.deleteMany({
-      where: { key: input.key, userId, scope: "user" },
-    });
+    await ctx.db
+      .delete(settings)
+      .where(
+        and(eq(settings.key, input.key), eq(settings.userId, userId), eq(settings.scope, "user")),
+      );
     return { ok: true, value: def.default };
   }),
 
@@ -188,10 +196,15 @@ export const settingsRouter = router({
     const keys = SETTING_KEYS.filter(
       (k) => SETTINGS_CATALOG[k].scope === "global" && k !== "setup.complete",
     );
-    const rows = await ctx.db.setting.findMany({
-      where: { scope: "global", userId: null, projectId: null, key: { in: keys } },
-      select: { key: true, value: true, updatedAt: true },
-      orderBy: { updatedAt: "desc" },
+    const rows = await ctx.db.query.settings.findMany({
+      where: and(
+        eq(settings.scope, "global"),
+        isNull(settings.userId),
+        isNull(settings.projectId),
+        inArray(settings.key, keys),
+      ),
+      columns: { key: true, value: true, updatedAt: true },
+      orderBy: [desc(settings.updatedAt)],
     });
     // Postgres treats null in a unique index as unconstrained; if a duplicate
     // landed somehow, prefer the most recently updated row (matches
@@ -222,9 +235,16 @@ export const settingsRouter = router({
 
   globalReset: mutationProcedure.input(GlobalResetInput).mutation(async ({ ctx, input }) => {
     const def = getSettingDef(input.key);
-    await ctx.db.setting.deleteMany({
-      where: { key: input.key, scope: "global", userId: null, projectId: null },
-    });
+    await ctx.db
+      .delete(settings)
+      .where(
+        and(
+          eq(settings.key, input.key),
+          eq(settings.scope, "global"),
+          isNull(settings.userId),
+          isNull(settings.projectId),
+        ),
+      );
     logger.info(
       { actorUserId: ctx.userId, key: input.key },
       "settings: global setting reset to default",
@@ -239,13 +259,13 @@ export const settingsRouter = router({
    */
   projectList: projectScopedProcedure.input(projectSlugSchema).query(async ({ ctx }) => {
     const projectKeys = SETTING_KEYS.filter((k) => SETTINGS_CATALOG[k].scope === "project");
-    const rows = await ctx.db.setting.findMany({
-      where: {
-        projectId: ctx.projectId,
-        scope: "project",
-        key: { in: projectKeys },
-      },
-      select: { key: true, value: true },
+    const rows = await ctx.db.query.settings.findMany({
+      where: and(
+        eq(settings.projectId, ctx.projectId),
+        eq(settings.scope, "project"),
+        inArray(settings.key, projectKeys),
+      ),
+      columns: { key: true, value: true },
     });
     const byKey = new Map(rows.map((r) => [r.key, r.value]));
     return projectKeys.map((key) => ({
@@ -265,9 +285,15 @@ export const settingsRouter = router({
     .input(ProjectResetInput)
     .mutation(async ({ ctx, input }) => {
       const def = getSettingDef(input.key);
-      await ctx.db.setting.deleteMany({
-        where: { key: input.key, projectId: ctx.projectId, scope: "project" },
-      });
+      await ctx.db
+        .delete(settings)
+        .where(
+          and(
+            eq(settings.key, input.key),
+            eq(settings.projectId, ctx.projectId),
+            eq(settings.scope, "project"),
+          ),
+        );
       return { ok: true, value: def.default };
     }),
 
@@ -278,12 +304,17 @@ export const settingsRouter = router({
    */
   auditStatus: protectedProcedure.query(async ({ ctx }) => {
     const retentionDays = await loadGlobalSetting(ctx.db, "audit.retention-days");
-    const total = await ctx.db.audit.count();
+    const totalRows = await ctx.db.select({ c: count() }).from(audits);
+    const total = totalRows[0]?.c ?? 0;
     let eligible = 0;
     let cutoff: Date | null = null;
     if (retentionDays > 0) {
       cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
-      eligible = await ctx.db.audit.count({ where: { createdAt: { lt: cutoff } } });
+      const eligibleRows = await ctx.db
+        .select({ c: count() })
+        .from(audits)
+        .where(lt(audits.createdAt, cutoff));
+      eligible = eligibleRows[0]?.c ?? 0;
     }
     return {
       retentionDays,

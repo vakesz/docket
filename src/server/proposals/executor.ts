@@ -8,16 +8,22 @@
 
 import "server-only";
 import { TRPCError } from "@trpc/server";
+import { and, eq, lt } from "drizzle-orm";
 import {
   asProposalId,
+  asProviderItemId,
   type Comment as CanonicalComment,
   type Item as CanonicalItem,
+  type ItemId,
   type ProjectId,
   type ProposalId,
+  type Reactions,
   type UserId,
 } from "@/core/types";
-import { Prisma, type Proposal as ProposalRow } from "@/db/generated/client";
-import type { db as Db } from "@/server/db";
+import type { Db } from "@/db";
+import type { MemorySource } from "@/db/schema";
+import { audits, comments, items, memoryEntries, projects, proposals } from "@/db/schema";
+import type { Proposal as ProposalRow } from "@/db/schema/types";
 import { assertFound } from "@/server/errors";
 import { errFields } from "@/server/log-fields";
 import { logger } from "@/server/logger";
@@ -37,53 +43,51 @@ type ReactionUpdate =
   | {
       kind: "item";
       providerItemId: string;
-      reactions: Prisma.InputJsonValue | typeof Prisma.JsonNull;
+      reactions: Reactions | null;
     }
   | {
       kind: "comment";
-      itemSurrogate: string;
+      itemSurrogate: ItemId;
       providerCommentId: string;
-      reactions: Prisma.InputJsonValue | typeof Prisma.JsonNull;
+      reactions: Reactions | null;
     };
 
 type ExecutorContext = {
-  db: typeof Db;
+  db: Db;
   projectId: ProjectId;
   userId: UserId;
 };
 
 /**
  * Audit retention prune. Lives here (not in the settings router) because
- * `db.audit.<write>` is locked to this module by `no-audit-write-leak.test.ts`
+ * `audit.<write>` is locked to this module by `no-audit-write-leak.test.ts`
  * — every audit row write/delete site must be auditable in one place.
  */
-export async function pruneAuditOlderThan(
-  db: typeof import("@/server/db").db,
-  cutoff: Date,
-): Promise<number> {
-  const res = await db.audit.deleteMany({ where: { createdAt: { lt: cutoff } } });
-  return res.count;
+export async function pruneAuditOlderThan(db: Db, cutoff: Date): Promise<number> {
+  const deleted = await db
+    .delete(audits)
+    .where(lt(audits.createdAt, cutoff))
+    .returning({ id: audits.id });
+  return deleted.length;
 }
 
 async function recordFailureAudit(
   ctx: ExecutorContext,
   action: string,
   proposalId: ProposalId,
-  payload: Prisma.InputJsonValue,
+  payload: Record<string, unknown>,
 ): Promise<void> {
   // Best-effort: failure audits run in the catch block; the DB may already be
   // sick. Don't let an audit miss swallow the user-visible result. Success
   // audits go through the finalize transaction below where they're atomic
   // with executedAt.
   try {
-    await ctx.db.audit.create({
-      data: {
-        projectId: ctx.projectId,
-        userId: ctx.userId,
-        action,
-        proposalId,
-        payload,
-      },
+    await ctx.db.insert(audits).values({
+      projectId: ctx.projectId,
+      userId: ctx.userId,
+      action,
+      proposalId,
+      payload,
     });
   } catch (err) {
     logger.error(
@@ -99,9 +103,9 @@ async function recordFailureAudit(
   }
 }
 
-async function loadPending(ctx: ExecutorContext, proposalId: ProposalId) {
+async function loadPending(ctx: ExecutorContext, proposalId: ProposalId): Promise<ProposalRow> {
   const row = assertFound(
-    await ctx.db.proposal.findUnique({ where: { id: proposalId } }),
+    await ctx.db.query.proposals.findFirst({ where: eq(proposals.id, proposalId) }),
     "proposal not found",
   );
   if (row.projectId !== ctx.projectId) {
@@ -154,9 +158,14 @@ export async function confirmProposal(
 
   phase = "provider_build";
   const project = assertFound(
-    await ctx.db.project.findUnique({
-      where: { id: ctx.projectId },
-      select: { id: true, providerKind: true, providerScope: true, name: true },
+    await ctx.db.query.projects.findFirst({
+      where: eq(projects.id, ctx.projectId),
+      columns: {
+        id: true,
+        providerKind: true,
+        providerScope: true,
+        name: true,
+      },
     }),
     "project not found",
   );
@@ -166,17 +175,17 @@ export async function confirmProposal(
   // in flight. We also clear `errorMessage` so a retry after a transient
   // provider failure doesn't carry the previous attempt's error forward
   // after succeeding.
-  await ctx.db.proposal.update({
-    where: { id: row.id },
-    data: { status: "confirmed", confirmedAt, errorMessage: null },
-  });
+  await ctx.db
+    .update(proposals)
+    .set({ status: "confirmed", confirmedAt, errorMessage: null })
+    .where(eq(proposals.id, row.id));
 
   // Outcome of the provider call(s) — captured during phase 1, applied by
   // the finalize transaction in phase 2. Memory ops have no provider call;
   // their work runs entirely in the finalize tx.
   let canonical: CanonicalItem | null = null;
   let commentId: string | null = null;
-  let postedComment: { itemSurrogate: string; comment: CanonicalComment } | null = null;
+  let postedComment: { itemSurrogate: ItemId; comment: CanonicalComment } | null = null;
   let reactionUpdate: ReactionUpdate | null = null;
   let providerMs = 0;
 
@@ -197,30 +206,28 @@ export async function confirmProposal(
             const body = buildDuplicateCommentBody(proposal.canonicalItem);
             const comment = await provider.addComment(proposal.item.id, body);
             commentId = comment.id;
-            const cachedItem = await ctx.db.item.findUnique({
-              where: {
-                projectId_providerItemId: {
-                  projectId: ctx.projectId,
-                  providerItemId: proposal.item.id,
-                },
-              },
-              select: { id: true },
+            const cachedItem = await ctx.db.query.items.findFirst({
+              where: and(
+                eq(items.projectId, ctx.projectId),
+                eq(items.providerItemId, asProviderItemId(proposal.item.id)),
+              ),
+              columns: { id: true },
             });
             // Atomic: reconcile the cached comment AND stamp postedCommentId
             // before the transition call. A retry after transition failure
             // sees postedCommentId and skips re-posting.
             const { id: _, ...rest } = proposal;
             const nextPayload = { ...rest, postedCommentId: comment.id };
-            await ctx.db.$transaction(async (tx) => {
+            await ctx.db.transaction(async (tx) => {
               if (cachedItem) {
-                await reconcileComments(tx as typeof Db, [
+                await reconcileComments(tx, [
                   { itemSurrogate: cachedItem.id, comments: [comment] },
                 ]);
               }
-              await tx.proposal.update({
-                where: { id: row.id },
-                data: { payload: toJsonProposalPayload(nextPayload) },
-              });
+              await tx
+                .update(proposals)
+                .set({ payload: toJsonProposalPayload(nextPayload) })
+                .where(eq(proposals.id, row.id));
             });
             proposal.postedCommentId = comment.id;
           } else {
@@ -236,14 +243,12 @@ export async function confirmProposal(
       case "comment_add": {
         const comment = await provider.addComment(proposal.item.id, proposal.body);
         commentId = comment.id;
-        const cachedItem = await ctx.db.item.findUnique({
-          where: {
-            projectId_providerItemId: {
-              projectId: ctx.projectId,
-              providerItemId: proposal.item.id,
-            },
-          },
-          select: { id: true },
+        const cachedItem = await ctx.db.query.items.findFirst({
+          where: and(
+            eq(items.projectId, ctx.projectId),
+            eq(items.providerItemId, asProviderItemId(proposal.item.id)),
+          ),
+          columns: { id: true },
         });
         if (cachedItem) {
           postedComment = { itemSurrogate: cachedItem.id, comment };
@@ -268,9 +273,7 @@ export async function confirmProposal(
         }
         const target = { kind: proposal.targetKind, id: proposal.targetId } as const;
         const result = await fn.call(provider, target, proposal.reaction);
-        const reactionsJson = (result.reactions ?? Prisma.JsonNull) as
-          | Prisma.InputJsonValue
-          | typeof Prisma.JsonNull;
+        const reactionsJson: Reactions | null = result.reactions ?? null;
         if (proposal.targetKind === "item") {
           reactionUpdate = {
             kind: "item",
@@ -278,14 +281,12 @@ export async function confirmProposal(
             reactions: reactionsJson,
           };
         } else {
-          const cachedItem = await ctx.db.item.findUnique({
-            where: {
-              projectId_providerItemId: {
-                projectId: ctx.projectId,
-                providerItemId: proposal.item.id,
-              },
-            },
-            select: { id: true },
+          const cachedItem = await ctx.db.query.items.findFirst({
+            where: and(
+              eq(items.projectId, ctx.projectId),
+              eq(items.providerItemId, asProviderItemId(proposal.item.id)),
+            ),
+            columns: { id: true },
           });
           if (cachedItem) {
             reactionUpdate = {
@@ -329,91 +330,93 @@ export async function confirmProposal(
     //     would risk double-execution on retry → keep status=confirmed and
     //     stamp errorMessage so the UI surfaces the partial state.
     phase = "finalize";
-    const updated = await ctx.db.$transaction(async (tx) => {
+    const updated = await ctx.db.transaction(async (tx) => {
       if (canonical) {
         const itemRow = toItemRow(canonical, ctx.projectId, new Date());
-        await tx.item.upsert({
-          where: {
-            projectId_providerItemId: {
-              projectId: ctx.projectId,
-              providerItemId: canonical.id,
-            },
-          },
-          create: itemRow,
-          update: { ...itemRow, archived: false },
-        });
+        await tx
+          .insert(items)
+          .values(itemRow)
+          .onConflictDoUpdate({
+            target: [items.projectId, items.providerItemId],
+            set: { ...itemRow, archived: false },
+          });
       }
       if (postedComment) {
-        await reconcileComments(tx as typeof Db, [
+        await reconcileComments(tx, [
           { itemSurrogate: postedComment.itemSurrogate, comments: [postedComment.comment] },
         ]);
       }
       if (reactionUpdate?.kind === "item") {
-        await tx.item.update({
-          where: {
-            projectId_providerItemId: {
-              projectId: ctx.projectId,
-              providerItemId: reactionUpdate.providerItemId,
-            },
-          },
-          data: { reactions: reactionUpdate.reactions },
-        });
+        await tx
+          .update(items)
+          .set({ reactions: reactionUpdate.reactions })
+          .where(
+            and(
+              eq(items.projectId, ctx.projectId),
+              eq(items.providerItemId, asProviderItemId(reactionUpdate.providerItemId)),
+            ),
+          );
       } else if (reactionUpdate?.kind === "comment") {
-        await tx.comment.updateMany({
-          where: {
-            itemId: reactionUpdate.itemSurrogate,
-            providerCommentId: reactionUpdate.providerCommentId,
-          },
-          data: { reactions: reactionUpdate.reactions },
-        });
+        await tx
+          .update(comments)
+          .set({ reactions: reactionUpdate.reactions })
+          .where(
+            and(
+              eq(comments.itemId, reactionUpdate.itemSurrogate),
+              eq(comments.providerCommentId, reactionUpdate.providerCommentId),
+            ),
+          );
       }
       if (proposal.kind === "memory_write") {
         if (proposal.memoryId) {
-          await tx.memoryEntry.update({
-            where: { id: proposal.memoryId },
-            data: {
+          await tx
+            .update(memoryEntries)
+            .set({
               title: proposal.title,
               body: proposal.body,
               tags: [...proposal.tags],
-              source: proposal.source,
-            },
-          });
+              source: proposal.source as MemorySource,
+            })
+            .where(eq(memoryEntries.id, proposal.memoryId));
         } else {
-          await tx.memoryEntry.create({
-            data: {
-              projectId: ctx.projectId,
-              title: proposal.title,
-              body: proposal.body,
-              tags: [...proposal.tags],
-              source: proposal.source,
-            },
+          await tx.insert(memoryEntries).values({
+            projectId: ctx.projectId,
+            title: proposal.title,
+            body: proposal.body,
+            tags: [...proposal.tags],
+            source: proposal.source as MemorySource,
           });
         }
       } else if (proposal.kind === "memory_delete") {
-        await tx.memoryEntry.deleteMany({
-          where: { id: proposal.memoryId, projectId: ctx.projectId },
-        });
+        await tx
+          .delete(memoryEntries)
+          .where(
+            and(
+              eq(memoryEntries.id, proposal.memoryId),
+              eq(memoryEntries.projectId, ctx.projectId),
+            ),
+          );
       }
-      const updatedRow = await tx.proposal.update({
-        where: { id: row.id },
-        data: {
+      const [updatedRow] = await tx
+        .update(proposals)
+        .set({
           executedAt: new Date(),
           ...(commentId && proposal.kind === "comment_add"
-            ? { providerItemId: proposal.item.id }
+            ? { providerItemId: asProviderItemId(proposal.item.id) }
             : {}),
-        },
-      });
-      await tx.audit.create({
-        data: {
-          projectId: ctx.projectId,
-          userId: ctx.userId,
-          action: okAction,
-          proposalId: asProposalId(row.id),
-          payload: {
-            kind: row.kind,
-            providerItemId: row.providerItemId,
-            ...(commentId ? { commentId } : {}),
-          } as Prisma.InputJsonValue,
+        })
+        .where(eq(proposals.id, row.id))
+        .returning();
+      if (!updatedRow) throw new Error("confirmProposal: finalize update returned no row");
+      await tx.insert(audits).values({
+        projectId: ctx.projectId,
+        userId: ctx.userId,
+        action: okAction,
+        proposalId: asProposalId(row.id),
+        payload: {
+          kind: row.kind,
+          providerItemId: row.providerItemId,
+          ...(commentId ? { commentId } : {}),
         },
       });
       return updatedRow;
@@ -441,17 +444,20 @@ export async function confirmProposal(
     //     Reverting would risk double-execution on retry. Keep status at
     //     confirmed and stamp errorMessage so the UI shows the partial state.
     const stuck = phase === "finalize" && !isMemoryKind;
-    const failed = stuck
-      ? await ctx.db.proposal.update({
-          where: { id: row.id },
-          data: {
+    const [failed] = stuck
+      ? await ctx.db
+          .update(proposals)
+          .set({
             errorMessage: `provider write succeeded but local sync failed: ${message}`,
-          },
-        })
-      : await ctx.db.proposal.update({
-          where: { id: row.id },
-          data: { status: "pending", confirmedAt: null, errorMessage: message },
-        });
+          })
+          .where(eq(proposals.id, row.id))
+          .returning()
+      : await ctx.db
+          .update(proposals)
+          .set({ status: "pending", confirmedAt: null, errorMessage: message })
+          .where(eq(proposals.id, row.id))
+          .returning();
+    if (!failed) throw new Error("confirmProposal: failure update returned no row");
     await recordFailureAudit(ctx, failAction, asProposalId(row.id), {
       kind: row.kind,
       providerItemId: row.providerItemId,
@@ -524,21 +530,21 @@ export async function rejectProposal(
 ): Promise<ProposalRow> {
   const row = await loadPending(ctx, proposalId);
   // Atomic with the audit row so reject + trail commit together.
-  const updated = await ctx.db.$transaction(async (tx) => {
-    const r = await tx.proposal.update({
-      where: { id: row.id },
-      data: { status: "rejected" },
-    });
-    await tx.audit.create({
-      data: {
-        projectId: ctx.projectId,
-        userId: ctx.userId,
-        action: "proposal.reject",
-        proposalId: asProposalId(row.id),
-        payload: {
-          kind: row.kind,
-          providerItemId: row.providerItemId,
-        } as Prisma.InputJsonValue,
+  const updated = await ctx.db.transaction(async (tx) => {
+    const [r] = await tx
+      .update(proposals)
+      .set({ status: "rejected" })
+      .where(eq(proposals.id, row.id))
+      .returning();
+    if (!r) throw new Error("rejectProposal: update returned no row");
+    await tx.insert(audits).values({
+      projectId: ctx.projectId,
+      userId: ctx.userId,
+      action: "proposal.reject",
+      proposalId: asProposalId(row.id),
+      payload: {
+        kind: row.kind,
+        providerItemId: row.providerItemId,
       },
     });
     return r;

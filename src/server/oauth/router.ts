@@ -1,8 +1,9 @@
 import "server-only";
+import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import type { OauthAuxSlot } from "@/core/provider";
-import type { Prisma } from "@/db/generated/client";
-import { asPlainObject } from "@/lib/json";
+import type { OauthProviderConfigMetadata } from "@/db/schema";
+import { oauthProviderConfigs } from "@/db/schema";
 import { logger } from "@/server/logger";
 import { getProviderSpec, listProviderSpecs } from "@/server/provider-registry";
 import { encryptSecret } from "@/server/secrets/encryption";
@@ -15,7 +16,7 @@ import { mutationProcedure, protectedProcedure, router } from "@/server/trpc";
  * provider is one new entry in `provider-registry.ts` plus a case in
  * `auth-build.ts`; this enum updates automatically.
  *
- * The DB column is plain `String` so a deployment can carry a forward-
+ * The DB column is plain `text` so a deployment can carry a forward-
  * compatible row from a future migration without a schema bump; this Zod
  * enum simply gates what the admin UI will offer today.
  */
@@ -38,10 +39,10 @@ const CreateOauthProviderInput = z.object({
   scopes: z.string().max(500).default(""),
   /**
    * Per-kind aux value carried by the form's "Base URL / tenant" field.
-   * The server stores it in `baseUrl` for kinds that override the OAuth
-   * endpoint (e.g. GitHub Enterprise) and in `metadata.tenant` for kinds
-   * that key off a tenant id (`azure_devops`). The `auxFor(kind)` mapping
-   * below is the single source of truth for which slot a kind uses.
+   * The server stores it in `metadata.tenant` for kinds that key off a
+   * tenant id (`azure_devops`). The `auxFor(kind)` mapping below is the
+   * single source of truth for which slot a kind uses; only
+   * `metadataTenant` is wired today.
    */
   baseUrl: z.string().max(500).default(""),
 });
@@ -65,7 +66,8 @@ const UpdateOauthProviderInput = z.object({
  * Per-kind dispatch for the form's free-form "Base URL / tenant" input. The
  * single field on the form maps to one storage slot; each provider's spec
  * declares which slot via `oauth.auxSlot`. Kinds without an OAuth spec entry
- * default to `baseUrl` so legacy / forward-compatible rows still display.
+ * default to `baseUrl` so legacy / forward-compatible rows still display —
+ * but only `metadataTenant` is honoured today.
  */
 function auxFor(kind: string): OauthAuxSlot {
   return getProviderSpec(kind)?.oauth?.auxSlot ?? "baseUrl";
@@ -75,47 +77,44 @@ function auxFor(kind: string): OauthAuxSlot {
  * Read the kind-appropriate aux value from a row. Used by `list` so the
  * admin form sees the right value regardless of which slot the row uses.
  */
-function readAux(row: { kind: string; baseUrl: string; metadata: unknown }): string {
+function readAux(row: { kind: string; metadata: OauthProviderConfigMetadata }): string {
   if (auxFor(row.kind) === "metadataTenant") {
-    const meta = asPlainObject(row.metadata);
-    const tenant = meta["tenant"];
+    const tenant = row.metadata.tenant;
     return typeof tenant === "string" ? tenant : "";
   }
-  return row.baseUrl;
+  return "";
 }
 
 function writeAux(
   kind: string,
   value: string,
-  existingMetadata: unknown,
-): { baseUrl: string; metadata: Prisma.InputJsonValue } {
+  existingMetadata: OauthProviderConfigMetadata,
+): OauthProviderConfigMetadata {
   const trimmed = value.trim();
-  const meta = asPlainObject(existingMetadata);
+  const next: OauthProviderConfigMetadata = { ...existingMetadata };
   if (auxFor(kind) === "metadataTenant") {
-    if (trimmed) meta["tenant"] = trimmed;
-    else delete meta["tenant"];
-    return { baseUrl: "", metadata: meta as Prisma.InputJsonValue };
+    if (trimmed) next.tenant = trimmed;
+    else delete next.tenant;
   }
-  return { baseUrl: trimmed, metadata: meta as Prisma.InputJsonValue };
+  return next;
 }
 
 export const oauthProvidersRouter = router({
   /**
    * List all configured OAuth providers. Visible to any authenticated user.
    * The `aux` field is the kind-appropriate value for the form's "Base URL /
-   * tenant" input — `baseUrl` for most kinds, `metadata.tenant` for
-   * `azure_devops`. The UI never reads `baseUrl` or `metadata` directly.
+   * tenant" input — `metadata.tenant` for `azure_devops`. The UI never reads
+   * `metadata` directly.
    */
   list: protectedProcedure.query(async ({ ctx }) => {
-    const rows = await ctx.db.oauthProviderConfig.findMany({
-      orderBy: [{ enabled: "desc" }, { createdAt: "desc" }],
-      select: {
+    const rows = await ctx.db.query.oauthProviderConfigs.findMany({
+      orderBy: [desc(oauthProviderConfigs.enabled), desc(oauthProviderConfigs.createdAt)],
+      columns: {
         id: true,
         kind: true,
         label: true,
         clientId: true,
         scopes: true,
-        baseUrl: true,
         metadata: true,
         enabled: true,
         createdAt: true,
@@ -124,23 +123,24 @@ export const oauthProvidersRouter = router({
       },
     });
     return rows.map((row) => {
-      const { baseUrl: _baseUrl, metadata: _metadata, ...rest } = row;
+      const { metadata: _metadata, ...rest } = row;
       return { ...rest, aux: readAux(row) };
     });
   }),
 
   create: mutationProcedure.input(CreateOauthProviderInput).mutation(async ({ ctx, input }) => {
     const { baseUrl: aux, clientSecret, kind, ...rest } = input;
-    const { baseUrl, metadata } = writeAux(kind, aux, {});
-    const created = await ctx.db.oauthProviderConfig.create({
-      data: {
+    const metadata = writeAux(kind, aux, {});
+    const [created] = await ctx.db
+      .insert(oauthProviderConfigs)
+      .values({
         ...rest,
         kind,
         clientSecret: encryptSecret(clientSecret),
-        baseUrl,
         metadata,
-      },
-    });
+      })
+      .returning();
+    if (!created) throw new Error("oauth provider create returned no row");
     logger.info(
       { actorUserId: ctx.userId, oauthProviderId: created.id, kind: created.kind },
       "oauth: provider created",
@@ -150,17 +150,23 @@ export const oauthProvidersRouter = router({
 
   update: mutationProcedure.input(UpdateOauthProviderInput).mutation(async ({ ctx, input }) => {
     const { id, clientSecret, baseUrl: aux, ...rest } = input;
-    const existing = await ctx.db.oauthProviderConfig.findUniqueOrThrow({
-      where: { id },
-      select: { kind: true, metadata: true },
+    const existing = await ctx.db.query.oauthProviderConfigs.findFirst({
+      where: eq(oauthProviderConfigs.id, id),
+      columns: { kind: true, metadata: true },
     });
-    const { baseUrl, metadata } = writeAux(existing.kind, aux, existing.metadata);
-    const data: Record<string, unknown> = { ...rest, baseUrl, metadata };
-    const trimmedSecret = clientSecret?.trim();
-    if (trimmedSecret) {
-      data["clientSecret"] = encryptSecret(trimmedSecret);
+    if (!existing) {
+      throw new Error("oauth provider not found");
     }
-    await ctx.db.oauthProviderConfig.update({ where: { id }, data });
+    const metadata = writeAux(existing.kind, aux, existing.metadata);
+    const trimmedSecret = clientSecret?.trim();
+    await ctx.db
+      .update(oauthProviderConfigs)
+      .set({
+        ...rest,
+        metadata,
+        ...(trimmedSecret ? { clientSecret: encryptSecret(trimmedSecret) } : {}),
+      })
+      .where(eq(oauthProviderConfigs.id, id));
     return { ok: true } as const;
   }),
 
@@ -168,10 +174,10 @@ export const oauthProvidersRouter = router({
   setEnabled: mutationProcedure
     .input(z.object({ id: z.string().min(1), enabled: z.boolean() }))
     .mutation(async ({ ctx, input }) => {
-      await ctx.db.oauthProviderConfig.update({
-        where: { id: input.id },
-        data: { enabled: input.enabled },
-      });
+      await ctx.db
+        .update(oauthProviderConfigs)
+        .set({ enabled: input.enabled })
+        .where(eq(oauthProviderConfigs.id, input.id));
       logger.info(
         { actorUserId: ctx.userId, oauthProviderId: input.id, enabled: input.enabled },
         "oauth: provider enabled flag changed",
@@ -182,7 +188,7 @@ export const oauthProvidersRouter = router({
   delete: mutationProcedure
     .input(z.object({ id: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
-      await ctx.db.oauthProviderConfig.delete({ where: { id: input.id } });
+      await ctx.db.delete(oauthProviderConfigs).where(eq(oauthProviderConfigs.id, input.id));
       logger.info(
         { actorUserId: ctx.userId, oauthProviderId: input.id },
         "oauth: provider deleted",

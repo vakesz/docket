@@ -12,15 +12,17 @@
  */
 
 import "server-only";
+import { and, asc, eq } from "drizzle-orm";
 import { ProviderAuthError, ProviderError, type WorkItemProvider } from "@/core/provider";
 import type { UserId } from "@/core/types";
-import type { Project } from "@/db/generated/client";
+import type { Db } from "@/db";
+import { accounts } from "@/db/schema";
+import type { Project } from "@/db/schema/types";
 import { asPlainObject } from "@/lib/json";
-import type { db as Db } from "@/server/db";
 import { getProviderSpec } from "@/server/provider-registry";
 
 export async function buildProviderForUser(
-  db: typeof Db,
+  db: Db,
   project: Pick<Project, "id" | "providerKind" | "providerScope" | "name">,
   userId: UserId,
 ): Promise<WorkItemProvider> {
@@ -33,14 +35,13 @@ export async function buildProviderForUser(
 
   // Each provider's NextAuth wrapper sets `id: <providerKind>` so the
   // `Account.provider` column matches our `providerKind` value directly.
-  const account = await db.account.findFirst({
-    where: { userId, provider: project.providerKind },
-    select: { access_token: true },
-    // Deterministic order: a user can in theory have multiple Account rows
-    // for the same provider (re-link with a different OAuth identity).
-    // Without orderBy, Postgres is free to pick a different one on different
-    // connections — fine until two queries in the same turn disagree.
-    orderBy: [{ providerAccountId: "asc" }],
+  // Deterministic order on providerAccountId keeps token selection stable
+  // across connections when a user has multiple Account rows for the same
+  // provider (re-link with a different OAuth identity).
+  const account = await db.query.accounts.findFirst({
+    where: and(eq(accounts.userId, userId), eq(accounts.provider, project.providerKind)),
+    columns: { access_token: true },
+    orderBy: [asc(accounts.providerAccountId)],
   });
   if (!account?.access_token) {
     throw new ProviderAuthError(

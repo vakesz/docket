@@ -6,6 +6,7 @@
 
 import "server-only";
 import { randomUUID } from "node:crypto";
+import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { selectGuardrailFor } from "@/agent/guardrail/registry";
 import type { GuardrailUsage } from "@/agent/guardrail/types";
@@ -20,24 +21,27 @@ import type { AgentTool, ToolContext, ToolResult } from "@/agent/tools/types";
 import {
   asMessageId,
   asProjectId,
+  asProviderItemId,
   assertItemKind,
   type ConversationId,
   type ItemKind,
   type MessageId,
   type ProjectId,
+  type ProviderItemId,
   type UserId,
 } from "@/core/types";
-import type { Conversation, Message } from "@/db/generated/client";
+import type { Db } from "@/db";
+import { conversations, items, messages } from "@/db/schema";
+import type { Conversation, Message } from "@/db/schema/types";
 import { getBudgetStatus } from "@/server/billing/budget";
 import { compactConversation, loadCompactionSettings } from "@/server/conversations/compaction";
 import { appendMessage, getConversation } from "@/server/conversations/storage";
-import type { db as Db } from "@/server/db";
 import { loadGuardrailSettings } from "@/server/guardrail/settings";
 import { logger } from "@/server/logger";
 import { getProviderSpec } from "@/server/provider-registry";
 import { loadUserSetting } from "@/server/settings/effective";
 
-type Database = typeof Db;
+type Database = Db;
 
 // Tool-result envelopes the loop forwards to the SSE stream. Mirrors the
 // shapes returned by `proposalResult` (mutating tools) and the
@@ -152,9 +156,9 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
 
   // 1. Load the conversation + project so we can build the prompt prefix
   //    and the per-project tool registry.
-  const conv = await db.conversation.findUnique({
-    where: { id: conversationId },
-    include: { project: true },
+  const conv = await db.query.conversations.findFirst({
+    where: eq(conversations.id, conversationId),
+    with: { project: true },
   });
   if (!conv) {
     logger.warn({ turnId, conversationId, userId }, "agent: conversation not found");
@@ -680,14 +684,16 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
       tokensOut: totalTokensOut,
       costCents: totalCostCents,
     };
-    await db.conversation.update({
-      where: { id: conversationId },
-      data: {
-        tokensIn: { increment: totalTokensIn },
-        tokensOut: { increment: totalTokensOut },
-        ...(totalCostCents !== undefined ? { costCents: { increment: totalCostCents } } : {}),
-      },
-    });
+    await db
+      .update(conversations)
+      .set({
+        tokensIn: sql`${conversations.tokensIn} + ${totalTokensIn}`,
+        tokensOut: sql`${conversations.tokensOut} + ${totalTokensOut}`,
+        ...(totalCostCents !== undefined
+          ? { costCents: sql`${conversations.costCents} + ${totalCostCents}` }
+          : {}),
+      })
+      .where(eq(conversations.id, conversationId));
   }
 
   await flushGuardrailUsage(db, conversationId, guardrailUsage);
@@ -738,16 +744,18 @@ async function flushGuardrailUsage(
   usage: GuardrailUsage,
 ): Promise<void> {
   if (usage.tokensIn === 0 && usage.tokensOut === 0) return;
-  await db.conversation.update({
-    where: { id: conversationId },
-    data: {
-      guardrailTokensIn: { increment: usage.tokensIn },
-      guardrailTokensOut: { increment: usage.tokensOut },
+  await db
+    .update(conversations)
+    .set({
+      guardrailTokensIn: sql`${conversations.guardrailTokensIn} + ${usage.tokensIn}`,
+      guardrailTokensOut: sql`${conversations.guardrailTokensOut} + ${usage.tokensOut}`,
       ...(usage.costCents !== undefined && usage.costCents > 0
-        ? { guardrailCostCents: { increment: Math.round(usage.costCents) } }
+        ? {
+            guardrailCostCents: sql`${conversations.guardrailCostCents} + ${Math.round(usage.costCents)}`,
+          }
         : {}),
-    },
-  });
+    })
+    .where(eq(conversations.id, conversationId));
 }
 
 async function markMessageFlagged(
@@ -755,10 +763,10 @@ async function markMessageFlagged(
   messageId: MessageId,
   reason: string,
 ): Promise<void> {
-  await db.message.update({
-    where: { id: messageId },
-    data: { flagged: true, guardrailReason: reason },
-  });
+  await db
+    .update(messages)
+    .set({ flagged: true, guardrailReason: reason })
+    .where(eq(messages.id, messageId));
 }
 
 /**
@@ -847,34 +855,37 @@ async function loadTranscriptForLlm(
 type ItemContext = {
   summary: string | null;
   kind: ItemKind | null;
-  providerItemId: string | null;
+  providerItemId: ProviderItemId | null;
 };
 
 async function loadItemContext(db: Database, conv: Conversation): Promise<ItemContext> {
   if (!conv.itemId) {
     return { summary: null, kind: null, providerItemId: null };
   }
-  const item = await db.item.findUnique({
-    where: { id: conv.itemId },
-    select: {
-      providerItemId: true,
-      kind: true,
-      title: true,
-      state: true,
-      assignee: true,
-    },
-  });
+  const item = await db
+    .select({
+      providerItemId: items.providerItemId,
+      kind: items.kind,
+      title: items.title,
+      state: items.state,
+      assignees: items.assignees,
+    })
+    .from(items)
+    .where(eq(items.id, conv.itemId))
+    .limit(1)
+    .then((rows) => rows[0]);
   if (!item) return { summary: null, kind: null, providerItemId: null };
+  const assignee = item.assignees[0] ?? null;
   const lines = [
     `id: ${item.providerItemId}`,
     `kind: ${item.kind}`,
     `title: ${item.title}`,
     `state: ${item.state}`,
-    item.assignee ? `assignee: ${item.assignee}` : "assignee: (unassigned)",
+    assignee ? `assignee: ${assignee}` : "assignee: (unassigned)",
   ];
   return {
     summary: lines.join("\n"),
     kind: assertItemKind(item.kind, `Item ${item.providerItemId}.kind`),
-    providerItemId: item.providerItemId,
+    providerItemId: asProviderItemId(item.providerItemId),
   };
 }

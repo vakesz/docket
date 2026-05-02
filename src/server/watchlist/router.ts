@@ -12,7 +12,10 @@
  */
 
 import "server-only";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
+import { asProviderItemId } from "@/core/types";
+import { items, watchlistEntries } from "@/db/schema";
 import { getProviderSpec } from "@/server/provider-registry";
 import {
   projectScopedMutationProcedure,
@@ -26,7 +29,7 @@ const ListInput = projectSlugSchema.extend({
 });
 
 const PinInput = projectSlugSchema.extend({
-  providerItemId: z.string().min(1),
+  providerItemId: z.string().min(1).transform(asProviderItemId),
 });
 
 export const watchlistRouter = router({
@@ -37,19 +40,25 @@ export const watchlistRouter = router({
    */
   list: projectScopedProcedure.input(ListInput).query(async ({ ctx, input }) => {
     const userId = ctx.userId;
-    const pins = await ctx.db.watchlistEntry.findMany({
-      where: { userId, projectId: ctx.projectId },
-      orderBy: [{ pinnedAt: "desc" }],
-      take: input.limit,
+    const pins = await ctx.db.query.watchlistEntries.findMany({
+      where: and(
+        eq(watchlistEntries.userId, userId),
+        eq(watchlistEntries.projectId, ctx.projectId),
+      ),
+      orderBy: [desc(watchlistEntries.pinnedAt)],
+      limit: input.limit,
     });
     if (pins.length === 0) return [];
-    const items = await ctx.db.item.findMany({
-      where: {
-        projectId: ctx.projectId,
-        providerItemId: { in: pins.map((p) => p.providerItemId) },
-        archived: false,
-      },
-      select: {
+    const itemRows = await ctx.db.query.items.findMany({
+      where: and(
+        eq(items.projectId, ctx.projectId),
+        inArray(
+          items.providerItemId,
+          pins.map((p) => p.providerItemId),
+        ),
+        eq(items.archived, false),
+      ),
+      columns: {
         id: true,
         providerItemId: true,
         kind: true,
@@ -60,7 +69,7 @@ export const watchlistRouter = router({
     });
     const spec = getProviderSpec(ctx.project.providerKind);
     const formatItemNumber = spec?.itemNumberCodec.formatItemNumber ?? ((id: string) => id);
-    const byProviderId = new Map(items.map((i) => [i.providerItemId, i]));
+    const byProviderId = new Map(itemRows.map((i) => [i.providerItemId, i]));
     return pins.flatMap((pin) => {
       const item = byProviderId.get(pin.providerItemId);
       if (!item) return [];
@@ -76,47 +85,50 @@ export const watchlistRouter = router({
 
   isPinned: projectScopedProcedure.input(PinInput).query(async ({ ctx, input }) => {
     const userId = ctx.userId;
-    const found = await ctx.db.watchlistEntry.findUnique({
-      where: {
-        userId_projectId_providerItemId: {
-          userId,
-          projectId: ctx.projectId,
-          providerItemId: input.providerItemId,
-        },
-      },
-      select: { id: true },
+    const found = await ctx.db.query.watchlistEntries.findFirst({
+      where: and(
+        eq(watchlistEntries.userId, userId),
+        eq(watchlistEntries.projectId, ctx.projectId),
+        eq(watchlistEntries.providerItemId, input.providerItemId),
+      ),
+      columns: { id: true },
     });
-    return { pinned: found !== null };
+    return { pinned: found !== undefined };
   }),
 
   pin: projectScopedMutationProcedure.input(PinInput).mutation(async ({ ctx, input }) => {
     const userId = ctx.userId;
-    return ctx.db.watchlistEntry.upsert({
-      where: {
-        userId_projectId_providerItemId: {
-          userId,
-          projectId: ctx.projectId,
-          providerItemId: input.providerItemId,
-        },
-      },
-      create: {
+    const [row] = await ctx.db
+      .insert(watchlistEntries)
+      .values({
         userId,
         projectId: ctx.projectId,
         providerItemId: input.providerItemId,
-      },
-      update: {},
-    });
+      })
+      .onConflictDoUpdate({
+        target: [
+          watchlistEntries.userId,
+          watchlistEntries.projectId,
+          watchlistEntries.providerItemId,
+        ],
+        set: {},
+      })
+      .returning();
+    if (!row) throw new Error("watchlist pin returned no row");
+    return row;
   }),
 
   unpin: projectScopedMutationProcedure.input(PinInput).mutation(async ({ ctx, input }) => {
     const userId = ctx.userId;
-    await ctx.db.watchlistEntry.deleteMany({
-      where: {
-        userId,
-        projectId: ctx.projectId,
-        providerItemId: input.providerItemId,
-      },
-    });
+    await ctx.db
+      .delete(watchlistEntries)
+      .where(
+        and(
+          eq(watchlistEntries.userId, userId),
+          eq(watchlistEntries.projectId, ctx.projectId),
+          eq(watchlistEntries.providerItemId, input.providerItemId),
+        ),
+      );
     return { ok: true };
   }),
 });

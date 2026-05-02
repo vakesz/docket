@@ -44,12 +44,9 @@ compose.override.yml
 *.tsbuildinfo
 next-env.d.ts
 
-# Prisma generated client (committed lockfile, generated artifacts not)
-/src/db/generated
-
-# Bundled seed/raw-SQL scripts produced by the Docker builder via esbuild
+# Bundled seed/migrate scripts produced by the Docker builder via esbuild
 /bin/seed-dev.mjs
-/bin/apply-raw-sql.mjs
+/bin/migrate.mjs
 
 # pnpm content-addressable store (only used if `store-dir` is set in-repo)
 .pnpm-store/

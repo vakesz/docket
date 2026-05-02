@@ -1,8 +1,10 @@
 import "server-only";
-import { PrismaAdapter } from "@auth/prisma-adapter";
+import { DrizzleAdapter } from "@auth/drizzle-adapter";
+import { eq } from "drizzle-orm";
 import NextAuth, { type NextAuthConfig } from "next-auth";
 import { cache } from "react";
-import { db } from "@/server/db";
+import { db } from "@/db";
+import { accounts, oauthProviderConfigs, sessions, users, verificationTokens } from "@/db/schema";
 import { logger } from "@/server/logger";
 import { buildAuthProvider, UnknownOauthKindError } from "@/server/providers/auth-build";
 
@@ -24,9 +26,11 @@ import { buildAuthProvider, UnknownOauthKindError } from "@/server/providers/aut
  * stays identical between dev and prod.
  */
 async function buildProviders(): Promise<NextAuthConfig["providers"]> {
-  let rows: Awaited<ReturnType<typeof db.oauthProviderConfig.findMany>>;
+  let rows: Awaited<ReturnType<typeof db.query.oauthProviderConfigs.findMany>>;
   try {
-    rows = await db.oauthProviderConfig.findMany({ where: { enabled: true } });
+    rows = await db.query.oauthProviderConfigs.findMany({
+      where: eq(oauthProviderConfigs.enabled, true),
+    });
   } catch (err) {
     // Database isn't reachable or the table doesn't exist yet (pre-migration).
     // Log once and return no providers; sign-in pages render with no buttons,
@@ -60,7 +64,12 @@ async function buildProviders(): Promise<NextAuthConfig["providers"]> {
 const nextAuth = NextAuth(async () => {
   const providers = await buildProviders();
   return {
-    adapter: PrismaAdapter(db),
+    adapter: DrizzleAdapter(db, {
+      usersTable: users,
+      accountsTable: accounts,
+      sessionsTable: sessions,
+      verificationTokensTable: verificationTokens,
+    }),
     session: { strategy: "database" },
     providers,
   } satisfies NextAuthConfig;

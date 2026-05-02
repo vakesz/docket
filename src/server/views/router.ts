@@ -1,11 +1,13 @@
 // `setDefault` clears the prior default in the same transaction — the
 // "at most one default per (user, project)" invariant has no DB partial
-// unique to lean on (Prisma 7 doesn't declare those cleanly yet).
+// unique to lean on.
 
 import "server-only";
 import { TRPCError } from "@trpc/server";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { STATE_BUCKETS } from "@/core/types";
+import { savedViews } from "@/db/schema";
 import {
   assertFound,
   projectScopedMutationProcedure,
@@ -59,17 +61,21 @@ const UpdateInput = projectSlugSchema
 export const viewsRouter = router({
   list: projectScopedProcedure.input(projectSlugSchema).query(async ({ ctx }) => {
     const userId = ctx.userId;
-    return ctx.db.savedView.findMany({
-      where: { userId, projectId: ctx.projectId },
-      orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+    return ctx.db.query.savedViews.findMany({
+      where: and(eq(savedViews.userId, userId), eq(savedViews.projectId, ctx.projectId)),
+      orderBy: [desc(savedViews.isDefault), asc(savedViews.name)],
     });
   }),
 
   get: projectScopedProcedure.input(ViewIdInput).query(async ({ ctx, input }) => {
     const userId = ctx.userId;
     return assertFound(
-      await ctx.db.savedView.findFirst({
-        where: { id: input.viewId, userId, projectId: ctx.projectId },
+      await ctx.db.query.savedViews.findFirst({
+        where: and(
+          eq(savedViews.id, input.viewId),
+          eq(savedViews.userId, userId),
+          eq(savedViews.projectId, ctx.projectId),
+        ),
       }),
       "view not found",
     );
@@ -77,15 +83,22 @@ export const viewsRouter = router({
 
   create: projectScopedMutationProcedure.input(CreateInput).mutation(async ({ ctx, input }) => {
     const userId = ctx.userId;
-    return ctx.db.$transaction(async (tx) => {
+    return ctx.db.transaction(async (tx) => {
       if (input.isDefault) {
-        await tx.savedView.updateMany({
-          where: { userId, projectId: ctx.projectId, isDefault: true },
-          data: { isDefault: false },
-        });
+        await tx
+          .update(savedViews)
+          .set({ isDefault: false })
+          .where(
+            and(
+              eq(savedViews.userId, userId),
+              eq(savedViews.projectId, ctx.projectId),
+              eq(savedViews.isDefault, true),
+            ),
+          );
       }
-      return tx.savedView.create({
-        data: {
+      const [row] = await tx
+        .insert(savedViews)
+        .values({
           userId,
           projectId: ctx.projectId,
           name: input.name,
@@ -93,34 +106,50 @@ export const viewsRouter = router({
           assignees: [...input.assignees],
           facets: input.facets,
           isDefault: input.isDefault,
-        },
-      });
+        })
+        .returning();
+      if (!row) throw new Error("saved view create returned no row");
+      return row;
     });
   }),
 
   update: projectScopedMutationProcedure.input(UpdateInput).mutation(async ({ ctx, input }) => {
     const userId = ctx.userId;
-    const result = await ctx.db.savedView.updateMany({
-      where: { id: input.viewId, userId, projectId: ctx.projectId },
-      data: {
+    const [row] = await ctx.db
+      .update(savedViews)
+      .set({
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(input.stateBucket !== undefined ? { stateBucket: input.stateBucket } : {}),
         ...(input.assignees !== undefined ? { assignees: [...input.assignees] } : {}),
         ...(input.facets !== undefined ? { facets: input.facets } : {}),
-      },
-    });
-    if (result.count === 0) {
+      })
+      .where(
+        and(
+          eq(savedViews.id, input.viewId),
+          eq(savedViews.userId, userId),
+          eq(savedViews.projectId, ctx.projectId),
+        ),
+      )
+      .returning();
+    if (!row) {
       throw new TRPCError({ code: "NOT_FOUND", message: "view not found" });
     }
-    return ctx.db.savedView.findUniqueOrThrow({ where: { id: input.viewId } });
+    return row;
   }),
 
   delete: projectScopedMutationProcedure.input(ViewIdInput).mutation(async ({ ctx, input }) => {
     const userId = ctx.userId;
-    const result = await ctx.db.savedView.deleteMany({
-      where: { id: input.viewId, userId, projectId: ctx.projectId },
-    });
-    if (result.count === 0) {
+    const deleted = await ctx.db
+      .delete(savedViews)
+      .where(
+        and(
+          eq(savedViews.id, input.viewId),
+          eq(savedViews.userId, userId),
+          eq(savedViews.projectId, ctx.projectId),
+        ),
+      )
+      .returning({ id: savedViews.id });
+    if (deleted.length === 0) {
       throw new TRPCError({ code: "NOT_FOUND", message: "view not found" });
     }
     return { ok: true };
@@ -133,25 +162,44 @@ export const viewsRouter = router({
    */
   setDefault: projectScopedMutationProcedure.input(ViewIdInput).mutation(async ({ ctx, input }) => {
     const userId = ctx.userId;
-    return ctx.db.$transaction(async (tx) => {
+    return ctx.db.transaction(async (tx) => {
       const target = assertFound(
-        await tx.savedView.findFirst({
-          where: { id: input.viewId, userId, projectId: ctx.projectId },
-          select: { id: true, isDefault: true },
+        await tx.query.savedViews.findFirst({
+          where: and(
+            eq(savedViews.id, input.viewId),
+            eq(savedViews.userId, userId),
+            eq(savedViews.projectId, ctx.projectId),
+          ),
+          columns: { id: true, isDefault: true },
         }),
         "view not found",
       );
       if (target.isDefault) {
-        return tx.savedView.findUniqueOrThrow({ where: { id: input.viewId } });
+        const current = assertFound(
+          await tx.query.savedViews.findFirst({
+            where: eq(savedViews.id, input.viewId),
+          }),
+          "view not found",
+        );
+        return current;
       }
-      await tx.savedView.updateMany({
-        where: { userId, projectId: ctx.projectId, isDefault: true },
-        data: { isDefault: false },
-      });
-      return tx.savedView.update({
-        where: { id: input.viewId },
-        data: { isDefault: true },
-      });
+      await tx
+        .update(savedViews)
+        .set({ isDefault: false })
+        .where(
+          and(
+            eq(savedViews.userId, userId),
+            eq(savedViews.projectId, ctx.projectId),
+            eq(savedViews.isDefault, true),
+          ),
+        );
+      const [row] = await tx
+        .update(savedViews)
+        .set({ isDefault: true })
+        .where(eq(savedViews.id, input.viewId))
+        .returning();
+      if (!row) throw new Error("saved view setDefault returned no row");
+      return row;
     });
   }),
 });

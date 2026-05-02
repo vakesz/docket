@@ -1,5 +1,5 @@
 /**
- * Thin Prisma wrappers for the conversations module.
+ * Thin Drizzle wrappers for the conversations module.
  *
  * Lives separate from the router so the inbound-changes module
  * (`src/server/inbound-changes/inject.ts`) can reuse `appendMessage`
@@ -7,30 +7,30 @@
  */
 
 import "server-only";
-import type { ConversationId, ProjectId, UserId } from "@/core/types";
-import type { Conversation, Message } from "@/db/generated/client";
-import type { db as Db } from "@/server/db";
-
-type Database = typeof Db;
+import { and, desc, eq, isNull } from "drizzle-orm";
+import type { ConversationId, ItemId, ProjectId, UserId } from "@/core/types";
+import type { Db } from "@/db";
+import { conversations, messages } from "@/db/schema";
+import type { Conversation, Message } from "@/db/schema/types";
 
 type ListArgs = {
   projectId: ProjectId;
   userId: UserId;
-  itemId: string | null;
+  itemId: ItemId | null;
   limit: number;
   archived: boolean;
 };
 
-export async function listConversations(db: Database, args: ListArgs): Promise<Conversation[]> {
-  return db.conversation.findMany({
-    where: {
-      projectId: args.projectId,
-      userId: args.userId,
-      ...(args.itemId !== null ? { itemId: args.itemId } : {}),
-      ...(args.archived ? {} : { archivedAt: null }),
-    },
-    orderBy: [{ startedAt: "desc" }],
-    take: args.limit,
+export async function listConversations(db: Db, args: ListArgs): Promise<Conversation[]> {
+  return db.query.conversations.findMany({
+    where: and(
+      eq(conversations.projectId, args.projectId),
+      eq(conversations.userId, args.userId),
+      ...(args.itemId !== null ? [eq(conversations.itemId, args.itemId)] : []),
+      ...(args.archived ? [] : [isNull(conversations.archivedAt)]),
+    ),
+    orderBy: [desc(conversations.startedAt)],
+    limit: args.limit,
   });
 }
 
@@ -47,21 +47,21 @@ export async function listConversations(db: Database, args: ListArgs): Promise<C
 const LIVE_TRANSCRIPT_CAP = 500;
 
 export async function getConversation(
-  db: Database,
+  db: Db,
   conversationId: ConversationId,
 ): Promise<(Conversation & { messages: Message[] }) | null> {
-  const conv = await db.conversation.findUnique({
-    where: { id: conversationId },
-    include: {
+  const conv = await db.query.conversations.findFirst({
+    where: eq(conversations.id, conversationId),
+    with: {
+      // Take the latest N then reverse to ascending — Drizzle can't express
+      // "latest N ordered ascending" directly. The secondary `id` tiebreaker
+      // keeps assistant + tool-result rows that share a microsecond
+      // `createdAt` deterministically ordered (otherwise refetches shuffle
+      // them in the chat UI).
       messages: {
-        where: { compacted: false },
-        // Take the latest N then reverse to ascending — Prisma can't express
-        // "latest N ordered ascending" directly. The secondary `id` tiebreaker
-        // keeps assistant + tool-result rows that share a microsecond
-        // `createdAt` deterministically ordered (otherwise refetches shuffle
-        // them in the chat UI).
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take: LIVE_TRANSCRIPT_CAP,
+        where: eq(messages.compacted, false),
+        orderBy: [desc(messages.createdAt), desc(messages.id)],
+        limit: LIVE_TRANSCRIPT_CAP,
       },
     },
   });
@@ -70,16 +70,20 @@ export async function getConversation(
 }
 
 export async function ownsConversation(
-  db: Database,
+  db: Db,
   conversationId: ConversationId,
   projectId: ProjectId,
   userId: UserId,
 ): Promise<boolean> {
-  const found = await db.conversation.findFirst({
-    where: { id: conversationId, projectId, userId },
-    select: { id: true },
+  const found = await db.query.conversations.findFirst({
+    where: and(
+      eq(conversations.id, conversationId),
+      eq(conversations.projectId, projectId),
+      eq(conversations.userId, userId),
+    ),
+    columns: { id: true },
   });
-  return found !== null;
+  return found !== undefined;
 }
 
 /**
@@ -89,40 +93,45 @@ export async function ownsConversation(
  * exist or the user/project pair doesn't own it.
  */
 export async function getConversationForOwner(
-  db: Database,
+  db: Db,
   conversationId: ConversationId,
   projectId: ProjectId,
   userId: UserId,
-): Promise<{ id: string; llmProviderIdOverride: string | null } | null> {
-  return db.conversation.findFirst({
-    where: { id: conversationId, projectId, userId },
-    select: { id: true, llmProviderIdOverride: true },
+): Promise<{ id: ConversationId; llmProviderIdOverride: string | null } | null> {
+  const row = await db.query.conversations.findFirst({
+    where: and(
+      eq(conversations.id, conversationId),
+      eq(conversations.projectId, projectId),
+      eq(conversations.userId, userId),
+    ),
+    columns: { id: true, llmProviderIdOverride: true },
   });
+  return row ?? null;
 }
 
 export async function createConversation(
-  db: Database,
-  args: { projectId: ProjectId; userId: UserId; itemId: string | null },
+  db: Db,
+  args: { projectId: ProjectId; userId: UserId; itemId: ItemId | null },
 ): Promise<Conversation> {
-  return db.conversation.create({
-    data: {
+  const [row] = await db
+    .insert(conversations)
+    .values({
       projectId: args.projectId,
       userId: args.userId,
       itemId: args.itemId,
-    },
-  });
+    })
+    .returning();
+  if (!row) throw new Error("createConversation: insert returned no row");
+  return row;
 }
 
 type AppendArgs = {
   conversationId: ConversationId;
-  /** 'system' | 'user' | 'assistant' | 'tool' */
   role: "system" | "user" | "assistant" | "tool";
   content: string;
   /**
    * Tool-call records are stored as JSON; callers serialize their typed
-   * shape (`LlmToolCall[]`) at the boundary. `object | null` is used here
-   * because Prisma's `InputJsonValue` doesn't accept `unknown`-valued
-   * structures (which our typed `arguments: Record<string, unknown>` is).
+   * shape (`LlmToolCall[]`) at the boundary.
    */
   toolCallsJson?: object | null;
   toolCallId?: string | null;
@@ -130,29 +139,34 @@ type AppendArgs = {
   pending?: boolean;
 };
 
-export async function appendMessage(db: Database, args: AppendArgs): Promise<Message> {
-  const toolCallsJson = args.toolCallsJson ?? undefined;
-  return db.message.create({
-    data: {
+export async function appendMessage(db: Db, args: AppendArgs): Promise<Message> {
+  const [row] = await db
+    .insert(messages)
+    .values({
       conversationId: args.conversationId,
       role: args.role,
       content: args.content,
-      ...(toolCallsJson !== undefined ? { toolCallsJson } : {}),
+      toolCallsJson: args.toolCallsJson ?? null,
       toolCallId: args.toolCallId ?? null,
       toolName: args.toolName ?? null,
       pending: args.pending ?? false,
-    },
-  });
+    })
+    .returning();
+  if (!row) throw new Error("appendMessage: insert returned no row");
+  return row;
 }
 
 export async function archiveConversation(
-  db: Database,
+  db: Db,
   conversationId: ConversationId,
 ): Promise<Conversation> {
-  return db.conversation.update({
-    where: { id: conversationId },
-    data: { archivedAt: new Date() },
-  });
+  const [row] = await db
+    .update(conversations)
+    .set({ archivedAt: new Date() })
+    .where(eq(conversations.id, conversationId))
+    .returning();
+  if (!row) throw new Error("archiveConversation: row not found");
+  return row;
 }
 
 /**
@@ -166,13 +180,17 @@ export async function archiveConversation(
 const ACTIVE_CONVERSATIONS_PER_ITEM_CAP = 50;
 
 export async function activeConversationsForItem(
-  db: Database,
+  db: Db,
   projectId: ProjectId,
-  itemId: string,
+  itemId: ItemId,
 ): Promise<Conversation[]> {
-  return db.conversation.findMany({
-    where: { projectId, itemId, archivedAt: null },
-    orderBy: [{ startedAt: "desc" }],
-    take: ACTIVE_CONVERSATIONS_PER_ITEM_CAP,
+  return db.query.conversations.findMany({
+    where: and(
+      eq(conversations.projectId, projectId),
+      eq(conversations.itemId, itemId),
+      isNull(conversations.archivedAt),
+    ),
+    orderBy: [desc(conversations.startedAt)],
+    limit: ACTIVE_CONVERSATIONS_PER_ITEM_CAP,
   });
 }

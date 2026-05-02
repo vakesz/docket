@@ -5,10 +5,10 @@
 // even if rows later get disabled — clear the Setting row by hand to revert.
 
 import "server-only";
-import type { db as Db } from "@/server/db";
+import { count, eq } from "drizzle-orm";
+import type { Db } from "@/db";
+import { llmProviders, oauthProviderConfigs } from "@/db/schema";
 import { loadGlobalSetting, upsertGlobalSetting } from "@/server/settings/effective";
-
-type Database = typeof Db;
 
 export type SetupStatus = {
   /** Sticky-bit OR computed: at least one OAuth row exists. */
@@ -19,14 +19,22 @@ export type SetupStatus = {
   hasOauth: boolean;
 };
 
-export async function getSetupStatus(db: Database): Promise<SetupStatus> {
-  const [llmCount, oauthCount, sticky] = await Promise.all([
-    db.llmProvider.count({ where: { enabled: true } }),
-    db.oauthProviderConfig.count({ where: { enabled: true } }),
+export async function getSetupStatus(db: Db): Promise<SetupStatus> {
+  const [llmCountResult, oauthCountResult, sticky] = await Promise.all([
+    db
+      .select({ c: count() })
+      .from(llmProviders)
+      .where(eq(llmProviders.enabled, true))
+      .then((r) => r[0]?.c ?? 0),
+    db
+      .select({ c: count() })
+      .from(oauthProviderConfigs)
+      .where(eq(oauthProviderConfigs.enabled, true))
+      .then((r) => r[0]?.c ?? 0),
     loadGlobalSetting(db, "setup.complete"),
   ]);
-  const hasLlm = llmCount > 0;
-  const hasOauth = oauthCount > 0;
+  const hasLlm = llmCountResult > 0;
+  const hasOauth = oauthCountResult > 0;
   if (hasOauth && !sticky) {
     // First observation flips the bit so subsequent requests skip the
     // count() round-trips. Best-effort: a write race between two

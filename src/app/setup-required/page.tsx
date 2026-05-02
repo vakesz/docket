@@ -1,7 +1,9 @@
+import { and, eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { LLM_KINDS } from "@/agent/llm/types";
+import { db } from "@/db";
+import { llmProviders, oauthProviderConfigs } from "@/db/schema";
 import { publicBaseUrl } from "@/lib/public-base-url";
-import { db } from "@/server/db";
 import { listProviderSpecs } from "@/server/provider-registry";
 import { getSetupStatus } from "@/server/setup/status";
 import { SetupWizardForm } from "@/ui/setup/wizard-form";
@@ -39,17 +41,23 @@ export default async function SetupRequiredPage() {
   const [existingOauthByTypeId, existingLlmByKindRole] = await Promise.all([
     Promise.all(
       oauthSpecs.map((spec) =>
-        db.oauthProviderConfig
-          .findFirst({ where: { kind: spec.typeId }, select: { id: true } })
-          .then((row) => [spec.typeId, row !== null] as const),
+        db.query.oauthProviderConfigs
+          .findFirst({
+            where: eq(oauthProviderConfigs.kind, spec.typeId),
+            columns: { id: true },
+          })
+          .then((row) => [spec.typeId, row !== undefined] as const),
       ),
     ),
     Promise.all(
       LLM_KINDS.flatMap((kind) =>
         (["chat", "guardrail"] as const).map((role) =>
-          db.llmProvider
-            .findFirst({ where: { kind, role }, select: { id: true } })
-            .then((row) => [`${kind}:${role}`, row !== null] as const),
+          db.query.llmProviders
+            .findFirst({
+              where: and(eq(llmProviders.kind, kind), eq(llmProviders.role, role)),
+              columns: { id: true },
+            })
+            .then((row) => [`${kind}:${role}`, row !== undefined] as const),
         ),
       ),
     ),

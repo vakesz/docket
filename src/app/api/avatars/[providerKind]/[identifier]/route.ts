@@ -16,9 +16,9 @@
  */
 
 import { NextResponse } from "next/server";
+import { db } from "@/db";
 import { auth } from "@/server/auth";
 import { serveAvatar } from "@/server/avatars/service";
-import { db } from "@/server/db";
 import { getProviderSpec } from "@/server/provider-registry";
 
 export const runtime = "nodejs";

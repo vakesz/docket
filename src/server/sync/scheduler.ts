@@ -8,9 +8,11 @@
 
 import "server-only";
 
+import { isNull } from "drizzle-orm";
 import { asProjectId, asUserId } from "@/core/types";
-import type { Project } from "@/db/generated/client";
-import { db } from "@/server/db";
+import { db } from "@/db";
+import { projects as projectsTable } from "@/db/schema";
+import type { Project } from "@/db/schema/types";
 import { errFields } from "@/server/log-fields";
 import { logger } from "@/server/logger";
 import { loadGlobalSetting, loadProjectSetting } from "@/server/settings/effective";
@@ -70,9 +72,9 @@ async function supervisorTick(): Promise<void> {
   try {
     const readOnly = await loadGlobalSetting(db, "app.read-only");
     if (readOnly) return;
-    const projects = await db.project.findMany({
-      where: { archivedAt: null },
-      select: {
+    const projectRows = await db.query.projects.findMany({
+      where: isNull(projectsTable.archivedAt),
+      columns: {
         id: true,
         ownerUserId: true,
         providerKind: true,
@@ -80,7 +82,7 @@ async function supervisorTick(): Promise<void> {
         name: true,
       },
     });
-    for (const project of projects) {
+    for (const project of projectRows) {
       void tickProject(project);
     }
   } catch (err) {

@@ -13,7 +13,9 @@
  */
 
 import "server-only";
+import { and, arrayContains, desc, eq, ilike, or } from "drizzle-orm";
 import { z } from "zod";
+import { memoryEntries } from "@/db/schema";
 import { proposeMemoryDelete, proposeMemoryWrite } from "@/server/proposals/builders";
 import { maybeAutoAccept } from "@/server/proposals/executor";
 import {
@@ -47,28 +49,27 @@ const ProposeDeleteInput = projectSlugSchema.extend({
 
 export const memoryRouter = router({
   list: projectScopedProcedure.input(ListInput).query(async ({ ctx, input }) => {
-    return ctx.db.memoryEntry.findMany({
-      where: {
-        projectId: ctx.projectId,
-        ...(input.tag ? { tags: { has: input.tag } } : {}),
-        ...(input.search
-          ? {
-              OR: [
-                { title: { contains: input.search, mode: "insensitive" } },
-                { body: { contains: input.search, mode: "insensitive" } },
-              ],
-            }
-          : {}),
-      },
-      orderBy: [{ updatedAt: "desc" }],
-      take: input.limit,
+    const conditions = [eq(memoryEntries.projectId, ctx.projectId)];
+    if (input.tag) conditions.push(arrayContains(memoryEntries.tags, [input.tag]));
+    if (input.search) {
+      const needle = `%${input.search}%`;
+      const orClause = or(ilike(memoryEntries.title, needle), ilike(memoryEntries.body, needle));
+      if (orClause) conditions.push(orClause);
+    }
+    return ctx.db.query.memoryEntries.findMany({
+      where: and(...conditions),
+      orderBy: [desc(memoryEntries.updatedAt)],
+      limit: input.limit,
     });
   }),
 
   get: projectScopedProcedure.input(GetInput).query(async ({ ctx, input }) => {
     return assertFound(
-      await ctx.db.memoryEntry.findFirst({
-        where: { id: input.memoryId, projectId: ctx.projectId },
+      await ctx.db.query.memoryEntries.findFirst({
+        where: and(
+          eq(memoryEntries.id, input.memoryId),
+          eq(memoryEntries.projectId, ctx.projectId),
+        ),
       }),
       "memory entry not found",
     );

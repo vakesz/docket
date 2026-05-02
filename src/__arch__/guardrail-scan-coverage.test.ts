@@ -69,8 +69,10 @@ const EXPECTED: Record<string, ScanMode> = {
 
 const fakeCtx: ToolContext = {
   db: {
-    mcpServerConfig: { findMany: async () => [] },
-    setting: { findFirst: async () => null },
+    query: {
+      mcpServerConfigs: { findMany: async () => [] },
+      settings: { findFirst: async () => undefined },
+    },
   } as unknown as ToolContext["db"],
   projectId: asProjectId("proj_arch_test"),
   userId: asUserId("user_arch_test"),
@@ -115,17 +117,19 @@ describe("arch: guardrail-scan coverage", () => {
     const ctxWithServer: ToolContext = {
       ...fakeCtx,
       db: {
-        mcpServerConfig: {
-          findMany: async () => [
-            {
-              id: "srv_1",
-              name: "ledger",
-              url: "https://example.invalid/mcp",
-              headersJson: {},
-              enabled: true,
-              projectId: "proj_arch_test",
-            },
-          ],
+        query: {
+          mcpServerConfigs: {
+            findMany: async () => [
+              {
+                id: "srv_1",
+                name: "ledger",
+                url: "https://example.invalid/mcp",
+                headersJson: {},
+                enabled: true,
+                projectId: "proj_arch_test",
+              },
+            ],
+          },
         },
       } as unknown as ToolContext["db"],
     };

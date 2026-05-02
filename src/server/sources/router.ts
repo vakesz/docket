@@ -15,7 +15,9 @@
 
 import "server-only";
 import { TRPCError } from "@trpc/server";
+import { and, arrayContains, desc, eq, ilike, or } from "drizzle-orm";
 import { z } from "zod";
+import { sourceDocs } from "@/db/schema";
 import {
   assertFound,
   projectScopedMutationProcedure,
@@ -53,72 +55,70 @@ const UpdateInput = GetInput.extend({
 
 export const sourcesRouter = router({
   list: projectScopedProcedure.input(ListInput).query(async ({ ctx, input }) => {
-    return ctx.db.sourceDoc.findMany({
-      where: {
-        projectId: ctx.projectId,
-        ...(input.kind ? { kind: input.kind } : {}),
-        ...(input.tag ? { tags: { has: input.tag } } : {}),
-        ...(input.search
-          ? {
-              OR: [
-                { title: { contains: input.search, mode: "insensitive" } },
-                { body: { contains: input.search, mode: "insensitive" } },
-              ],
-            }
-          : {}),
-      },
-      orderBy: [{ updatedAt: "desc" }],
-      take: input.limit,
+    const conditions = [eq(sourceDocs.projectId, ctx.projectId)];
+    if (input.kind) conditions.push(eq(sourceDocs.kind, input.kind));
+    if (input.tag) conditions.push(arrayContains(sourceDocs.tags, [input.tag]));
+    if (input.search) {
+      const needle = `%${input.search}%`;
+      const orClause = or(ilike(sourceDocs.title, needle), ilike(sourceDocs.body, needle));
+      if (orClause) conditions.push(orClause);
+    }
+    return ctx.db.query.sourceDocs.findMany({
+      where: and(...conditions),
+      orderBy: [desc(sourceDocs.updatedAt)],
+      limit: input.limit,
     });
   }),
 
   get: projectScopedProcedure.input(GetInput).query(async ({ ctx, input }) => {
     return assertFound(
-      await ctx.db.sourceDoc.findFirst({
-        where: { id: input.sourceId, projectId: ctx.projectId },
+      await ctx.db.query.sourceDocs.findFirst({
+        where: and(eq(sourceDocs.id, input.sourceId), eq(sourceDocs.projectId, ctx.projectId)),
       }),
       "source not found",
     );
   }),
 
   create: projectScopedMutationProcedure.input(CreateInput).mutation(async ({ ctx, input }) => {
-    return ctx.db.sourceDoc.create({
-      data: {
+    const [row] = await ctx.db
+      .insert(sourceDocs)
+      .values({
         projectId: ctx.projectId,
         title: input.title.trim(),
         kind: input.kind,
         uri: input.uri,
         body: input.body,
         tags: input.tags,
-      },
-    });
+      })
+      .returning();
+    if (!row) throw new Error("source create returned no row");
+    return row;
   }),
 
   update: projectScopedMutationProcedure.input(UpdateInput).mutation(async ({ ctx, input }) => {
-    // updateMany scopes the update to (id, projectId) atomically — no need
-    // for a pre-flight findFirst. count === 0 means either the row doesn't
-    // exist or it belongs to a different project, which both surface as 404.
-    const result = await ctx.db.sourceDoc.updateMany({
-      where: { id: input.sourceId, projectId: ctx.projectId },
-      data: {
+    const [row] = await ctx.db
+      .update(sourceDocs)
+      .set({
         ...(input.title !== undefined ? { title: input.title.trim() } : {}),
         ...(input.kind !== undefined ? { kind: input.kind } : {}),
         ...(input.uri !== undefined ? { uri: input.uri } : {}),
         ...(input.body !== undefined ? { body: input.body } : {}),
         ...(input.tags !== undefined ? { tags: input.tags } : {}),
-      },
-    });
-    if (result.count === 0) {
+      })
+      .where(and(eq(sourceDocs.id, input.sourceId), eq(sourceDocs.projectId, ctx.projectId)))
+      .returning();
+    if (!row) {
       throw new TRPCError({ code: "NOT_FOUND", message: "source not found" });
     }
-    return ctx.db.sourceDoc.findUniqueOrThrow({ where: { id: input.sourceId } });
+    return row;
   }),
 
   delete: projectScopedMutationProcedure.input(GetInput).mutation(async ({ ctx, input }) => {
-    const result = await ctx.db.sourceDoc.deleteMany({
-      where: { id: input.sourceId, projectId: ctx.projectId },
-    });
-    if (result.count === 0) {
+    const deleted = await ctx.db
+      .delete(sourceDocs)
+      .where(and(eq(sourceDocs.id, input.sourceId), eq(sourceDocs.projectId, ctx.projectId)))
+      .returning({ id: sourceDocs.id });
+    if (deleted.length === 0) {
       throw new TRPCError({ code: "NOT_FOUND", message: "source not found" });
     }
     return { id: input.sourceId };

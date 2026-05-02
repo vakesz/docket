@@ -5,7 +5,11 @@
 
 import "server-only";
 import { TRPCError } from "@trpc/server";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
+import type { ProjectId, UserId } from "@/core/types";
+import type { Db } from "@/db";
+import { mcpOauthStates, mcpServerConfigs, projects } from "@/db/schema";
 import { recordMcpOauthConnected, recordMcpOauthDisconnected } from "@/server/audit/log";
 import { decodeHeaders, encodeHeaders } from "@/server/mcp/headers-codec";
 import { discoverOauthEndpoints } from "@/server/mcp/oauth/discovery";
@@ -25,13 +29,8 @@ const STATE_TTL_MS = 10 * 60 * 1000;
 
 const StartInput = projectSlugSchema.extend({
   serverId: z.string().min(1),
-  /// Optional pre-registered client credentials. Used when DCR is
-  /// disabled at the IdP and the operator has registered an OAuth client
-  /// out of band. Server falls back to DCR when omitted.
   clientId: z.string().optional(),
   clientSecret: z.string().optional(),
-  /// Optional space-separated scope override. When omitted, all scopes
-  /// advertised in discovery metadata are requested.
   scopes: z.string().optional(),
 });
 
@@ -44,8 +43,11 @@ export const mcpOauthRouter = router({
   start: projectScopedMutationProcedure.input(StartInput).mutation(async ({ ctx, input }) => {
     const userId = ctx.userId;
     const row = assertFound(
-      await ctx.db.mcpServerConfig.findFirst({
-        where: { id: input.serverId, projectId: ctx.projectId },
+      await ctx.db.query.mcpServerConfigs.findFirst({
+        where: and(
+          eq(mcpServerConfigs.id, input.serverId),
+          eq(mcpServerConfigs.projectId, ctx.projectId),
+        ),
       }),
       "MCP server not found",
     );
@@ -80,21 +82,19 @@ export const mcpOauthRouter = router({
     const { verifier, challenge } = generatePkcePair();
     const nonce = generateNonce();
 
-    await ctx.db.mcpOauthState.create({
-      data: {
-        nonce,
-        projectId: ctx.projectId,
-        userId,
-        mcpServerId: row.id,
-        codeVerifier: verifier,
-        issuer: meta.issuer,
-        tokenEndpoint: meta.tokenEndpoint,
-        clientId: encryptSecret(clientId),
-        clientSecret: clientSecret ? encryptSecret(clientSecret) : null,
-        scopes,
-        redirectUri,
-        expiresAt: new Date(Date.now() + STATE_TTL_MS),
-      },
+    await ctx.db.insert(mcpOauthStates).values({
+      nonce,
+      projectId: ctx.projectId,
+      userId,
+      mcpServerId: row.id,
+      codeVerifier: verifier,
+      issuer: meta.issuer,
+      tokenEndpoint: meta.tokenEndpoint,
+      clientId: encryptSecret(clientId),
+      clientSecret: clientSecret ? encryptSecret(clientSecret) : null,
+      scopes,
+      redirectUri,
+      expiresAt: new Date(Date.now() + STATE_TTL_MS),
     });
 
     const authUrl = new URL(meta.authorizationEndpoint);
@@ -111,25 +111,26 @@ export const mcpOauthRouter = router({
 
   /**
    * Drop OAuth tokens from a server row. Called from the editor's
-   * "Disconnect" button. The row stays — the user might want to manually
-   * paste a token afterwards — but its `Authorization` header and OAuth
-   * fields are cleared and the row is disabled.
+   * "Disconnect" button.
    */
   disconnect: projectScopedMutationProcedure
     .input(projectSlugSchema.extend({ serverId: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.userId;
       const row = assertFound(
-        await ctx.db.mcpServerConfig.findFirst({
-          where: { id: input.serverId, projectId: ctx.projectId },
+        await ctx.db.query.mcpServerConfigs.findFirst({
+          where: and(
+            eq(mcpServerConfigs.id, input.serverId),
+            eq(mcpServerConfigs.projectId, ctx.projectId),
+          ),
         }),
         "MCP server not found",
       );
       const headers = decodeHeaders(row.headersJson);
       delete headers["Authorization"];
-      const updated = await ctx.db.mcpServerConfig.update({
-        where: { id: row.id },
-        data: {
+      const [updated] = await ctx.db
+        .update(mcpServerConfigs)
+        .set({
           headersJson: encodeHeaders(headers),
           enabled: false,
           oauthIssuer: null,
@@ -138,8 +139,10 @@ export const mcpOauthRouter = router({
           oauthScopes: null,
           oauthRefreshToken: null,
           oauthAccessExpiresAt: null,
-        },
-      });
+        })
+        .where(eq(mcpServerConfigs.id, row.id))
+        .returning();
+      if (!updated) throw new Error("MCP server update returned no row");
       await recordMcpOauthDisconnected({
         db: ctx.db,
         projectId: ctx.projectId,
@@ -153,24 +156,23 @@ export const mcpOauthRouter = router({
 
 /**
  * Callback-side completion. Called from the Next route handler at
- * `/api/mcp/oauth/callback` — not a tRPC procedure because the redirect
- * lands as a top-level GET, not a tRPC POST. Auth is by the random
- * nonce the IdP echoes back (state is the row id by another name); we
- * reject if the session user doesn't match the row's `userId`.
+ * `/api/mcp/oauth/callback`.
  */
 export async function completeMcpOauth(args: {
-  db: typeof import("@/server/db").db;
-  sessionUserId: string;
+  db: Db;
+  sessionUserId: UserId;
   nonce: string;
   code: string;
-}): Promise<{ projectId: string; projectSlug: string; mcpServerId: string }> {
+}): Promise<{ projectId: ProjectId; projectSlug: string; mcpServerId: string }> {
   const parsed = CompleteInput.parse({ nonce: args.nonce, code: args.code });
-  const state = await args.db.mcpOauthState.findUnique({ where: { nonce: parsed.nonce } });
+  const state = await args.db.query.mcpOauthStates.findFirst({
+    where: eq(mcpOauthStates.nonce, parsed.nonce),
+  });
   if (!state) {
     throw new Error("oauth callback: state not found (already used or expired)");
   }
   if (state.expiresAt.getTime() < Date.now()) {
-    await args.db.mcpOauthState.delete({ where: { id: state.id } });
+    await args.db.delete(mcpOauthStates).where(eq(mcpOauthStates.id, state.id));
     throw new Error("oauth callback: state expired");
   }
   if (state.userId !== args.sessionUserId) {
@@ -186,11 +188,14 @@ export async function completeMcpOauth(args: {
     codeVerifier: state.codeVerifier,
   });
 
-  const row = await args.db.mcpServerConfig.findFirst({
-    where: { id: state.mcpServerId, projectId: state.projectId },
+  const row = await args.db.query.mcpServerConfigs.findFirst({
+    where: and(
+      eq(mcpServerConfigs.id, state.mcpServerId),
+      eq(mcpServerConfigs.projectId, state.projectId),
+    ),
   });
   if (!row) {
-    await args.db.mcpOauthState.delete({ where: { id: state.id } });
+    await args.db.delete(mcpOauthStates).where(eq(mcpOauthStates.id, state.id));
     throw new Error("oauth callback: server row no longer exists");
   }
 
@@ -199,9 +204,9 @@ export async function completeMcpOauth(args: {
   const expiresAt = tokens.expiresInSec ? new Date(Date.now() + tokens.expiresInSec * 1000) : null;
   const scopes = tokens.scope ?? state.scopes;
 
-  await args.db.mcpServerConfig.update({
-    where: { id: row.id },
-    data: {
+  await args.db
+    .update(mcpServerConfigs)
+    .set({
       headersJson: encodeHeaders(headers),
       enabled: true,
       oauthIssuer: state.issuer,
@@ -210,9 +215,9 @@ export async function completeMcpOauth(args: {
       oauthScopes: scopes,
       oauthRefreshToken: tokens.refreshToken ? encryptSecret(tokens.refreshToken) : null,
       oauthAccessExpiresAt: expiresAt,
-    },
-  });
-  await args.db.mcpOauthState.delete({ where: { id: state.id } });
+    })
+    .where(eq(mcpServerConfigs.id, row.id));
+  await args.db.delete(mcpOauthStates).where(eq(mcpOauthStates.id, state.id));
 
   await recordMcpOauthConnected({
     db: args.db,
@@ -224,9 +229,9 @@ export async function completeMcpOauth(args: {
     scopes,
   });
 
-  const project = await args.db.project.findUnique({
-    where: { id: state.projectId },
-    select: { slug: true },
+  const project = await args.db.query.projects.findFirst({
+    where: eq(projects.id, state.projectId),
+    columns: { slug: true },
   });
   if (!project) {
     throw new Error("oauth callback: project no longer exists");

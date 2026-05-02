@@ -1,7 +1,7 @@
 /**
  * Monthly LLM budget guard.
  *
- * Backed by `Conversation.costCents` + `Conversation.guardrailCostCents`
+ * Backed by `conversations.costCents` + `conversations.guardrailCostCents`
  * rows the agent loop already increments after each streaming turn. Both
  * columns bill against the operator's API key, so both count toward the
  * cap. Cap + action come from global Settings:
@@ -12,10 +12,10 @@
  */
 
 import "server-only";
-import type { db as Db } from "@/server/db";
+import { gte, sum } from "drizzle-orm";
+import type { Db } from "@/db";
+import { conversations } from "@/db/schema";
 import { loadGlobalSetting } from "@/server/settings/effective";
-
-type Database = typeof Db;
 
 export type BudgetStatus = {
   /** Cents accrued in the current calendar month (UTC). */
@@ -34,17 +34,25 @@ function startOfMonthUtc(now: Date = new Date()): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
 }
 
-export async function getBudgetStatus(db: Database): Promise<BudgetStatus> {
+export async function getBudgetStatus(db: Db): Promise<BudgetStatus> {
   const [capCents, action] = await Promise.all([
     loadGlobalSetting(db, "llm.monthly-cost-cap-cents"),
     loadGlobalSetting(db, "llm.cost-cap-action"),
   ]);
   const since = startOfMonthUtc();
-  const agg = await db.conversation.aggregate({
-    where: { startedAt: { gte: since } },
-    _sum: { costCents: true, guardrailCostCents: true },
-  });
-  const monthCents = (agg._sum.costCents ?? 0) + (agg._sum.guardrailCostCents ?? 0);
+  // postgres-js returns SUM() over an integer column as a numeric string;
+  // coerce + clamp to a safe integer at the boundary.
+  const [agg] = await db
+    .select({
+      chat: sum(conversations.costCents),
+      guardrail: sum(conversations.guardrailCostCents),
+    })
+    .from(conversations)
+    .where(gte(conversations.startedAt, since));
+  const chat = Number(agg?.chat ?? 0);
+  const guardrail = Number(agg?.guardrail ?? 0);
+  const monthCents =
+    (Number.isFinite(chat) ? chat : 0) + (Number.isFinite(guardrail) ? guardrail : 0);
   const capReached = capCents > 0 && monthCents >= capCents;
   const remainingCents = capCents > 0 ? Math.max(0, capCents - monthCents) : 0;
   return { monthCents, capCents, remainingCents, capReached, action };

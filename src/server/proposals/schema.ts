@@ -8,14 +8,13 @@
  * The schema mirrors `core/proposal-types.ts` but validates only the
  * fields the executor actually reads — the cached `item` snapshot rides
  * through as a shape-checked object without parsing every nested field
- * (the upstream `snapshotFromRow` already produced it from a typed Prisma
+ * (the upstream `snapshotFromRow` already produced it from a typed Drizzle
  * row, so re-parsing would just burn CPU).
  */
 
 import "server-only";
 import { z } from "zod";
 import { ITEM_KINDS, ITEM_STATES, TRANSITION_INTENTS } from "@/core/types";
-import type { Prisma } from "@/db/generated/client";
 
 // Mirrors what `snapshotFromRow` produces and what `diff.ts` reads — all
 // fields the diff renderer touches are required, the rest of the canonical
@@ -148,18 +147,14 @@ export const proposalPayloadSchema = z
 export type ProposalPayload = z.infer<typeof proposalPayloadSchema>;
 
 /**
- * Validate-then-encode a proposal payload for Prisma's JSON column. Replaces
- * the bare `as unknown as Prisma.InputJsonValue` cast at the persistence
- * boundary: the Zod parse runs the same discriminated-union schema we use on
- * the read side, so a builder bug producing the wrong shape fails at write
- * time instead of crashing inside the executor on a future hydrate.
- *
- * The double-cast tail is unavoidable: Zod parses readonly arrays out, and
- * Prisma's `InputJsonValue` is mutable-only — both are JSON-shape-compatible
- * but the type system can't unify them. Runtime confidence comes from the
- * parse, not the cast.
+ * Validate-then-encode a proposal payload for the JSON column. The Zod parse
+ * runs the same discriminated-union schema we use on the read side, so a
+ * builder bug producing the wrong shape fails at write time instead of
+ * crashing inside the executor on a future hydrate. Drizzle types JSON
+ * columns natively via `.$type<>()`, so the parsed value flows through
+ * without further casts.
  */
-export function toJsonProposalPayload(draft: unknown): Prisma.InputJsonValue {
+export function toJsonProposalPayload(draft: unknown): Record<string, unknown> {
   const parsed = proposalPayloadSchema.parse(draft);
-  return parsed as unknown as Prisma.InputJsonValue;
+  return parsed as Record<string, unknown>;
 }

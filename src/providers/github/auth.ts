@@ -16,10 +16,10 @@
 import "server-only";
 import type { Provider } from "next-auth/providers";
 import GitHub from "next-auth/providers/github";
+import { db } from "@/db";
 import { avatarUrl } from "@/lib/avatar-url";
 import { fetchAvatarFromProvider } from "@/server/avatars/fetchers";
 import { persistAvatar } from "@/server/avatars/service";
-import { db } from "@/server/db";
 import { logger } from "@/server/logger";
 
 export type GitHubAuthOptions = {

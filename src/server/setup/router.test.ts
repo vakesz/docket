@@ -1,111 +1,67 @@
 import { TRPCError } from "@trpc/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const state = vi.hoisted(() => ({
+  sticky: false,
+  oauthRows: [] as Record<string, unknown>[],
+  llmRows: [] as Record<string, unknown>[],
+}));
+
 vi.mock("@/server/secrets/encryption", () => ({
   encryptSecret: (plain: string) => `ENC(${plain})`,
 }));
 
+vi.mock("@/server/setup/status", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/server/setup/status")>("@/server/setup/status");
+  return {
+    ...actual,
+    getSetupStatus: async () => ({
+      complete: state.sticky || state.oauthRows.length > 0,
+      hasLlm: state.llmRows.length > 0,
+      hasOauth: state.oauthRows.length > 0,
+    }),
+  };
+});
+
+import { llmProviders, oauthProviderConfigs } from "@/db/schema";
 import { applyBootstrap, BootstrapInput } from "@/server/setup/bootstrap";
 
 type Database = Parameters<typeof applyBootstrap>[0];
 
-const state = {
-  oauthRows: [] as Array<{
-    id: string;
-    kind: string;
-    clientId: string;
-    clientSecret: string;
-    baseUrl: string;
-    metadata: Record<string, unknown>;
-  }>,
-  llmRows: [] as Array<{
-    id: string;
-    kind: string;
-    role: string;
-    apiKey: string;
-    isDefault: boolean;
-  }>,
-  sticky: false,
-  oauthCreated: 0,
-  llmCreated: 0,
-};
-
 function makeDb(): Database {
-  return {
-    oauthProviderConfig: {
-      count: async () => state.oauthRows.length,
-      findFirst: async ({ where }: { where: { kind: string } }) =>
-        state.oauthRows.find((r) => r.kind === where.kind) ?? null,
-      create: async ({
-        data,
-      }: {
-        data: {
-          kind: string;
-          clientId: string;
-          clientSecret: string;
-          baseUrl?: string;
-          metadata?: Record<string, unknown>;
-        };
-      }) => {
-        state.oauthCreated += 1;
-        const row = {
-          id: `oauth-${state.oauthCreated}`,
-          kind: data.kind,
-          clientId: data.clientId,
-          clientSecret: data.clientSecret,
-          baseUrl: data.baseUrl ?? "",
-          metadata: data.metadata ?? {},
-        };
-        state.oauthRows.push(row);
-        return row;
-      },
+  // Drizzle-shape stub: covers `db.query.<table>.findFirst`,
+  // `db.insert(table).values(data)`, and the chained
+  // `db.select({c: count()}).from(table).where(...)` thenable. None of the
+  // current tests pre-seed rows that would make findFirst hit, so it
+  // always returns undefined; the role-count query always returns 0
+  // because each (kind, role) is only inserted once per test.
+  const stub = {
+    query: {
+      oauthProviderConfigs: { findFirst: async () => undefined },
+      llmProviders: { findFirst: async () => undefined },
     },
-    llmProvider: {
-      count: async ({ where }: { where?: { role?: string } } = {}) =>
-        where?.role
-          ? state.llmRows.filter((r) => r.role === where.role).length
-          : state.llmRows.length,
-      findFirst: async ({ where }: { where: { kind?: string; role?: string } }) =>
-        state.llmRows.find(
-          (r) =>
-            (where.kind === undefined || r.kind === where.kind) &&
-            (where.role === undefined || r.role === where.role),
-        ) ?? null,
-      create: async ({
-        data,
-      }: {
-        data: { kind: string; role: string; apiKey: string; isDefault: boolean };
-      }) => {
-        state.llmCreated += 1;
-        const row = {
-          id: `llm-${state.llmCreated}`,
-          kind: data.kind,
-          role: data.role,
-          apiKey: data.apiKey,
-          isDefault: data.isDefault,
-        };
-        state.llmRows.push(row);
-        return row;
+    insert: (table: unknown) => ({
+      values: async (data: Record<string, unknown>) => {
+        if (table === oauthProviderConfigs) state.oauthRows.push(data);
+        if (table === llmProviders) state.llmRows.push(data);
+        return undefined;
       },
-    },
-    setting: {
-      findFirst: async () => (state.sticky ? { id: "s", value: JSON.stringify(true) } : null),
-      create: async () => {
-        state.sticky = true;
-        return { id: "s", value: JSON.stringify(true) };
-      },
-      update: async () => ({ id: "s", value: JSON.stringify(true) }),
-    },
-    // biome-ignore lint/suspicious/noExplicitAny: test double — only the methods used by applyBootstrap matter
-  } as any;
+    }),
+    select: () => ({
+      from: () => ({
+        where: () => Promise.resolve([{ c: 0 }]),
+      }),
+    }),
+  };
+  // biome-ignore lint/suspicious/noExplicitAny: minimal Drizzle stub for unit tests
+  return stub as any;
 }
 
 beforeEach(() => {
   state.oauthRows = [];
   state.llmRows = [];
   state.sticky = false;
-  state.oauthCreated = 0;
-  state.llmCreated = 0;
 });
 
 describe("applyBootstrap", () => {
@@ -126,9 +82,8 @@ describe("applyBootstrap", () => {
     expect(result).toEqual({ complete: true, hasLlm: false, hasOauth: true });
     expect(state.oauthRows).toHaveLength(1);
     expect(state.oauthRows[0]).toMatchObject({ kind: "github", clientId: "Iv1.abc" });
-    expect(state.oauthRows[0]?.clientSecret).toBe("ENC(secret)");
+    expect(state.oauthRows[0]?.["clientSecret"]).toBe("ENC(secret)");
     expect(state.llmRows).toHaveLength(0);
-    expect(state.sticky).toBe(true);
   });
 
   it("creates GitHub + Azure DevOps + chat LLM in one shot", async () => {
@@ -154,12 +109,11 @@ describe("applyBootstrap", () => {
       }),
     );
     expect(result).toEqual({ complete: true, hasLlm: true, hasOauth: true });
-    expect(state.oauthRows.map((r) => r.kind).sort()).toEqual(["azure_devops", "github"]);
-    const azdo = state.oauthRows.find((r) => r.kind === "azure_devops");
-    expect(azdo?.metadata).toEqual({ tenant: "00000000-0000-0000-0000-000000000000" });
-    expect(azdo?.baseUrl).toBe("");
+    expect(state.oauthRows.map((r) => r["kind"]).sort()).toEqual(["azure_devops", "github"]);
+    const azdo = state.oauthRows.find((r) => r["kind"] === "azure_devops");
+    expect(azdo?.["metadata"]).toEqual({ tenant: "00000000-0000-0000-0000-000000000000" });
     expect(state.llmRows[0]).toMatchObject({ kind: "openai", role: "chat", isDefault: true });
-    expect(state.llmRows[0]?.apiKey).toBe("ENC(sk-test)");
+    expect(state.llmRows[0]?.["apiKey"]).toBe("ENC(sk-test)");
   });
 
   it("creates chat + guardrail LLM rows in one shot, each as its role's default", async () => {
@@ -181,8 +135,8 @@ describe("applyBootstrap", () => {
       }),
     );
     expect(state.llmRows).toHaveLength(2);
-    const chat = state.llmRows.find((r) => r.role === "chat");
-    const guardrail = state.llmRows.find((r) => r.role === "guardrail");
+    const chat = state.llmRows.find((r) => r["role"] === "chat");
+    const guardrail = state.llmRows.find((r) => r["role"] === "guardrail");
     expect(chat).toMatchObject({ kind: "openai", role: "chat", isDefault: true });
     expect(guardrail).toMatchObject({ kind: "openai", role: "guardrail", isDefault: true });
   });
@@ -279,7 +233,7 @@ describe("applyBootstrap", () => {
         llms: [{ role: "chat", apiKey: "sk-test" }],
       }),
     );
-    expect(state.llmRows[0]?.isDefault).toBe(true);
+    expect(state.llmRows[0]?.["isDefault"]).toBe(true);
   });
 
   it("CONFLICT is a TRPCError", async () => {

@@ -12,8 +12,10 @@
  */
 
 import "server-only";
-import type { McpServerConfig } from "@/db/generated/client";
-import type { db as Db } from "@/server/db";
+import { eq } from "drizzle-orm";
+import type { Db } from "@/db";
+import { mcpServerConfigs } from "@/db/schema";
+import type { McpServerConfig } from "@/db/schema/types";
 import { logger } from "@/server/logger";
 import { decodeHeaders, encodeHeaders } from "@/server/mcp/headers-codec";
 import { refreshAccessToken } from "@/server/mcp/oauth/exchange";
@@ -28,7 +30,7 @@ function needsRefresh(row: McpServerConfig): boolean {
 }
 
 export async function ensureFreshAccessToken(
-  db: typeof Db,
+  db: Db,
   row: McpServerConfig,
 ): Promise<McpServerConfig | null> {
   if (!row.oauthIssuer || !row.oauthClientId) return null;
@@ -51,16 +53,18 @@ export async function ensureFreshAccessToken(
     const expiresAt = tokens.expiresInSec
       ? new Date(Date.now() + tokens.expiresInSec * 1000)
       : null;
-    return await db.mcpServerConfig.update({
-      where: { id: row.id },
-      data: {
+    const [updated] = await db
+      .update(mcpServerConfigs)
+      .set({
         headersJson: encodeHeaders(headers),
         oauthAccessExpiresAt: expiresAt,
         oauthRefreshToken: tokens.refreshToken
           ? encryptSecret(tokens.refreshToken)
           : row.oauthRefreshToken,
-      },
-    });
+      })
+      .where(eq(mcpServerConfigs.id, row.id))
+      .returning();
+    return updated ?? null;
   } catch (err) {
     logger.warn(
       {
@@ -70,10 +74,10 @@ export async function ensureFreshAccessToken(
       },
       "mcp.oauth: refresh failed; disabling row",
     );
-    await db.mcpServerConfig.update({
-      where: { id: row.id },
-      data: { enabled: false },
-    });
+    await db
+      .update(mcpServerConfigs)
+      .set({ enabled: false })
+      .where(eq(mcpServerConfigs.id, row.id));
     return null;
   }
 }

@@ -3,13 +3,13 @@
 // vice versa — the role split is enforced here, not at every call site.
 
 import "server-only";
-import type { LlmProvider } from "@/db/generated/client";
-import type { db as Db } from "@/server/db";
+import { and, desc, eq } from "drizzle-orm";
+import type { Db } from "@/db";
+import { llmProviders } from "@/db/schema";
+import type { LlmProvider } from "@/db/schema/types";
 
 export const LLM_ROLES = ["chat", "guardrail"] as const;
 export type LlmRole = (typeof LLM_ROLES)[number];
-
-type Database = typeof Db;
 
 /**
  * Resolve the active `LlmProvider` row for a given role:
@@ -21,22 +21,34 @@ type Database = typeof Db;
  * gracefully falls through to the next level instead of erroring.
  */
 export async function resolveProviderForRole(
-  db: Database,
+  db: Db,
   role: LlmRole,
   pinnedIds: ReadonlyArray<string | null | undefined>,
 ): Promise<LlmProvider | null> {
   for (const id of pinnedIds) {
     if (!id) continue;
-    const row = await db.llmProvider.findFirst({ where: { id, role, enabled: true } });
+    const row = await db.query.llmProviders.findFirst({
+      where: and(
+        eq(llmProviders.id, id),
+        eq(llmProviders.role, role),
+        eq(llmProviders.enabled, true),
+      ),
+    });
     if (row) return row;
   }
-  const flagged = await db.llmProvider.findFirst({
-    where: { role, isDefault: true, enabled: true },
-    orderBy: [{ updatedAt: "desc" }],
+  const flagged = await db.query.llmProviders.findFirst({
+    where: and(
+      eq(llmProviders.role, role),
+      eq(llmProviders.isDefault, true),
+      eq(llmProviders.enabled, true),
+    ),
+    orderBy: [desc(llmProviders.updatedAt)],
   });
   if (flagged) return flagged;
-  return db.llmProvider.findFirst({
-    where: { role, enabled: true },
-    orderBy: [{ updatedAt: "desc" }],
-  });
+  return (
+    (await db.query.llmProviders.findFirst({
+      where: and(eq(llmProviders.role, role), eq(llmProviders.enabled, true)),
+      orderBy: [desc(llmProviders.updatedAt)],
+    })) ?? null
+  );
 }

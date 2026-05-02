@@ -19,35 +19,36 @@
  *     endpoint.
  *
  * Idempotency comes from each branch's own existence check. There is no
- * gate on `setup.complete` — that bit is owned by the in-browser wizard
- * (`src/server/setup/router.ts`) and the `getSetupStatus` reader. Setting
- * `DEV_*` envs *after* the wizard has already flipped the bit will still
- * fill in any missing rows (e.g. a user who finished the wizard with
- * just an OAuth provider, then later set `DEV_OPENAI_API_KEY`).
+ * gate on `setup.complete` — that bit is owned by the in-browser wizard.
  *
  * Missing env or unavailable DB just logs a warning and exits 0 — never
  * blocks the server. Secrets land via `encryptSecret` so the on-disk row
  * matches whatever `SECRETS_KEY` policy is in effect.
  */
 
-import { PrismaPg } from "@prisma/adapter-pg";
 import { config as loadEnv } from "dotenv";
-import { type Prisma, PrismaClient } from "../src/db/generated/client";
+import { count, eq } from "drizzle-orm";
+import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
+import * as schema from "../src/db/schema";
+import { llmProviders, oauthProviderConfigs } from "../src/db/schema";
 import { encryptSecret } from "../src/server/secrets/encryption";
 
-// Match prisma.config.ts precedence: .env.local first, then .env fills any gaps.
+type SeedDb = PostgresJsDatabase<typeof schema>;
+
+// Match drizzle.config.ts precedence: .env.local first, then .env fills any gaps.
 loadEnv({ path: ".env.local" });
 loadEnv({ path: ".env" });
 
-async function main() {
+async function main(): Promise<void> {
   const databaseUrl = process.env["DATABASE_URL"];
   if (!databaseUrl) {
     console.warn("[seed-dev] DATABASE_URL not set — skipping.");
     return;
   }
 
-  const adapter = new PrismaPg({ connectionString: databaseUrl });
-  const db = new PrismaClient({ adapter, log: ["error"] });
+  const sql = postgres(databaseUrl, { max: 1, prepare: false });
+  const db = drizzle(sql, { schema, casing: "snake_case" });
 
   try {
     await seedOpenAi(db);
@@ -57,11 +58,11 @@ async function main() {
     const message = err instanceof Error ? err.message : String(err);
     console.warn(`[seed-dev] Skipped: ${message}`);
   } finally {
-    await db.$disconnect();
+    await sql.end({ timeout: 5 });
   }
 }
 
-async function seedOpenAi(db: PrismaClient): Promise<void> {
+async function seedOpenAi(db: SeedDb): Promise<void> {
   const apiKey = process.env["DEV_OPENAI_API_KEY"];
   if (!apiKey) {
     console.warn("[seed-dev] DEV_OPENAI_API_KEY not set — skipping OpenAI seed.");
@@ -70,10 +71,9 @@ async function seedOpenAi(db: PrismaClient): Promise<void> {
 
   // Match by (kind, role='chat') so a user who renamed the row in the admin
   // UI still gets their apiKey bumped on a re-seed without having the label
-  // clobbered back. Ciphertexts can't be byte-compared (fresh IV). The seed
-  // only manages chat rows; guardrail rows are added from the settings UI.
-  const existing = await db.llmProvider.findFirst({
-    where: { kind: "openai", role: "chat" },
+  // clobbered back. Ciphertexts can't be byte-compared (fresh IV).
+  const existing = await db.query.llmProviders.findFirst({
+    where: (t, { and, eq }) => and(eq(t.kind, "openai"), eq(t.role, "chat")),
   });
   const writeKey = encryptSecret(apiKey);
 
@@ -81,21 +81,23 @@ async function seedOpenAi(db: PrismaClient): Promise<void> {
     // First chat row in the deployment? Seed it as the global chat default
     // so the agent has an adapter to dispatch to without any further admin
     // work. Guardrail-role rows have an independent default.
-    const anyChat = await db.llmProvider.count({ where: { role: "chat" } });
+    const chatRows = await db
+      .select({ c: count() })
+      .from(llmProviders)
+      .where(eq(llmProviders.role, "chat"));
+    const chatCount = chatRows[0]?.c ?? 0;
     const label = "OpenAI";
-    await db.llmProvider.create({
-      data: {
-        kind: "openai",
-        role: "chat",
-        label,
-        apiKey: writeKey,
-        model: process.env["DEV_OPENAI_MODEL"]?.trim() || "gpt-5",
-        baseUrl: process.env["DEV_OPENAI_BASE_URL"]?.trim() || "",
-        inputPriceCentsPerMtok: parsePrice(process.env["DEV_OPENAI_INPUT_PRICE_CENTS_PER_MTOK"]),
-        outputPriceCentsPerMtok: parsePrice(process.env["DEV_OPENAI_OUTPUT_PRICE_CENTS_PER_MTOK"]),
-        isDefault: anyChat === 0,
-        enabled: true,
-      },
+    await db.insert(llmProviders).values({
+      kind: "openai",
+      role: "chat",
+      label,
+      apiKey: writeKey,
+      model: process.env["DEV_OPENAI_MODEL"]?.trim() || "gpt-5",
+      baseUrl: process.env["DEV_OPENAI_BASE_URL"]?.trim() || "",
+      inputPriceCentsPerMtok: parsePrice(process.env["DEV_OPENAI_INPUT_PRICE_CENTS_PER_MTOK"]),
+      outputPriceCentsPerMtok: parsePrice(process.env["DEV_OPENAI_OUTPUT_PRICE_CENTS_PER_MTOK"]),
+      isDefault: chatCount === 0,
+      enabled: true,
     });
     console.log(`[seed-dev] Created LlmProvider(${label}) (encrypted).`);
     return;
@@ -108,37 +110,37 @@ async function seedOpenAi(db: PrismaClient): Promise<void> {
   const envInputPrice = parsePrice(process.env["DEV_OPENAI_INPUT_PRICE_CENTS_PER_MTOK"]);
   const envOutputPrice = parsePrice(process.env["DEV_OPENAI_OUTPUT_PRICE_CENTS_PER_MTOK"]);
 
-  const data: Record<string, unknown> = { apiKey: writeKey, enabled: true };
+  const data: Partial<typeof llmProviders.$inferInsert> = { apiKey: writeKey, enabled: true };
   const filled: string[] = [];
   if (envModel && existing.model === "") {
-    data["model"] = envModel;
+    data.model = envModel;
     filled.push("model");
   }
   if (envBaseUrl && existing.baseUrl === "") {
-    data["baseUrl"] = envBaseUrl;
+    data.baseUrl = envBaseUrl;
     filled.push("baseUrl");
   }
   if (envInputPrice !== null && existing.inputPriceCentsPerMtok === null) {
-    data["inputPriceCentsPerMtok"] = envInputPrice;
+    data.inputPriceCentsPerMtok = envInputPrice;
     filled.push("inputPriceCentsPerMtok");
   }
   if (envOutputPrice !== null && existing.outputPriceCentsPerMtok === null) {
-    data["outputPriceCentsPerMtok"] = envOutputPrice;
+    data.outputPriceCentsPerMtok = envOutputPrice;
     filled.push("outputPriceCentsPerMtok");
   }
 
-  await db.llmProvider.update({ where: { id: existing.id }, data });
+  await db.update(llmProviders).set(data).where(eq(llmProviders.id, existing.id));
   const extras = filled.length ? ` + filled blanks: ${filled.join(", ")}` : "";
   console.log(`[seed-dev] Refreshed LlmProvider(${existing.label}) apiKey${extras}.`);
 }
 
-function parsePrice(raw: string | undefined): number | null {
+function parsePrice(raw: string | undefined): string | null {
   if (!raw) return null;
   const n = Number.parseFloat(raw);
-  return Number.isFinite(n) ? n : null;
+  return Number.isFinite(n) ? n.toString() : null;
 }
 
-async function seedGithubOAuth(db: PrismaClient): Promise<void> {
+async function seedGithubOAuth(db: SeedDb): Promise<void> {
   const clientId = process.env["DEV_GITHUB_CLIENT_ID"];
   const clientSecret = process.env["DEV_GITHUB_CLIENT_SECRET"];
   if (!clientId || !clientSecret) {
@@ -148,19 +150,19 @@ async function seedGithubOAuth(db: PrismaClient): Promise<void> {
     return;
   }
 
-  const existing = await db.oauthProviderConfig.findFirst({ where: { kind: "github" } });
+  const existing = await db.query.oauthProviderConfigs.findFirst({
+    where: (t, { eq }) => eq(t.kind, "github"),
+  });
   const writeSecret = encryptSecret(clientSecret);
 
   if (!existing) {
-    await db.oauthProviderConfig.create({
-      data: {
-        kind: "github",
-        label: "GitHub",
-        clientId,
-        clientSecret: writeSecret,
-        scopes: "read:user user:email repo",
-        enabled: true,
-      },
+    await db.insert(oauthProviderConfigs).values({
+      kind: "github",
+      label: "GitHub",
+      clientId,
+      clientSecret: writeSecret,
+      scopes: "read:user user:email repo",
+      enabled: true,
     });
     console.log("[seed-dev] Created OauthProviderConfig(kind=github) (encrypted).");
     return;
@@ -169,23 +171,18 @@ async function seedGithubOAuth(db: PrismaClient): Promise<void> {
   // Compare client id by-value; rewrap the secret unconditionally — we'd
   // need to decrypt to compare, and round-tripping a freshly-encrypted
   // ciphertext (different IV) wouldn't byte-equal the stored one anyway.
-  const idChanged = existing.clientId !== clientId;
-  if (idChanged) {
-    await db.oauthProviderConfig.update({
-      where: { id: existing.id },
-      data: {
-        clientId,
-        clientSecret: writeSecret,
-        enabled: true,
-      },
-    });
+  if (existing.clientId !== clientId) {
+    await db
+      .update(oauthProviderConfigs)
+      .set({ clientId, clientSecret: writeSecret, enabled: true })
+      .where(eq(oauthProviderConfigs.id, existing.id));
     console.log("[seed-dev] Updated OauthProviderConfig(kind=github) credentials.");
   } else {
     console.log("[seed-dev] OauthProviderConfig(kind=github) already up to date.");
   }
 }
 
-async function seedAzureDevOpsOAuth(db: PrismaClient): Promise<void> {
+async function seedAzureDevOpsOAuth(db: SeedDb): Promise<void> {
   const clientId = process.env["DEV_AZURE_DEVOPS_CLIENT_ID"];
   const clientSecret = process.env["DEV_AZURE_DEVOPS_CLIENT_SECRET"];
   if (!clientId || !clientSecret) {
@@ -196,21 +193,20 @@ async function seedAzureDevOpsOAuth(db: PrismaClient): Promise<void> {
   }
 
   const tenant = process.env["DEV_AZURE_DEVOPS_TENANT_ID"]?.trim() ?? "";
-  const existing = await db.oauthProviderConfig.findFirst({ where: { kind: "azure_devops" } });
+  const existing = await db.query.oauthProviderConfigs.findFirst({
+    where: (t, { eq }) => eq(t.kind, "azure_devops"),
+  });
   const writeSecret = encryptSecret(clientSecret);
 
   if (!existing) {
-    await db.oauthProviderConfig.create({
-      data: {
-        kind: "azure_devops",
-        label: "Azure DevOps",
-        clientId,
-        clientSecret: writeSecret,
-        scopes: "",
-        baseUrl: "",
-        metadata: tenant ? { tenant } : {},
-        enabled: true,
-      },
+    await db.insert(oauthProviderConfigs).values({
+      kind: "azure_devops",
+      label: "Azure DevOps",
+      clientId,
+      clientSecret: writeSecret,
+      scopes: "",
+      metadata: tenant ? { tenant } : {},
+      enabled: true,
     });
     console.log("[seed-dev] Created OauthProviderConfig(kind=azure_devops) (encrypted).");
     return;
@@ -219,36 +215,22 @@ async function seedAzureDevOpsOAuth(db: PrismaClient): Promise<void> {
   // Same approach as GitHub: compare by clientId, rewrap the secret each
   // time (fresh IV → ciphertexts can't be byte-compared). Tenant change
   // also forces a refresh so `.env` edits propagate without a manual UI poke.
-  // Tenant lives in `metadata.tenant`; legacy rows that still carry the
-  // value in `baseUrl` are read as a fallback so a re-seed before the
-  // backfill migration ran still compares against the live tenant.
   const idChanged = existing.clientId !== clientId;
-  const meta: Record<string, unknown> =
-    existing.metadata && typeof existing.metadata === "object" && !Array.isArray(existing.metadata)
-      ? (existing.metadata as Record<string, unknown>)
-      : {};
-  const currentTenant =
-    typeof meta["tenant"] === "string" && meta["tenant"].length > 0
-      ? (meta["tenant"] as string)
-      : existing.baseUrl;
+  const meta = existing.metadata ?? {};
+  const currentTenant = typeof meta.tenant === "string" ? meta.tenant : "";
   const tenantChanged = currentTenant !== tenant;
   if (idChanged || tenantChanged) {
-    const nextMeta: Record<string, unknown> = { ...meta };
-    if (tenant) {
-      nextMeta["tenant"] = tenant;
-    } else {
-      delete nextMeta["tenant"];
-    }
-    await db.oauthProviderConfig.update({
-      where: { id: existing.id },
-      data: {
+    const { tenant: _drop, ...rest } = meta;
+    const nextMeta = tenant ? { ...rest, tenant } : rest;
+    await db
+      .update(oauthProviderConfigs)
+      .set({
         clientId,
         clientSecret: writeSecret,
-        baseUrl: "",
-        metadata: nextMeta as Prisma.InputJsonValue,
+        metadata: nextMeta,
         enabled: true,
-      },
-    });
+      })
+      .where(eq(oauthProviderConfigs.id, existing.id));
     console.log("[seed-dev] Updated OauthProviderConfig(kind=azure_devops) credentials.");
   } else {
     console.log("[seed-dev] OauthProviderConfig(kind=azure_devops) already up to date.");

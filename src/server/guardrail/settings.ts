@@ -7,15 +7,13 @@
 import "server-only";
 import type { GuardrailSettings } from "@/agent/guardrail/registry";
 import type { ProjectId } from "@/core/types";
-import type { db as Db } from "@/server/db";
+import type { Db } from "@/db";
 import { loadProjectSetting } from "@/server/settings/effective";
-
-type Database = typeof Db;
 
 export type { GuardrailSettings };
 
 export async function loadGuardrailSettings(
-  db: Database,
+  db: Db,
   projectId: ProjectId,
 ): Promise<GuardrailSettings> {
   const [enabled, kind, blockOnInjection, blockOffTopic, scopeCheckEnabled, outputCheckEnabled] =

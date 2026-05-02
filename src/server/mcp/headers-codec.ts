@@ -9,15 +9,16 @@
  */
 
 import "server-only";
-import type { Prisma } from "@/db/generated/client";
 import { decryptSecret, encryptSecret } from "@/server/secrets/encryption";
 
 const ENC_KEY = "_enc";
 
+export type EncodedHeaders = Record<string, string> | { [ENC_KEY]: string };
+
 /** Encode a plaintext headers map for storage. Empty stays empty. */
-export function encodeHeaders(plain: Record<string, string>): Prisma.InputJsonValue {
+export function encodeHeaders(plain: Record<string, string>): EncodedHeaders {
   const keys = Object.keys(plain);
-  if (keys.length === 0) return {} satisfies Record<string, never>;
+  if (keys.length === 0) return {};
   const blob = encryptSecret(JSON.stringify(plain));
   return { [ENC_KEY]: blob };
 }

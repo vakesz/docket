@@ -15,7 +15,7 @@
 
 import "server-only";
 import type { Provider } from "next-auth/providers";
-import type { OauthProviderConfig } from "@/db/generated/client";
+import type { OauthProviderConfig } from "@/db/schema/types";
 import { asPlainObject } from "@/lib/json";
 import { azureDevOpsProvider } from "@/providers/azure-devops/auth";
 import { githubAuthProvider } from "@/providers/github/auth";

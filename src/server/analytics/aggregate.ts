@@ -16,9 +16,10 @@
  */
 
 import "server-only";
-import type { db as Db } from "@/server/db";
-
-type Database = typeof Db;
+import { and, eq, gte } from "drizzle-orm";
+import type { ProjectId } from "@/core/types";
+import type { Db } from "@/db";
+import { conversations } from "@/db/schema";
 
 export type DailyBucket = {
   /** YYYY-MM-DD (UTC). */
@@ -75,20 +76,20 @@ function clampDays(days: number): number {
 }
 
 async function aggregate(
-  db: Database,
-  where: { projectId?: string },
+  db: Db,
+  scope: { projectId?: ProjectId },
   days: number,
 ): Promise<AggregateResult> {
   const window = clampDays(days);
   const todayStart = startOfUtcDay(new Date());
   const fromStart = addDays(todayStart, -(window - 1));
 
-  const rows = await db.conversation.findMany({
-    where: {
-      ...where,
-      startedAt: { gte: fromStart },
-    },
-    select: {
+  const rows = await db.query.conversations.findMany({
+    where: and(
+      gte(conversations.startedAt, fromStart),
+      ...(scope.projectId ? [eq(conversations.projectId, scope.projectId)] : []),
+    ),
+    columns: {
       id: true,
       startedAt: true,
       tokensIn: true,
@@ -160,13 +161,13 @@ async function aggregate(
 }
 
 export function aggregateProjectDaily(
-  db: Database,
-  projectId: string,
+  db: Db,
+  projectId: ProjectId,
   days: number,
 ): Promise<AggregateResult> {
   return aggregate(db, { projectId }, days);
 }
 
-export function aggregateGlobalDaily(db: Database, days: number): Promise<AggregateResult> {
+export function aggregateGlobalDaily(db: Db, days: number): Promise<AggregateResult> {
   return aggregate(db, {}, days);
 }

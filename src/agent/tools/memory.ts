@@ -14,9 +14,11 @@
  */
 
 import "server-only";
+import { and, arrayContains, desc, eq, ilike, or } from "drizzle-orm";
 import { z } from "zod";
 import type { ToolFactory } from "@/agent/tools/types";
 import { defineTool, fail, ok } from "@/agent/tools/types";
+import { memoryEntries } from "@/db/schema";
 
 export const listMemoryTool: ToolFactory = (ctx) =>
   defineTool({
@@ -32,34 +34,33 @@ export const listMemoryTool: ToolFactory = (ctx) =>
     // user-authored. Body markdown is fetched separately via get_memory.
     guardrailScan: { mode: "fields", untrusted: ["[].title"] },
     handler: async (args) => {
-      const rows = await ctx.db.memoryEntry.findMany({
-        where: {
-          projectId: ctx.projectId,
-          ...(args.tag ? { tags: { has: args.tag } } : {}),
-          ...(args.search
-            ? {
-                OR: [
-                  { title: { contains: args.search, mode: "insensitive" } },
-                  { body: { contains: args.search, mode: "insensitive" } },
-                ],
-              }
-            : {}),
-        },
-        orderBy: [{ updatedAt: "desc" }],
-        take: args.limit,
-        select: {
-          id: true,
-          title: true,
-          tags: true,
-          source: true,
-          updatedAt: true,
-        },
-      });
+      const searchPattern = args.search ? `%${args.search}%` : null;
+      const searchClause = searchPattern
+        ? or(ilike(memoryEntries.title, searchPattern), ilike(memoryEntries.body, searchPattern))
+        : undefined;
+      const rows = await ctx.db
+        .select({
+          id: memoryEntries.id,
+          title: memoryEntries.title,
+          tags: memoryEntries.tags,
+          source: memoryEntries.source,
+          updatedAt: memoryEntries.updatedAt,
+        })
+        .from(memoryEntries)
+        .where(
+          and(
+            eq(memoryEntries.projectId, ctx.projectId),
+            ...(args.tag ? [arrayContains(memoryEntries.tags, [args.tag])] : []),
+            ...(searchClause ? [searchClause] : []),
+          ),
+        )
+        .orderBy(desc(memoryEntries.updatedAt))
+        .limit(args.limit);
       return ok(
         rows.map((r) => ({
           id: r.id,
           title: r.title,
-          tags: r.tags,
+          tags: [...r.tags],
           source: r.source,
           updated_at: r.updatedAt,
         })),
@@ -76,15 +77,15 @@ export const getMemoryTool: ToolFactory = (ctx) =>
     // server-controlled metadata.
     guardrailScan: { mode: "fields", untrusted: ["title", "body"] },
     handler: async ({ memory_id: memoryId }) => {
-      const row = await ctx.db.memoryEntry.findFirst({
-        where: { id: memoryId, projectId: ctx.projectId },
+      const row = await ctx.db.query.memoryEntries.findFirst({
+        where: and(eq(memoryEntries.id, memoryId), eq(memoryEntries.projectId, ctx.projectId)),
       });
       if (!row) return fail(`memory entry '${memoryId}' not found in this project`);
       return ok({
         id: row.id,
         title: row.title,
         body: row.body,
-        tags: row.tags,
+        tags: [...row.tags],
         source: row.source,
         updated_at: row.updatedAt,
       });

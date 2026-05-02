@@ -1,4 +1,5 @@
 import "server-only";
+import { and, count, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import {
   asProposalId,
@@ -7,7 +8,9 @@ import {
   TRANSITION_INTENTS,
   type UserId,
 } from "@/core/types";
-import type { Proposal as ProposalRow } from "@/db/generated/client";
+import type { Db } from "@/db";
+import { audits, proposals } from "@/db/schema";
+import type { Proposal as ProposalRow } from "@/db/schema/types";
 import {
   hydrateProposal,
   proposeAssigneeChange,
@@ -33,10 +36,6 @@ const ItemKindEnum = z.enum(ITEM_KINDS);
 const TransitionIntentEnum = z.enum(TRANSITION_INTENTS);
 const ReactionTargetKindEnum = z.enum(["item", "comment"]);
 const ReactionOpEnum = z.enum(["add", "remove"]);
-// Reaction kinds are provider-declared (capabilities.supportedReactions); the
-// router takes any opaque non-empty string and the provider validates against
-// its own list inside addReaction/removeReaction. 64 is comfortably above
-// every real-world reaction shortcode.
 const ReactionKindSchema = z.string().min(1).max(64);
 
 const ListInput = projectSlugSchema.extend({
@@ -48,12 +47,12 @@ const CountInput = projectSlugSchema.extend({
   status: z.enum(["pending", "confirmed", "rejected", "all"]).default("pending"),
 });
 
-const ProposalIdInput = projectSlugSchema.extend({ proposalId: z.string().min(1) });
+const ProposalIdInput = projectSlugSchema.extend({
+  proposalId: z.string().min(1).transform(asProposalId),
+});
 
 const AuditListInput = projectSlugSchema.extend({
-  /// When set, returns only audit rows for one proposal.
-  proposalId: z.string().min(1).optional(),
-  /// When set, filters to one action kind (e.g. `proposal.confirm.failed`).
+  proposalId: z.string().min(1).transform(asProposalId).optional(),
   action: z.string().min(1).max(64).optional(),
   limit: z.number().int().min(1).max(200).default(50),
 });
@@ -105,56 +104,30 @@ const ProposeNewItemInput = projectSlugSchema.extend({
 });
 
 type ProposalCtx = {
-  db: typeof import("@/server/db").db;
+  db: Db;
   projectId: ProjectId;
   userId: UserId;
   origin: "ui";
 };
 
-function ctxFor(ctx: {
-  db: typeof import("@/server/db").db;
-  projectId: ProjectId;
-  userId: UserId;
-}): ProposalCtx {
+function ctxFor(ctx: { db: Db; projectId: ProjectId; userId: UserId }): ProposalCtx {
   return { db: ctx.db, projectId: ctx.projectId, userId: ctx.userId, origin: "ui" };
 }
 
-/**
- * Run a builder, route through `maybeAutoAccept`, and shape the response
- * the UI expects. Every `propose*` mutation collapses to one call.
- */
 async function stageAndAccept(c: ProposalCtx, builderResult: Promise<ProposalRow>) {
   const row = await maybeAutoAccept(c, await builderResult);
   return { id: row.id, status: row.status, diff: diffOf(hydrateProposal(row)) };
 }
 
-/**
- * Proposals API.
- *
- * - Reads (`list`, `get`) live on `projectScopedProcedure` so viewers can see
- *   what the team is staging.
- * - Stages (`propose*`) use `projectScopedMutationProcedure`, which rejects
- *   `viewer` members and blocks when the system is in read-only mode.
- * - `confirm`/`reject` use `projectScopedApproverProcedure`, which further
- *   restricts execution to project owners and members with role `approver`
- *   (the human-in-the-loop gate on writes).
- *
- * `get` returns the persisted row plus a freshly computed `diff`. The diff
- * isn't stored — it's derived from the payload at read time so updates to
- * the diff renderer apply retroactively to in-flight proposals.
- */
 export const proposalsRouter = router({
   list: projectScopedProcedure.input(ListInput).query(async ({ ctx, input }) => {
-    // Explicit select keeps the `payload` JSON blob (the full proposed
-    // change body) off the wire — list rows render summaries only.
-    return ctx.db.proposal.findMany({
-      where: {
-        projectId: ctx.projectId,
-        ...(input.status === "all" ? {} : { status: input.status }),
-      },
-      orderBy: [{ createdAt: "desc" }],
-      take: input.limit,
-      select: {
+    const conditions = [eq(proposals.projectId, ctx.projectId)];
+    if (input.status !== "all") conditions.push(eq(proposals.status, input.status));
+    return ctx.db.query.proposals.findMany({
+      where: and(...conditions),
+      orderBy: [desc(proposals.createdAt)],
+      limit: input.limit,
+      columns: {
         id: true,
         kind: true,
         status: true,
@@ -167,19 +140,20 @@ export const proposalsRouter = router({
     });
   }),
 
-  count: projectScopedProcedure.input(CountInput).query(({ ctx, input }) => {
-    return ctx.db.proposal.count({
-      where: {
-        projectId: ctx.projectId,
-        ...(input.status === "all" ? {} : { status: input.status }),
-      },
-    });
+  count: projectScopedProcedure.input(CountInput).query(async ({ ctx, input }) => {
+    const conditions = [eq(proposals.projectId, ctx.projectId)];
+    if (input.status !== "all") conditions.push(eq(proposals.status, input.status));
+    const rows = await ctx.db
+      .select({ c: count() })
+      .from(proposals)
+      .where(and(...conditions));
+    return rows[0]?.c ?? 0;
   }),
 
   get: projectScopedProcedure.input(ProposalIdInput).query(async ({ ctx, input }) => {
     const row = assertFound(
-      await ctx.db.proposal.findFirst({
-        where: { id: input.proposalId, projectId: ctx.projectId },
+      await ctx.db.query.proposals.findFirst({
+        where: and(eq(proposals.id, input.proposalId), eq(proposals.projectId, ctx.projectId)),
       }),
       "proposal not found",
     );
@@ -283,28 +257,21 @@ export const proposalsRouter = router({
   confirm: projectScopedApproverProcedure
     .input(ProposalIdInput)
     .mutation(async ({ ctx, input }) => {
-      return confirmProposal(ctxFor(ctx), asProposalId(input.proposalId));
+      return confirmProposal(ctxFor(ctx), input.proposalId);
     }),
 
   reject: projectScopedApproverProcedure.input(ProposalIdInput).mutation(async ({ ctx, input }) => {
-    return rejectProposal(ctxFor(ctx), asProposalId(input.proposalId));
+    return rejectProposal(ctxFor(ctx), input.proposalId);
   }),
 
-  /**
-   * Audit feed for the project. Available to anyone with project access
-   * (including viewers) — the trail is meant to be transparent. Per the
-   * Audit model docstring, rows are append-only and never mutated, so
-   * exposing reads is safe even to read-only members.
-   */
   auditList: projectScopedProcedure.input(AuditListInput).query(async ({ ctx, input }) => {
-    return ctx.db.audit.findMany({
-      where: {
-        projectId: ctx.projectId,
-        ...(input.proposalId ? { proposalId: input.proposalId } : {}),
-        ...(input.action ? { action: input.action } : {}),
-      },
-      orderBy: [{ createdAt: "desc" }],
-      take: input.limit,
+    const conditions = [eq(audits.projectId, ctx.projectId)];
+    if (input.proposalId) conditions.push(eq(audits.proposalId, input.proposalId));
+    if (input.action) conditions.push(eq(audits.action, input.action));
+    return ctx.db.query.audits.findMany({
+      where: and(...conditions),
+      orderBy: [desc(audits.createdAt)],
+      limit: input.limit,
     });
   }),
 });

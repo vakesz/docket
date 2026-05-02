@@ -15,13 +15,11 @@ import type { Guardrail, GuardrailKind } from "@/agent/guardrail/types";
 import { AnthropicJudgeClient } from "@/agent/llm/anthropic";
 import { OpenAiJudgeClient } from "@/agent/llm/openai";
 import { isLlmKind, type LlmKind } from "@/agent/llm/types";
-import type { LlmProvider, Project } from "@/db/generated/client";
-import type { db as Db } from "@/server/db";
+import type { Db } from "@/db";
+import type { LlmProvider, Project } from "@/db/schema/types";
 import { resolveProviderForRole } from "@/server/llm/lookup";
 import { logger } from "@/server/logger";
 import { decryptSecret } from "@/server/secrets/encryption";
-
-type Database = typeof Db;
 
 export type GuardrailSettings = {
   enabled: boolean;
@@ -37,7 +35,7 @@ export type GuardrailContext = {
   settings: GuardrailSettings;
 };
 
-export async function selectGuardrailFor(db: Database, ctx: GuardrailContext): Promise<Guardrail> {
+export async function selectGuardrailFor(db: Db, ctx: GuardrailContext): Promise<Guardrail> {
   if (!ctx.settings.enabled) return new NoopGuardrail();
 
   switch (ctx.settings.kind) {
@@ -72,10 +70,7 @@ export async function selectGuardrailFor(db: Database, ctx: GuardrailContext): P
   }
 }
 
-async function tryBuildLlmJudge(
-  db: Database,
-  ctx: GuardrailContext,
-): Promise<LlmJudgeGuardrail | null> {
+async function tryBuildLlmJudge(db: Db, ctx: GuardrailContext): Promise<LlmJudgeGuardrail | null> {
   const row = await resolveProviderForRole(db, "guardrail", [
     ctx.project.defaultGuardrailProviderId,
   ]);
@@ -151,5 +146,6 @@ function buildJudgeClient(row: LlmProvider): JudgeClient | null {
 
 function decimalToNumber(value: LlmProvider["inputPriceCentsPerMtok"]): number | null {
   if (value === null || value === undefined) return null;
-  return typeof value === "number" ? value : Number(value);
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
 }

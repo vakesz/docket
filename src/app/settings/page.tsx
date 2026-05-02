@@ -1,7 +1,10 @@
+import { and, desc, eq, exists, isNull, or } from "drizzle-orm";
 import { redirect } from "next/navigation";
+import { asUserId } from "@/core/types";
+import { db } from "@/db";
+import { projectMemberships, projects, users } from "@/db/schema";
 import { publicBaseUrl } from "@/lib/public-base-url";
 import { auth } from "@/server/auth";
-import { db } from "@/server/db";
 import { requireSetupComplete } from "@/server/setup/guard";
 import { SettingsShell } from "@/ui/settings/settings-shell";
 
@@ -48,7 +51,7 @@ export default async function SettingsPage({
     redirect("/");
   }
 
-  const userId = session.user.id;
+  const userId = asUserId(session.user.id);
   const params = await searchParams;
   const requested = params.project ?? null;
   const requestedSection: SectionKey | undefined =
@@ -56,7 +59,17 @@ export default async function SettingsPage({
       ? (params.section as SectionKey)
       : undefined;
 
-  const accessOr = [{ ownerUserId: userId }, { memberships: { some: { userId } } }];
+  const accessClause = or(
+    eq(projects.ownerUserId, userId),
+    exists(
+      db
+        .select({ id: projectMemberships.id })
+        .from(projectMemberships)
+        .where(
+          and(eq(projectMemberships.projectId, projects.id), eq(projectMemberships.userId, userId)),
+        ),
+    ),
+  );
 
   // ?project=<slug> wins; fall back to the user's pinned default (id), then
   // to the most-recently-touched membership. The slug branch and the user
@@ -64,29 +77,33 @@ export default async function SettingsPage({
   // (?project= matches) doesn't pay for the user lookup we won't use.
   const [requestedProject, me] = await Promise.all([
     requested
-      ? db.project.findFirst({
-          where: { slug: requested, archivedAt: null, OR: accessOr },
-          select: { id: true, slug: true, name: true },
+      ? db.query.projects.findFirst({
+          where: and(eq(projects.slug, requested), isNull(projects.archivedAt), accessClause),
+          columns: { id: true, slug: true, name: true },
         })
-      : Promise.resolve(null),
-    db.user.findUnique({
-      where: { id: userId },
-      select: { defaultProjectId: true },
+      : Promise.resolve(undefined),
+    db.query.users.findFirst({
+      where: eq(users.id, userId),
+      columns: { defaultProjectId: true },
     }),
   ]);
 
   const project =
     requestedProject ??
     (me?.defaultProjectId
-      ? await db.project.findFirst({
-          where: { id: me.defaultProjectId, archivedAt: null, OR: accessOr },
-          select: { id: true, slug: true, name: true },
+      ? await db.query.projects.findFirst({
+          where: and(
+            eq(projects.id, me.defaultProjectId),
+            isNull(projects.archivedAt),
+            accessClause,
+          ),
+          columns: { id: true, slug: true, name: true },
         })
-      : null) ??
-    (await db.project.findFirst({
-      where: { archivedAt: null, OR: accessOr },
-      orderBy: [{ updatedAt: "desc" }],
-      select: { id: true, slug: true, name: true },
+      : undefined) ??
+    (await db.query.projects.findFirst({
+      where: and(isNull(projects.archivedAt), accessClause),
+      orderBy: [desc(projects.updatedAt)],
+      columns: { id: true, slug: true, name: true },
     }));
 
   const publicBase = publicBaseUrl();

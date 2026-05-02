@@ -7,10 +7,10 @@
 
 import "server-only";
 import { DEFAULT_JUDGE_PROMPTS, type ResolvedJudgePrompts } from "@/agent/guardrail/judge-prompts";
-import type { db as Db } from "@/server/db";
+import type { Db } from "@/db";
 import { loadGlobalSetting } from "@/server/settings/effective";
 
-export async function loadJudgePrompts(db: typeof Db): Promise<ResolvedJudgePrompts> {
+export async function loadJudgePrompts(db: Db): Promise<ResolvedJudgePrompts> {
   const [injection, scope, output] = await Promise.all([
     loadGlobalSetting(db, "prompt.guardrail.injection"),
     loadGlobalSetting(db, "prompt.guardrail.scope"),

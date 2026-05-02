@@ -12,32 +12,31 @@
  *
  * Allowed callers are listed in
  * `src/__arch__/no-audit-write-leak.test.ts`. To add a new event,
- * extend this module — don't add `db.audit.create` calls elsewhere.
+ * extend this module — don't add `db.insert(audits)` calls elsewhere.
  */
 
 import "server-only";
-import type { Prisma } from "@/db/generated/client";
-import type { db as Db } from "@/server/db";
+import type { ProjectId, UserId } from "@/core/types";
+import type { Db } from "@/db";
+import { audits } from "@/db/schema";
 import { errFields } from "@/server/log-fields";
 import { logger } from "@/server/logger";
 
 type WriteArgs = {
-  db: typeof Db;
-  projectId: string;
-  userId: string;
+  db: Db;
+  projectId: ProjectId;
+  userId: UserId;
   action: string;
-  payload: Prisma.InputJsonValue;
+  payload: Record<string, unknown>;
 };
 
 async function writeAudit(args: WriteArgs): Promise<void> {
   try {
-    await args.db.audit.create({
-      data: {
-        projectId: args.projectId,
-        userId: args.userId,
-        action: args.action,
-        payload: args.payload,
-      },
+    await args.db.insert(audits).values({
+      projectId: args.projectId,
+      userId: args.userId,
+      action: args.action,
+      payload: args.payload,
     });
   } catch (err) {
     logger.error(
@@ -53,9 +52,9 @@ async function writeAudit(args: WriteArgs): Promise<void> {
 }
 
 export async function recordMcpOauthConnected(args: {
-  db: typeof Db;
-  projectId: string;
-  userId: string;
+  db: Db;
+  projectId: ProjectId;
+  userId: UserId;
   mcpServerId: string;
   mcpServerName: string;
   issuer: string;
@@ -76,9 +75,9 @@ export async function recordMcpOauthConnected(args: {
 }
 
 export async function recordMcpOauthDisconnected(args: {
-  db: typeof Db;
-  projectId: string;
-  userId: string;
+  db: Db;
+  projectId: ProjectId;
+  userId: UserId;
   mcpServerId: string;
   mcpServerName: string;
 }): Promise<void> {

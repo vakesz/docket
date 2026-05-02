@@ -8,9 +8,12 @@
  */
 
 import "server-only";
+import { and, asc, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import { z } from "zod";
 import type { AgentTool, ToolContext, ToolFactory } from "@/agent/tools/types";
 import { defineTool, fail, ok, withProvider } from "@/agent/tools/types";
+import { asProviderItemId, type ItemKind, type ItemState } from "@/core/types";
+import { items } from "@/db/schema";
 
 export const listItemsTool: ToolFactory = (ctx) =>
   defineTool({
@@ -31,43 +34,44 @@ export const listItemsTool: ToolFactory = (ctx) =>
     // server-generated ids / provider-controlled enum strings.
     guardrailScan: { mode: "fields", untrusted: ["[].title"] },
     handler: async (args) => {
-      const items = await ctx.db.item.findMany({
-        where: {
-          projectId: ctx.projectId,
-          archived: false,
-          ...(args.kind ? { kind: args.kind } : {}),
-          ...(args.bucket === "open"
-            ? { state: { in: ["new", "active", "blocked", "needs_info"] } }
-            : args.bucket === "closed"
-              ? { state: { in: ["resolved", "closed"] } }
-              : {}),
-          ...(args.search
-            ? {
-                OR: [
-                  { title: { contains: args.search, mode: "insensitive" } },
-                  { providerItemId: { contains: args.search, mode: "insensitive" } },
-                ],
-              }
-            : {}),
-        },
-        orderBy: [{ updatedAt: "desc" }],
-        take: args.limit,
-        select: {
-          providerItemId: true,
-          kind: true,
-          title: true,
-          state: true,
-          assignee: true,
-          url: true,
-        },
-      });
+      const openStates: ItemState[] = ["new", "active", "blocked", "needs_info"];
+      const closedStates: ItemState[] = ["resolved", "closed"];
+      const searchPattern = args.search ? `%${args.search}%` : null;
+      const searchClause = searchPattern
+        ? or(ilike(items.title, searchPattern), ilike(items.providerItemId, searchPattern))
+        : undefined;
+      const rows = await ctx.db
+        .select({
+          providerItemId: items.providerItemId,
+          kind: items.kind,
+          title: items.title,
+          state: items.state,
+          assignees: items.assignees,
+          url: items.url,
+        })
+        .from(items)
+        .where(
+          and(
+            eq(items.projectId, ctx.projectId),
+            eq(items.archived, false),
+            ...(args.kind ? [eq(items.kind, args.kind as ItemKind)] : []),
+            ...(args.bucket === "open"
+              ? [inArray(items.state, openStates)]
+              : args.bucket === "closed"
+                ? [inArray(items.state, closedStates)]
+                : []),
+            ...(searchClause ? [searchClause] : []),
+          ),
+        )
+        .orderBy(desc(items.updatedAt))
+        .limit(args.limit);
       return ok(
-        items.map((i) => ({
+        rows.map((i) => ({
           item_id: i.providerItemId,
           kind: i.kind,
           title: i.title,
           state: i.state,
-          assignee: i.assignee,
+          assignee: i.assignees[0] ?? null,
           url: i.url,
         })),
       );
@@ -94,9 +98,12 @@ export const getItemTool: ToolFactory = (ctx) =>
           "item_id is required when no item is anchored on this conversation; pass an explicit id like 'owner/repo#42'.",
         );
       }
-      const item = await ctx.db.item.findFirst({
-        where: { projectId: ctx.projectId, providerItemId: itemId },
-        include: { comments: { orderBy: [{ createdAt: "asc" }] } },
+      const item = await ctx.db.query.items.findFirst({
+        where: and(
+          eq(items.projectId, ctx.projectId),
+          eq(items.providerItemId, asProviderItemId(itemId)),
+        ),
+        with: { comments: { orderBy: (c) => [asc(c.createdAt)] } },
       });
       if (!item) return fail(`Item '${itemId}' not in cache; the user may need to sync.`);
       return ok({
@@ -104,9 +111,9 @@ export const getItemTool: ToolFactory = (ctx) =>
         kind: item.kind,
         title: item.title,
         state: item.state,
-        assignee: item.assignee,
+        assignee: item.assignees[0] ?? null,
         author: item.author,
-        tags: item.tags,
+        tags: [...item.tags],
         url: item.url,
         description: item.description,
         comments: item.comments.map((c) => ({

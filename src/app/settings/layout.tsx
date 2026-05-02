@@ -1,7 +1,10 @@
+import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
+import { asUserId } from "@/core/types";
+import { db } from "@/db";
+import { users } from "@/db/schema";
 import { auth } from "@/server/auth";
-import { db } from "@/server/db";
 import { loadGlobalSetting } from "@/server/settings/effective";
 import { requireSetupComplete } from "@/server/setup/guard";
 import { createCaller } from "@/server/trpc-caller";
@@ -38,19 +41,19 @@ export default async function SettingsLayout({
     redirect("/");
   }
 
-  const userId = session.user.id;
+  const userId = asUserId(session.user.id);
   const trpc = await createCaller();
 
-  const [me, projects, readOnly] = await Promise.all([
-    db.user.findUnique({
-      where: { id: userId },
-      select: { defaultProjectId: true },
+  const [me, userProjects, readOnly] = await Promise.all([
+    db.query.users.findFirst({
+      where: eq(users.id, userId),
+      columns: { defaultProjectId: true },
     }),
     trpc.projects.list(),
     loadGlobalSetting(db, "app.read-only"),
   ]);
 
-  const projectOptions = projects.map((p) => ({
+  const projectOptions = userProjects.map((p) => ({
     id: p.id,
     slug: p.slug,
     name: p.name,

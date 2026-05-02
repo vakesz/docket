@@ -27,9 +27,9 @@ import { asProjectId, asUserId } from "@/core/types";
 // = true) so the trailing slot is populated in the canonical run.
 const fakeCtx: ToolContext = {
   db: {
-    mcpServerConfig: { findMany: async () => [] },
-    setting: {
-      findFirst: async () => null,
+    query: {
+      mcpServerConfigs: { findMany: async () => [] },
+      settings: { findFirst: async () => undefined },
     },
   } as unknown as ToolContext["db"],
   projectId: asProjectId("proj_arch_test"),

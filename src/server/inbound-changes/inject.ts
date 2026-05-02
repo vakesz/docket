@@ -16,13 +16,18 @@
  */
 
 import "server-only";
-import { assertItemState, type Item as CanonicalItem, type ProjectId } from "@/core/types";
-import type { Item as ItemRow } from "@/db/generated/client";
+import {
+  assertItemState,
+  type Item as CanonicalItem,
+  type ItemId,
+  type ProjectId,
+  type ProviderItemId,
+} from "@/core/types";
+import type { Db } from "@/db";
+import { messages } from "@/db/schema";
+import type { Item as ItemRow } from "@/db/schema/types";
 import { activeConversationsForItem } from "@/server/conversations/storage";
-import type { db as Db } from "@/server/db";
 import { logger } from "@/server/logger";
-
-type Database = typeof Db;
 
 export type MaterialChange = {
   field: "state" | "title" | "description" | "assignee";
@@ -35,7 +40,7 @@ export type MaterialChange = {
  * fields a human reasoning about a ticket would care about count.
  */
 export function materialDiff(
-  cached: Pick<ItemRow, "state" | "title" | "description" | "assignee">,
+  cached: Pick<ItemRow, "state" | "title" | "description" | "assignees">,
   fresh: CanonicalItem,
 ): MaterialChange[] {
   const out: MaterialChange[] = [];
@@ -56,11 +61,13 @@ export function materialDiff(
       after: summarize(fresh.description),
     });
   }
-  if ((cached.assignee ?? "") !== (fresh.assignee ?? "")) {
+  const cachedAssignee = cached.assignees[0] ?? "";
+  const freshAssignee = fresh.assignee ?? "";
+  if (cachedAssignee !== freshAssignee) {
     out.push({
       field: "assignee",
-      before: cached.assignee ?? "(none)",
-      after: fresh.assignee ?? "(none)",
+      before: cachedAssignee || "(none)",
+      after: freshAssignee || "(none)",
     });
   }
   return out;
@@ -77,15 +84,15 @@ function summarize(md: string): string {
  * synthetic system message describing the change. No-op if there are no
  * active conversations.
  *
- * `itemId` here is the cached `Item.id` (cuid), not the providerItemId, so
+ * `itemId` here is the cached `Item.id` (uuid), not the providerItemId, so
  * the FK on `Conversation.itemId` matches.
  */
 export async function injectExternalChange(
-  db: Database,
+  db: Db,
   args: {
     projectId: ProjectId;
-    itemId: string;
-    providerItemId: string;
+    itemId: ItemId;
+    providerItemId: ProviderItemId;
     changes: readonly MaterialChange[];
   },
 ): Promise<{ injectedInto: number }> {
@@ -97,15 +104,15 @@ export async function injectExternalChange(
   const body = formatInboundChange(args.providerItemId, args.changes);
   // One batched insert instead of N parallel `INSERT` round-trips. A project
   // with 50 active conversations on a chatty item used to cost 50 separate
-  // statements per material change; `createMany` collapses that to a single
-  // multi-row insert.
-  await db.message.createMany({
-    data: conversations.map((conv) => ({
+  // statements per material change; the multi-row insert collapses that to a
+  // single statement.
+  await db.insert(messages).values(
+    conversations.map((conv) => ({
       conversationId: conv.id,
       role: "system" as const,
       content: body,
     })),
-  });
+  );
   logger.debug(
     {
       projectId: args.projectId,

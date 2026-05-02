@@ -1,17 +1,16 @@
 import "server-only";
 import { TRPCError } from "@trpc/server";
+import { and, count, eq } from "drizzle-orm";
 import { z } from "zod";
 import { LLM_KINDS } from "@/agent/llm/types";
-import type { Prisma } from "@/db/generated/client";
-import { asPlainObject } from "@/lib/json";
-import type { db as Db } from "@/server/db";
+import type { Db } from "@/db";
+import type { OauthProviderConfigMetadata } from "@/db/schema";
+import { llmProviders, oauthProviderConfigs } from "@/db/schema";
 import { LLM_ROLES } from "@/server/llm/lookup";
 import { logger } from "@/server/logger";
 import { getProviderSpec, listProviderSpecs } from "@/server/provider-registry";
 import { encryptSecret } from "@/server/secrets/encryption";
 import { getSetupStatus, type SetupStatus } from "@/server/setup/status";
-
-type Database = typeof Db;
 
 /**
  * Per-LLM-kind defaults for label and model when the wizard input leaves
@@ -44,10 +43,9 @@ const PriceCentsPerMtok = z.number().min(0).max(1_000_000).nullable();
 
 /**
  * Per-provider OAuth input the wizard collects. `typeId` picks which spec
- * the row applies to; `aux` carries the provider-specific extra (GitHub
- * Enterprise base URL, Entra tenant id, etc.) and bootstrap routes it via
- * the spec's `oauth.auxSlot` to either the `baseUrl` column or
- * `metadata.tenant`.
+ * the row applies to; `aux` carries the provider-specific extra (Entra
+ * tenant id, etc.) and bootstrap routes it via the spec's `oauth.auxSlot`
+ * to `metadata.tenant`.
  *
  * Cross-field validation (per-provider scope defaults, aux-required) runs
  * inside `applyBootstrap` against the registry so the schema stays
@@ -140,10 +138,7 @@ export type BootstrapInputType = z.infer<typeof BootstrapInput>;
  * `setup.complete` is true to stop a stale tab from silently
  * re-bootstrapping a running deployment.
  */
-export async function applyBootstrap(
-  db: Database,
-  input: BootstrapInputType,
-): Promise<SetupStatus> {
+export async function applyBootstrap(db: Db, input: BootstrapInputType): Promise<SetupStatus> {
   const before = await getSetupStatus(db);
   if (before.complete) {
     throw new TRPCError({
@@ -175,25 +170,21 @@ export async function applyBootstrap(
         message: `${spec.displayName}: '${spec.oauth.auxLabel}' is required.`,
       });
     }
-    const existing = await db.oauthProviderConfig.findFirst({
-      where: { kind: oauth.typeId },
+    const existing = await db.query.oauthProviderConfigs.findFirst({
+      where: eq(oauthProviderConfigs.kind, oauth.typeId),
     });
     if (existing) {
       logger.info({ kind: oauth.typeId }, "setup: oauth provider already exists; skipping");
       continue;
     }
-    const { baseUrl, metadata } = persistAux(spec.oauth.auxSlot, aux);
-    await db.oauthProviderConfig.create({
-      data: {
-        kind: oauth.typeId,
-        label: oauth.label.trim() || spec.oauth.defaultLabel,
-        clientId: oauth.clientId.trim(),
-        clientSecret: encryptSecret(oauth.clientSecret),
-        scopes: oauth.scopes.trim() || spec.oauth.defaultScopes,
-        baseUrl,
-        metadata,
-        enabled: true,
-      },
+    await db.insert(oauthProviderConfigs).values({
+      kind: oauth.typeId,
+      label: oauth.label.trim() || spec.oauth.defaultLabel,
+      clientId: oauth.clientId.trim(),
+      clientSecret: encryptSecret(oauth.clientSecret),
+      scopes: oauth.scopes.trim() || spec.oauth.defaultScopes,
+      metadata: persistAux(spec.oauth.auxSlot, aux),
+      enabled: true,
     });
     logger.info({ kind: oauth.typeId }, "setup: oauth provider created");
   }
@@ -214,8 +205,8 @@ export async function applyBootstrap(
     // Skip if a row already exists for this (kind, role) — the wizard is
     // idempotent against returning operators who configured one role
     // earlier and are now adding the other.
-    const existing = await db.llmProvider.findFirst({
-      where: { kind: llm.kind, role: llm.role },
+    const existing = await db.query.llmProviders.findFirst({
+      where: and(eq(llmProviders.kind, llm.kind), eq(llmProviders.role, llm.role)),
     });
     if (existing) {
       logger.info(
@@ -227,20 +218,24 @@ export async function applyBootstrap(
     // First row of this role in the deployment becomes its `isDefault`,
     // so the chat / guardrail resolvers have something to dispatch to
     // without further admin work. Roles default independently.
-    const anyForRole = await db.llmProvider.count({ where: { role: llm.role } });
-    await db.llmProvider.create({
-      data: {
-        kind: llm.kind,
-        role: llm.role,
-        label: llm.label.trim() || defaults.label,
-        apiKey: encryptSecret(llm.apiKey),
-        model: llm.model.trim() || defaults.model,
-        baseUrl: llm.baseUrl.trim(),
-        inputPriceCentsPerMtok: llm.inputPriceCentsPerMtok,
-        outputPriceCentsPerMtok: llm.outputPriceCentsPerMtok,
-        isDefault: anyForRole === 0,
-        enabled: true,
-      },
+    const anyForRoleRows = await db
+      .select({ c: count() })
+      .from(llmProviders)
+      .where(eq(llmProviders.role, llm.role));
+    const anyForRole = anyForRoleRows[0]?.c ?? 0;
+    await db.insert(llmProviders).values({
+      kind: llm.kind,
+      role: llm.role,
+      label: llm.label.trim() || defaults.label,
+      apiKey: encryptSecret(llm.apiKey),
+      model: llm.model.trim() || defaults.model,
+      baseUrl: llm.baseUrl.trim(),
+      inputPriceCentsPerMtok:
+        llm.inputPriceCentsPerMtok === null ? null : llm.inputPriceCentsPerMtok.toString(),
+      outputPriceCentsPerMtok:
+        llm.outputPriceCentsPerMtok === null ? null : llm.outputPriceCentsPerMtok.toString(),
+      isDefault: anyForRole === 0,
+      enabled: true,
     });
     logger.info(
       { kind: llm.kind, role: llm.role, isDefault: anyForRole === 0 },
@@ -258,17 +253,17 @@ export async function applyBootstrap(
 /**
  * Route the OAuth form's auxiliary input to the storage slot the spec
  * declares. Mirrors `writeAux` in `src/server/oauth/router.ts` so wizard
- * and admin-edit paths persist the same shape.
+ * and admin-edit paths persist the same shape. Currently only the
+ * `metadataTenant` slot is used — the legacy `baseUrl` slot was retired
+ * along with the column.
  */
 function persistAux(
   auxSlot: "baseUrl" | "metadataTenant",
   value: string,
-): { baseUrl: string; metadata: Prisma.InputJsonValue } {
+): OauthProviderConfigMetadata {
   const trimmed = value.trim();
-  if (auxSlot === "metadataTenant") {
-    const meta = asPlainObject(undefined);
-    if (trimmed) meta["tenant"] = trimmed;
-    return { baseUrl: "", metadata: meta as Prisma.InputJsonValue };
+  if (auxSlot === "metadataTenant" && trimmed) {
+    return { tenant: trimmed };
   }
-  return { baseUrl: trimmed, metadata: {} as Prisma.InputJsonValue };
+  return {};
 }

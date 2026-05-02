@@ -15,9 +15,11 @@
  */
 
 import "server-only";
+import { and, asc, eq } from "drizzle-orm";
 import { callMcpTool, listMcpTools, type McpServer } from "@/agent/mcp/client";
 import type { AgentTool, ToolContext } from "@/agent/tools/types";
 import { fail, ok } from "@/agent/tools/types";
+import { mcpServerConfigs } from "@/db/schema";
 import { errFields } from "@/server/log-fields";
 import { logger } from "@/server/logger";
 import { decodeHeaders } from "@/server/mcp/headers-codec";
@@ -26,9 +28,9 @@ import { ensureFreshAccessToken } from "@/server/mcp/oauth/refresh";
 const SEPARATOR = "__";
 
 async function loadServers(ctx: ToolContext): Promise<McpServer[]> {
-  const rows = await ctx.db.mcpServerConfig.findMany({
-    where: { projectId: ctx.projectId, enabled: true },
-    orderBy: [{ name: "asc" }],
+  const rows = await ctx.db.query.mcpServerConfigs.findMany({
+    where: and(eq(mcpServerConfigs.projectId, ctx.projectId), eq(mcpServerConfigs.enabled, true)),
+    orderBy: [asc(mcpServerConfigs.name)],
   });
   const servers: McpServer[] = [];
   for (const row of rows) {

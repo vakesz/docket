@@ -14,8 +14,7 @@
       "!**/dist",
       "!**/build",
       "!**/coverage",
-      "!**/prisma/migrations",
-      "!**/src/db/generated",
+      "!**/drizzle/**/*.sql",
       "!src/app/globals.css"
     ]
   },
@@ -70,6 +69,17 @@
           "a11y": {
             "useSemanticElements": "off",
             "useKeyWithClickEvents": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/db/index.ts", "src/db/schema/index.ts"],
+      "linter": {
+        "rules": {
+          "performance": {
+            "noBarrelFile": "off",
+            "noReExportAll": "off"
           }
         }
       }

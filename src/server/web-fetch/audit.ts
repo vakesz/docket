@@ -2,7 +2,7 @@
  * Append-only audit writer for the web_fetch tool.
  *
  * Every web_fetch call — successful or denied — writes one row to the
- * `WebFetchEvent` table. The status string is open-ended so future
+ * `web_fetch_events` table. The status string is open-ended so future
  * deny reasons (`denied_size`, `denied_type`, …) can land without a
  * migration.
  *
@@ -14,12 +14,14 @@
  */
 
 import "server-only";
-import type { db as Db } from "@/server/db";
+import type { ProjectId, UserId } from "@/core/types";
+import type { Db } from "@/db";
+import { webFetchEvents } from "@/db/schema";
 import { logger } from "@/server/logger";
 
 export type WebFetchAuditRow = {
-  projectId: string;
-  userId: string | null;
+  projectId: ProjectId;
+  userId: UserId | null;
   url: string;
   status: string;
   contentType: string | null;
@@ -38,21 +40,19 @@ export type WebFetchAuditRow = {
   cleanError?: string | null;
 };
 
-export async function recordWebFetchEvent(db: typeof Db, row: WebFetchAuditRow): Promise<void> {
+export async function recordWebFetchEvent(db: Db, row: WebFetchAuditRow): Promise<void> {
   try {
-    await db.webFetchEvent.create({
-      data: {
-        projectId: row.projectId,
-        userId: row.userId,
-        url: row.url,
-        status: row.status,
-        contentType: row.contentType,
-        bytes: row.bytes,
-        errorMessage: row.errorMessage,
-        cleaned: row.cleaned ?? null,
-        cleanedBytes: row.cleanedBytes ?? null,
-        cleanError: row.cleanError ?? null,
-      },
+    await db.insert(webFetchEvents).values({
+      projectId: row.projectId,
+      userId: row.userId,
+      url: row.url,
+      status: row.status,
+      contentType: row.contentType,
+      bytes: row.bytes,
+      errorMessage: row.errorMessage,
+      cleaned: row.cleaned ?? null,
+      cleanedBytes: row.cleanedBytes ?? null,
+      cleanError: row.cleanError ?? null,
     });
   } catch (err) {
     logger.warn(

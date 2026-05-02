@@ -1,9 +1,11 @@
+import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { asProjectId, asUserId } from "@/core/types";
+import { db } from "@/db";
+import { projects } from "@/db/schema";
 import { resolveEffectiveStaleThreshold } from "@/lib/staleness";
 import { auth } from "@/server/auth";
-import { db } from "@/server/db";
 import { loadProjectSetting, loadUserSetting } from "@/server/settings/effective";
 import { ItemsShell } from "@/ui/shell/items-shell";
 
@@ -27,9 +29,9 @@ export default async function ItemsLayout({
   // second wave once we know the project id and user id.
   const [session, project] = await Promise.all([
     auth(),
-    db.project.findUnique({
-      where: { slug: projectSlug },
-      select: { id: true },
+    db.query.projects.findFirst({
+      where: eq(projects.slug, projectSlug),
+      columns: { id: true },
     }),
   ]);
   if (!project) notFound();

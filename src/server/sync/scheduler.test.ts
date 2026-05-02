@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Project } from "@/db/generated/client";
+import { asProjectId, asUserId } from "@/core/types";
+import type { Project } from "@/db/schema/types";
 
 const state = vi.hoisted(() => ({
   readOnly: false,
@@ -9,10 +10,12 @@ const state = vi.hoisted(() => ({
   syncDelayMs: 0,
 }));
 
-vi.mock("@/server/db", () => ({
+vi.mock("@/db", () => ({
   db: {
-    project: {
-      findMany: async () => [],
+    query: {
+      projects: {
+        findMany: async () => [],
+      },
     },
   },
 }));
@@ -65,8 +68,8 @@ const sampleProject: Pick<
   Project,
   "id" | "ownerUserId" | "providerKind" | "providerScope" | "name"
 > = {
-  id: "p1",
-  ownerUserId: "u1",
+  id: asProjectId("p1"),
+  ownerUserId: asUserId("u1"),
   providerKind: "github",
   providerScope: {},
   name: "Sample",

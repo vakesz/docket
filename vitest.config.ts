@@ -13,7 +13,7 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts", "src/**/*.test.tsx", "tests/**/*.test.ts"],
-    exclude: ["node_modules", ".next", "src/db/generated/**"],
+    exclude: ["node_modules", ".next"],
     typecheck: {
       enabled: false,
     },
@@ -21,7 +21,7 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "html"],
       include: ["src/server/proposals/**", "src/agent/tools/**"],
-      exclude: ["**/*.test.ts", "**/*.test.tsx", "src/db/generated/**"],
+      exclude: ["**/*.test.ts", "**/*.test.tsx"],
       thresholds: {
         "src/server/proposals/**": {
           lines: 70,

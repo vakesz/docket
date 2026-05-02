@@ -8,7 +8,7 @@
 import "server-only";
 import { DEFAULT_PROMPTS, type ResolvedPrompts } from "@/agent/prompt";
 import type { ItemKind } from "@/core/types";
-import type { db as Db } from "@/server/db";
+import type { Db } from "@/db";
 import { loadGlobalSetting } from "@/server/settings/effective";
 
 const KIND_KEYS: Record<
@@ -26,7 +26,7 @@ const KIND_KEYS: Record<
   bug: "prompt.kind.bug",
 };
 
-export async function loadPrompts(db: typeof Db): Promise<ResolvedPrompts> {
+export async function loadPrompts(db: Db): Promise<ResolvedPrompts> {
   const [systemBase, epic, feature, story, task, bug] = await Promise.all([
     loadGlobalSetting(db, "prompt.system-base"),
     loadGlobalSetting(db, KIND_KEYS.epic),

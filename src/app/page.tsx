@@ -1,6 +1,9 @@
+import { and, desc, eq, exists, isNull, or } from "drizzle-orm";
 import { redirect } from "next/navigation";
+import { asUserId } from "@/core/types";
+import { db } from "@/db";
+import { projectMemberships, projects, users } from "@/db/schema";
 import { auth } from "@/server/auth";
-import { db } from "@/server/db";
 import { requireSetupComplete } from "@/server/setup/guard";
 import { CreateProjectForm } from "@/ui/projects/create-project-form";
 import { DocketLogo } from "@/ui/setup/docket-logo";
@@ -28,31 +31,46 @@ export default async function Home() {
   // projects (or every default they could have picked has since been
   // archived/deleted — User.defaultProjectId is SetNull on delete, so a
   // stale id presents as null).
-  const userId = session.user.id;
-  if (!userId) {
+  if (!session.user.id) {
     redirect("/api/auth/signin");
   }
-  const me = await db.user.findUnique({
-    where: { id: userId },
-    select: { defaultProjectId: true },
+  const userId = asUserId(session.user.id);
+  const me = await db.query.users.findFirst({
+    where: eq(users.id, userId),
+    columns: { defaultProjectId: true },
   });
+
+  const accessClause = or(
+    eq(projects.ownerUserId, userId),
+    exists(
+      db
+        .select({ id: projectMemberships.id })
+        .from(projectMemberships)
+        .where(
+          and(eq(projectMemberships.projectId, projects.id), eq(projectMemberships.userId, userId)),
+        ),
+    ),
+  );
 
   // Run the default-project access check and the most-recent-touched
   // fallback in parallel. The fallback only matters when the default is
   // missing or stale, but speculating on it shaves a roundtrip in that
   // path and is a no-op cost when the default redirect fires.
-  const accessOr = [{ ownerUserId: userId }, { memberships: { some: { userId } } }];
   const [defaultProject, fallback] = await Promise.all([
     me?.defaultProjectId
-      ? db.project.findFirst({
-          where: { id: me.defaultProjectId, archivedAt: null, OR: accessOr },
-          select: { slug: true },
+      ? db.query.projects.findFirst({
+          where: and(
+            eq(projects.id, me.defaultProjectId),
+            isNull(projects.archivedAt),
+            accessClause,
+          ),
+          columns: { slug: true },
         })
-      : Promise.resolve(null),
-    db.project.findFirst({
-      where: { archivedAt: null, OR: accessOr },
-      orderBy: [{ updatedAt: "desc" }],
-      select: { slug: true },
+      : Promise.resolve(undefined),
+    db.query.projects.findFirst({
+      where: and(isNull(projects.archivedAt), accessClause),
+      orderBy: [desc(projects.updatedAt)],
+      columns: { slug: true },
     }),
   ]);
 

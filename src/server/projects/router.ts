@@ -1,8 +1,10 @@
 import "server-only";
 import { TRPCError } from "@trpc/server";
+import { and, asc, desc, eq, exists, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 import { slugify } from "@/core/slug";
-import type { Prisma } from "@/db/generated/client";
+import { asConversationId, type ProjectId } from "@/core/types";
+import { llmProviders, projectMemberships, projects, users } from "@/db/schema";
 import { asPlainObject } from "@/lib/json";
 import { logger } from "@/server/logger";
 import { buildProjectExport } from "@/server/projects/export";
@@ -47,12 +49,15 @@ function nameToSlug(name: string): string {
   return slug;
 }
 
+/**
+ * Postgres unique-violation SQLSTATE. postgres-js surfaces it on `err.code`.
+ */
 function isUniqueViolation(err: unknown): boolean {
   return (
     typeof err === "object" &&
     err !== null &&
     "code" in err &&
-    (err as { code: string }).code === "P2002"
+    (err as { code: string }).code === "23505"
   );
 }
 
@@ -83,16 +88,29 @@ export const projectsRouter = router({
   /** List projects the current user owns or is a member of (non-archived). */
   list: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.userId;
-    const rows = await ctx.db.project.findMany({
-      where: {
-        archivedAt: null,
-        OR: [{ ownerUserId: userId }, { memberships: { some: { userId } } }],
-      },
-      orderBy: [{ createdAt: "desc" }],
+    const rows = await ctx.db.query.projects.findMany({
+      where: and(
+        isNull(projects.archivedAt),
+        or(
+          eq(projects.ownerUserId, userId),
+          exists(
+            ctx.db
+              .select({ id: projectMemberships.id })
+              .from(projectMemberships)
+              .where(
+                and(
+                  eq(projectMemberships.projectId, projects.id),
+                  eq(projectMemberships.userId, userId),
+                ),
+              ),
+          ),
+        ),
+      ),
+      orderBy: [desc(projects.createdAt)],
       // Backstop against unbounded fan-out — a user with thousands of project
       // memberships would otherwise pull them all into the switcher.
-      take: 200,
-      select: {
+      limit: 200,
+      columns: {
         id: true,
         slug: true,
         name: true,
@@ -165,21 +183,25 @@ export const projectsRouter = router({
     }
     const slug = nameToSlug(input.name);
     try {
-      const created = await ctx.db.project.create({
-        data: {
-          name: input.name,
-          slug,
-          description: input.description,
-          providerKind: input.providerKind,
-          providerScope: normalizedScope as Prisma.InputJsonValue,
-          ownerUserId: userId,
-          memberships: {
-            create: {
-              userId,
-              role: "approver",
-            },
-          },
-        },
+      const created = await ctx.db.transaction(async (tx) => {
+        const [row] = await tx
+          .insert(projects)
+          .values({
+            name: input.name,
+            slug,
+            description: input.description,
+            providerKind: input.providerKind,
+            providerScope: normalizedScope,
+            ownerUserId: userId,
+          })
+          .returning();
+        if (!row) throw new Error("project create returned no row");
+        await tx.insert(projectMemberships).values({
+          projectId: row.id,
+          userId,
+          role: "approver",
+        });
+        return row;
       });
       logger.info(
         {
@@ -218,11 +240,13 @@ export const projectsRouter = router({
       }
       const slug = nameToSlug(input.name);
       try {
-        return await ctx.db.project.update({
-          where: { id: ctx.projectId },
-          data: { name: input.name, slug },
-          select: { id: true, slug: true, name: true },
-        });
+        const [row] = await ctx.db
+          .update(projects)
+          .set({ name: input.name, slug })
+          .where(eq(projects.id, ctx.projectId))
+          .returning({ id: projects.id, slug: projects.slug, name: projects.name });
+        if (!row) throw new Error("project rename returned no row");
+        return row;
       } catch (err) {
         if (isUniqueViolation(err)) {
           throw new TRPCError({
@@ -246,10 +270,12 @@ export const projectsRouter = router({
         message: "only the project owner can archive",
       });
     }
-    const archived = await ctx.db.project.update({
-      where: { id: ctx.projectId },
-      data: { archivedAt: new Date() },
-    });
+    const [archived] = await ctx.db
+      .update(projects)
+      .set({ archivedAt: new Date() })
+      .where(eq(projects.id, ctx.projectId))
+      .returning();
+    if (!archived) throw new Error("project archive returned no row");
     logger.info(
       { actorUserId: ctx.userId, projectId: ctx.projectId, slug: ctx.project.slug },
       "projects: archived",
@@ -266,25 +292,35 @@ export const projectsRouter = router({
     .input(z.object({ projectSlug: z.string().min(1).nullable() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.userId;
-      let resolvedId: string | null = null;
+      let resolvedId: ProjectId | null = null;
       if (input.projectSlug) {
         const project = assertFound(
-          await ctx.db.project.findFirst({
-            where: {
-              slug: input.projectSlug,
-              archivedAt: null,
-              OR: [{ ownerUserId: userId }, { memberships: { some: { userId } } }],
-            },
-            select: { id: true },
+          await ctx.db.query.projects.findFirst({
+            where: and(
+              eq(projects.slug, input.projectSlug),
+              isNull(projects.archivedAt),
+              or(
+                eq(projects.ownerUserId, userId),
+                exists(
+                  ctx.db
+                    .select({ id: projectMemberships.id })
+                    .from(projectMemberships)
+                    .where(
+                      and(
+                        eq(projectMemberships.projectId, projects.id),
+                        eq(projectMemberships.userId, userId),
+                      ),
+                    ),
+                ),
+              ),
+            ),
+            columns: { id: true },
           }),
           "project not found or you no longer have access",
         );
         resolvedId = project.id;
       }
-      await ctx.db.user.update({
-        where: { id: userId },
-        data: { defaultProjectId: resolvedId },
-      });
+      await ctx.db.update(users).set({ defaultProjectId: resolvedId }).where(eq(users.id, userId));
       return { defaultProjectId: resolvedId };
     }),
 
@@ -304,9 +340,9 @@ export const projectsRouter = router({
     .mutation(async ({ ctx, input }) => {
       if (input.llmProviderId) {
         const provider = assertFound(
-          await ctx.db.llmProvider.findUnique({
-            where: { id: input.llmProviderId },
-            select: { id: true, enabled: true },
+          await ctx.db.query.llmProviders.findFirst({
+            where: eq(llmProviders.id, input.llmProviderId),
+            columns: { id: true, enabled: true },
           }),
           "LLM provider not found",
         );
@@ -317,19 +353,21 @@ export const projectsRouter = router({
           });
         }
       }
-      return ctx.db.project.update({
-        where: { id: ctx.projectId },
-        data: {
+      const [updated] = await ctx.db
+        .update(projects)
+        .set({
           defaultLlmProviderId: input.llmProviderId,
           defaultTemperature: input.defaultTemperature,
-        },
-        select: {
-          id: true,
-          slug: true,
-          defaultLlmProviderId: true,
-          defaultTemperature: true,
-        },
-      });
+        })
+        .where(eq(projects.id, ctx.projectId))
+        .returning({
+          id: projects.id,
+          slug: projects.slug,
+          defaultLlmProviderId: projects.defaultLlmProviderId,
+          defaultTemperature: projects.defaultTemperature,
+        });
+      if (!updated) throw new Error("project setLlmDefaults returned no row");
+      return updated;
     }),
 
   /**
@@ -345,7 +383,7 @@ export const projectsRouter = router({
         cursor: z
           .object({
             startedAt: z.string(),
-            conversationId: z.string(),
+            conversationId: z.string().transform(asConversationId),
           })
           .nullish(),
       }),
@@ -361,23 +399,21 @@ export const projectsRouter = router({
    * "owner" as a non-editable, non-removable row.
    */
   members: projectScopedProcedure.input(projectSlugSchema).query(async ({ ctx }) => {
-    const project = await ctx.db.project.findUniqueOrThrow({
-      where: { id: ctx.projectId },
-      select: {
-        ownerUserId: true,
-        owner: { select: { id: true, name: true, email: true, image: true } },
+    const project = await ctx.db.query.projects.findFirst({
+      where: eq(projects.id, ctx.projectId),
+      columns: { ownerUserId: true },
+      with: {
+        owner: { columns: { id: true, name: true, email: true, image: true } },
         memberships: {
-          select: {
-            id: true,
-            userId: true,
-            role: true,
-            createdAt: true,
-            user: { select: { id: true, name: true, email: true, image: true } },
-          },
-          orderBy: [{ createdAt: "asc" }],
+          columns: { id: true, userId: true, role: true, createdAt: true },
+          with: { user: { columns: { id: true, name: true, email: true, image: true } } },
+          orderBy: [asc(projectMemberships.createdAt)],
         },
       },
     });
+    if (!project) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "project not found" });
+    }
     return {
       callerIsOwner: project.ownerUserId === ctx.userId,
       owner: project.owner,
@@ -408,9 +444,9 @@ export const projectsRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const user = assertFound(
-        await ctx.db.user.findUnique({
-          where: { email: input.email.toLowerCase() },
-          select: { id: true },
+        await ctx.db.query.users.findFirst({
+          where: eq(users.email, input.email.toLowerCase()),
+          columns: { id: true },
         }),
         "no user with that email has signed in yet",
       );
@@ -421,14 +457,20 @@ export const projectsRouter = router({
         });
       }
       try {
-        const created = await ctx.db.projectMembership.create({
-          data: {
+        const [created] = await ctx.db
+          .insert(projectMemberships)
+          .values({
             projectId: ctx.projectId,
             userId: user.id,
             role: input.role,
-          },
-          select: { id: true, userId: true, role: true, createdAt: true },
-        });
+          })
+          .returning({
+            id: projectMemberships.id,
+            userId: projectMemberships.userId,
+            role: projectMemberships.role,
+            createdAt: projectMemberships.createdAt,
+          });
+        if (!created) throw new Error("addMember returned no row");
         logger.info(
           {
             actorUserId: ctx.userId,
@@ -461,17 +503,25 @@ export const projectsRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const membership = assertFound(
-        await ctx.db.projectMembership.findFirst({
-          where: { id: input.membershipId, projectId: ctx.projectId },
-          select: { id: true },
+        await ctx.db.query.projectMemberships.findFirst({
+          where: and(
+            eq(projectMemberships.id, input.membershipId),
+            eq(projectMemberships.projectId, ctx.projectId),
+          ),
+          columns: { id: true },
         }),
         "membership not found",
       );
-      const updated = await ctx.db.projectMembership.update({
-        where: { id: membership.id },
-        data: { role: input.role },
-        select: { id: true, userId: true, role: true },
-      });
+      const [updated] = await ctx.db
+        .update(projectMemberships)
+        .set({ role: input.role })
+        .where(eq(projectMemberships.id, membership.id))
+        .returning({
+          id: projectMemberships.id,
+          userId: projectMemberships.userId,
+          role: projectMemberships.role,
+        });
+      if (!updated) throw new Error("updateMemberRole returned no row");
       logger.info(
         {
           actorUserId: ctx.userId,
@@ -498,13 +548,16 @@ export const projectsRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const membership = assertFound(
-        await ctx.db.projectMembership.findFirst({
-          where: { id: input.membershipId, projectId: ctx.projectId },
-          select: { id: true, userId: true },
+        await ctx.db.query.projectMemberships.findFirst({
+          where: and(
+            eq(projectMemberships.id, input.membershipId),
+            eq(projectMemberships.projectId, ctx.projectId),
+          ),
+          columns: { id: true, userId: true },
         }),
         "membership not found",
       );
-      await ctx.db.projectMembership.delete({ where: { id: membership.id } });
+      await ctx.db.delete(projectMemberships).where(eq(projectMemberships.id, membership.id));
       logger.info(
         {
           actorUserId: ctx.userId,
@@ -519,9 +572,9 @@ export const projectsRouter = router({
 
   /** Read the caller's profile bits the UI needs (default project picker). */
   me: protectedProcedure.query(async ({ ctx }) => {
-    return ctx.db.user.findUnique({
-      where: { id: ctx.userId },
-      select: { id: true, name: true, email: true, defaultProjectId: true },
+    return ctx.db.query.users.findFirst({
+      where: eq(users.id, ctx.userId),
+      columns: { id: true, name: true, email: true, defaultProjectId: true },
     });
   }),
 });

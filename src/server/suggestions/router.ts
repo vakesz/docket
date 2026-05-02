@@ -3,8 +3,11 @@
 // project-scoped) with an optional `projectId` filter/discriminator.
 
 import "server-only";
+import { and, desc, eq, exists, isNull, or } from "drizzle-orm";
 import { z } from "zod";
-import type { db as Db } from "@/server/db";
+import type { ProjectId, UserId } from "@/core/types";
+import type { Db } from "@/db";
+import { commandUsage, projectMemberships, projects, suggestions } from "@/db/schema";
 import {
   mutationProcedure,
   projectScopedMutationProcedure,
@@ -14,28 +17,33 @@ import {
   router,
 } from "@/server/trpc";
 
-/**
- * Resolve a `projectSlug` to its surrogate CUID for FK queries when the
- * caller doesn't go through `projectScopedProcedure`. Returns `null` when
- * the slug doesn't match a project the user can access — caller decides
- * whether to throw or silently degrade.
- */
-async function resolveSlug(db: typeof Db, slug: string, userId: string): Promise<string | null> {
-  const row = await db.project.findFirst({
-    where: {
-      slug,
-      archivedAt: null,
-      OR: [{ ownerUserId: userId }, { memberships: { some: { userId } } }],
-    },
-    select: { id: true },
+async function resolveSlug(db: Db, slug: string, userId: UserId): Promise<ProjectId | null> {
+  const row = await db.query.projects.findFirst({
+    where: and(
+      eq(projects.slug, slug),
+      isNull(projects.archivedAt),
+      or(
+        eq(projects.ownerUserId, userId),
+        exists(
+          db
+            .select({ id: projectMemberships.id })
+            .from(projectMemberships)
+            .where(
+              and(
+                eq(projectMemberships.projectId, projects.id),
+                eq(projectMemberships.userId, userId),
+              ),
+            ),
+        ),
+      ),
+    ),
+    columns: { id: true },
   });
   return row?.id ?? null;
 }
 
 const ListInput = projectSlugSchema.extend({
-  /// Filter by suggestion kind. Empty omits the filter.
   kind: z.string().min(1).max(64).optional(),
-  /// When true, also returns dismissed rows. Default hides them.
   includeDismissed: z.boolean().default(false),
   limit: z.number().int().min(1).max(100).default(20),
 });
@@ -43,8 +51,6 @@ const ListInput = projectSlugSchema.extend({
 const DismissInput = projectSlugSchema.extend({ suggestionId: z.string().min(1) });
 
 const RecentsInput = z.object({
-  /// Optional project filter — when set, only commands used in that
-  /// project (or globally with `projectSlug: null` on write) are returned.
   projectSlug: z.string().min(1).optional(),
   limit: z.number().int().min(1).max(50).default(10),
 });
@@ -56,79 +62,74 @@ const BumpInput = z.object({
 
 export const suggestionsRouter = router({
   list: projectScopedProcedure.input(ListInput).query(async ({ ctx, input }) => {
-    return ctx.db.suggestion.findMany({
-      where: {
-        projectId: ctx.projectId,
-        ...(input.kind ? { kind: input.kind } : {}),
-        ...(input.includeDismissed ? {} : { dismissedAt: null }),
-      },
-      orderBy: [{ createdAt: "desc" }],
-      take: input.limit,
+    const conditions = [eq(suggestions.projectId, ctx.projectId)];
+    if (input.kind) conditions.push(eq(suggestions.kind, input.kind));
+    if (!input.includeDismissed) conditions.push(isNull(suggestions.dismissedAt));
+    return ctx.db.query.suggestions.findMany({
+      where: and(...conditions),
+      orderBy: [desc(suggestions.createdAt)],
+      limit: input.limit,
     });
   }),
 
   dismiss: projectScopedMutationProcedure.input(DismissInput).mutation(async ({ ctx, input }) => {
-    const result = await ctx.db.suggestion.updateMany({
-      where: { id: input.suggestionId, projectId: ctx.projectId, dismissedAt: null },
-      data: { dismissedAt: new Date() },
-    });
-    if (result.count === 0) {
-      // Either the suggestion doesn't exist, isn't in this project, or
-      // was already dismissed. Don't differentiate — the client just
-      // wanted it gone, and it is.
-      return { ok: false };
-    }
-    return { ok: true };
+    const updated = await ctx.db
+      .update(suggestions)
+      .set({ dismissedAt: new Date() })
+      .where(
+        and(
+          eq(suggestions.id, input.suggestionId),
+          eq(suggestions.projectId, ctx.projectId),
+          isNull(suggestions.dismissedAt),
+        ),
+      )
+      .returning({ id: suggestions.id });
+    return { ok: updated.length > 0 };
   }),
 
-  /**
-   * Top-N most-recent commands for the current user. Default ranking is by
-   * `lastUsedAt` desc, which matches the user mental model ("what did I
-   * just do") better than `usageCount` for a personal palette. Both are
-   * available on the row if a richer ranking is needed later.
-   */
   recents: protectedProcedure.input(RecentsInput).query(async ({ ctx, input }) => {
     const userId = ctx.userId;
     const projectId = input.projectSlug
       ? await resolveSlug(ctx.db, input.projectSlug, userId)
       : undefined;
-    return ctx.db.commandUsage.findMany({
-      where: {
-        userId,
-        ...(projectId !== undefined ? { projectId } : {}),
-      },
-      orderBy: [{ lastUsedAt: "desc" }],
-      take: input.limit,
+    const conditions = [eq(commandUsage.userId, userId)];
+    if (projectId !== undefined) {
+      conditions.push(
+        projectId === null ? isNull(commandUsage.projectId) : eq(commandUsage.projectId, projectId),
+      );
+    }
+    return ctx.db.query.commandUsage.findMany({
+      where: and(...conditions),
+      orderBy: [desc(commandUsage.lastUsedAt)],
+      limit: input.limit,
     });
   }),
 
-  /**
-   * Record one usage of `commandId`. Idempotent per (user, project,
-   * commandId) — increments the counter and bumps `lastUsedAt`. Pass
-   * `projectSlug` when the command is project-scoped; omit for global
-   * commands (the unique key treats `projectId == null` as its own slot).
-   */
   bump: mutationProcedure.input(BumpInput).mutation(async ({ ctx, input }) => {
     const userId = ctx.userId;
     const projectId = input.projectSlug
       ? ((await resolveSlug(ctx.db, input.projectSlug, userId)) ?? null)
       : null;
-    // Compound unique includes a nullable column, so Postgres won't enforce
-    // uniqueness on null-projectId rows. Find-then-update/create like the
-    // settings router; the (user, project, command) tuple is application-
-    // unique even when the DB can't enforce it.
-    const existing = await ctx.db.commandUsage.findFirst({
-      where: { userId, projectId, commandId: input.commandId },
-      select: { id: true, usageCount: true },
+    const existing = await ctx.db.query.commandUsage.findFirst({
+      where: and(
+        eq(commandUsage.userId, userId),
+        projectId === null ? isNull(commandUsage.projectId) : eq(commandUsage.projectId, projectId),
+        eq(commandUsage.commandId, input.commandId),
+      ),
+      columns: { id: true, usageCount: true },
     });
     if (existing) {
-      return ctx.db.commandUsage.update({
-        where: { id: existing.id },
-        data: { usageCount: existing.usageCount + 1, lastUsedAt: new Date() },
-      });
+      const [row] = await ctx.db
+        .update(commandUsage)
+        .set({ usageCount: existing.usageCount + 1, lastUsedAt: new Date() })
+        .where(eq(commandUsage.id, existing.id))
+        .returning();
+      return row;
     }
-    return ctx.db.commandUsage.create({
-      data: { userId, projectId, commandId: input.commandId },
-    });
+    const [row] = await ctx.db
+      .insert(commandUsage)
+      .values({ userId, projectId, commandId: input.commandId })
+      .returning();
+    return row;
   }),
 });

@@ -8,12 +8,12 @@
  */
 
 import "server-only";
+import { and, eq, exists, isNull, or } from "drizzle-orm";
 import { cache } from "react";
 import type { ProjectId, UserId } from "@/core/types";
-import type { Project } from "@/db/generated/client";
-import type { db as Db } from "@/server/db";
-
-type Database = typeof Db;
+import type { Db } from "@/db";
+import { projectMemberships, projects } from "@/db/schema";
+import type { Project } from "@/db/schema/types";
 
 /**
  * Project row with the ids stamped as branded types. The brand attaches
@@ -32,7 +32,7 @@ export type AuthorizedProject = Omit<Project, "id" | "ownerUserId"> & {
  * share the same access semantics.
  *
  * Lookup is by `slug` (the URL-facing identifier) rather than the surrogate
- * CUID — every caller sources its identifier from the route params or wire
+ * id — every caller sources its identifier from the route params or wire
  * input.
  *
  * Wrapped in React's `cache()` so a single batched tRPC request (which can
@@ -43,16 +43,29 @@ export type AuthorizedProject = Omit<Project, "id" | "ownerUserId"> & {
 export const projectForUser = cache(_projectForUser);
 
 async function _projectForUser(
-  db: Database,
+  db: Db,
   projectSlug: string,
   userId: UserId,
 ): Promise<AuthorizedProject | null> {
-  const row = await db.project.findFirst({
-    where: {
-      slug: projectSlug,
-      archivedAt: null,
-      OR: [{ ownerUserId: userId }, { memberships: { some: { userId } } }],
-    },
+  const row = await db.query.projects.findFirst({
+    where: and(
+      eq(projects.slug, projectSlug),
+      isNull(projects.archivedAt),
+      or(
+        eq(projects.ownerUserId, userId),
+        exists(
+          db
+            .select({ id: projectMemberships.id })
+            .from(projectMemberships)
+            .where(
+              and(
+                eq(projectMemberships.projectId, projects.id),
+                eq(projectMemberships.userId, userId),
+              ),
+            ),
+        ),
+      ),
+    ),
   });
   if (!row) return null;
   return row as AuthorizedProject;

@@ -17,8 +17,17 @@
 
 import "server-only";
 import { TRPCError } from "@trpc/server";
+import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
-import { asConversationId, type ProjectId, type UserId } from "@/core/types";
+import {
+  asConversationId,
+  asItemId,
+  type ConversationId,
+  type ProjectId,
+  type UserId,
+} from "@/core/types";
+import type { Db } from "@/db";
+import { conversations, llmProviders, messages } from "@/db/schema";
 import {
   archiveConversation,
   createConversation,
@@ -34,16 +43,26 @@ import {
   router,
 } from "@/server/trpc";
 
-const ConversationRef = projectSlugSchema.extend({ conversationId: z.string().min(1) });
+const ConversationRef = projectSlugSchema.extend({
+  conversationId: z.string().min(1).transform(asConversationId),
+});
 
 const ListInput = projectSlugSchema.extend({
-  itemId: z.string().nullable().default(null),
+  itemId: z
+    .string()
+    .nullable()
+    .default(null)
+    .transform((v) => (v === null ? null : asItemId(v))),
   limit: z.number().int().min(1).max(100).default(50),
   archived: z.boolean().default(false),
 });
 
 const CreateInput = projectSlugSchema.extend({
-  itemId: z.string().nullable().default(null),
+  itemId: z
+    .string()
+    .nullable()
+    .default(null)
+    .transform((v) => (v === null ? null : asItemId(v))),
 });
 
 const SetLlmOverrideInput = ConversationRef.extend({
@@ -52,18 +71,13 @@ const SetLlmOverrideInput = ConversationRef.extend({
 
 async function ensureOwn(
   ctx: {
-    db: typeof import("@/server/db").db;
+    db: Db;
     userId: UserId;
   },
-  conversationId: string,
+  conversationId: ConversationId,
   projectId: ProjectId,
 ): Promise<void> {
-  const ok = await ownsConversation(
-    ctx.db,
-    asConversationId(conversationId),
-    projectId,
-    ctx.userId,
-  );
+  const ok = await ownsConversation(ctx.db, conversationId, projectId, ctx.userId);
   if (!ok) {
     throw new TRPCError({ code: "NOT_FOUND", message: "conversation not found" });
   }
@@ -83,32 +97,34 @@ export const conversationsRouter = router({
   get: projectScopedProcedure.input(ConversationRef).query(async ({ ctx, input }) => {
     // findFirst + scoped where collapses the ownership double-check into the
     // SQL filter, so we never serialize projectId/userId we'd only re-validate.
-    // The narrow `select` carries exactly what chat-pane reads — full Message
+    // The narrow `columns` carries exactly what chat-pane reads — full Message
     // rows include tokensIn/tokensOut/createdAt/conversationId/compacted that
     // the UI never touches, and skipping them shrinks every transcript fetch.
     const conv = assertFound(
-      await ctx.db.conversation.findFirst({
-        where: {
-          id: input.conversationId,
-          projectId: ctx.projectId,
-          userId: ctx.userId,
-        },
-        select: {
+      await ctx.db.query.conversations.findFirst({
+        where: and(
+          eq(conversations.id, input.conversationId),
+          eq(conversations.projectId, ctx.projectId),
+          eq(conversations.userId, ctx.userId),
+        ),
+        columns: {
           id: true,
           tokensIn: true,
           tokensOut: true,
           costCents: true,
           llmProviderIdOverride: true,
+        },
+        with: {
           messages: {
-            where: { compacted: false },
+            where: eq(messages.compacted, false),
             // Latest-N descending then reverse — same defense-in-depth cap as
             // `getConversation` storage helper, see LIVE_TRANSCRIPT_CAP. The
             // compaction service is what's *supposed* to keep this bounded;
             // the cap protects the UI from runaway conversations that slipped
             // past compaction.
-            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-            take: 500,
-            select: {
+            orderBy: [desc(messages.createdAt), desc(messages.id)],
+            limit: 500,
+            columns: {
               id: true,
               role: true,
               content: true,
@@ -142,7 +158,7 @@ export const conversationsRouter = router({
     .input(ConversationRef)
     .mutation(async ({ ctx, input }) => {
       await ensureOwn(ctx, input.conversationId, ctx.projectId);
-      return archiveConversation(ctx.db, asConversationId(input.conversationId));
+      return archiveConversation(ctx.db, input.conversationId);
     }),
 
   /**
@@ -156,9 +172,9 @@ export const conversationsRouter = router({
       await ensureOwn(ctx, input.conversationId, ctx.projectId);
       if (input.llmProviderId) {
         const provider = assertFound(
-          await ctx.db.llmProvider.findUnique({
-            where: { id: input.llmProviderId },
-            select: { id: true, enabled: true },
+          await ctx.db.query.llmProviders.findFirst({
+            where: eq(llmProviders.id, input.llmProviderId),
+            columns: { id: true, enabled: true },
           }),
           "LLM provider not found",
         );
@@ -169,10 +185,15 @@ export const conversationsRouter = router({
           });
         }
       }
-      return ctx.db.conversation.update({
-        where: { id: input.conversationId },
-        data: { llmProviderIdOverride: input.llmProviderId },
-        select: { id: true, llmProviderIdOverride: true },
-      });
+      const [row] = await ctx.db
+        .update(conversations)
+        .set({ llmProviderIdOverride: input.llmProviderId })
+        .where(eq(conversations.id, input.conversationId))
+        .returning({
+          id: conversations.id,
+          llmProviderIdOverride: conversations.llmProviderIdOverride,
+        });
+      if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "conversation not found" });
+      return row;
     }),
 });

@@ -8,10 +8,9 @@ import { selectAdapterFor } from "@/agent/llm/registry";
 import type { LoopEvent } from "@/agent/loop";
 import { runTurn } from "@/agent/loop";
 import { asConversationId, asUserId } from "@/core/types";
-
+import { db } from "@/db";
 import { auth } from "@/server/auth";
 import { getConversationForOwner } from "@/server/conversations/storage";
-import { db } from "@/server/db";
 import { logger } from "@/server/logger";
 import { projectForUser } from "@/server/projects/access";
 import { loadGlobalSetting } from "@/server/settings/effective";

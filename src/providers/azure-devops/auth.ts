@@ -10,10 +10,10 @@
 
 import "server-only";
 import type { OIDCConfig } from "next-auth/providers";
+import { db } from "@/db";
 import { avatarUrl } from "@/lib/avatar-url";
 import { fetchAvatarFromProvider } from "@/server/avatars/fetchers";
 import { persistAvatar } from "@/server/avatars/service";
-import { db } from "@/server/db";
 import { logger } from "@/server/logger";
 
 const AZDO_RESOURCE_ID = "499b84ac-1321-427f-aa17-267ca6975798";

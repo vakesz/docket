@@ -1,6 +1,8 @@
+import { asc, eq } from "drizzle-orm";
+import { db } from "@/db";
+import { oauthProviderConfigs } from "@/db/schema";
 import { ProviderLogo } from "@/lib/provider-logos";
 import { signIn } from "@/server/auth";
-import { db } from "@/server/db";
 import { logger } from "@/server/logger";
 import { Button } from "@/ui/primitives/button";
 
@@ -8,14 +10,14 @@ export async function SignInButtons({ redirectTo = "/" }: { redirectTo?: string 
   // Render one button per enabled OauthProviderConfig row so a new provider
   // (DB-seeded or admin-added) lights up its sign-in path with no code edit.
   // Labels come from `row.label` — the admin UI controls what users see;
-  // we never enumerate kinds here. Explicit `select` keeps `clientSecret`
+  // we never enumerate kinds here. Explicit `columns` keeps `clientSecret`
   // ciphertext out of the server component's memory entirely.
   let rows: Array<{ id: string; kind: string; label: string }> = [];
   try {
-    rows = await db.oauthProviderConfig.findMany({
-      where: { enabled: true },
-      orderBy: [{ kind: "asc" }],
-      select: { id: true, kind: true, label: true },
+    rows = await db.query.oauthProviderConfigs.findMany({
+      where: eq(oauthProviderConfigs.enabled, true),
+      orderBy: [asc(oauthProviderConfigs.kind)],
+      columns: { id: true, kind: true, label: true },
     });
   } catch (err) {
     logger.error({ err }, "[sign-in] failed to load OAuth providers");
