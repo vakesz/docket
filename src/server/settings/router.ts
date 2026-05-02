@@ -26,7 +26,12 @@ import {
   type SettingScope,
   type SettingValue,
 } from "@/server/settings/catalog";
-import { loadGlobalSetting } from "@/server/settings/effective";
+import {
+  loadGlobalSetting,
+  upsertGlobalSetting,
+  upsertProjectSetting,
+  upsertUserSetting,
+} from "@/server/settings/effective";
 import {
   mutationProcedure,
   projectScopedMutationProcedure,
@@ -161,21 +166,8 @@ export const settingsRouter = router({
   }),
 
   update: mutationProcedure.input(UserUpdateInput).mutation(async ({ ctx, input }) => {
-    const userId = ctx.userId;
-    const encoded = JSON.stringify(input.value);
-    // Prisma's `upsert` won't accept `null` in a compound-unique `where`,
-    // and Postgres treats `null` columns in a unique as unconstrained — so
-    // a per-user (projectId == null) Setting needs find-then-update/create.
-    const existing = await ctx.db.setting.findFirst({
-      where: { key: input.key, userId, projectId: null },
-      select: { id: true },
-    });
-    if (existing) {
-      return ctx.db.setting.update({ where: { id: existing.id }, data: { value: encoded } });
-    }
-    return ctx.db.setting.create({
-      data: { key: input.key, value: encoded, scope: "user", userId },
-    });
+    await upsertUserSetting(ctx.db, ctx.userId, input.key, input.value);
+    return { ok: true };
   }),
 
   reset: mutationProcedure.input(UserResetInput).mutation(async ({ ctx, input }) => {
@@ -217,12 +209,6 @@ export const settingsRouter = router({
   }),
 
   globalUpdate: mutationProcedure.input(GlobalUpdateInput).mutation(async ({ ctx, input }) => {
-    const encoded = JSON.stringify(input.value);
-    const existing = await ctx.db.setting.findFirst({
-      where: { key: input.key, scope: "global", userId: null, projectId: null },
-      orderBy: { updatedAt: "desc" },
-      select: { id: true },
-    });
     // Log every global setting change — they affect the whole deployment, are
     // rare, and the audit log only covers proposals. Operators reading logs
     // need to see who flipped read-only mode, retention windows, etc.
@@ -230,10 +216,8 @@ export const settingsRouter = router({
       { actorUserId: ctx.userId, key: input.key, value: input.value },
       "settings: global setting changed",
     );
-    if (existing) {
-      return ctx.db.setting.update({ where: { id: existing.id }, data: { value: encoded } });
-    }
-    return ctx.db.setting.create({ data: { key: input.key, value: encoded, scope: "global" } });
+    await upsertGlobalSetting(ctx.db, input.key, input.value);
+    return { ok: true };
   }),
 
   globalReset: mutationProcedure.input(GlobalResetInput).mutation(async ({ ctx, input }) => {
@@ -273,22 +257,8 @@ export const settingsRouter = router({
   projectUpdate: projectScopedMutationProcedure
     .input(ProjectUpdateInput)
     .mutation(async ({ ctx, input }) => {
-      const encoded = JSON.stringify(input.value);
-      const existing = await ctx.db.setting.findFirst({
-        where: { key: input.key, projectId: ctx.projectId, scope: "project", userId: null },
-        select: { id: true },
-      });
-      if (existing) {
-        return ctx.db.setting.update({ where: { id: existing.id }, data: { value: encoded } });
-      }
-      return ctx.db.setting.create({
-        data: {
-          key: input.key,
-          value: encoded,
-          scope: "project",
-          projectId: ctx.projectId,
-        },
-      });
+      await upsertProjectSetting(ctx.db, ctx.projectId, input.key, input.value);
+      return { ok: true };
     }),
 
   projectReset: projectScopedMutationProcedure

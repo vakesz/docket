@@ -5,6 +5,7 @@ import { LLM_KINDS } from "@/agent/llm/types";
 import type { Prisma } from "@/db/generated/client";
 import { asPlainObject } from "@/lib/json";
 import type { db as Db } from "@/server/db";
+import { LLM_ROLES } from "@/server/llm/lookup";
 import { logger } from "@/server/logger";
 import { getProviderSpec, listProviderSpecs } from "@/server/provider-registry";
 import { encryptSecret } from "@/server/secrets/encryption";
@@ -36,7 +37,6 @@ const LLM_DEFAULTS_BY_KIND: Record<(typeof LLM_KINDS)[number], LlmKindDefaults> 
   },
 };
 
-const LLM_ROLES = ["chat", "guardrail"] as const;
 const LlmRole = z.enum(LLM_ROLES);
 const LlmKind = z.enum(LLM_KINDS);
 

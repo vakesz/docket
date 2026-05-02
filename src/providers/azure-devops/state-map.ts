@@ -1,23 +1,7 @@
-/**
- * Bidirectional translation between Azure DevOps work-item states/types
- * and the canonical `ItemKind` / `ItemState` / `TransitionIntent`.
- *
- * Supports the **Agile** process template (the default for new AzDO
- * projects). Other templates (Scrum, CMMI, custom) work for the kinds
- * already in `KIND_BY_WIT` (Product Backlog Item, Requirement) since their
- * state vocabulary overlaps Agile; out-of-vocabulary states fall back to
- * `active` so sync doesn't fail on a process template we haven't catalogued.
- *
- * The arch test in `src/providers/azure-devops/state-map.test.ts` walks every
- * canonical state we commit to supporting and asserts at least one AzDO
- * state pair maps to it — same property the GitHub map carries.
- *
- * Soft states (`blocked`, `needs_info`, `closed-as-wontfix`) have no native
- * Agile representation, so we encode them as **tags** alongside the state
- * field. Sync inference of those tags back into canonical state happens in
- * `to-item.ts`; the executor merges new tags into the item's existing tag
- * set rather than overwriting.
- */
+// Soft states (`blocked`, `needs_info`, `closed-as-wontfix`) have no
+// native Agile representation, so we encode them as tags alongside the
+// state field. Out-of-vocabulary states fall back to `active` so sync
+// doesn't fail on a process template we haven't catalogued.
 
 import { ProviderError } from "@/core/provider";
 import {

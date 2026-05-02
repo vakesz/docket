@@ -113,7 +113,7 @@ export function BacklogPane({
     const tagMap = new Map<string, number>();
     const assigneeMap = new Map<string, number>();
     for (const it of data) {
-      const k = it.kind as ItemKind;
+      const k = it.kind;
       kindMap.set(k, (kindMap.get(k) ?? 0) + 1);
       for (const t of it.tags ?? []) tagMap.set(t, (tagMap.get(t) ?? 0) + 1);
       const a = it.assignee;

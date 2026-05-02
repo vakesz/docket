@@ -1,29 +1,10 @@
-/**
- * Server-side periodic sync scheduler.
- *
- * Runs one incremental sync per project on the cadence configured by the
- * project's `sync.interval-seconds` setting. Replaces the per-tab
- * `useBackgroundSync` hook so N tabs × M users on the same project don't
- * each fire their own sync, and so list refetches don't fan out across
- * every open browser on every tick.
- *
- * Design — kept deliberately small:
- *   - One supervisor `setInterval` walks all non-archived projects every
- *     SUPERVISOR_INTERVAL_MS. Each project that's due (interval elapsed
- *     since `lastFiredAt`) and not already in flight gets a sync.
- *   - State is stashed on `globalThis` so Next.js HMR re-imports don't
- *     leak duplicate timers — same trick `src/server/db.ts` uses for the
- *     Prisma client. Justified exception to invariant #13: the scheduler
- *     is out-of-band by design (timer-driven, not request-driven), so a
- *     module-level singleton is the right shape.
- *   - Sync runs as the project's `ownerUserId` (the canonical actor
- *     `buildProviderForUser` requires).
- *   - `app.read-only` short-circuits the supervisor entirely.
- *
- * Multi-instance: this currently assumes one Node process. Adding a second
- * instance would double-sync until a `pg_try_advisory_lock` is wired into
- * `tickProject`. Cheap to add when needed; deliberately omitted now.
- */
+// State is stashed on `globalThis` so Next.js HMR re-imports don't leak
+// duplicate timers — same trick `src/server/db.ts` uses for the Prisma
+// client. Justified exception to CLAUDE.md invariant #13: the scheduler
+// is out-of-band by design.
+//
+// Multi-instance: assumes one Node process. A second instance would
+// double-sync until a `pg_try_advisory_lock` is wired into `tickProject`.
 
 import "server-only";
 

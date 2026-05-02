@@ -1,22 +1,7 @@
-/**
- * Bidirectional translation between GitHub issue states and canonical
- * `ItemState` / `TransitionIntent`.
- *
- * GitHub stores issue state as `(state, state_reason)`:
- *   - `state` is "open" | "closed"
- *   - `state_reason` is "completed" | "not_planned" | "duplicate" | "reopened" | null
- *
- * GitHub doesn't have a native concept of "blocked" or "needs info" — the
- * provider encodes those as **labels** alongside the state field, mirroring
- * how Azure DevOps encodes the same soft states as tags. Sync-time canonical
- * mapping reads labels first; the executor merges add/remove plans into the
- * existing label set so unrelated labels survive a transition.
- *
- * The arch test in `src/providers/github/state-map.test.ts` walks every
- * canonical `ItemState` GitHub commits to supporting and asserts at least
- * one `(state, stateReason, labels)` triple maps to it. That guarantees no
- * canonical state is unreachable through GitHub.
- */
+// GitHub has no native "blocked" / "needs info" — the provider encodes
+// those as labels, mirroring AzDO's tag encoding. Sync reads labels first;
+// the executor merges add/remove plans into the existing label set so
+// unrelated labels survive a transition.
 
 import { ProviderError } from "@/core/provider";
 import { canonicalIntentsFor, type ItemState, type TransitionIntent } from "@/core/types";

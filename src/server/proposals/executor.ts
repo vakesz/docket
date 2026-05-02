@@ -1,25 +1,10 @@
-/**
- * Proposal executor — the ONE place provider write methods are called.
- *
- * The arch test `src/__arch__/no-provider-write-leak.test.ts` enforces
- * this rule by regex-scanning the source tree and asserting that no
- * file outside this module (or the GitHub provider implementation
- * itself) calls `.transition(`, `.patchDescription(`, `.uploadAttachment(`,
- * `.addComment(`, or `.createItem(`. That keeps the proposal-first
- * mutation invariant load-bearing.
- *
- * `confirmProposal` runs the four-step write protocol:
- *   1. Load + validate the pending proposal
- *   2. Build the per-user provider via the registry
- *   3. Call the matching write method on the provider
- *   4. Refresh the cached `Item` row from the response, stamp
- *      `confirmedAt` / `executedAt`, return the updated proposal row
- *
- * On failure, the proposal is reverted to `pending` with `errorMessage`
- * set so the user can inspect what happened and retry from the same UI.
- * `errorMessage` is cleared on the next optimistic flip, so a successful
- * retry leaves no stale error behind.
- */
+// The ONE place provider write methods are called. Enforced by the regex
+// scan in `src/__arch__/no-provider-write-leak.test.ts` — every other
+// caller of `.transition(` / `.patchDescription(` / `.addComment(` /
+// `.createItem(` / `.setTags(` etc. is a leak of the proposal-first
+// invariant. Failed writes flip the proposal back to `pending` with
+// `errorMessage`; the next optimistic flip clears it so a successful
+// retry leaves no stale error.
 
 import "server-only";
 import { TRPCError } from "@trpc/server";
@@ -115,11 +100,12 @@ async function recordFailureAudit(
 
 async function loadPending(ctx: ExecutorContext, proposalId: ProposalId) {
   const row = assertFound(
-    await ctx.db.proposal.findFirst({
-      where: { id: proposalId, projectId: ctx.projectId },
-    }),
+    await ctx.db.proposal.findUnique({ where: { id: proposalId } }),
     "proposal not found",
   );
+  if (row.projectId !== ctx.projectId) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "proposal not found" });
+  }
   if (row.status !== "pending") {
     throw new TRPCError({
       code: "BAD_REQUEST",

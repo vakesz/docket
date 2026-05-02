@@ -2,6 +2,7 @@
 
 import { AlertTriangle } from "lucide-react";
 import { useId } from "react";
+import { useProjectSettingsMap, useSettingsMap } from "@/lib/settings-client";
 import { DEFAULT_STALE_THRESHOLD_DAYS } from "@/lib/staleness";
 import { trpc } from "@/lib/trpc-client";
 import { RECENT_LIMIT_MAX, useRecentEnabled, useRecentLimit } from "@/lib/ui-prefs";
@@ -31,11 +32,8 @@ const USER_STALE_OVERRIDE_KEY = "items.stale-after-days.user";
  */
 export function ItemsListPanel({ projectSlug }: { projectSlug: string | null }) {
   const utils = trpc.useUtils();
-  const list = trpc.settings.list.useQuery();
-  const projectList = trpc.settings.projectList.useQuery(
-    { projectSlug: projectSlug ?? "" },
-    { enabled: projectSlug !== null },
-  );
+  const settings = useSettingsMap();
+  const projectSettings = useProjectSettingsMap({ projectSlug });
   const update = trpc.settings.update.useMutation({
     onSuccess: async () => {
       await utils.settings.list.invalidate();
@@ -59,38 +57,21 @@ export function ItemsListPanel({ projectSlug }: { projectSlug: string | null }) 
   const indicatorId = useId();
   const thresholdId = useId();
 
-  const maxVisibleTagsRaw = list.data?.find((r) => r.key === "items.max-visible-tags")?.value;
-  const maxVisibleTags = typeof maxVisibleTagsRaw === "number" ? maxVisibleTagsRaw : 2;
-  const maxVisibleAssigneesRaw = list.data?.find(
-    (r) => r.key === "items.max-visible-assignees",
-  )?.value;
-  const maxVisibleAssignees =
-    typeof maxVisibleAssigneesRaw === "number" ? maxVisibleAssigneesRaw : 2;
-  const assigneeSelectorStyleRaw = list.data?.find(
-    (r) => r.key === "items.assignee-selector-style",
-  )?.value;
+  const maxVisibleTags = settings.num("items.max-visible-tags", 2);
+  const maxVisibleAssignees = settings.num("items.max-visible-assignees", 2);
   const assigneeSelectorStyle: "chips" | "dropdown" =
-    assigneeSelectorStyleRaw === "dropdown" ? "dropdown" : "chips";
-  const showAvatarsRaw = list.data?.find((r) => r.key === "items.show-assignee-avatars")?.value;
-  const showAvatars = typeof showAvatarsRaw === "boolean" ? showAvatarsRaw : true;
-  const showArchivedBucketRaw = list.data?.find(
-    (r) => r.key === "items.show-archived-bucket",
-  )?.value;
-  const showArchivedBucket =
-    typeof showArchivedBucketRaw === "boolean" ? showArchivedBucketRaw : true;
-  const backlogSortRaw = list.data?.find((r) => r.key === "backlog.default-sort")?.value;
-  const backlogSort = typeof backlogSortRaw === "string" ? backlogSortRaw : "updated";
-  const backlogStateRaw = list.data?.find((r) => r.key === "backlog.default-state-filter")?.value;
-  const backlogState = typeof backlogStateRaw === "string" ? backlogStateRaw : "open";
-  const backlogDensityRaw = list.data?.find((r) => r.key === "backlog.density")?.value;
-  const backlogDensity = typeof backlogDensityRaw === "string" ? backlogDensityRaw : "cozy";
+    settings.str("items.assignee-selector-style", "chips") === "dropdown" ? "dropdown" : "chips";
+  const showAvatars = settings.bool("items.show-assignee-avatars", true);
+  const showArchivedBucket = settings.bool("items.show-archived-bucket", true);
+  const backlogSort = settings.str("backlog.default-sort", "updated");
+  const backlogState = settings.str("backlog.default-state-filter", "open");
+  const backlogDensity = settings.str("backlog.density", "cozy");
 
-  const userStaleRaw = list.data?.find((r) => r.key === USER_STALE_OVERRIDE_KEY)?.value;
-  const userStale = typeof userStaleRaw === "number" ? userStaleRaw : -1;
+  const userStale = settings.num(USER_STALE_OVERRIDE_KEY, -1);
   const overrideOn = userStale >= 0;
   const indicatorOn = userStale > 0;
 
-  const projectStaleRaw = projectList.data?.find((r) => r.key === "items.stale-after-days")?.value;
+  const projectStaleRaw = projectSettings.raw("items.stale-after-days");
   const projectStale = typeof projectStaleRaw === "number" ? projectStaleRaw : null;
   const projectThresholdLabel =
     projectStale === null
@@ -99,7 +80,7 @@ export function ItemsListPanel({ projectSlug }: { projectSlug: string | null }) 
         ? "Disabled"
         : `${projectStale} day${projectStale === 1 ? "" : "s"}`;
 
-  const disabled = list.isPending || update.isPending;
+  const disabled = settings.list.isPending || update.isPending;
 
   const onToggleStaleOverride = (next: boolean) => {
     update.mutate({

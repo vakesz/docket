@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
+import { useProjectSettingsMap } from "@/lib/settings-client";
 import { DEFAULT_STALE_THRESHOLD_DAYS } from "@/lib/staleness";
 import { trpc } from "@/lib/trpc-client";
 import { NumberField } from "@/ui/forms/number-field";
@@ -21,25 +22,23 @@ const DEFAULT_SYNC_INTERVAL_SECONDS = 300;
  */
 export function ProjectItemsPanel({ projectSlug }: { projectSlug: string }) {
   const utils = trpc.useUtils();
-  const list = trpc.settings.projectList.useQuery({ projectSlug });
+  const settings = useProjectSettingsMap({ projectSlug });
   const update = trpc.settings.projectUpdate.useMutation({
     onSuccess: async () => {
       await utils.settings.projectList.invalidate({ projectSlug });
     },
   });
 
-  const valueRaw = list.data?.find((r) => r.key === STALE_KEY)?.value;
-  const value = typeof valueRaw === "number" ? valueRaw : DEFAULT_STALE_THRESHOLD_DAYS;
+  const value = settings.num(STALE_KEY, DEFAULT_STALE_THRESHOLD_DAYS);
   const indicatorOn = value > 0;
   const [lastPositive, setLastPositive] = useState<number>(
     value > 0 ? value : DEFAULT_STALE_THRESHOLD_DAYS,
   );
 
-  const syncRaw = list.data?.find((r) => r.key === SYNC_INTERVAL_KEY)?.value;
-  const syncSeconds = typeof syncRaw === "number" ? syncRaw : DEFAULT_SYNC_INTERVAL_SECONDS;
+  const syncSeconds = settings.num(SYNC_INTERVAL_KEY, DEFAULT_SYNC_INTERVAL_SECONDS);
   const syncMinutes = Math.round(syncSeconds / 60);
 
-  const disabled = list.isPending || update.isPending;
+  const disabled = settings.list.isPending || update.isPending;
   const indicatorId = useId();
   const thresholdId = useId();
   const syncId = useId();

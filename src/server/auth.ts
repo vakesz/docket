@@ -1,6 +1,7 @@
 import "server-only";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import NextAuth, { type NextAuthConfig } from "next-auth";
+import { cache } from "react";
 import { db } from "@/server/db";
 import { logger } from "@/server/logger";
 import { buildAuthProvider, UnknownOauthKindError } from "@/server/providers/auth-build";
@@ -56,7 +57,7 @@ async function buildProviders(): Promise<NextAuthConfig["providers"]> {
   return providers;
 }
 
-export const { handlers, signIn, signOut, auth } = NextAuth(async () => {
+const nextAuth = NextAuth(async () => {
   const providers = await buildProviders();
   return {
     adapter: PrismaAdapter(db),
@@ -64,3 +65,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth(async () => {
     providers,
   } satisfies NextAuthConfig;
 });
+
+export const { handlers, signIn, signOut } = nextAuth;
+
+// `cache()` dedupes the auth call within a single RSC render, collapsing
+// the 2-3 calls per page (root layout + nested layouts + page) into one
+// session lookup. Outside React (route handlers, tRPC ctx), it's a no-op.
+export const auth: typeof nextAuth.auth = cache(nextAuth.auth) as typeof nextAuth.auth;

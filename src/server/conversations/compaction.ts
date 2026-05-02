@@ -1,23 +1,8 @@
-/**
- * Conversation compaction.
- *
- * Long-running threads can exceed the LLM context window. Compaction folds
- * older messages into a single synthetic system summary so the next turn's
- * prompt fits, without breaking the byte-stable system+ticket prefix the
- * agent loop builds in `src/agent/prompt.ts`.
- *
- * Wire-up:
- * - The settings catalog exposes per-project knobs under `llm.compaction.*`.
- * - The agent loop checks `shouldCompact` at turn start and calls
- *   `compactConversation` when it returns true.
- *
- * On-disk model:
- * - Each `Message` has `compacted: boolean`. The live transcript filters
- *   `compacted = false` (see `getConversation`); compacted rows are kept
- *   for audit but never replayed to the LLM.
- * - The synthesized summary is appended as a `role = 'system'` message
- *   with `compacted = false` so it surfaces in the next prompt.
- */
+// Compacted rows stay in the DB for audit but never replay to the LLM
+// (the live transcript filters `compacted = false`). The synthesized
+// summary appends as a fresh `role='system'` row with `compacted=false`
+// so the next prompt picks it up. Lives outside the byte-stable prefix
+// in `src/agent/prompt.ts` — adding to that prefix would break the cache.
 
 import "server-only";
 import type { Message } from "@/db/generated/client";

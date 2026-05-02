@@ -1,22 +1,7 @@
-/**
- * MCP OAuth handshake router.
- *
- * Two-step flow:
- *   1. `start` — discover endpoints, register a client (DCR) if needed,
- *      generate PKCE + nonce, persist `McpOauthState`, return the
- *      authorization URL the UI should open in a popup.
- *   2. `complete` — invoked from the callback Next route handler. Looks
- *      up the state by nonce, exchanges the code for tokens, encrypts
- *      and writes them onto the `McpServerConfig` row, enables the row,
- *      drops the audit trail, and deletes the state row.
- *
- * Token storage:
- *   - `Authorization: Bearer <access>` lives in `headersJson` (encrypted
- *     via `headers-codec`) so the agent loop reads it the same way as
- *     any manually-pasted bearer token.
- *   - `oauthRefreshToken`, `oauthClientId`, `oauthClientSecret` are
- *     `enc:v1:` encrypted on the row directly via `secrets/encryption.ts`.
- */
+// `Authorization: Bearer <access>` lives in `headersJson` (encrypted via
+// `headers-codec`) so the agent loop reads it the same way as any manually
+// pasted bearer token. `oauthRefreshToken`, `oauthClientId`,
+// `oauthClientSecret` are `enc:v1:` encrypted directly on the row.
 
 import "server-only";
 import { TRPCError } from "@trpc/server";

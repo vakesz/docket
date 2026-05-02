@@ -1,25 +1,6 @@
-/**
- * Static metadata for the Azure DevOps provider type.
- *
- * Configs reaching the factory have shape:
- *   { orgUrl: string, project: string, accessToken: string }
- *
- * `orgUrl` and `project` come from the project's `providerScope` JSON column.
- * `accessToken` is injected by the server-side provider builder (it reads
- * the user's `Account.access_token` for `provider="azure_devops"` and merges
- * it into the config).
- *
- * `scopeAxes` declares the three AzDO-specific narrowing axes the view bar
- * exposes alongside the reserved assignee/state/tags chips:
- *   - `area_path`: matches `System.AreaPath` with UNDER semantics
- *     (a stored `A\B\C` matches filter `A` or `A\B`).
- *   - `iteration_path`: same UNDER semantics on `System.IterationPath`.
- *   - `team`: matches `System.NodeName` (preferred) or `System.TeamProject`.
- *
- * The matchers and extractors live below in pure-function form because they
- * read off `Item.providerRaw.fields`; `core/` stays provider-agnostic by
- * not knowing what those keys mean.
- */
+// AreaPath / IterationPath axes use UNDER semantics: a stored `A\B\C`
+// matches filter `A` or `A\B`. Matchers/extractors live here (not in
+// `core/`) so the provider-agnostic core stays out of `providerRaw.fields`.
 
 import type {
   AxisExtractor,
@@ -126,22 +107,12 @@ export const azureDevOpsSpec = {
   ],
   requiresCli: [],
   grouping: "by_kind",
-  // Accept either the bare org name (the friendly form input) or a full
-  // `https://dev.azure.com/<org>` URL — for backwards compatibility with
-  // any project rows already storing the full URL form.
   normalizeConfig: (raw) => {
-    const orgRaw =
-      typeof raw["organization"] === "string" && raw["organization"].trim()
-        ? raw["organization"].trim()
-        : typeof raw["orgUrl"] === "string"
-          ? raw["orgUrl"].trim()
-          : "";
+    const orgRaw = typeof raw["organization"] === "string" ? raw["organization"].trim() : "";
     const project = typeof raw["project"] === "string" ? raw["project"].trim() : "";
     if (!orgRaw) throw new Error("Azure DevOps: 'organization' is required");
     if (!project) throw new Error("Azure DevOps: 'project' is required");
-    const orgUrl = /^https?:\/\//.test(orgRaw)
-      ? orgRaw.replace(/\/$/, "")
-      : `https://dev.azure.com/${orgRaw.replace(/^\/+|\/+$/g, "")}`;
+    const orgUrl = `https://dev.azure.com/${orgRaw.replace(/^\/+|\/+$/g, "")}`;
     return { orgUrl, project };
   },
   labelTemplate,

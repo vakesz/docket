@@ -1,26 +1,7 @@
-/**
- * Guardrail interface — vendor-neutral, mirrors the LLM adapter shape.
- *
- * The agent loop never imports a guardrail vendor SDK directly; it only
- * sees a `Guardrail` instance handed back by `selectGuardrailFor`.
- * Three hook points sit inside the loop:
- *
- *   1. `checkInput`  — runs after the user message is persisted, before
- *                      transcript assembly. A `block` aborts the turn.
- *   2. `checkToolResult` — runs after each tool dispatch, before the
- *                          result is re-fed to the model. A `block`
- *                          replaces the result with a refusal stub the
- *                          model can react to (it never sees the original
- *                          payload). A `flag` prepends a warning line.
- *   3. `checkOutput` — runs after the final assistant text is persisted,
- *                      before `done`. Output is never blocked mid-stream
- *                      (UX cost too high); `flag` only marks the row.
- *
- * Architecture rule: only files under `src/agent/guardrail/**` may import
- * vendor SDKs needed by guardrail adapters. Enforced by
- * `src/__arch__/no-llm-vendor-leak.test.ts` (guardrail/ is allow-listed
- * alongside llm/).
- */
+// `checkOutput` `block` is intentionally absent from the contract — the
+// user has already seen the streamed text by that point, so the only
+// useful disposition is `flag`. Vendor SDKs allowed under
+// `src/agent/guardrail/**` (allow-listed in `no-llm-vendor-leak.test.ts`).
 
 export const GUARDRAIL_KINDS = ["noop", "pattern", "llm-judge", "composite"] as const;
 export type GuardrailKind = (typeof GUARDRAIL_KINDS)[number];

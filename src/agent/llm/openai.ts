@@ -1,21 +1,8 @@
-/**
- * OpenAI LLM adapter.
- *
- * THE ONLY FILE in the tree allowed to import `openai`. The arch test
- * `src/__arch__/no-llm-vendor-leak.test.ts` enforces it. Adding a new
- * vendor is a sibling file under `src/agent/llm/` plus a registry entry.
- *
- * Uses the Responses API in streaming mode. Chat-style messages are
- * translated into Responses input items at the boundary so the agent loop
- * stays vendor-neutral.
- *
- * Model defaults to `gpt-5` (our daily driver) but the LlmProvider row's
- * `model` overrides it. Cost is reported in USD cents when usage data is
- * available and the LlmProvider row carries `inputPriceCentsPerMtok` /
- * `outputPriceCentsPerMtok`. Without prices the cost is left undefined and
- * budget tracking silently undercounts that turn — fill the price fields
- * when adding a model.
- */
+// One of two files in the tree allowed to import `openai` (the other is
+// the Anthropic adapter sibling). Enforced by
+// `src/__arch__/no-llm-vendor-leak.test.ts`. Without `inputPriceCentsPerMtok`
+// / `outputPriceCentsPerMtok` on the LlmProvider row, cost is left undefined
+// and budget tracking silently undercounts the turn.
 
 import OpenAI from "openai";
 import type {

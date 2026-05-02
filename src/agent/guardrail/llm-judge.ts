@@ -1,40 +1,10 @@
-/**
- * LLM-judge guardrail.
- *
- * One-shot, single-token classification using a cheap model
- * (operator picks one — typically a `*-nano` / `*-mini` / `*-haiku` tier).
- * Three responsibilities, one model:
- *
- *   1. **Input scope check** — classifies whether a user message is
- *      about software / work-item topics. Off-topic messages
- *      ("how to make pancakes") return `block` so the chatbot stays in
- *      its lane.
- *   2. **Tool-result injection check** — scans tool output before it
- *      re-enters the prompt. Catches prompt injection from item bodies,
- *      comments, web_fetch markdown, MCP responses.
- *   3. **Output safety check** — classifies the assistant's final reply
- *      for harmful content (hate / harassment / violence / sexual).
- *      Always `flag` (banner), never `block` — the user already saw the
- *      streamed text. Opt-in via `outputCheckEnabled`.
- *
- * Cost: ~300–500 input tokens, a handful of output tokens per call. The
- * judge runs against an `LlmProvider` row with `role='guardrail'`. Per
- * project, that row's API key + base URL + model name flow into a
- * vendor-specific `JudgeClient` instance built by the guardrail registry —
- * `LlmJudgeGuardrail` itself is vendor-neutral.
- *
- * Vendor SDK quarantine: this file imports no vendor SDK. The OpenAI and
- * Anthropic judge clients live alongside their chat adapters under
- * `src/agent/llm/<kind>.ts` and the arch test
- * `src/__arch__/no-llm-vendor-leak.test.ts` keeps the SDKs there.
- *
- * Prompt overrides: the three system prompts (injection / scope / output
- * safety) default to the bundled strings in `judge-prompts.ts`, but
- * `loadJudgePrompts` resolves operator overrides from
- * `prompt.guardrail.*` global settings before the registry hands them
- * here. Empty overrides fall back to the defaults so an admin clearing
- * the field doesn't leave the judge with no instructions.
- */
+// Output safety classifications always `flag` (banner) — never `block`,
+// because the user already saw the streamed text. Vendor SDK quarantine:
+// this file is vendor-neutral; the per-kind `JudgeClient` instances live
+// alongside the chat adapters under `src/agent/llm/<kind>.ts` so the arch
+// test in `no-llm-vendor-leak.test.ts` keeps the SDKs in one place.
+// Empty prompt overrides fall back to bundled defaults so a cleared
+// override doesn't leave the judge with no instructions.
 
 import type { JudgeClient } from "@/agent/guardrail/judge-client";
 import { DEFAULT_JUDGE_PROMPTS, type ResolvedJudgePrompts } from "@/agent/guardrail/judge-prompts";

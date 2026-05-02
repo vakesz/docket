@@ -35,9 +35,6 @@ function readStringMeta(metadata: unknown, key: string): string | undefined {
 }
 
 export function buildAuthProvider(row: OauthProviderConfig): Provider {
-  // `clientSecret` is encrypted at rest with `SECRETS_KEY`. Legacy plaintext
-  // rows are returned as-is by `decryptSecret`, so this is a no-op until the
-  // operator rolls a key.
   const clientSecret = decryptSecret(row.clientSecret);
   switch (row.kind) {
     case "github":

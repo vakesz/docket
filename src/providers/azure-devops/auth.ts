@@ -1,24 +1,12 @@
-/**
- * Custom NextAuth provider for Azure DevOps.
- *
- * AzDO's OAuth story is awkward: Microsoft has *deprecated* the legacy
- * `app.vssps.visualstudio.com/oauth2/*` flow (the one NextAuth ships
- * out-of-the-box as `azure-devops`) and now recommends Microsoft Entra ID
- * with the AzDO resource scope. We follow that recommendation — the user
- * registers an Entra app, grants it `499b84ac-1321-427f-aa17-267ca6975798`
- * (the well-known AzDO API resource id), and we ask for the `.default`
- * scope on top of OIDC.
- *
- * Provider id is set to `azure_devops` (matching `OauthProviderConfig.kind`
- * and `Project.providerKind`) so the NextAuth `Account.provider` column
- * lines up with what `buildProviderForUser` looks up. That symmetry is
- * load-bearing — change one side, change both.
- *
- * Tenant: callers pass either a specific tenant guid or the literal
- * `common` (the default). For org-internal apps a single-tenant guid is
- * the right choice; for ones that need to support multiple AAD tenants,
- * `common` works.
- */
+// Microsoft deprecated the legacy `app.vssps.visualstudio.com/oauth2/*`
+// flow (the one NextAuth ships as `azure-devops`); the supported path is
+// Microsoft Entra ID with `.default` against AzDO resource id
+// `499b84ac-1321-427f-aa17-267ca6975798`.
+//
+// Provider id `azure_devops` must match `OauthProviderConfig.kind` and
+// `Project.providerKind` — the NextAuth `Account.provider` column has to
+// line up with what `buildProviderForUser` looks up. Load-bearing
+// symmetry; change one side, change both.
 
 import "server-only";
 import type { OIDCConfig } from "next-auth/providers";

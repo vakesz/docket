@@ -1,38 +1,42 @@
+// Single resolver for both LLM roles. Each level filters `role` + `enabled`,
+// so a chat row can never resolve when the caller asked for guardrail and
+// vice versa — the role split is enforced here, not at every call site.
+
 import "server-only";
-import type { Conversation, LlmProvider, Project } from "@/db/generated/client";
-import type { db } from "@/server/db";
+import type { LlmProvider } from "@/db/generated/client";
+import type { db as Db } from "@/server/db";
+
+export const LLM_ROLES = ["chat", "guardrail"] as const;
+export type LlmRole = (typeof LLM_ROLES)[number];
+
+type Database = typeof Db;
 
 /**
- * Resolve which `LlmProvider` row should drive the agent for a given
- * conversation, applying the documented fallback chain:
+ * Resolve the active `LlmProvider` row for a given role:
+ *   pinnedIds (in order, first match wins)
+ *     → role default flagged with `isDefault`
+ *     → most-recently-updated enabled row in the role
  *
- *   conversation.llmProviderIdOverride
- *     → project.defaultLlmProviderId
- *     → the deployment-wide chat row (`role='chat'`, `isDefault=true`).
- *
- * Every step filters `role: 'chat'` so a guardrail row can never resolve
- * here even when some malformed pointer references one. Returns null when
- * no row at all is configured (setup wizard hasn't run). `selectAdapterFor`
- * instantiates the actual adapter from this row.
+ * Each candidate is filtered on `role` + `enabled: true` so a disabled pin
+ * gracefully falls through to the next level instead of erroring.
  */
-export async function resolveLlmProviderRow(
-  prisma: typeof db,
-  project: Pick<Project, "id" | "defaultLlmProviderId">,
-  conversation?: Pick<Conversation, "llmProviderIdOverride"> | null,
+export async function resolveProviderForRole(
+  db: Database,
+  role: LlmRole,
+  pinnedIds: ReadonlyArray<string | null | undefined>,
 ): Promise<LlmProvider | null> {
-  if (conversation?.llmProviderIdOverride) {
-    const row = await prisma.llmProvider.findFirst({
-      where: { id: conversation.llmProviderIdOverride, role: "chat", enabled: true },
-    });
+  for (const id of pinnedIds) {
+    if (!id) continue;
+    const row = await db.llmProvider.findFirst({ where: { id, role, enabled: true } });
     if (row) return row;
   }
-  if (project.defaultLlmProviderId) {
-    const row = await prisma.llmProvider.findFirst({
-      where: { id: project.defaultLlmProviderId, role: "chat", enabled: true },
-    });
-    if (row) return row;
-  }
-  return prisma.llmProvider.findFirst({
-    where: { role: "chat", isDefault: true, enabled: true },
+  const flagged = await db.llmProvider.findFirst({
+    where: { role, isDefault: true, enabled: true },
+    orderBy: [{ updatedAt: "desc" }],
+  });
+  if (flagged) return flagged;
+  return db.llmProvider.findFirst({
+    where: { role, enabled: true },
+    orderBy: [{ updatedAt: "desc" }],
   });
 }

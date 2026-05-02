@@ -1,23 +1,6 @@
-/**
- * HTML → cleaned-markdown pass for the web_fetch tool.
- *
- * Two goals:
- *   1. Strip head/script/style/noscript/template/iframe/svg + HTML comments,
- *      so chrome and inline assets don't bloat the agent's context.
- *   2. Convert the remaining body to markdown via Turndown so structure
- *      (headings, lists, fenced code, links) survives in a token-efficient
- *      form.
- *
- * Relative `<a href>` and `<img src>` URLs are resolved against the response
- * URL before Turndown runs, so the agent sees absolute URLs it can follow on
- * its own without juggling base URLs.
- *
- * Failure modes the caller (web-fetch.ts) handles:
- *   - parse error → `EmptyCleanedOutputError` is *not* thrown; we throw the
- *     underlying error and the caller falls back to raw.
- *   - cleaned markdown is whitespace-only → throws `EmptyCleanedOutputError`
- *     so the caller can record `cleanError` and fall back to raw.
- */
+// Relative `<a href>` and `<img src>` resolve against the response URL
+// before Turndown runs so the agent sees absolute URLs without juggling
+// base URLs itself.
 
 import "server-only";
 import { JSDOM } from "jsdom";

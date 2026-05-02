@@ -15,94 +15,81 @@
 
 import "server-only";
 import { z } from "zod";
-import { zodToJsonSchema } from "@/agent/tools/schema";
 import type { ToolFactory } from "@/agent/tools/types";
-import { fail, ok } from "@/agent/tools/types";
+import { defineTool, fail, ok } from "@/agent/tools/types";
 
-export const listMemoryTool: ToolFactory = (ctx) => ({
-  def: {
+export const listMemoryTool: ToolFactory = (ctx) =>
+  defineTool({
     name: "list_memory",
     description:
       "List memory entries saved for the current project. Filter by tag or free-text search across title + body.",
-    parameters: zodToJsonSchema(
-      z.object({
-        tag: z.string().optional().describe("Restrict to entries carrying this tag."),
-        search: z.string().max(200).optional(),
-        limit: z.number().int().min(1).max(50).default(20),
-      }),
-    ),
-  },
-  // List view returns id/title/tags/source/updatedAt — only the title is
-  // user-authored. Body markdown is fetched separately via get_memory.
-  guardrailScan: { mode: "fields", untrusted: ["[].title"] },
-  handler: async (raw) => {
-    const args = z
-      .object({
-        tag: z.string().optional(),
-        search: z.string().max(200).optional(),
-        limit: z.number().int().min(1).max(50).default(20),
-      })
-      .parse(raw);
-    const rows = await ctx.db.memoryEntry.findMany({
-      where: {
-        projectId: ctx.projectId,
-        ...(args.tag ? { tags: { has: args.tag } } : {}),
-        ...(args.search
-          ? {
-              OR: [
-                { title: { contains: args.search, mode: "insensitive" } },
-                { body: { contains: args.search, mode: "insensitive" } },
-              ],
-            }
-          : {}),
-      },
-      orderBy: [{ updatedAt: "desc" }],
-      take: args.limit,
-      select: {
-        id: true,
-        title: true,
-        tags: true,
-        source: true,
-        updatedAt: true,
-      },
-    });
-    return ok(
-      rows.map((r) => ({
-        id: r.id,
-        title: r.title,
-        tags: r.tags,
-        source: r.source,
-        updated_at: r.updatedAt,
-      })),
-    );
-  },
-});
+    schema: z.object({
+      tag: z.string().optional().describe("Restrict to entries carrying this tag."),
+      search: z.string().max(200).optional(),
+      limit: z.number().int().min(1).max(50).default(20),
+    }),
+    // List view returns id/title/tags/source/updatedAt — only the title is
+    // user-authored. Body markdown is fetched separately via get_memory.
+    guardrailScan: { mode: "fields", untrusted: ["[].title"] },
+    handler: async (args) => {
+      const rows = await ctx.db.memoryEntry.findMany({
+        where: {
+          projectId: ctx.projectId,
+          ...(args.tag ? { tags: { has: args.tag } } : {}),
+          ...(args.search
+            ? {
+                OR: [
+                  { title: { contains: args.search, mode: "insensitive" } },
+                  { body: { contains: args.search, mode: "insensitive" } },
+                ],
+              }
+            : {}),
+        },
+        orderBy: [{ updatedAt: "desc" }],
+        take: args.limit,
+        select: {
+          id: true,
+          title: true,
+          tags: true,
+          source: true,
+          updatedAt: true,
+        },
+      });
+      return ok(
+        rows.map((r) => ({
+          id: r.id,
+          title: r.title,
+          tags: r.tags,
+          source: r.source,
+          updated_at: r.updatedAt,
+        })),
+      );
+    },
+  });
 
-export const getMemoryTool: ToolFactory = (ctx) => ({
-  def: {
+export const getMemoryTool: ToolFactory = (ctx) =>
+  defineTool({
     name: "get_memory",
     description: "Read one memory entry by id. Returns full markdown body.",
-    parameters: zodToJsonSchema(z.object({ memory_id: z.string().min(1) })),
-  },
-  // Title and body are user-authored. id/tags/source/updated_at are
-  // server-controlled metadata.
-  guardrailScan: { mode: "fields", untrusted: ["title", "body"] },
-  handler: async (raw) => {
-    const { memory_id: memoryId } = z.object({ memory_id: z.string().min(1) }).parse(raw);
-    const row = await ctx.db.memoryEntry.findFirst({
-      where: { id: memoryId, projectId: ctx.projectId },
-    });
-    if (!row) return fail(`memory entry '${memoryId}' not found in this project`);
-    return ok({
-      id: row.id,
-      title: row.title,
-      body: row.body,
-      tags: row.tags,
-      source: row.source,
-      updated_at: row.updatedAt,
-    });
-  },
-});
+    schema: z.object({ memory_id: z.string().min(1) }),
+    // Title and body are user-authored. id/tags/source/updated_at are
+    // server-controlled metadata.
+    guardrailScan: { mode: "fields", untrusted: ["title", "body"] },
+    handler: async ({ memory_id: memoryId }) => {
+      const row = await ctx.db.memoryEntry.findFirst({
+        where: { id: memoryId, projectId: ctx.projectId },
+      });
+      if (!row) return fail(`memory entry '${memoryId}' not found in this project`);
+      return ok({
+        id: row.id,
+        title: row.title,
+        body: row.body,
+        tags: row.tags,
+        source: row.source,
+        updated_at: row.updatedAt,
+      });
+    },
+  });
 
 export function memoryReadonlyTools(ctx: Parameters<ToolFactory>[0]) {
   return [listMemoryTool(ctx), getMemoryTool(ctx)] as const;

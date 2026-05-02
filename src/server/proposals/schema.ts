@@ -14,13 +14,20 @@
 
 import "server-only";
 import { z } from "zod";
-import { ITEM_KINDS, TRANSITION_INTENTS } from "@/core/types";
+import { ITEM_KINDS, ITEM_STATES, TRANSITION_INTENTS } from "@/core/types";
 
+// Mirrors what `snapshotFromRow` produces and what `diff.ts` reads — all
+// fields the diff renderer touches are required, the rest of the canonical
+// `Item` shape rides through via passthrough so snapshots written by older
+// versions of `snapshotFromRow` keep parsing.
 const itemSnapshotSchema = z
   .object({
     id: z.string(),
     title: z.string(),
-    state: z.string(),
+    state: z.enum(ITEM_STATES),
+    description: z.string(),
+    assignee: z.string().nullable(),
+    tags: z.array(z.string()).readonly(),
   })
   .passthrough();
 

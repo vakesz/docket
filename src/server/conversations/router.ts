@@ -18,6 +18,7 @@
 import "server-only";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { asConversationId, type ProjectId, type UserId } from "@/core/types";
 import {
   archiveConversation,
   createConversation,
@@ -52,12 +53,17 @@ const SetLlmOverrideInput = ConversationRef.extend({
 async function ensureOwn(
   ctx: {
     db: typeof import("@/server/db").db;
-    userId: string;
+    userId: UserId;
   },
   conversationId: string,
-  projectId: string,
+  projectId: ProjectId,
 ): Promise<void> {
-  const ok = await ownsConversation(ctx.db, conversationId, projectId, ctx.userId);
+  const ok = await ownsConversation(
+    ctx.db,
+    asConversationId(conversationId),
+    projectId,
+    ctx.userId,
+  );
   if (!ok) {
     throw new TRPCError({ code: "NOT_FOUND", message: "conversation not found" });
   }
@@ -76,8 +82,8 @@ export const conversationsRouter = router({
 
   get: projectScopedProcedure.input(ConversationRef).query(async ({ ctx, input }) => {
     const conv = assertFound(
-      await ctx.db.conversation.findFirst({
-        where: { id: input.conversationId, projectId: ctx.projectId, userId: ctx.userId },
+      await ctx.db.conversation.findUnique({
+        where: { id: input.conversationId },
         include: {
           messages: {
             where: { compacted: false },
@@ -93,6 +99,11 @@ export const conversationsRouter = router({
       }),
       "conversation not found",
     );
+    if (conv.projectId !== ctx.projectId || conv.userId !== ctx.userId) {
+      // Treat the row as nonexistent for callers — same surface as the prior
+      // findFirst with the ownership filter built in.
+      throw new TRPCError({ code: "NOT_FOUND", message: "conversation not found" });
+    }
     return { ...conv, messages: conv.messages.slice().reverse() };
   }),
 
@@ -114,7 +125,7 @@ export const conversationsRouter = router({
     .input(ConversationRef)
     .mutation(async ({ ctx, input }) => {
       await ensureOwn(ctx, input.conversationId, ctx.projectId);
-      return archiveConversation(ctx.db, input.conversationId);
+      return archiveConversation(ctx.db, asConversationId(input.conversationId));
     }),
 
   /**

@@ -33,7 +33,7 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { config as loadEnv } from "dotenv";
 import { type Prisma, PrismaClient } from "../src/db/generated/client";
-import { encryptSecret, isEncryptionConfigured } from "../src/server/secrets/encryption";
+import { encryptSecret } from "../src/server/secrets/encryption";
 
 // Match prisma.config.ts precedence: .env.local first, then .env fills any gaps.
 loadEnv({ path: ".env.local" });
@@ -97,9 +97,7 @@ async function seedOpenAi(db: PrismaClient): Promise<void> {
         enabled: true,
       },
     });
-    console.log(
-      `[seed-dev] Created LlmProvider(${label})${isEncryptionConfigured() ? " (encrypted)" : ""}.`,
-    );
+    console.log(`[seed-dev] Created LlmProvider(${label}) (encrypted).`);
     return;
   }
 
@@ -164,9 +162,7 @@ async function seedGithubOAuth(db: PrismaClient): Promise<void> {
         enabled: true,
       },
     });
-    console.log(
-      `[seed-dev] Created OauthProviderConfig(kind=github)${isEncryptionConfigured() ? " (encrypted)" : ""}.`,
-    );
+    console.log("[seed-dev] Created OauthProviderConfig(kind=github) (encrypted).");
     return;
   }
 
@@ -216,9 +212,7 @@ async function seedAzureDevOpsOAuth(db: PrismaClient): Promise<void> {
         enabled: true,
       },
     });
-    console.log(
-      `[seed-dev] Created OauthProviderConfig(kind=azure_devops)${isEncryptionConfigured() ? " (encrypted)" : ""}.`,
-    );
+    console.log("[seed-dev] Created OauthProviderConfig(kind=azure_devops) (encrypted).");
     return;
   }
 

@@ -109,9 +109,13 @@ export async function buildProjectExport(
     db.conversation.findMany({
       where: { projectId, userId },
       orderBy: [{ startedAt: "desc" }],
+      // Bound the export so a chatty user can't OOM the Node process.
+      // The cap is generous; if anyone hits it we can move to NDJSON streaming.
+      take: 5_000,
       include: {
         messages: {
           orderBy: [{ createdAt: "asc" }],
+          take: 5_000,
         },
       },
     }),

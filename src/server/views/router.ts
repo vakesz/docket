@@ -1,21 +1,6 @@
-/**
- * Saved-views API.
- *
- * Per-user, per-project named visual filters. The view itself stores the
- * three narrowing axes the product surfaces (state bucket, assignees, axes
- * map); applying them to cached items lives in `src/core/view-filter.ts`,
- * which is pure and provider-agnostic.
- *
- * Mutations are on `projectScopedMutationProcedure` even though a view is
- * a per-user scratchpad — the role check is what gates non-owner viewers
- * from poking around (consistent with watchlist). Reads stay on
- * `projectScopedProcedure`.
- *
- * `setDefault` clears the prior default in the same transaction so the
- * "at most one default per (user, project)" invariant holds without a DB
- * partial unique index (Prisma 7 doesn't declare those cleanly yet — see
- * the `SavedView` schema comment).
- */
+// `setDefault` clears the prior default in the same transaction — the
+// "at most one default per (user, project)" invariant has no DB partial
+// unique to lean on (Prisma 7 doesn't declare those cleanly yet).
 
 import "server-only";
 import { TRPCError } from "@trpc/server";

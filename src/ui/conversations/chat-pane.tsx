@@ -116,16 +116,6 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
     return !messages.some((m) => m.role === "user" && m.content.trim() === target);
   })();
 
-  // Reset stream on item switch — closures inside the hook are bound to
-  // (projectSlug, itemId, conversationId) for one turn, so a stale stream
-  // can't bleed across items. The composer's own draft resets via
-  // `key={itemNumber}` below.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: itemNumber is the trigger; resetStream is stable.
-  useEffect(() => {
-    resetStream();
-    setActiveId(null);
-  }, [itemNumber]);
-
   // Stick-to-bottom scroll: flip the ref to false the moment the user
   // scrolls up, and back to true once they're within 64px of the bottom.
   useEffect(() => {

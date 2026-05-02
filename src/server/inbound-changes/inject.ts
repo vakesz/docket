@@ -16,7 +16,7 @@
  */
 
 import "server-only";
-import type { Item as CanonicalItem, ItemState } from "@/core/types";
+import { assertItemState, type Item as CanonicalItem, type ProjectId } from "@/core/types";
 import type { Item as ItemRow } from "@/db/generated/client";
 import { activeConversationsForItem } from "@/server/conversations/storage";
 import type { db as Db } from "@/server/db";
@@ -42,7 +42,7 @@ export function materialDiff(
   if (cached.state !== fresh.state) {
     out.push({
       field: "state",
-      before: cached.state as ItemState,
+      before: assertItemState(cached.state, "cached Item.state"),
       after: fresh.state,
     });
   }
@@ -83,7 +83,7 @@ function summarize(md: string): string {
 export async function injectExternalChange(
   db: Database,
   args: {
-    projectId: string;
+    projectId: ProjectId;
     itemId: string;
     providerItemId: string;
     changes: readonly MaterialChange[];

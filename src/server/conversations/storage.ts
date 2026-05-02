@@ -7,14 +7,15 @@
  */
 
 import "server-only";
+import type { ConversationId, ProjectId, UserId } from "@/core/types";
 import type { Conversation, Message } from "@/db/generated/client";
 import type { db as Db } from "@/server/db";
 
 type Database = typeof Db;
 
 type ListArgs = {
-  projectId: string;
-  userId: string;
+  projectId: ProjectId;
+  userId: UserId;
   itemId: string | null;
   limit: number;
   archived: boolean;
@@ -47,7 +48,7 @@ const LIVE_TRANSCRIPT_CAP = 500;
 
 export async function getConversation(
   db: Database,
-  conversationId: string,
+  conversationId: ConversationId,
 ): Promise<(Conversation & { messages: Message[] }) | null> {
   const conv = await db.conversation.findUnique({
     where: { id: conversationId },
@@ -70,9 +71,9 @@ export async function getConversation(
 
 export async function ownsConversation(
   db: Database,
-  conversationId: string,
-  projectId: string,
-  userId: string,
+  conversationId: ConversationId,
+  projectId: ProjectId,
+  userId: UserId,
 ): Promise<boolean> {
   const found = await db.conversation.findFirst({
     where: { id: conversationId, projectId, userId },
@@ -89,9 +90,9 @@ export async function ownsConversation(
  */
 export async function getConversationForOwner(
   db: Database,
-  conversationId: string,
-  projectId: string,
-  userId: string,
+  conversationId: ConversationId,
+  projectId: ProjectId,
+  userId: UserId,
 ): Promise<{ id: string; llmProviderIdOverride: string | null } | null> {
   return db.conversation.findFirst({
     where: { id: conversationId, projectId, userId },
@@ -101,7 +102,7 @@ export async function getConversationForOwner(
 
 export async function createConversation(
   db: Database,
-  args: { projectId: string; userId: string; itemId: string | null },
+  args: { projectId: ProjectId; userId: UserId; itemId: string | null },
 ): Promise<Conversation> {
   return db.conversation.create({
     data: {
@@ -113,7 +114,7 @@ export async function createConversation(
 }
 
 type AppendArgs = {
-  conversationId: string;
+  conversationId: ConversationId;
   /** 'system' | 'user' | 'assistant' | 'tool' */
   role: "system" | "user" | "assistant" | "tool";
   content: string;
@@ -146,7 +147,7 @@ export async function appendMessage(db: Database, args: AppendArgs): Promise<Mes
 
 export async function archiveConversation(
   db: Database,
-  conversationId: string,
+  conversationId: ConversationId,
 ): Promise<Conversation> {
   return db.conversation.update({
     where: { id: conversationId },
@@ -166,7 +167,7 @@ const ACTIVE_CONVERSATIONS_PER_ITEM_CAP = 50;
 
 export async function activeConversationsForItem(
   db: Database,
-  projectId: string,
+  projectId: ProjectId,
   itemId: string,
 ): Promise<Conversation[]> {
   return db.conversation.findMany({

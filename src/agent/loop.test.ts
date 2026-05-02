@@ -1,26 +1,11 @@
-/**
- * Agent loop tests against the scripted fake LLM.
- *
- * These tests drive `runTurn()` end-to-end without touching Postgres or
- * the OpenAI SDK: a hand-rolled in-memory Prisma stub satisfies the
- * narrow shape the loop reaches for, and `FakeLlm` from
- * `tests/fakes/llm.ts` plays back a pre-baked event sequence.
- *
- * What we're protecting:
- *   - text-only turns persist a single assistant message and stream the
- *     deltas in order
- *   - tool calls dispatch to the registered handler, re-feed the result,
- *     and resume the loop on the next turn
- *   - `ask_user_question` ends the turn early (no further LLM round)
- *   - the iteration cap (`chat.max-tool-rounds`) trips with a clear error
- *     instead of running forever
- *   - usage events accumulate and are written back to the conversation row
- */
+// Drives `runTurn()` end-to-end without Postgres or the OpenAI SDK —
+// hand-rolled in-memory Prisma stub plus the scripted FakeLlm in
+// `tests/fakes/llm.ts`.
 
 import { describe, expect, it } from "vitest";
 import type { LlmEvent } from "@/agent/llm/types";
 import { runTurn } from "@/agent/loop";
-import { asUserId } from "@/core/types";
+import { asConversationId, asUserId } from "@/core/types";
 import type { db as Db } from "@/server/db";
 import { FakeLlm } from "../../tests/fakes/llm";
 
@@ -187,7 +172,7 @@ describe("agent loop", () => {
       runTurn({
         db,
         adapter: llm,
-        conversationId: "conv_1",
+        conversationId: asConversationId("conv_1"),
         userId: asUserId("user_1"),
         userMessage: "hi",
         readOnly: false,
@@ -247,7 +232,7 @@ describe("agent loop", () => {
       runTurn({
         db,
         adapter: llm,
-        conversationId: "conv_1",
+        conversationId: asConversationId("conv_1"),
         userId: asUserId("user_1"),
         userMessage: "list anything",
         readOnly: false,
@@ -303,7 +288,7 @@ describe("agent loop", () => {
       runTurn({
         db,
         adapter: llm,
-        conversationId: "conv_1",
+        conversationId: asConversationId("conv_1"),
         userId: asUserId("user_1"),
         userMessage: "go",
         readOnly: false,
@@ -352,7 +337,7 @@ describe("agent loop", () => {
       runTurn({
         db,
         adapter: llm,
-        conversationId: "conv_1",
+        conversationId: asConversationId("conv_1"),
         userId: asUserId("user_1"),
         userMessage: "loop",
         readOnly: false,
@@ -393,7 +378,7 @@ describe("agent loop", () => {
       runTurn({
         db,
         adapter: llm,
-        conversationId: "conv_1",
+        conversationId: asConversationId("conv_1"),
         userId: asUserId("user_1"),
         userMessage: "loop",
         readOnly: false,
@@ -418,7 +403,7 @@ describe("agent loop", () => {
       runTurn({
         db,
         adapter: llm,
-        conversationId: "conv_1",
+        conversationId: asConversationId("conv_1"),
         userId: asUserId("user_1"),
         userMessage: "go",
         readOnly: false,
@@ -438,7 +423,7 @@ describe("agent loop", () => {
       runTurn({
         db,
         adapter: llm,
-        conversationId: "nope",
+        conversationId: asConversationId("nope"),
         userId: asUserId("user_1"),
         userMessage: "hi",
         readOnly: false,

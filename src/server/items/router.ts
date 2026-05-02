@@ -1,8 +1,14 @@
 import "server-only";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import type { BacklogBucket, Item, ItemKind, ItemState, StateBucket } from "@/core/types";
-import { BACKLOG_BUCKETS } from "@/core/types";
+import {
+  assertItemKind,
+  assertItemState,
+  BACKLOG_BUCKETS,
+  type BacklogBucket,
+  type Item,
+  type StateBucket,
+} from "@/core/types";
 import { applyViewFilter, STATE_BUCKET_MEMBERS, type ViewFilter } from "@/core/view-filter";
 import type { Prisma, Item as PrismaItem } from "@/db/generated/client";
 import { asPlainObject } from "@/lib/json";
@@ -242,10 +248,10 @@ function liftRowToCanonical(row: PrismaItem, providerKind: string): Item {
   const providerRaw = asPlainObject(row.providerRaw);
   return {
     id: row.id,
-    kind: row.kind as ItemKind,
+    kind: assertItemKind(row.kind, `Item ${row.id}.kind`),
     title: row.title,
     description: row.description,
-    state: row.state as ItemState,
+    state: assertItemState(row.state, `Item ${row.id}.state`),
     assignee: row.assignee,
     parentId: row.parentId,
     tags: row.tags,
@@ -339,9 +345,9 @@ export const itemsRouter = router({
       id: row.id,
       providerItemId: row.providerItemId,
       itemNumber: formatItemNumber(row.providerItemId),
-      kind: row.kind,
+      kind: assertItemKind(row.kind, `Item ${row.id}.kind`),
       title: row.title,
-      state: row.state,
+      state: assertItemState(row.state, `Item ${row.id}.state`),
       assignee: row.assignee,
       author: row.author,
       tags: row.tags,
@@ -367,8 +373,8 @@ export const itemsRouter = router({
     // Explicit select keeps the `providerRaw` JSON blob (often kilobytes of
     // unfiltered provider response) off the wire — nothing in the UI reads it.
     const row = assertFound(
-      await ctx.db.item.findFirst({
-        where: { providerItemId, projectId: ctx.projectId },
+      await ctx.db.item.findUnique({
+        where: { projectId_providerItemId: { projectId: ctx.projectId, providerItemId } },
         select: {
           id: true,
           projectId: true,

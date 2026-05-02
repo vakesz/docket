@@ -18,6 +18,7 @@ import { cache } from "react";
 import type { db as Db } from "@/server/db";
 import {
   decodeSettingValue,
+  encodeSettingValue,
   getSettingDef,
   type SettingKey,
   type SettingValue,
@@ -82,3 +83,76 @@ export const loadUserSetting = cache(async function loadUserSetting<K extends Se
   });
   return decodeSettingValue(key, row?.value ?? null);
 });
+
+// Postgres treats NULL columns as unconstrained in compound uniques, so a
+// global / per-user / per-project Setting (the "other" FKs are NULL) needs
+// find-then-update/create rather than a Prisma upsert. Helpers below
+// encapsulate that pattern; the catalog's `encodeSettingValue` re-validates
+// the value against the catalog schema so a buggy caller can't write junk.
+
+export async function upsertGlobalSetting<K extends SettingKey>(
+  db: typeof Db,
+  key: K,
+  value: SettingValue<K>,
+): Promise<void> {
+  const def = getSettingDef(key);
+  if (def.scope !== "global") {
+    throw new Error(`upsertGlobalSetting called for non-global key '${key}'`);
+  }
+  const encoded = encodeSettingValue(key, value);
+  const existing = await db.setting.findFirst({
+    where: { key, scope: "global", userId: null, projectId: null },
+    orderBy: { updatedAt: "desc" },
+    select: { id: true },
+  });
+  if (existing) {
+    await db.setting.update({ where: { id: existing.id }, data: { value: encoded } });
+    return;
+  }
+  await db.setting.create({ data: { key, value: encoded, scope: "global" } });
+}
+
+export async function upsertProjectSetting<K extends SettingKey>(
+  db: typeof Db,
+  projectId: string,
+  key: K,
+  value: SettingValue<K>,
+): Promise<void> {
+  const def = getSettingDef(key);
+  if (def.scope !== "project") {
+    throw new Error(`upsertProjectSetting called for non-project key '${key}'`);
+  }
+  const encoded = encodeSettingValue(key, value);
+  const existing = await db.setting.findFirst({
+    where: { key, scope: "project", projectId, userId: null },
+    orderBy: { updatedAt: "desc" },
+    select: { id: true },
+  });
+  if (existing) {
+    await db.setting.update({ where: { id: existing.id }, data: { value: encoded } });
+    return;
+  }
+  await db.setting.create({ data: { key, value: encoded, scope: "project", projectId } });
+}
+
+export async function upsertUserSetting<K extends SettingKey>(
+  db: typeof Db,
+  userId: string,
+  key: K,
+  value: SettingValue<K>,
+): Promise<void> {
+  const def = getSettingDef(key);
+  if (def.scope !== "user") {
+    throw new Error(`upsertUserSetting called for non-user key '${key}'`);
+  }
+  const encoded = encodeSettingValue(key, value);
+  const existing = await db.setting.findFirst({
+    where: { key, scope: "user", userId, projectId: null },
+    select: { id: true },
+  });
+  if (existing) {
+    await db.setting.update({ where: { id: existing.id }, data: { value: encoded } });
+    return;
+  }
+  await db.setting.create({ data: { key, value: encoded, scope: "user", userId } });
+}

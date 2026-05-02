@@ -1,22 +1,6 @@
-/**
- * Suggestions API.
- *
- * Two related concerns under one router:
- *
- *   1. **Suggestion rows** — `duplicate` / `related` / `transition` hints
- *      surfaced to the user. Generation is upstream (sync or agent writes
- *      rows); this router is read + dismiss only.
- *
- *   2. **Command-usage recency** — recently-used command-palette entries,
- *      ranked by `lastUsedAt` desc. `bump` records a usage; `recents`
- *      returns the top-N for the current user (optionally filtered to one
- *      project).
- *
- * Reads on `projectScopedProcedure` because Suggestions are project-scoped.
- * Recents/bump are protected (not project-scoped) because command usage
- * spans projects — `projectId` is an *optional* filter on read and an
- * optional discriminator on write.
- */
+// Suggestion rows are read+dismiss only (generation is upstream). Command
+// usage spans projects, so `recents`/`bump` are `protectedProcedure` (not
+// project-scoped) with an optional `projectId` filter/discriminator.
 
 import "server-only";
 import { z } from "zod";

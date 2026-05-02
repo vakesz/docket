@@ -1,27 +1,6 @@
-/**
- * Anthropic LLM adapter.
- *
- * THE ONLY FILE in the tree allowed to import `@anthropic-ai/sdk`. The arch
- * test `src/__arch__/no-llm-vendor-leak.test.ts` enforces it — same as the
- * OpenAI adapter, just a sibling.
- *
- * Uses the Messages API in streaming mode. The agent loop's vendor-neutral
- * `LlmMessage` shape is translated at the boundary:
- *   - `system` messages collapse into the top-level `system` field (Anthropic
- *     has no `system` role inside `messages`; consecutive system turns are
- *     joined with blank lines, matching how the prompt builder produces them).
- *   - `user` / `assistant` text turns map 1:1 onto `MessageParam`.
- *   - `assistant` turns that requested tools fan out into a content-array
- *     with `text` blocks followed by `tool_use` blocks (Anthropic requires
- *     `tool_use` blocks to be in the same assistant turn that produced them).
- *   - `tool` results fold into the *next* user turn as `tool_result` content
- *     blocks. Adjacent tool results in the loop's transcript are merged into
- *     one user message so the alternating-roles invariant holds.
- *
- * Cost: USD cents are reported when the LlmProvider row carries
- * `inputPriceCentsPerMtok` / `outputPriceCentsPerMtok`. Without prices the
- * cost is left undefined and budget tracking silently undercounts that turn.
- */
+// One of two files in the tree allowed to import `@anthropic-ai/sdk`
+// (the other is the chat adapter sibling). Enforced by
+// `src/__arch__/no-llm-vendor-leak.test.ts`.
 
 import Anthropic from "@anthropic-ai/sdk";
 import type {

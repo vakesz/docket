@@ -1,25 +1,7 @@
-/**
- * Deterministic post-processor that enforces the project's code-snippet
- * caps on assistant replies and on the body field of staged
- * `comment_add` / `description_patch` proposals.
- *
- * Pure string transform — no LLM call, no side effects, no randomness.
- * Runs after the agent response is fully assembled so the streamed
- * deltas stay untouched on the wire; the trim is applied to the
- * persisted text and to the staged proposal body.
- *
- * Three modes:
- *   - `enabled: true` — count fenced blocks, drop blocks past the
- *     per-reply cap, then trim each surviving block's body to the
- *     line cap. The truncation marker is a syntactically valid
- *     comment in the block's language so it never breaks rendering.
- *   - `enabled: false` — replace every fenced block with an
- *     italicized placeholder so the surrounding prose still flows
- *     and the reader knows code was redacted.
- *   - When `maxSnippetsPerReply === 0` we treat the call as
- *     `enabled: false` regardless of the toggle so the reader sees
- *     the same placeholder everywhere a snippet would have landed.
- */
+// Runs after the agent response is fully assembled — the streamed deltas
+// stay untouched on the wire; the trim only lands on persisted text and
+// staged proposal bodies. Truncation markers are inserted as syntactically
+// valid comments so renderers don't choke on the trimmed block.
 
 const COMMENT_BY_LANGUAGE: Record<string, string> = {
   ts: "//",

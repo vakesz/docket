@@ -5,7 +5,6 @@ import {
   assertEncryptionConfigured,
   decryptSecret,
   encryptSecret,
-  isEncryptedPayload,
   isEncryptionConfigured,
 } from "@/server/secrets/encryption";
 
@@ -33,13 +32,17 @@ describe("secrets encryption", () => {
   it("round-trips an encrypted secret with a configured key", () => {
     setKey(freshKey());
     const enc = encryptSecret("sk_live_supersecret");
-    expect(isEncryptedPayload(enc)).toBe(true);
+    expect(enc.startsWith("enc:v1:")).toBe(true);
     expect(decryptSecret(enc)).toBe("sk_live_supersecret");
   });
 
-  it("returns plaintext as-is and decrypts plaintext as-is (legacy / dev)", () => {
-    expect(encryptSecret("plain-token")).toBe("plain-token");
-    expect(decryptSecret("plain-token")).toBe("plain-token");
+  it("throws when SECRETS_KEY is unset on encrypt", () => {
+    expect(() => encryptSecret("plain-token")).toThrow(/SECRETS_KEY is required/);
+  });
+
+  it("rejects unencrypted strings on decrypt", () => {
+    setKey(freshKey());
+    expect(() => decryptSecret("plain-token")).toThrow(/not encrypted/);
   });
 
   it("never double-encrypts an already-encrypted payload", () => {
@@ -50,11 +53,11 @@ describe("secrets encryption", () => {
     expect(decryptSecret(twice)).toBe("hello");
   });
 
-  it("rejects an encrypted payload when SECRETS_KEY is unset on read", () => {
+  it("throws when SECRETS_KEY is unset on read", () => {
     setKey(freshKey());
     const enc = encryptSecret("token");
     setKey(undefined);
-    expect(() => decryptSecret(enc)).toThrow(/SECRETS_KEY is unset/);
+    expect(() => decryptSecret(enc)).toThrow(/SECRETS_KEY is required/);
   });
 
   it("rejects malformed encrypted payloads", () => {

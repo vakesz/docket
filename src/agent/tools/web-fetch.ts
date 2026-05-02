@@ -1,39 +1,11 @@
-/**
- * web_fetch — agent tool for reading public URLs.
- *
- * Read-only on the *outside* world (no provider state changes), but it
- * still has a meaningful blast radius: a careless prompt could trick
- * the agent into requesting an internal admin URL, an SSH-style
- * meta-data endpoint, or a URL that returns a multi-GB payload. The
- * pipeline:
- *
- *   1. Per-project `web-fetch.enabled` toggle (audit `denied_disabled`)
- *   2. Optional per-project host allowlist (audit `denied_host_allowlist`)
- *   3. SSRF guard (`assertFetchTargetSafe`, audit `denied_*` from there)
- *   4. Bounded fetch — `AbortController` 10 s timeout, max-bytes cap
- *      from settings (audit `denied_size` on overflow, `error` on a
- *      transport failure)
- *   5. Body return — text only. Binary content types are denied
- *      (`denied_type`) so the agent doesn't try to reason over a PDF or
- *      a tarball as if it were prose.
- *   6. HTML cleanup — for HTML responses (sniffed even on misleading
- *      content-types), strip head/script/style/noscript/iframe/svg +
- *      comments and run Turndown to emit cleaned markdown. The agent
- *      can opt out per call with `raw: true`. On parse failure or
- *      empty cleaned output the tool falls back to the raw body and
- *      records a `cleanError` in the audit row.
- *
- * Every outcome — including the deny paths — writes one
- * `WebFetchEvent` row so an admin can audit who fetched what. That
- * table sits separately from `Audit` (which is reserved for proposal
- * outcomes per CLAUDE.md rule 9).
- */
+// Every outcome — including denies — writes one `WebFetchEvent` row.
+// That table is separate from `Audit` because CLAUDE.md rule 9 reserves
+// `Audit` for proposal outcomes.
 
 import "server-only";
 import { z } from "zod";
-import { zodToJsonSchema } from "@/agent/tools/schema";
 import type { ToolFactory } from "@/agent/tools/types";
-import { fail, ok } from "@/agent/tools/types";
+import { defineTool, fail, ok } from "@/agent/tools/types";
 import { cleanHtml, shouldCleanHtml } from "@/agent/tools/web-fetch-clean";
 import { loadProjectSetting } from "@/server/settings/effective";
 import { recordWebFetchEvent } from "@/server/web-fetch/audit";
@@ -78,256 +50,279 @@ const webFetchInputSchema = z.object({
     ),
 });
 
-export const webFetchTool: ToolFactory = (ctx) => ({
-  def: {
+export const webFetchTool: ToolFactory = (ctx) =>
+  defineTool({
     name: "web_fetch",
     description:
       "Fetch a public URL and return its body. HTML responses are converted to cleaned markdown by default — head, script, style, noscript, iframe, embedded SVG, and HTML comments are stripped, and relative links are resolved to absolute URLs, so you only see the readable content. Pass `raw: true` to skip cleaning and get the original body verbatim — use this when the cleaned markdown looks wrong or empty, when you need to inspect raw HTML/JSON structure, or after a fetch returns `cleaned: false` with a `cleanError`. Non-HTML responses (JSON, XML, plain text, YAML) are always returned unchanged regardless of `raw`. Private IPs and cloud metadata endpoints are blocked. Project admins can disable the tool or restrict it to an allowlist of hosts in settings.",
-    parameters: zodToJsonSchema(webFetchInputSchema),
-  },
-  // The body comes straight from a third-party URL. The whole envelope
-  // (status / contentType / body) is foreign content — full scan is the
-  // only safe choice here. Tagged explicitly so the arch test doesn't
-  // need a "default = full" escape hatch.
-  guardrailScan: { mode: "full" },
-  handler: async (raw) => {
-    const args = webFetchInputSchema.parse(raw);
-    const wantRaw = args.raw === true;
-    const auditBase = {
-      projectId: ctx.projectId,
-      userId: ctx.userId,
-      url: args.url,
-    };
+    schema: webFetchInputSchema,
+    // The body comes straight from a third-party URL. The whole envelope
+    // (status / contentType / body) is foreign content — full scan is the
+    // only safe choice here. Tagged explicitly so the arch test doesn't
+    // need a "default = full" escape hatch.
+    guardrailScan: { mode: "full" },
+    handler: async (args) => {
+      const wantRaw = args.raw === true;
+      const auditBase = {
+        projectId: ctx.projectId,
+        userId: ctx.userId,
+        url: args.url,
+      };
 
-    const [enabled, allowlist, maxBytes] = await Promise.all([
-      loadProjectSetting(ctx.db, ctx.projectId, "web-fetch.enabled"),
-      loadProjectSetting(ctx.db, ctx.projectId, "web-fetch.allowed-hosts"),
-      loadProjectSetting(ctx.db, ctx.projectId, "web-fetch.max-bytes"),
-    ]);
+      const [enabled, allowlist, maxBytes] = await Promise.all([
+        loadProjectSetting(ctx.db, ctx.projectId, "web-fetch.enabled"),
+        loadProjectSetting(ctx.db, ctx.projectId, "web-fetch.allowed-hosts"),
+        loadProjectSetting(ctx.db, ctx.projectId, "web-fetch.max-bytes"),
+      ]);
 
-    if (!enabled) {
-      await recordWebFetchEvent(ctx.db, {
-        ...auditBase,
-        status: "denied_disabled",
-        contentType: null,
-        bytes: 0,
-        errorMessage: "web_fetch is disabled for this project",
-      });
-      return fail("web_fetch is disabled for this project. Ask an admin to enable it in settings.");
-    }
-
-    let parsed: URL;
-    try {
-      parsed = new URL(args.url);
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      await recordWebFetchEvent(ctx.db, {
-        ...auditBase,
-        status: "denied_url",
-        contentType: null,
-        bytes: 0,
-        errorMessage: `invalid URL: ${detail}`,
-      });
-      return fail(`'${args.url}' is not a valid URL: ${detail}`);
-    }
-
-    // Bounded redirect chain. SSRF + allowlist checks run on every hop —
-    // `redirect: "follow"` would let a public URL bounce to an internal
-    // target after passing the initial guard, so we drive redirects ourselves
-    // and re-validate each Location.
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    let response: Response;
-    let currentUrl = parsed;
-    try {
-      let hop = 0;
-      while (true) {
-        const guard = await assertFetchTargetSafe(currentUrl);
-        if (!guard.ok) {
-          clearTimeout(timeoutId);
-          await recordWebFetchEvent(ctx.db, {
-            ...auditBase,
-            url: currentUrl.toString(),
-            status: guard.reason,
-            contentType: null,
-            bytes: 0,
-            errorMessage: hop === 0 ? guard.detail : `redirect target rejected: ${guard.detail}`,
-          });
-          return fail(`fetch denied: ${guard.detail}`);
-        }
-        if (!hostAllowed(guard.host, allowlist)) {
-          clearTimeout(timeoutId);
-          await recordWebFetchEvent(ctx.db, {
-            ...auditBase,
-            url: currentUrl.toString(),
-            status: "denied_host_allowlist",
-            contentType: null,
-            bytes: 0,
-            errorMessage:
-              hop === 0
-                ? `'${guard.host}' is not in the project allowlist`
-                : `redirect to '${guard.host}' is not in the project allowlist`,
-          });
-          return fail(
-            `fetch denied: '${guard.host}' is not in the project's web-fetch host allowlist.`,
-          );
-        }
-
-        const hopResponse = await fetch(currentUrl.toString(), {
-          method: "GET",
-          signal: controller.signal,
-          redirect: "manual",
-          headers: {
-            "user-agent": "docket-agent/1.0 (+https://github.com/vakesz/docket)",
-            accept: "text/html,text/plain,application/json;q=0.9,*/*;q=0.5",
-          },
+      if (!enabled) {
+        await recordWebFetchEvent(ctx.db, {
+          ...auditBase,
+          status: "denied_disabled",
+          contentType: null,
+          bytes: 0,
+          errorMessage: "web_fetch is disabled for this project",
         });
+        return fail(
+          "web_fetch is disabled for this project. Ask an admin to enable it in settings.",
+        );
+      }
 
-        const isRedirect =
-          hopResponse.status >= 300 &&
-          hopResponse.status < 400 &&
-          hopResponse.status !== 304 &&
-          hopResponse.headers.has("location");
-        if (!isRedirect) {
-          response = hopResponse;
+      let parsed: URL;
+      try {
+        parsed = new URL(args.url);
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        await recordWebFetchEvent(ctx.db, {
+          ...auditBase,
+          status: "denied_url",
+          contentType: null,
+          bytes: 0,
+          errorMessage: `invalid URL: ${detail}`,
+        });
+        return fail(`'${args.url}' is not a valid URL: ${detail}`);
+      }
+
+      // Bounded redirect chain. SSRF + allowlist checks run on every hop —
+      // `redirect: "follow"` would let a public URL bounce to an internal
+      // target after passing the initial guard, so we drive redirects ourselves
+      // and re-validate each Location.
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+      let response: Response;
+      let currentUrl = parsed;
+      try {
+        let hop = 0;
+        while (true) {
+          const guard = await assertFetchTargetSafe(currentUrl);
+          if (!guard.ok) {
+            clearTimeout(timeoutId);
+            await recordWebFetchEvent(ctx.db, {
+              ...auditBase,
+              url: currentUrl.toString(),
+              status: guard.reason,
+              contentType: null,
+              bytes: 0,
+              errorMessage: hop === 0 ? guard.detail : `redirect target rejected: ${guard.detail}`,
+            });
+            return fail(`fetch denied: ${guard.detail}`);
+          }
+          if (!hostAllowed(guard.host, allowlist)) {
+            clearTimeout(timeoutId);
+            await recordWebFetchEvent(ctx.db, {
+              ...auditBase,
+              url: currentUrl.toString(),
+              status: "denied_host_allowlist",
+              contentType: null,
+              bytes: 0,
+              errorMessage:
+                hop === 0
+                  ? `'${guard.host}' is not in the project allowlist`
+                  : `redirect to '${guard.host}' is not in the project allowlist`,
+            });
+            return fail(
+              `fetch denied: '${guard.host}' is not in the project's web-fetch host allowlist.`,
+            );
+          }
+
+          const hopResponse = await fetch(currentUrl.toString(), {
+            method: "GET",
+            signal: controller.signal,
+            redirect: "manual",
+            headers: {
+              "user-agent": "docket-agent/1.0 (+https://github.com/vakesz/docket)",
+              accept: "text/html,text/plain,application/json;q=0.9,*/*;q=0.5",
+            },
+          });
+
+          const isRedirect =
+            hopResponse.status >= 300 &&
+            hopResponse.status < 400 &&
+            hopResponse.status !== 304 &&
+            hopResponse.headers.has("location");
+          if (!isRedirect) {
+            response = hopResponse;
+            break;
+          }
+
+          // Drain the redirect body so the connection can be reused.
+          try {
+            await hopResponse.body?.cancel();
+          } catch {
+            // ignore
+          }
+
+          if (hop >= MAX_REDIRECTS) {
+            clearTimeout(timeoutId);
+            await recordWebFetchEvent(ctx.db, {
+              ...auditBase,
+              url: currentUrl.toString(),
+              status: "denied_redirect",
+              contentType: null,
+              bytes: 0,
+              errorMessage: `exceeded ${MAX_REDIRECTS} redirects`,
+            });
+            return fail(`fetch denied: exceeded ${MAX_REDIRECTS} redirects`);
+          }
+
+          const location = hopResponse.headers.get("location") ?? "";
+          let next: URL;
+          try {
+            next = new URL(location, currentUrl);
+          } catch (err) {
+            clearTimeout(timeoutId);
+            const detail = err instanceof Error ? err.message : String(err);
+            await recordWebFetchEvent(ctx.db, {
+              ...auditBase,
+              url: currentUrl.toString(),
+              status: "denied_redirect",
+              contentType: null,
+              bytes: 0,
+              errorMessage: `invalid redirect Location '${location}': ${detail}`,
+            });
+            return fail(`fetch denied: invalid redirect Location '${location}'`);
+          }
+          currentUrl = next;
+          hop += 1;
+        }
+      } catch (err) {
+        clearTimeout(timeoutId);
+        const detail = err instanceof Error ? err.message : String(err);
+        await recordWebFetchEvent(ctx.db, {
+          ...auditBase,
+          status: "error",
+          contentType: null,
+          bytes: 0,
+          errorMessage: detail,
+        });
+        return fail(`fetch failed: ${detail}`);
+      }
+      clearTimeout(timeoutId);
+
+      const contentType = response.headers.get("content-type");
+      if (!isTextualContentType(contentType)) {
+        await recordWebFetchEvent(ctx.db, {
+          ...auditBase,
+          status: "denied_type",
+          contentType,
+          bytes: 0,
+          errorMessage: `non-textual content-type '${contentType ?? ""}'`,
+        });
+        return fail(
+          `fetch denied: response content-type '${contentType ?? "(none)"}' is not textual.`,
+        );
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        await recordWebFetchEvent(ctx.db, {
+          ...auditBase,
+          status: "error",
+          contentType,
+          bytes: 0,
+          errorMessage: "response body was empty",
+        });
+        return fail("fetch failed: response body was empty");
+      }
+      const chunks: Uint8Array[] = [];
+      let total = 0;
+      let truncated = false;
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > maxBytes) {
+          truncated = true;
+          const room = maxBytes - (total - value.byteLength);
+          if (room > 0) chunks.push(value.slice(0, room));
+          try {
+            await reader.cancel();
+          } catch {
+            // ignore — we got what we needed
+          }
           break;
         }
+        chunks.push(value);
+      }
+      const buffer = new Uint8Array(truncated ? maxBytes : total);
+      let offset = 0;
+      for (const c of chunks) {
+        buffer.set(c, offset);
+        offset += c.byteLength;
+      }
+      const rawBody = new TextDecoder("utf-8", { fatal: false }).decode(buffer);
+      const finalBytes = buffer.byteLength;
 
-        // Drain the redirect body so the connection can be reused.
+      // HTML cleanup pass. Truncated HTML is still cleaned (jsdom is tolerant);
+      // the agent can refetch with `raw: true` if a partial trailing section
+      // matters.
+      let cleaned: boolean | null = null;
+      let cleanedBytes: number | null = null;
+      let cleanError: string | null = null;
+      let body = rawBody;
+      if (!wantRaw && shouldCleanHtml(contentType, rawBody)) {
         try {
-          await hopResponse.body?.cancel();
-        } catch {
-          // ignore
-        }
-
-        if (hop >= MAX_REDIRECTS) {
-          clearTimeout(timeoutId);
-          await recordWebFetchEvent(ctx.db, {
-            ...auditBase,
-            url: currentUrl.toString(),
-            status: "denied_redirect",
-            contentType: null,
-            bytes: 0,
-            errorMessage: `exceeded ${MAX_REDIRECTS} redirects`,
-          });
-          return fail(`fetch denied: exceeded ${MAX_REDIRECTS} redirects`);
-        }
-
-        const location = hopResponse.headers.get("location") ?? "";
-        let next: URL;
-        try {
-          next = new URL(location, currentUrl);
+          const result = cleanHtml(rawBody, currentUrl.toString());
+          body = result.markdown;
+          cleaned = true;
+          cleanedBytes = result.bytes;
         } catch (err) {
-          clearTimeout(timeoutId);
-          const detail = err instanceof Error ? err.message : String(err);
-          await recordWebFetchEvent(ctx.db, {
-            ...auditBase,
-            url: currentUrl.toString(),
-            status: "denied_redirect",
-            contentType: null,
-            bytes: 0,
-            errorMessage: `invalid redirect Location '${location}': ${detail}`,
-          });
-          return fail(`fetch denied: invalid redirect Location '${location}'`);
+          cleaned = false;
+          cleanError = err instanceof Error ? err.message : String(err);
+          body = rawBody;
         }
-        currentUrl = next;
-        hop += 1;
       }
-    } catch (err) {
-      clearTimeout(timeoutId);
-      const detail = err instanceof Error ? err.message : String(err);
-      await recordWebFetchEvent(ctx.db, {
-        ...auditBase,
-        status: "error",
-        contentType: null,
-        bytes: 0,
-        errorMessage: detail,
-      });
-      return fail(`fetch failed: ${detail}`);
-    }
-    clearTimeout(timeoutId);
 
-    const contentType = response.headers.get("content-type");
-    if (!isTextualContentType(contentType)) {
-      await recordWebFetchEvent(ctx.db, {
-        ...auditBase,
-        status: "denied_type",
-        contentType,
-        bytes: 0,
-        errorMessage: `non-textual content-type '${contentType ?? ""}'`,
-      });
-      return fail(
-        `fetch denied: response content-type '${contentType ?? "(none)"}' is not textual.`,
-      );
-    }
-
-    const reader = response.body?.getReader();
-    if (!reader) {
-      await recordWebFetchEvent(ctx.db, {
-        ...auditBase,
-        status: "error",
-        contentType,
-        bytes: 0,
-        errorMessage: "response body was empty",
-      });
-      return fail("fetch failed: response body was empty");
-    }
-    const chunks: Uint8Array[] = [];
-    let total = 0;
-    let truncated = false;
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > maxBytes) {
-        truncated = true;
-        const room = maxBytes - (total - value.byteLength);
-        if (room > 0) chunks.push(value.slice(0, room));
-        try {
-          await reader.cancel();
-        } catch {
-          // ignore — we got what we needed
-        }
-        break;
+      if (truncated) {
+        await recordWebFetchEvent(ctx.db, {
+          ...auditBase,
+          status: "denied_size",
+          contentType,
+          bytes: finalBytes,
+          errorMessage: `response exceeded ${maxBytes} bytes; truncated`,
+          cleaned,
+          cleanedBytes,
+          cleanError,
+        });
+        return ok({
+          status: response.status,
+          content_type: contentType,
+          truncated: true,
+          bytes: finalBytes,
+          cleaned,
+          cleaned_bytes: cleanedBytes,
+          clean_error: cleanError,
+          body,
+          note: `response truncated at ${maxBytes} bytes`,
+        });
       }
-      chunks.push(value);
-    }
-    const buffer = new Uint8Array(truncated ? maxBytes : total);
-    let offset = 0;
-    for (const c of chunks) {
-      buffer.set(c, offset);
-      offset += c.byteLength;
-    }
-    const rawBody = new TextDecoder("utf-8", { fatal: false }).decode(buffer);
-    const finalBytes = buffer.byteLength;
 
-    // HTML cleanup pass. Truncated HTML is still cleaned (jsdom is tolerant);
-    // the agent can refetch with `raw: true` if a partial trailing section
-    // matters.
-    let cleaned: boolean | null = null;
-    let cleanedBytes: number | null = null;
-    let cleanError: string | null = null;
-    let body = rawBody;
-    if (!wantRaw && shouldCleanHtml(contentType, rawBody)) {
-      try {
-        const result = cleanHtml(rawBody, currentUrl.toString());
-        body = result.markdown;
-        cleaned = true;
-        cleanedBytes = result.bytes;
-      } catch (err) {
-        cleaned = false;
-        cleanError = err instanceof Error ? err.message : String(err);
-        body = rawBody;
-      }
-    }
-
-    if (truncated) {
       await recordWebFetchEvent(ctx.db, {
         ...auditBase,
-        status: "denied_size",
+        status: response.ok ? "ok" : "error",
         contentType,
         bytes: finalBytes,
-        errorMessage: `response exceeded ${maxBytes} bytes; truncated`,
+        errorMessage: response.ok ? null : `HTTP ${response.status}`,
         cleaned,
         cleanedBytes,
         cleanError,
@@ -335,38 +330,15 @@ export const webFetchTool: ToolFactory = (ctx) => ({
       return ok({
         status: response.status,
         content_type: contentType,
-        truncated: true,
+        truncated: false,
         bytes: finalBytes,
         cleaned,
         cleaned_bytes: cleanedBytes,
         clean_error: cleanError,
         body,
-        note: `response truncated at ${maxBytes} bytes`,
       });
-    }
-
-    await recordWebFetchEvent(ctx.db, {
-      ...auditBase,
-      status: response.ok ? "ok" : "error",
-      contentType,
-      bytes: finalBytes,
-      errorMessage: response.ok ? null : `HTTP ${response.status}`,
-      cleaned,
-      cleanedBytes,
-      cleanError,
-    });
-    return ok({
-      status: response.status,
-      content_type: contentType,
-      truncated: false,
-      bytes: finalBytes,
-      cleaned,
-      cleaned_bytes: cleanedBytes,
-      clean_error: cleanError,
-      body,
-    });
-  },
-});
+    },
+  });
 
 export function webFetchTools(ctx: Parameters<ToolFactory>[0]) {
   return [webFetchTool(ctx)] as const;

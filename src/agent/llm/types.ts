@@ -1,20 +1,6 @@
-/**
- * LLM adapter interface — vendor-neutral.
- *
- * The agent loop never imports a vendor SDK directly; it only sees
- * `LlmAdapter` values handed in by `selectAdapterFor(project)`. Adding a
- * new vendor (Anthropic, Gemini, Bedrock, Ollama, …) is a new file under
- * `src/agent/llm/` plus a registry entry — no other agent code changes.
- *
- * Architecture test `src/__arch__/no-llm-vendor-leak.test.ts` enforces
- * that the only file importing `openai` is `src/agent/llm/openai.ts`. The
- * same rule will quarantine future SDKs as they land.
- *
- * `LLM_KINDS` lists the kinds whose adapter is *actually wired*.
- * `src/__arch__/llm-kinds-have-adapters.test.ts` keeps the runtime switch
- * in `registry.ts` and the UI selector in lockstep — adding a kind here
- * without a matching `case` is a CI failure.
- */
+// `LLM_KINDS` lists kinds with a wired adapter.
+// `src/__arch__/llm-kinds-have-adapters.test.ts` enforces that the
+// registry switch in `registry.ts` carries a `case` for every entry.
 
 export const LLM_KINDS = ["openai", "anthropic"] as const;
 export type LlmKind = (typeof LLM_KINDS)[number];

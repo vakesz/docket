@@ -22,16 +22,33 @@ declare const __brand: unique symbol;
 export type ProjectId = string & { readonly [__brand]: "ProjectId" };
 export type UserId = string & { readonly [__brand]: "UserId" };
 export type ProposalId = string & { readonly [__brand]: "ProposalId" };
+/** Prisma PK for an `Item` row (cuid). NOT the provider-native id. */
+export type ItemId = string & { readonly [__brand]: "ItemId" };
+/** Provider-native item id (e.g. `owner/repo#123`, ADO work item URL). */
+export type ProviderItemId = string & { readonly [__brand]: "ProviderItemId" };
+export type ConversationId = string & { readonly [__brand]: "ConversationId" };
+export type MessageId = string & { readonly [__brand]: "MessageId" };
 
 export const asProjectId = (value: string): ProjectId => value as ProjectId;
 export const asUserId = (value: string): UserId => value as UserId;
 export const asProposalId = (value: string): ProposalId => value as ProposalId;
+export const asItemId = (value: string): ItemId => value as ItemId;
+export const asProviderItemId = (value: string): ProviderItemId => value as ProviderItemId;
+export const asConversationId = (value: string): ConversationId => value as ConversationId;
+export const asMessageId = (value: string): MessageId => value as MessageId;
 
 export const ITEM_KINDS = ["epic", "feature", "story", "task", "bug"] as const;
 export type ItemKind = (typeof ITEM_KINDS)[number];
 
 export function isItemKind(value: string): value is ItemKind {
   return (ITEM_KINDS as readonly string[]).includes(value);
+}
+
+export function assertItemKind(value: string, context = "ItemKind"): ItemKind {
+  if (!isItemKind(value)) {
+    throw new Error(`${context}: '${value}' is not a canonical ItemKind`);
+  }
+  return value;
 }
 
 export const ITEM_STATES = [
@@ -46,6 +63,13 @@ export type ItemState = (typeof ITEM_STATES)[number];
 
 export function isItemState(value: string): value is ItemState {
   return (ITEM_STATES as readonly string[]).includes(value);
+}
+
+export function assertItemState(value: string, context = "ItemState"): ItemState {
+  if (!isItemState(value)) {
+    throw new Error(`${context}: '${value}' is not a canonical ItemState`);
+  }
+  return value;
 }
 
 export const TRANSITION_INTENTS = [

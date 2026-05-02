@@ -1,30 +1,19 @@
-/**
- * Project sync — pulls items from the project's provider into the cache.
- *
- * Two modes:
- *   - `runIncrementalSync` uses the project's `SyncCursor.watermark` and
- *     fetches only items updated after it. Cheap; safe to run often.
- *   - `runFullSync` ignores the watermark and walks the full result set,
- *     then archives any cached row not seen in the walk. The archive step
- *     is what makes "issue closed at the provider but never re-synced"
- *     observable.
- *
- * Both routes update `SyncCursor`. `lastFullSyncAt` is only stamped by
- * `runFullSync`; `watermark` is bumped by both to the most recent
- * `updatedAt` we observed.
- *
- * Items are drained from the provider's async iterable in chunks
- * (`CHUNK_SIZE`) and persisted in bulk: one `findMany` per chunk to load
- * the existing rows, `createMany` for new ids, and a single
- * `$transaction` of `update`s for existing ids. On large repos this turns
- * thousands of sequential per-item round-trips into a handful of pipelined
- * batches — the dominant sync cost on first-time / full syncs.
- */
+// `runFullSync` archives any cached row not seen in the walk — that's
+// what makes "closed at the provider but never re-synced" observable.
+// Items are drained in `CHUNK_SIZE` batches: one findMany per chunk to
+// load existing rows, createMany for new ids, then a single $transaction
+// of updates — bulk pipelining beats thousands of sequential round-trips
+// on first-time / full syncs.
 
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import type { Comment as CanonicalComment, Item as CanonicalItem, ChangedItem } from "@/core/types";
+import {
+  asProjectId,
+  type Comment as CanonicalComment,
+  type Item as CanonicalItem,
+  type ChangedItem,
+} from "@/core/types";
 import { Prisma } from "@/db/generated/client";
 import { warmAvatars } from "@/server/avatars/service";
 import type { db as Db } from "@/server/db";
@@ -424,7 +413,7 @@ async function processChunk(
     const results = await Promise.all(
       changedExisting.map((c) =>
         injectExternalChange(db, {
-          projectId,
+          projectId: asProjectId(projectId),
           itemId: c.itemId,
           providerItemId: c.providerItemId,
           changes: c.changes,

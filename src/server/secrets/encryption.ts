@@ -1,32 +1,10 @@
-/**
- * AES-GCM at-rest encryption for provider credentials.
- *
- * The DB stores stuff that's only as private as the row it lives in
- * (`OauthProviderConfig.clientSecret`, `LlmProvider.apiKey`). A leaked
- * `pg_dump` shouldn't be a leaked OpenAI key — so the values get wrapped
- * with `SECRETS_KEY` (32 bytes, base64) before they hit the column.
- *
- * Wire format (one column = one string):
- *
- *     enc:v1:<base64-iv>:<base64-ciphertext-and-tag>
- *
- * The version tag (`v1`) lets us migrate to a different cipher / key length
- * later without ambiguity. Anything that doesn't start with the prefix is
- * treated as legacy plaintext — `decryptSecret` returns it as-is, so dev
- * setups without `SECRETS_KEY` keep working.
- *
- * `SECRETS_KEY` policy:
- *   - **Prod**: required. `assertEncryptionConfigured` throws on boot if
- *     missing.
- *   - **Dev**: optional. Without it, writes pass through and reads accept
- *     plaintext — but the moment the operator sets the key, new writes are
- *     encrypted; old plaintext rows still decrypt as plaintext until they
- *     are touched. A future re-encrypt script can bulk-upgrade legacy rows.
- */
+// Wire format: `enc:v1:<base64-iv>:<base64-ciphertext-and-tag>`. The `v1`
+// tag lets us migrate to a different cipher / key length later without
+// ambiguity. SECRETS_KEY is required; both dev (`bin/generate-secrets.sh`)
+// and Docker (`bin/docker-entrypoint.sh`) seed one before boot.
 
 import "server-only";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import { logger } from "@/server/logger";
 
 const PREFIX = "enc:v1:";
 const ALGO = "aes-256-gcm";
@@ -55,15 +33,18 @@ function loadKey(): Buffer | null {
   return buf;
 }
 
-/** True when `SECRETS_KEY` is set and valid. */
+function requireKey(): Buffer {
+  const key = loadKey();
+  if (!key) {
+    throw new Error("SECRETS_KEY is required (32 random bytes, base64)");
+  }
+  return key;
+}
+
 export function isEncryptionConfigured(): boolean {
   return loadKey() !== null;
 }
 
-/**
- * Throw if encryption is not configured. Use at boot in prod paths so a
- * silent plaintext fallback doesn't ship to production.
- */
 export function assertEncryptionConfigured(context: string): void {
   if (loadKey() === null) {
     throw new Error(
@@ -78,26 +59,11 @@ export function _resetEncryptionCacheForTests(): void {
   cacheChecked = false;
 }
 
-/**
- * Encrypt a plaintext secret for at-rest storage. When `SECRETS_KEY` is
- * unset, returns the plaintext unchanged so dev setups work — but emits
- * a one-line warning so the operator notices.
- */
 export function encryptSecret(plaintext: string): string {
   if (plaintext.length === 0) return plaintext;
-  if (plaintext.startsWith(PREFIX)) {
-    // Already encrypted — guard against accidental double-encryption when
-    // a write path is wrapped twice.
-    return plaintext;
-  }
-  const key = loadKey();
-  if (!key) {
-    if (!_warnedPlaintext) {
-      logger.warn({}, "secrets: SECRETS_KEY unset — storing secret in plaintext (dev only)");
-      _warnedPlaintext = true;
-    }
-    return plaintext;
-  }
+  // Guard against accidental double-encryption when a write path wraps twice.
+  if (plaintext.startsWith(PREFIX)) return plaintext;
+  const key = requireKey();
   const iv = randomBytes(IV_BYTES);
   const cipher = createCipheriv(ALGO, key, iv);
   const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
@@ -109,17 +75,12 @@ export function encryptSecret(plaintext: string): string {
   return `${PREFIX}${iv.toString("base64")}:${payload}`;
 }
 
-/**
- * Decrypt a stored secret. Accepts both encrypted (`enc:v1:...`) and
- * legacy plaintext payloads — legacy returns as-is, so reads keep working
- * across a key rollout.
- */
 export function decryptSecret(stored: string): string {
-  if (!stored.startsWith(PREFIX)) return stored;
-  const key = loadKey();
-  if (!key) {
-    throw new Error("decryptSecret: stored value is encrypted but SECRETS_KEY is unset");
+  if (stored.length === 0) return stored;
+  if (!stored.startsWith(PREFIX)) {
+    throw new Error("decryptSecret: stored value is not encrypted (missing enc:v1: prefix)");
   }
+  const key = requireKey();
   const rest = stored.slice(PREFIX.length);
   const sep = rest.indexOf(":");
   if (sep < 0) {
@@ -140,10 +101,3 @@ export function decryptSecret(stored: string): string {
   const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
   return plaintext.toString("utf8");
 }
-
-/** True when `stored` is an `enc:v1:` payload (vs. legacy plaintext). */
-export function isEncryptedPayload(stored: string): boolean {
-  return stored.startsWith(PREFIX);
-}
-
-let _warnedPlaintext = false;

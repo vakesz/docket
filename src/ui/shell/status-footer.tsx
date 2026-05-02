@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { formatRelative } from "@/lib/format";
 import { trpc } from "@/lib/trpc-client";
+import { useMinuteTick } from "@/lib/use-minute-tick";
 import { cn } from "@/lib/utils";
 import { ProposalDialog } from "@/ui/proposals/proposal-dialog";
 import { PaletteHint } from "@/ui/shell/palette-hint";
@@ -34,7 +35,8 @@ export function StatusFooter({
   readOnly?: boolean;
 }) {
   const [online, setOnline] = useState(true);
-  const [, setTick] = useState(0);
+  // Re-render the footer when the relative-time display would change.
+  useMinuteTick();
 
   const utils = trpc.useUtils();
   const syncStatus = trpc.items.syncStatus.useQuery(
@@ -74,11 +76,9 @@ export function StatusFooter({
     update();
     window.addEventListener("online", update);
     window.addEventListener("offline", update);
-    const tick = setInterval(() => setTick((n) => n + 1), 30_000);
     return () => {
       window.removeEventListener("online", update);
       window.removeEventListener("offline", update);
-      clearInterval(tick);
     };
   }, []);
 

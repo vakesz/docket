@@ -16,9 +16,8 @@
 
 import "server-only";
 import { z } from "zod";
-import { zodToJsonSchema } from "@/agent/tools/schema";
 import type { ToolFactory } from "@/agent/tools/types";
-import { ok } from "@/agent/tools/types";
+import { defineTool, ok } from "@/agent/tools/types";
 
 const QuestionInput = z.object({
   question: z
@@ -42,27 +41,25 @@ const QuestionInput = z.object({
 
 export type AskUserQuestionPayload = z.infer<typeof QuestionInput>;
 
-export const askUserQuestionTool: ToolFactory = (_ctx) => ({
-  def: {
+export const askUserQuestionTool: ToolFactory = (_ctx) =>
+  defineTool({
     name: "ask_user_question",
     description:
       "Pause and ask the user a question. Use this instead of guessing when you need information that isn't in the conversation, the cached item, or any tool result. Provide multiple-choice options when the answer space is closed.",
-    parameters: zodToJsonSchema(QuestionInput),
-  },
-  // The result echoes the agent's own question back to the loop so the UI
-  // can render it; nothing in this payload originates outside the trust
-  // boundary, so the LLM judge would just be classifying our own text.
-  guardrailScan: { mode: "skip" },
-  handler: async (raw) => {
-    const payload = QuestionInput.parse(raw);
-    return ok({
-      kind: "ask_user_question" as const,
-      question: payload.question,
-      options: payload.options ?? null,
-      multi_select: payload.multi_select,
-    });
-  },
-});
+    schema: QuestionInput,
+    // The result echoes the agent's own question back to the loop so the UI
+    // can render it; nothing in this payload originates outside the trust
+    // boundary, so the LLM judge would just be classifying our own text.
+    guardrailScan: { mode: "skip" },
+    handler: async (payload) => {
+      return ok({
+        kind: "ask_user_question" as const,
+        question: payload.question,
+        options: payload.options ?? null,
+        multi_select: payload.multi_select,
+      });
+    },
+  });
 
 export function questionTools(ctx: Parameters<ToolFactory>[0]) {
   return [askUserQuestionTool(ctx)] as const;

@@ -8,9 +8,12 @@
  * of bare arguments.
  */
 
+import type { z } from "zod";
 import type { LlmToolDef } from "@/agent/llm/types";
+import { zodToJsonSchema } from "@/agent/tools/schema";
 import type { ProjectId, UserId } from "@/core/types";
 import type { db as Db } from "@/server/db";
+import { buildProviderForUser } from "@/server/providers/build";
 
 export type ToolContext = {
   db: typeof Db;
@@ -75,4 +78,46 @@ export function ok<T>(data: T): ToolResult<T> {
 
 export function fail(error: string): ToolResult<never> {
   return { ok: false, error };
+}
+
+/**
+ * Build the project's WorkItemProvider for this conversation and run `fn`
+ * against it. Used by every read-only and discovery tool that talks to the
+ * upstream provider (PRs, commits, code search, etc.) — keeps the project
+ * lookup + provider construction in one place rather than duplicated per
+ * tool factory.
+ */
+export async function withProvider<T>(
+  ctx: ToolContext,
+  fn: (provider: Awaited<ReturnType<typeof buildProviderForUser>>) => Promise<T>,
+): Promise<T> {
+  const project = await ctx.db.project.findUnique({ where: { id: ctx.projectId } });
+  if (!project) throw new Error(`project ${ctx.projectId} not found`);
+  const provider = await buildProviderForUser(ctx.db, project, ctx.userId);
+  return fn(provider);
+}
+
+/**
+ * Compose an `AgentTool` from a single zod schema. The schema is the
+ * source of truth: it produces both the JSON Schema the LLM sees and the
+ * type-safe parsed args the handler receives. Handlers no longer
+ * re-declare the schema or run a second `.parse(raw)`.
+ */
+export function defineTool<S extends z.ZodTypeAny>(spec: {
+  name: string;
+  description: string;
+  schema: S;
+  guardrailScan?: GuardrailScan;
+  handler: (args: z.infer<S>) => Promise<ToolResult>;
+}): AgentTool {
+  const tool: AgentTool = {
+    def: {
+      name: spec.name,
+      description: spec.description,
+      parameters: zodToJsonSchema(spec.schema),
+    },
+    handler: async (raw) => spec.handler(spec.schema.parse(raw)),
+  };
+  if (spec.guardrailScan) tool.guardrailScan = spec.guardrailScan;
+  return tool;
 }

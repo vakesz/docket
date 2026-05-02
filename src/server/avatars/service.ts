@@ -1,21 +1,5 @@
-/**
- * Avatar caching service — the "where do bytes for a person live" question.
- *
- * Three callers share this module:
- *  1. The auth-side profile callbacks (`auth-build.ts` for GitHub, the AzDO
- *     provider's own callback) call `persistAvatar` at sign-in so the user's
- *     own avatar lands in the cache before the first page render.
- *  2. The `/api/avatars/[providerKind]/[identifier]` route handler calls
- *     `serveAvatar` on every request — cache hit returns immediately,
- *     miss/stale triggers a lazy fetch via the public fetchers.
- *  3. The sync chunk-persist path calls `warmAvatars` to bulk-fetch
- *     avatars for assignees before the user opens the item list, so the
- *     first render has bytes ready and there's no flicker.
- *
- * Refresh policy: 30-day TTL. Avatars rarely change; cache hits should be
- * the dominant path. A failed fetch stamps `failedAt` and backs off for an
- * hour to avoid hammering when a provider is briefly down.
- */
+// 30-day TTL — avatars rarely change. A failed fetch stamps `failedAt`
+// and backs off for an hour to avoid hammering a briefly-down provider.
 
 import "server-only";
 import { fetchAvatarFromProvider } from "@/server/avatars/fetchers";

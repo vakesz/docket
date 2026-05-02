@@ -1,20 +1,8 @@
-/**
- * Per-providerKind HTTP fetchers for profile pictures.
- *
- * Each fetcher returns either fresh image bytes + content-type or `null`
- * when the provider has confirmed nothing is available (e.g. 404). Network
- * errors bubble up as thrown exceptions — the caller decides whether to
- * stamp a transient failure or retry.
- *
- * The fetchers are intentionally not part of the `WorkItemProvider`
- * interface. Avatar lookup isn't a project-scoped operation (the same
- * person resolves the same way across every project of that provider
- * kind), and not every provider has a useful fetcher — GitHub has a public
- * CDN for every login, AzDO can only fetch the *signed-in user's* avatar
- * cheaply. Each spec exposes its own fetcher via `ProviderSpec.avatarFetcher`
- * (or `null` to opt out) and this module dispatches via the registry so
- * adding a new provider is one new file in `src/providers/<x>/avatar.ts`.
- */
+// Avatar lookup isn't part of `WorkItemProvider` because it's not
+// project-scoped (the same login resolves identically across every project
+// of that kind) and not every provider has a useful fetcher — GitHub has
+// a public CDN per login, AzDO can only cheaply fetch the signed-in user's
+// own avatar. Specs that opt out set `avatarFetcher: null`.
 
 import "server-only";
 import { getProviderSpec } from "@/server/provider-registry";

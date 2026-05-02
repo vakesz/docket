@@ -1,20 +1,8 @@
-/**
- * Templates for the "Suggest next action" button.
- *
- * Each template is the literal user-role message the chat pane fires after
- * opening. The seed names the active item and gives the agent a small
- * excerpt of the body so it can spot the obvious echo trap (proposing a
- * comment that just restates the description) without an extra round-trip.
- *
- * Lives in its own file so revising wording is one diff and the prompt
- * cache invariant stays intact (this is post-prefix user content, never
- * concatenated into the byte-stable system prefix).
- *
- * The instructional middle (`DEFAULT_SUGGEST_ACTION_BULLETS`) is the part
- * operators can override from Deployment → Prompts. Dynamic interpolation
- * (title, kind/state hints, body excerpt, comment-count heads-up) stays
- * in code so the override stays simple — just prose, no template syntax.
- */
+// These render as user-role messages after the system prefix — never
+// concatenated into the byte-stable prefix in `prompt.ts`. The middle
+// (`DEFAULT_SUGGEST_ACTION_BULLETS`) is operator-overridable; dynamic
+// interpolation stays in code so the override is plain prose, not a
+// template language.
 
 import { DEFAULT_SUGGEST_ACTION_BULLETS } from "@/agent/prompt";
 import type { ItemKind, ItemState } from "@/core/types";

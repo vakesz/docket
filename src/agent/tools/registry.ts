@@ -1,26 +1,8 @@
-/**
- * Agent tool registry — the canonical, ordered list of tools the model sees.
- *
- * **Ordering matters.** The tool list contributes to the prompt prefix
- * OpenAI hashes for automatic prompt caching. Reordering tools — or
- * adding one in the middle of the list — invalidates the cache for every
- * open conversation. The arch test
- * `src/__arch__/tool-registration-order.test.ts` pins the order so a
- * silent reorder during a refactor fails CI rather than burning cache.
- *
- * The order mirrors AGENTS.md "Preserve agent tool registration order":
- *   1. readonly: items → PRs → commits/CI
- *   2. link tools
- *   3. memory readonly (project-scoped)
- *   4. source readonly (project-scoped)
- *   5. MCP tools — stripped in read-only
- *   6. mutating: provider mutations — stripped in read-only
- *   7. memory mutations — stripped in read-only
- *
- * Read-only mode strips groups (5)–(7). The agent loop passes `readOnly`
- * through here at construction time; downstream tool calls don't need to
- * re-check.
- */
+// Order is part of the prompt-cache key — reordering or inserting in the
+// middle invalidates every open conversation's cache. The arch test in
+// `src/__arch__/tool-registration-order.test.ts` pins it so a silent
+// reorder fails CI. CLAUDE.md invariant #11 lists the canonical order.
+// `readOnly` strips groups (5)–(7); downstream tool calls don't re-check.
 
 import "server-only";
 import { mcpTools } from "@/agent/mcp/tools";

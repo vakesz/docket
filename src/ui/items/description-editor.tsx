@@ -41,9 +41,12 @@ export function DescriptionEditor({
   const [keepPrevious, setKeepPrevious] = useState(false);
   const [pendingProposalId, setPendingProposalId] = useState<string | null>(null);
 
+  // Sync only when the editor is closed — otherwise a background refetch
+  // mid-edit (server-side sync just landed, or a websocket nudge) would
+  // silently stomp the user's in-progress draft.
   useEffect(() => {
-    setDraft(description ?? "");
-  }, [description]);
+    if (!editing) setDraft(description ?? "");
+  }, [description, editing]);
 
   const propose = trpc.proposals.proposeDescriptionPatch.useMutation({
     onSuccess: async (res) => {

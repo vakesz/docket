@@ -89,6 +89,9 @@ export const projectsRouter = router({
         OR: [{ ownerUserId: userId }, { memberships: { some: { userId } } }],
       },
       orderBy: [{ createdAt: "desc" }],
+      // Backstop against unbounded fan-out — a user with thousands of project
+      // memberships would otherwise pull them all into the switcher.
+      take: 200,
       select: {
         id: true,
         slug: true,

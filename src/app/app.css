@@ -1,19 +1,13 @@
 /*
  * Local additions on top of globals.css.
  *
- * globals.css is the tweakcn paste target and is the only source of
- * design tokens — UI code references `--primary`, `--destructive`,
- * `--muted`, `--chart-1..5`, etc. exclusively. This file is reserved for
- * webfont loading, small custom utilities, and global scrollbar styling
- * that doesn't belong in the theme file.
+ * Font families are loaded via `next/font/google` in `src/app/layout.tsx`
+ * — that injects `--font-sans` / `--font-mono` as CSS variables on
+ * <html>, which globals.css's tweakcn token blocks reference. Adding a
+ * family means wiring it through layout.tsx, not editing this file.
  *
- * - The Google Fonts import loads the families that globals.css's
- *   `--font-sans` / `--font-mono` reference. If you paste a theme that
- *   names different families, update the URL below to match.
- * - `no-scrollbar` is a small utility used by the command palette.
+ * `no-scrollbar` is a small utility used by the command palette.
  */
-
-@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@300..700&family=Geist+Mono:wght@400..600&display=swap");
 
 @utility no-scrollbar {
   -ms-overflow-style: none;

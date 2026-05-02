@@ -50,13 +50,24 @@ export function TagsEditor({
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  // Tracks the baseline draft was last synced from. We only re-baseline
+  // when draft still matches it — otherwise a background refetch mid-edit
+  // (sync, websocket nudge, or `router.refresh()` after a proposal lands)
+  // would silently overwrite the chips the user is staging.
+  const lastBaselineRef = useRef<readonly string[]>(editableInitial);
 
-  // Re-baseline whenever the item's tags change (sync, refresh, or the proposal
-  // landed and `router.refresh()` brought new props down).
   // biome-ignore lint/correctness/useExhaustiveDependencies: editableInitial is recomputed every render; depend on the source array.
   useEffect(() => {
-    setDraft(editableInitial);
-    setError(null);
+    const prev = lastBaselineRef.current;
+    const draftLower = new Set(draft.map((t) => t.toLowerCase()));
+    const prevLower = new Set(prev.map((t) => t.toLowerCase()));
+    const userIsClean =
+      draftLower.size === prevLower.size && [...draftLower].every((t) => prevLower.has(t));
+    if (userIsClean) {
+      setDraft(editableInitial);
+      setError(null);
+    }
+    lastBaselineRef.current = editableInitial;
   }, [currentTags, stateEncodingTags]);
 
   const draftSetLower = new Set(draft.map((t) => t.toLowerCase()));

@@ -399,11 +399,15 @@ export async function proposeMemoryWrite(
   let previousBody = "";
   if (args.memoryId) {
     const existing = assertFound(
-      await ctx.db.memoryEntry.findFirst({
-        where: { id: args.memoryId, projectId: ctx.projectId },
-      }),
+      await ctx.db.memoryEntry.findUnique({ where: { id: args.memoryId } }),
       `memory entry '${args.memoryId}' not found`,
     );
+    if (existing.projectId !== ctx.projectId) {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: `memory entry '${args.memoryId}' not found`,
+      });
+    }
     previousTitle = existing.title;
     previousBody = existing.body;
     if (existing.title === title && existing.body === args.body) {
@@ -437,11 +441,15 @@ export async function proposeMemoryDelete(
   args: { memoryId: string },
 ): Promise<ProposalRow> {
   const existing = assertFound(
-    await ctx.db.memoryEntry.findFirst({
-      where: { id: args.memoryId, projectId: ctx.projectId },
-    }),
+    await ctx.db.memoryEntry.findUnique({ where: { id: args.memoryId } }),
     `memory entry '${args.memoryId}' not found`,
   );
+  if (existing.projectId !== ctx.projectId) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: `memory entry '${args.memoryId}' not found`,
+    });
+  }
   const draft: Omit<MemoryDeleteProposal, "id"> = {
     kind: "memory_delete",
     projectId: ctx.projectId,

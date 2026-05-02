@@ -15,14 +15,6 @@
  *   3. GIN trgm indexes on `Item.title` and `Item.description` to back
  *      the ILIKE-style search (`title contains`, `description contains`)
  *      run by the items router and the agent's `search_items` tool.
- *   4. B-tree indexes on FK columns with `onDelete: SetNull`
- *      (`User.defaultProjectId`, `Project.defaultLlmProviderId`,
- *      `Project.defaultGuardrailProviderId`,
- *      `Conversation.llmProviderIdOverride`). Postgres doesn't
- *      auto-index FK columns, so without these the cascade-on-delete
- *      runs a seq scan on each child table. Lives here (instead of
- *      `@@index` in `schema.prisma`) so the build uses CONCURRENTLY
- *      and doesn't take an ACCESS EXCLUSIVE lock during `db push`.
  *
  * Missing env or unavailable DB just logs a warning and exits 0 — never
  * blocks the server.
@@ -131,25 +123,7 @@ async function main() {
       `CREATE INDEX CONCURRENTLY IF NOT EXISTS "Item_description_trgm_idx" ON "Item" USING GIN ("description" gin_trgm_ops)`,
     );
 
-    // B-tree FK indexes for SetNull cascades. Names match Prisma's
-    // auto-naming convention so re-adding the corresponding `@@index` to
-    // `schema.prisma` later would no-op rather than create a duplicate.
-    await db.$executeRawUnsafe(
-      `CREATE INDEX CONCURRENTLY IF NOT EXISTS "User_defaultProjectId_idx" ON "User" ("defaultProjectId")`,
-    );
-    await db.$executeRawUnsafe(
-      `CREATE INDEX CONCURRENTLY IF NOT EXISTS "Project_defaultLlmProviderId_idx" ON "Project" ("defaultLlmProviderId")`,
-    );
-    await db.$executeRawUnsafe(
-      `CREATE INDEX CONCURRENTLY IF NOT EXISTS "Project_defaultGuardrailProviderId_idx" ON "Project" ("defaultGuardrailProviderId")`,
-    );
-    await db.$executeRawUnsafe(
-      `CREATE INDEX CONCURRENTLY IF NOT EXISTS "Conversation_llmProviderIdOverride_idx" ON "Conversation" ("llmProviderIdOverride")`,
-    );
-
-    console.log(
-      "[apply-raw-sql] Applied pg_trgm + Setting partial uniques + Item trgm indexes + FK indexes.",
-    );
+    console.log("[apply-raw-sql] Applied pg_trgm + Setting partial uniques + Item trgm indexes.");
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.warn(`[apply-raw-sql] Skipped: ${message}`);

@@ -2,6 +2,7 @@ import "server-only";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { LLM_KINDS } from "@/agent/llm/types";
+import { LLM_ROLES } from "@/server/llm/lookup";
 import { logger } from "@/server/logger";
 import { encryptSecret } from "@/server/secrets/encryption";
 import {
@@ -29,7 +30,6 @@ const LLM_KIND = z.enum(LLM_KINDS);
  */
 const PriceCentsPerMtok = z.number().min(0).max(1_000_000).nullable();
 
-const LLM_ROLES = ["chat", "guardrail"] as const;
 const LLM_ROLE = z.enum(LLM_ROLES);
 
 const CreateLlmProviderInput = z.object({

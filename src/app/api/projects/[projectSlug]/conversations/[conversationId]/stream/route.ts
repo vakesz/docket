@@ -1,26 +1,14 @@
-/**
- * SSE chat-streaming endpoint.
- *
- * POST /api/projects/{projectSlug}/conversations/{conversationId}/stream
- *   body: { content: string }
- *
- * Drives one round of the agent loop and streams `LoopEvent`s back as
- * Server-Sent Events. The route returns text/event-stream and never
- * blocks on the full assistant response — the browser sees text deltas,
- * tool calls, proposal hand-offs, and `ask_user_question` events as they
- * happen.
- *
- * Auth + project membership are checked manually here (this route can't
- * compose tRPC middleware), but the underlying access shape is identical
- * to `projectScopedMutationProcedure`: session present, project owned or
- * membership row exists.
- */
+// Auth + project membership are checked manually here (route handlers
+// can't compose tRPC middleware) — the access shape mirrors
+// `projectScopedMutationProcedure`: session present, project owned or a
+// membership row exists.
 
 import { NextResponse } from "next/server";
 import { selectAdapterFor } from "@/agent/llm/registry";
 import type { LoopEvent } from "@/agent/loop";
 import { runTurn } from "@/agent/loop";
-import { asUserId } from "@/core/types";
+import { asConversationId, asUserId } from "@/core/types";
+
 import { auth } from "@/server/auth";
 import { getConversationForOwner } from "@/server/conversations/storage";
 import { db } from "@/server/db";
@@ -31,6 +19,9 @@ import { getSetupStatus } from "@/server/setup/status";
 
 export const runtime = "nodejs"; // Prisma + openai SDK both need node, not edge.
 export const dynamic = "force-dynamic";
+// Defensive against serverless platform default timeouts (Vercel = 15s) that
+// would guillotine longer agent turns. Self-host Node ignores this.
+export const maxDuration = 300;
 
 /**
  * Hard ceiling on the JSON body the stream endpoint will accept. The browser
@@ -59,7 +50,8 @@ export async function POST(req: Request, context: RouteContext): Promise<Respons
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const userId = asUserId(session.user.id);
-  const { projectSlug, conversationId } = await context.params;
+  const { projectSlug, conversationId: rawConversationId } = await context.params;
+  const conversationId = asConversationId(rawConversationId);
 
   // Project membership: shares `projectForUser` with the tRPC
   // `enforceProjectMembership` middleware so both surfaces use the same

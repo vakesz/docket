@@ -1,26 +1,8 @@
-/**
- * SSRF guard for the agent's web_fetch tool.
- *
- * `assertFetchTargetSafe` runs the URL through three checks:
- *   1. Scheme — only http(s).
- *   2. Hostname — refuses cloud metadata service hosts by name (the
- *      classic AWS / GCP / Azure metadata endpoints) so a host that
- *      resolves to a public IP can't still impersonate a metadata
- *      target via a vanity name.
- *   3. Resolved IPs — every A / AAAA record from `dns.lookup` is checked
- *      against the private / loopback / link-local / ULA / metadata
- *      ranges. If *any* address falls inside a blocked range the fetch
- *      is denied (defense in depth against DNS rebinding-style attacks
- *      that publish a public + private record).
- *
- * The function returns a stable `denied_*` reason so the WebFetchEvent
- * audit trail can record exactly which check rejected the request.
- *
- * The IP ranges are duplicated here rather than pulled from a package
- * so the guard has no runtime dependency that could be silently
- * relaxed by an upstream patch — these constants are part of the
- * security boundary.
- */
+// IP ranges are duplicated here rather than pulled from a package so the
+// guard has no runtime dependency that could be silently relaxed by an
+// upstream patch — these constants are part of the security boundary.
+// Hostname and resolved-IP checks both run as defense-in-depth against
+// DNS rebinding (a public+private dual-record attack defeats either alone).
 
 import "server-only";
 import { promises as dns } from "node:dns";

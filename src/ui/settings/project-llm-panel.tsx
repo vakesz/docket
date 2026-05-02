@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { useProjectSettingsMap } from "@/lib/settings-client";
 import { trpc } from "@/lib/trpc-client";
 import { Alert, AlertDescription } from "@/ui/primitives/alert";
 import { Button } from "@/ui/primitives/button";
@@ -28,7 +29,7 @@ export function ProjectLlmPanel({ projectSlug }: { projectSlug: string }) {
   const utils = trpc.useUtils();
   const projectsList = trpc.projects.list.useQuery();
   const providers = trpc.llmProviders.list.useQuery();
-  const projectSettings = trpc.settings.projectList.useQuery({ projectSlug });
+  const projectSettings = useProjectSettingsMap({ projectSlug });
 
   const project = projectsList.data?.find((p) => p.slug === projectSlug) ?? null;
 
@@ -68,18 +69,17 @@ export function ProjectLlmPanel({ projectSlug }: { projectSlug: string }) {
   const seededSettingsFor = useRef<string | null>(null);
   useEffect(() => {
     if (seededSettingsFor.current === projectSlug) return;
-    if (!projectSettings.data) return;
-    const lookup = new Map(projectSettings.data.map((row) => [row.key, row.value]));
-    const enabled = lookup.get("llm.compaction.enabled");
-    const threshold = lookup.get("llm.compaction.token-threshold");
-    const keep = lookup.get("llm.compaction.keep-recent-turns");
-    const strategy = lookup.get("llm.compaction.strategy");
-    setCompactEnabled(typeof enabled === "boolean" ? enabled : false);
-    setCompactThreshold(typeof threshold === "number" ? String(threshold) : "60000");
-    setCompactKeep(typeof keep === "number" ? String(keep) : "8");
-    setCompactStrategy(strategy === "drop-tools" ? "drop-tools" : "summary");
+    if (!projectSettings.list.data) return;
+    setCompactEnabled(projectSettings.bool("llm.compaction.enabled", false));
+    setCompactThreshold(String(projectSettings.num("llm.compaction.token-threshold", 60_000)));
+    setCompactKeep(String(projectSettings.num("llm.compaction.keep-recent-turns", 8)));
+    setCompactStrategy(
+      projectSettings.str("llm.compaction.strategy", "summary") === "drop-tools"
+        ? "drop-tools"
+        : "summary",
+    );
     seededSettingsFor.current = projectSlug;
-  }, [projectSettings.data, projectSlug]);
+  }, [projectSettings, projectSlug]);
 
   const saveLlm = trpc.projects.setLlmDefaults.useMutation({
     onSuccess: async () => {
@@ -136,7 +136,7 @@ export function ProjectLlmPanel({ projectSlug }: { projectSlug: string }) {
     ]);
   };
 
-  if (projectsList.isPending || providers.isPending || projectSettings.isPending) {
+  if (projectsList.isPending || providers.isPending || projectSettings.list.isPending) {
     return <p className="text-muted-foreground/70 text-sm">Loading…</p>;
   }
   if (!project) {

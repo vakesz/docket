@@ -1,14 +1,20 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Group, Panel, Separator } from "react-resizable-panels";
 import { useChatPaneController } from "@/ui/conversations/chat-pane-context";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/ui/primitives/sheet";
 import { useRegisterSidebarMount, useSidebarDrawer } from "@/ui/shell/sidebar-drawer-context";
 
-const RESIZE_HANDLE_CLASS =
-  "w-px bg-border transition-colors data-[resize-handle-state=hover]:bg-muted-foreground/70 data-[resize-handle-state=drag]:bg-primary";
+// Defer `react-resizable-panels` to a separate chunk. The desktop branch
+// is `hidden lg:flex` — mobile users below 1024px never need it, and
+// non-items routes (settings/auth/setup) skip it entirely. ssr:false is
+// safe because the panels mount inside a div that's CSS-hidden until lg.
+const ItemsShellDesktop = dynamic(
+  () => import("@/ui/shell/items-shell-desktop").then((m) => m.ItemsShellDesktop),
+  { ssr: false, loading: () => null },
+);
 
 /**
  * The 3-pane workspace.
@@ -67,37 +73,13 @@ export function ItemsShellLayout({
   return (
     <>
       <div className="hidden flex-1 overflow-hidden lg:flex">
-        <Group
-          orientation="horizontal"
-          id={`${groupId}.${showRight ? "3pane" : "2pane"}`}
-          className="group flex-1 overflow-hidden"
-        >
-          <Panel
-            id="left"
-            defaultSize={showRight ? 22 : 28}
-            minSize={14}
-            className="overflow-hidden"
-          >
-            {left}
-          </Panel>
-          <Separator className={RESIZE_HANDLE_CLASS} />
-          <Panel
-            id="middle"
-            defaultSize={showRight ? 48 : 72}
-            minSize={30}
-            className="overflow-hidden"
-          >
-            {middle}
-          </Panel>
-          {showRight && (
-            <>
-              <Separator className={RESIZE_HANDLE_CLASS} />
-              <Panel id="right" defaultSize={30} minSize={18} className="overflow-hidden">
-                {right}
-              </Panel>
-            </>
-          )}
-        </Group>
+        <ItemsShellDesktop
+          left={left}
+          middle={middle}
+          right={right}
+          groupId={groupId}
+          showRight={showRight}
+        />
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:hidden">

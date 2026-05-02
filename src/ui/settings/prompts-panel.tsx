@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { useGlobalSettingsMap } from "@/lib/settings-client";
 import { trpc } from "@/lib/trpc-client";
 import { cn } from "@/lib/utils";
 import { Alert, AlertDescription } from "@/ui/primitives/alert";
@@ -137,7 +138,7 @@ const GROUPS: { key: PromptGroup; label: string }[] = [
 
 export function PromptsPanel() {
   const utils = trpc.useUtils();
-  const list = trpc.settings.globalList.useQuery();
+  const settings = useGlobalSettingsMap();
 
   const [drafts, setDrafts] = useState<Record<PromptKey, string>>(() => emptyDrafts());
   const [active, setActive] = useState<PromptKey>(FIELDS[0]?.key ?? "prompt.system-base");
@@ -145,15 +146,14 @@ export function PromptsPanel() {
   const seededRef = useRef(false);
   useEffect(() => {
     if (seededRef.current) return;
-    if (!list.data) return;
+    if (!settings.list.data) return;
     const next = emptyDrafts();
     for (const field of FIELDS) {
-      const row = list.data.find((r) => r.key === field.key);
-      next[field.key] = typeof row?.value === "string" ? row.value : "";
+      next[field.key] = settings.str(field.key, "");
     }
     setDrafts(next);
     seededRef.current = true;
-  }, [list.data]);
+  }, [settings]);
 
   const update = trpc.settings.globalUpdate.useMutation({
     onSuccess: async () => {
@@ -181,7 +181,7 @@ export function PromptsPanel() {
     seededRef.current = false;
   };
 
-  if (list.isPending) {
+  if (settings.list.isPending) {
     return <p className="text-muted-foreground/70 text-sm">Loading…</p>;
   }
 
@@ -189,12 +189,8 @@ export function PromptsPanel() {
   if (!activeField) {
     throw new Error("prompts panel rendered with empty FIELDS list");
   }
-  const dirty = list.data
-    ? FIELDS.some((f) => {
-        const row = list.data.find((r) => r.key === f.key);
-        const stored = typeof row?.value === "string" ? row.value : "";
-        return drafts[f.key] !== stored;
-      })
+  const dirty = settings.list.data
+    ? FIELDS.some((f) => drafts[f.key] !== settings.str(f.key, ""))
     : false;
 
   return (

@@ -1,23 +1,7 @@
-/**
- * Azure DevOps `WorkItemProvider` implementation.
- *
- * Constructed from `{ orgUrl, project, accessToken }`. The token is an
- * AAD bearer issued through OAuth (`azure_devops` NextAuth provider) — same
- * token shape Microsoft accepts on the `vssps`/`dev.azure.com` REST surface.
- *
- * Soft states (`blocked`, `needs_info`, `closed-as-wontfix`) ride along as
- * **tags** because the Agile template has no native states for them. The
- * state map (`state-map.ts`) owns that encoding; this class only ferries the
- * resulting `(state, tags)` tuple to/from the WIT REST API.
- *
- * Description / comment bodies are HTML on AzDO; we round-trip them as-is
- * (no HTML→Markdown converter yet — the field appears in detail panes
- * verbatim, callers prepared to render either get sane output).
- *
- * PR / commit / CI methods are intentionally absent — AzDO Boards items
- * don't carry the same git-host signals GitHub does, and the agent's PR
- * tools tolerate providers that don't implement them.
- */
+// Description / comment bodies are HTML on AzDO and round-trip as-is —
+// no HTML→Markdown converter wired yet. PR / commit / CI methods are
+// intentionally absent: AzDO Boards items don't carry git-host signals,
+// and the agent's PR tools tolerate providers that don't implement them.
 
 import { Readable } from "node:stream";
 import * as azdev from "azure-devops-node-api";

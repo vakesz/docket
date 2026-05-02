@@ -1,31 +1,12 @@
-/**
- * Streaming agent loop.
- *
- * One call to `runTurn()` handles a complete user → assistant exchange:
- * persist the user message, ask the LLM for a response, dispatch any tool
- * calls it requests, re-feed the results, and finally persist the
- * assistant message. Yields a vendor-neutral stream of `LoopEvent`s the
- * SSE handler in `src/app/api/.../route.ts` serializes to the browser.
- *
- * Three invariants the loop preserves:
- *   1. **Prompt prefix is byte-stable.** `buildSystemPrefix` produces the
- *      same string for the same `(itemKind, itemSummary)` tuple. The
- *      tool list comes from `buildToolRegistry`, whose order is pinned
- *      by an arch test. OpenAI's automatic prompt cache hits on
- *      ≥1024-token deterministic prefixes — that's the property we're
- *      protecting.
- *   2. **Tool calls are dispatched, not echoed back.** The loop never
- *      returns control to the caller mid-turn; it iterates internally
- *      until the adapter emits `done` or hits the hard tool-round cap.
- *   3. **`ask_user_question` ends the turn early.** Dispatch returns the
- *      structured payload; the loop emits `ask_user_question`,
- *      persists the assistant message with `pending: true`, and yields
- *      `done` without re-feeding. The next user message lands as a
- *      regular `user` row and a fresh `runTurn()` resumes from there.
- */
+// Tool calls are dispatched internally — the loop never hands control
+// back to the caller mid-turn. `ask_user_question` is the one exception:
+// dispatch returns the structured payload, the loop emits the event,
+// persists the assistant message with `pending: true`, and yields `done`
+// without re-feeding. The next user message resumes a fresh `runTurn()`.
 
 import "server-only";
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
 import { selectGuardrailFor } from "@/agent/guardrail/registry";
 import type { GuardrailUsage } from "@/agent/guardrail/types";
 import { extractUntrustedFields } from "@/agent/guardrail/types";
@@ -36,7 +17,16 @@ import { buildSystemPrefix } from "@/agent/prompt";
 import { loadPrompts } from "@/agent/prompt-loader";
 import { buildToolRegistry } from "@/agent/tools/registry";
 import type { AgentTool, ToolContext, ToolResult } from "@/agent/tools/types";
-import { asProjectId, type ItemKind, type ProjectId, type UserId } from "@/core/types";
+import {
+  asMessageId,
+  asProjectId,
+  assertItemKind,
+  type ConversationId,
+  type ItemKind,
+  type MessageId,
+  type ProjectId,
+  type UserId,
+} from "@/core/types";
 import type { Conversation, Message } from "@/db/generated/client";
 import { getBudgetStatus } from "@/server/billing/budget";
 import { compactConversation, loadCompactionSettings } from "@/server/conversations/compaction";
@@ -47,6 +37,37 @@ import { logger } from "@/server/logger";
 import { loadUserSetting } from "@/server/settings/effective";
 
 type Database = typeof Db;
+
+// Tool-result envelopes the loop forwards to the SSE stream. Mirrors the
+// shapes returned by `proposalResult` (mutating tools) and the
+// `ask_user_question` tool — parsed defensively at the boundary so a
+// schema drift in a mutating tool surfaces here instead of a malformed
+// SSE event reaching the browser.
+const PROPOSAL_TOOL_NAMES = [
+  "propose_transition",
+  "propose_description_patch",
+  "propose_comment",
+  "propose_new_item",
+  "propose_item_tags",
+] as const;
+type ProposalToolName = (typeof PROPOSAL_TOOL_NAMES)[number];
+
+const proposalStagedPayloadSchema = z
+  .object({
+    proposal_id: z.string(),
+    kind: z.string().optional(),
+  })
+  .passthrough();
+
+const askUserQuestionPayloadSchema = z.object({
+  question: z.string(),
+  options: z.array(z.string()).nullable().optional(),
+  multi_select: z.boolean().optional(),
+});
+
+function isProposalToolName(name: string): name is ProposalToolName {
+  return (PROPOSAL_TOOL_NAMES as readonly string[]).includes(name);
+}
 
 export type LoopEvent =
   | { kind: "text_delta"; delta: string }
@@ -98,7 +119,7 @@ export type LoopEvent =
 export type RunTurnArgs = {
   db: Database;
   adapter: LlmAdapter;
-  conversationId: string;
+  conversationId: ConversationId;
   userId: UserId;
   userMessage: string;
   /** Read-only mode strips mutating tools from the registry. */
@@ -200,7 +221,7 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
   const inputDecision = await guardrail.checkInput(userMessage, signal);
   accumulateGuardrailUsage(guardrailUsage, inputDecision.usage);
   if (inputDecision.action !== "allow") {
-    await markMessageFlagged(db, userMessageRow.id, inputDecision.reason);
+    await markMessageFlagged(db, asMessageId(userMessageRow.id), inputDecision.reason);
     yield {
       kind: inputDecision.action === "block" ? "guardrail_blocked" : "guardrail_flagged",
       stage: "input",
@@ -562,7 +583,7 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
         toolName: formatted.toolName,
       });
       if (toolBlockReason !== null) {
-        await markMessageFlagged(db, toolRow.id, toolBlockReason);
+        await markMessageFlagged(db, asMessageId(toolRow.id), toolBlockReason);
         // Surface the block to the user as a final assistant turn so the
         // chat thread shows *why* the agent stopped instead of trailing
         // off mid-thought. Pinned at the end of this round; the outer
@@ -582,30 +603,26 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
       }
 
       // Special-case the two structured tool payloads the UI cares about.
-      const data = result.ok ? result.data : null;
-      if (data && typeof data === "object") {
-        const d = data as Record<string, unknown>;
-        if (
-          (call.name === "propose_transition" ||
-            call.name === "propose_description_patch" ||
-            call.name === "propose_comment" ||
-            call.name === "propose_new_item") &&
-          typeof d["proposal_id"] === "string"
-        ) {
+      if (result.ok && isProposalToolName(call.name)) {
+        const parsed = proposalStagedPayloadSchema.safeParse(result.data);
+        if (parsed.success) {
           yield {
             kind: "proposal_staged",
-            proposalId: d["proposal_id"],
-            proposalKind: typeof d["kind"] === "string" ? d["kind"] : call.name,
+            proposalId: parsed.data.proposal_id,
+            proposalKind: parsed.data.kind ?? call.name,
             toolName: call.name,
           };
         }
-        if (call.name === "ask_user_question" && typeof d["question"] === "string") {
+      }
+      if (result.ok && call.name === "ask_user_question") {
+        const parsed = askUserQuestionPayloadSchema.safeParse(result.data);
+        if (parsed.success) {
           askedQuestion = true;
           yield {
             kind: "ask_user_question",
-            question: d["question"],
-            options: Array.isArray(d["options"]) ? (d["options"] as string[]) : null,
-            multiSelect: Boolean(d["multi_select"]),
+            question: parsed.data.question,
+            options: parsed.data.options ?? null,
+            multiSelect: parsed.data.multi_select ?? false,
           };
         }
       }
@@ -639,7 +656,7 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
     const outputDecision = await guardrail.checkOutput(assistantBuffer, signal);
     accumulateGuardrailUsage(guardrailUsage, outputDecision.usage);
     if (outputDecision.action !== "allow") {
-      await markMessageFlagged(db, finalAssistantRow.id, outputDecision.reason);
+      await markMessageFlagged(db, asMessageId(finalAssistantRow.id), outputDecision.reason);
       yield {
         kind: "guardrail_flagged",
         stage: "output",
@@ -710,7 +727,7 @@ function accumulateGuardrailUsage(total: GuardrailUsage, add: GuardrailUsage | u
 
 async function flushGuardrailUsage(
   db: Database,
-  conversationId: string,
+  conversationId: ConversationId,
   usage: GuardrailUsage,
 ): Promise<void> {
   if (usage.tokensIn === 0 && usage.tokensOut === 0) return;
@@ -726,7 +743,11 @@ async function flushGuardrailUsage(
   });
 }
 
-async function markMessageFlagged(db: Database, messageId: string, reason: string): Promise<void> {
+async function markMessageFlagged(
+  db: Database,
+  messageId: MessageId,
+  reason: string,
+): Promise<void> {
   await db.message.update({
     where: { id: messageId },
     data: { flagged: true, guardrailReason: reason },
@@ -764,7 +785,7 @@ function readToolCallsJson(raw: unknown): LlmToolCall[] | undefined {
 
 async function persistAssistantTurn(
   db: Database,
-  conversationId: string,
+  conversationId: ConversationId,
   text: string,
   toolCalls: readonly LlmToolCall[],
   pending: boolean,
@@ -782,7 +803,10 @@ async function persistAssistantTurn(
   });
 }
 
-async function loadTranscriptForLlm(db: Database, conversationId: string): Promise<LlmMessage[]> {
+async function loadTranscriptForLlm(
+  db: Database,
+  conversationId: ConversationId,
+): Promise<LlmMessage[]> {
   const conv = await getConversation(db, conversationId);
   if (!conv) return [];
   const out: LlmMessage[] = [];
@@ -843,7 +867,7 @@ async function loadItemContext(db: Database, conv: Conversation): Promise<ItemCo
   ];
   return {
     summary: lines.join("\n"),
-    kind: item.kind as ItemKind,
+    kind: assertItemKind(item.kind, `Item ${item.providerItemId}.kind`),
     providerItemId: item.providerItemId,
   };
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { useProjectSettingsMap } from "@/lib/settings-client";
 import { trpc } from "@/lib/trpc-client";
 import { Button } from "@/ui/primitives/button";
 import { Input } from "@/ui/primitives/input";
@@ -20,7 +21,7 @@ import { Textarea } from "@/ui/primitives/textarea";
  */
 export function WebFetchPanel({ projectSlug }: { projectSlug: string }) {
   const utils = trpc.useUtils();
-  const projectSettings = trpc.settings.projectList.useQuery({ projectSlug });
+  const projectSettings = useProjectSettingsMap({ projectSlug });
 
   const [enabled, setEnabled] = useState(true);
   const [hostsText, setHostsText] = useState("");
@@ -38,16 +39,13 @@ export function WebFetchPanel({ projectSlug }: { projectSlug: string }) {
   const seededForRef = useRef<string | null>(null);
   useEffect(() => {
     if (seededForRef.current === projectSlug) return;
-    if (!projectSettings.data) return;
-    const lookup = new Map(projectSettings.data.map((row) => [row.key, row.value]));
-    const e = lookup.get("web-fetch.enabled");
-    const hosts = lookup.get("web-fetch.allowed-hosts");
-    const m = lookup.get("web-fetch.max-bytes");
-    setEnabled(typeof e === "boolean" ? e : true);
+    if (!projectSettings.list.data) return;
+    setEnabled(projectSettings.bool("web-fetch.enabled", true));
+    const hosts = projectSettings.raw("web-fetch.allowed-hosts");
     setHostsText(Array.isArray(hosts) ? hosts.join("\n") : "");
-    setMaxBytes(typeof m === "number" ? String(m) : "1000000");
+    setMaxBytes(String(projectSettings.num("web-fetch.max-bytes", 1_000_000)));
     seededForRef.current = projectSlug;
-  }, [projectSettings.data, projectSlug]);
+  }, [projectSettings, projectSlug]);
 
   const save = trpc.settings.projectUpdate.useMutation({
     onSuccess: async () => {
@@ -70,7 +68,7 @@ export function WebFetchPanel({ projectSlug }: { projectSlug: string }) {
     ]);
   };
 
-  if (projectSettings.isPending) {
+  if (projectSettings.list.isPending) {
     return <p className="text-muted-foreground/70 text-sm">Loading…</p>;
   }
 
