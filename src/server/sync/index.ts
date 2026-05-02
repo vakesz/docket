@@ -909,6 +909,9 @@ async function runSync(
       // count constant regardless of `seenIds` cardinality — a positional-
       // parameter `notIn` would fan out to N positional parameters and trip
       // Postgres's 65K parameter limit on full syncs of large repos.
+      // `sql.param` is required: a bare `${seenArr}` interpolation expands
+      // the JS array into a tuple `($4,$5,...)` which Postgres can't cast
+      // to `text[]`, so the whole update fails.
       const seenArr = Array.from(seenIds);
       const archived_ids = await db
         .update(items)
@@ -917,7 +920,7 @@ async function runSync(
           and(
             eq(items.projectId, projectId),
             eq(items.archived, false),
-            sql`${items.providerItemId} <> ALL(${seenArr}::text[])`,
+            sql`${items.providerItemId} <> ALL(${sql.param(seenArr)}::text[])`,
           ),
         )
         .returning({ id: items.id });
