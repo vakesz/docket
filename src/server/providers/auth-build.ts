@@ -47,11 +47,9 @@ export function buildAuthProvider(row: OauthProviderConfig): Provider {
         scopes: row.scopes,
       });
     case "azure_devops": {
-      // Entra tenant id lives under `metadata.tenant`. The legacy `baseUrl`
-      // slot is read as a fallback so a row that hasn't been migrated yet
-      // (between `prisma db push` and `bin/apply-raw-sql.ts`) still resolves.
-      // Empty → multi-tenant `common` endpoint.
-      const tenant = readStringMeta(row.metadata, "tenant") ?? row.baseUrl;
+      // Entra tenant id lives under `metadata.tenant`. Empty → multi-tenant
+      // `common` endpoint.
+      const tenant = readStringMeta(row.metadata, "tenant");
       return azureDevOpsProvider({
         clientId: row.clientId,
         clientSecret,

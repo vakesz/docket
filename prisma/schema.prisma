@@ -53,6 +53,11 @@ model User {
   commandUsage  CommandUsage[]
   settings      Setting[]
   savedViews    SavedView[]
+
+  // FK index on `defaultProjectId` is created in `bin/apply-raw-sql.ts`
+  // via CREATE INDEX CONCURRENTLY so the build doesn't take an exclusive
+  // lock on User. Without it, deleting a Project would seq-scan this
+  // table to apply the SetNull cascade.
 }
 
 model Account {
@@ -132,28 +137,28 @@ model OauthProviderConfig {
 }
 
 model LlmProvider {
-  id        String   @id @default(cuid())
+  id                      String   @id @default(cuid())
   /// 'openai' | future vendors ('anthropic', 'gemini', 'bedrock', 'mistral',
   /// 'ollama', ...). The agent's `selectAdapterFor` dispatches on this;
   /// the OpenAI adapter ships today, future adapters are one file each.
-  kind      String
+  kind                    String
   /// 'chat' | 'guardrail'. Chat rows feed the agent loop; guardrail rows
   /// feed the prompt-injection / moderation layer. Resolution paths are
   /// disjoint — a chat resolver never picks a guardrail row and vice
   /// versa. Role is stamped at create time and is not editable; to switch,
   /// delete and recreate the row.
-  role      String   @default("chat")
-  label     String
+  role                    String   @default("chat")
+  label                   String
   /// AES-256-GCM ciphertext (`enc:v1:<iv>:<ct+tag>`) when SECRETS_KEY is set;
   /// legacy plaintext rows are still readable and re-encrypt on next write.
-  apiKey    String
+  apiKey                  String
   /// Default model for this provider row (e.g. 'gpt-5' for chat,
   /// 'gpt-5-nano' for guardrail). Empty falls back to the adapter's
   /// hardcoded default for that role.
-  model     String   @default("")
+  model                   String   @default("")
   /// Optional base URL (Azure AI Foundry v1 endpoint, OpenAI-compatible
   /// Ollama endpoint, proxies). Empty = vendor default.
-  baseUrl   String   @default("")
+  baseUrl                 String   @default("")
   /// Per-million-tokens prompt-side price in USD cents. Null = unknown,
   /// in which case `estimateCostCents` returns undefined for any turn the
   /// API doesn't surface a precomputed cost for, and budget tracking
@@ -170,10 +175,10 @@ model LlmProvider {
   /// pin a row explicitly. At most one row per role should have this set;
   /// the application enforces it (`setDefault` clears the flag on the other
   /// rows of the same role first).
-  isDefault Boolean  @default(false)
-  enabled   Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  isDefault               Boolean  @default(false)
+  enabled                 Boolean  @default(true)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
   defaultedByChatProjects      Project[]      @relation("ProjectDefaultLlm")
   defaultedByGuardrailProjects Project[]      @relation("ProjectDefaultGuardrail")
@@ -191,62 +196,66 @@ model LlmProvider {
 // ----------------------------------------------------------------------------
 
 model Project {
-  id                   String    @id @default(cuid())
+  id                         String    @id @default(cuid())
   /// Display name for the project ("ACME / web", "Contoso Platform").
-  name                 String
+  name                       String
   /// URL slug derived from `name` via `slugify` (`src/core/slug.ts`).
   /// Globally unique — two projects can't share a slug regardless of owner.
   /// Recomputed on rename, so updating `name` changes the project's URL.
-  slug                 String    @unique
-  description          String    @default("")
+  slug                       String    @unique
+  description                String    @default("")
   /// Provider kind this project targets — 'github' | 'azure_devops' | ...
   /// Same vocabulary as OauthProviderConfig.kind.
-  providerKind         String
+  providerKind               String
   /// Per-provider scope payload (e.g. `{ owner: "acme", repo: "web" }` for
   /// GitHub, `{ organization: "Contoso", project: "Platform" }` for AzDO).
   /// Schemas live in each provider module's spec; this column doesn't
   /// validate.
-  providerScope        Json
+  providerScope              Json
   /// Project-level chat LLM choice; falls back to the most-recently-updated
   /// enabled `LlmProvider` row with role='chat' when null. Per-conversation
   /// override on Conversation.llmProviderIdOverride.
-  defaultLlmProviderId String?
+  defaultLlmProviderId       String?
   /// Project-level guardrail LLM choice; null disables LLM-judge guardrail
   /// for the project (pattern guardrail still runs if enabled). FK targets
   /// an LlmProvider row with role='guardrail'.
   defaultGuardrailProviderId String?
   /// Project-level sampling temperature for the agent loop. Null → adapter
   /// default. Conversation/per-turn overrides still win.
-  defaultTemperature   Float?
+  defaultTemperature         Float?
   /// Owner has implicit membership; explicit memberships go through
   /// ProjectMembership. Owner can delete the project; members cannot.
-  ownerUserId          String
-  createdAt            DateTime  @default(now())
-  archivedAt           DateTime?
-  updatedAt            DateTime  @updatedAt
+  ownerUserId                String
+  createdAt                  DateTime  @default(now())
+  archivedAt                 DateTime?
+  updatedAt                  DateTime  @updatedAt
 
-  owner         User                @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
-  defaultLlm    LlmProvider?        @relation("ProjectDefaultLlm", fields: [defaultLlmProviderId], references: [id], onDelete: SetNull)
-  defaultGuardrail LlmProvider?     @relation("ProjectDefaultGuardrail", fields: [defaultGuardrailProviderId], references: [id], onDelete: SetNull)
-  defaultForUsers User[]            @relation("UserDefaultProject")
-  memberships   ProjectMembership[]
-  items         Item[]
-  watchlist     WatchlistEntry[]
-  memory        MemoryEntry[]
-  sources       SourceDoc[]
-  conversations Conversation[]
-  proposals     Proposal[]
-  mcpServers    McpServerConfig[]
-  settings      Setting[]
-  suggestions   Suggestion[]
-  commandUsage  CommandUsage[]
-  sync          SyncCursor?
-  savedViews    SavedView[]
-  audits        Audit[]
-  webFetches    WebFetchEvent[]
+  owner            User                @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  defaultLlm       LlmProvider?        @relation("ProjectDefaultLlm", fields: [defaultLlmProviderId], references: [id], onDelete: SetNull)
+  defaultGuardrail LlmProvider?        @relation("ProjectDefaultGuardrail", fields: [defaultGuardrailProviderId], references: [id], onDelete: SetNull)
+  defaultForUsers  User[]              @relation("UserDefaultProject")
+  memberships      ProjectMembership[]
+  items            Item[]
+  watchlist        WatchlistEntry[]
+  memory           MemoryEntry[]
+  sources          SourceDoc[]
+  conversations    Conversation[]
+  proposals        Proposal[]
+  mcpServers       McpServerConfig[]
+  settings         Setting[]
+  suggestions      Suggestion[]
+  commandUsage     CommandUsage[]
+  sync             SyncCursor?
+  savedViews       SavedView[]
+  audits           Audit[]
+  webFetches       WebFetchEvent[]
 
   @@index([ownerUserId, archivedAt])
   @@index([providerKind])
+  // FK indexes on `defaultLlmProviderId` / `defaultGuardrailProviderId`
+  // are created in `bin/apply-raw-sql.ts` via CREATE INDEX CONCURRENTLY
+  // so the build doesn't lock Project. Without them, deleting an
+  // LlmProvider row would seq-scan Project to apply the SetNull cascade.
 }
 
 /// Per-user role on a project. Roles are 'viewer' | 'member' | 'approver';
@@ -272,7 +281,7 @@ model ProjectMembership {
 // ----------------------------------------------------------------------------
 
 model Item {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   projectId      String
   /// Provider-native id (e.g. "acme/web#42" for GitHub, "1234" for AzDO).
   /// Stable across syncs; the surrogate `id` is the FK target for everything
@@ -281,7 +290,7 @@ model Item {
   /// Canonical kind: ItemKind in src/core/types.ts.
   kind           String
   title          String
-  description    String   @default("")
+  description    String    @default("")
   /// Canonical state: ItemState in src/core/types.ts. Provider-native state
   /// strings are translated by each provider's state-map.ts.
   state          String
@@ -290,24 +299,24 @@ model Item {
   /// `[assignee]` when assignee is non-null, `[]` otherwise. Surfaces should
   /// move to reading this column over time; `assignee` (singular) is kept
   /// during the transition.
-  assignees      String[] @default([])
+  assignees      String[]  @default([])
   /// Optional reviewer logins (GitHub PR requested_reviewers, etc). Empty on
   /// providers that don't model reviewers.
-  reviewers      String[] @default([])
+  reviewers      String[]  @default([])
   /// Provider-native ids of items linked to this one (cross-references,
   /// AzDO relations). Empty when the provider doesn't surface linked items.
-  linkedItemIds  String[] @default([])
+  linkedItemIds  String[]  @default([])
   author         String?
   /// Parent's providerItemId, not the surrogate cuid. Resolved at query
   /// time; null when no parent or parent is outside the synced cache.
   parentId       String?
-  tags           String[] @default([])
+  tags           String[]  @default([])
   /// Catch-all bag for provider-native fields that don't have typed slots
   /// yet. Items already surface reactions, assignees, reviewers, milestone,
   /// iteration, area, ciSummary as typed columns — providerRaw is for the
   /// long tail beyond those. Read access is audit-logged via the agent's
   /// readonly tools; do not introduce new typed columns by reading from here.
-  providerRaw    Json     @default("{}")
+  providerRaw    Json      @default("{}")
   url            String?
   repositoryUrl  String?
   /// Provider-side creation timestamp ("Opened" date in the UI). Nullable
@@ -346,7 +355,7 @@ model Item {
 }
 
 model Comment {
-  id                String   @id @default(cuid())
+  id                String    @id @default(cuid())
   itemId            String
   /// Provider-native comment id, scoped under itemId.
   providerCommentId String
@@ -361,7 +370,7 @@ model Comment {
   /// True when the provider reports the comment was edited after creation
   /// (GitHub: `updated_at` > `created_at`). Informational; the cached body
   /// silently overwrites on the next sync.
-  edited            Boolean  @default(false)
+  edited            Boolean   @default(false)
   /// Reaction summary keyed by ReactionKind → count. Null when the
   /// provider doesn't model per-comment reactions.
   reactions         Json?
@@ -522,32 +531,36 @@ model Conversation {
   // project (`where: { startedAt: { gte: since } }`); without this index the
   // monthly spend query falls back to a full scan once the table grows.
   @@index([startedAt])
+  // FK index on `llmProviderIdOverride` is created in
+  // `bin/apply-raw-sql.ts` via CREATE INDEX CONCURRENTLY. Without it,
+  // deleting an LlmProvider row would seq-scan Conversation to apply the
+  // SetNull cascade.
 }
 
 model Message {
-  id             String   @id @default(cuid())
-  conversationId String
+  id              String   @id @default(cuid())
+  conversationId  String
   /// 'system' | 'user' | 'assistant' | 'tool'. Vendor-neutral.
-  role           String
-  content        String
+  role            String
+  content         String
   /// Vendor-neutral discriminated tool-call payload. Null for non-tool turns.
-  toolCallsJson  Json?
-  toolCallId     String?
-  toolName       String?
+  toolCallsJson   Json?
+  toolCallId      String?
+  toolName        String?
   /// True after the compaction service has folded this message into a
   /// synthetic system summary. Live transcript filters compacted == false.
-  compacted      Boolean  @default(false)
-  pending        Boolean  @default(false)
+  compacted       Boolean  @default(false)
+  pending         Boolean  @default(false)
   /// True when the guardrail layer flagged or blocked this message.
   /// Surfaces in the chat UI as a banner above the message bubble.
-  flagged        Boolean  @default(false)
+  flagged         Boolean  @default(false)
   /// One-line guardrail reason ("regex: ignore previous instructions",
   /// "moderation: harassment", "llm-judge: injection"). Null when not
   /// flagged.
   guardrailReason String?
-  tokensIn       Int      @default(0)
-  tokensOut      Int      @default(0)
-  createdAt      DateTime @default(now())
+  tokensIn        Int      @default(0)
+  tokensOut       Int      @default(0)
+  createdAt       DateTime @default(now())
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
@@ -609,20 +622,20 @@ model Proposal {
 // ----------------------------------------------------------------------------
 
 model McpServerConfig {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   projectId   String
   name        String
   /// 'http' only — stdio transport is intentionally not supported because
   /// running operator-supplied subprocesses server-side is a security
   /// problem. Column shape accepts other transports without a migration if
   /// that decision ever gets revisited.
-  transport   String   @default("http")
+  transport   String  @default("http")
   url         String
   /// Optional headers (auth tokens, etc). Encrypted at rest via the
   /// `_enc` blob shape produced by `src/server/mcp/headers-codec.ts`,
-  /// keyed by `SECRETS_KEY`. Legacy plaintext rows decode unchanged.
-  headersJson Json     @default("{}")
-  enabled     Boolean  @default(true)
+  /// keyed by `SECRETS_KEY`. An empty headers object is stored as `{}`.
+  headersJson Json    @default("{}")
+  enabled     Boolean @default(true)
 
   /// OAuth state (when this server was connected via the OAuth flow).
   /// `oauthIssuer` doubles as the discovery base URL — a present value
@@ -659,32 +672,32 @@ model McpServerConfig {
 /// token exchange can run without trusting the URL fragment. Rows are
 /// reaped on TTL by the next handshake.
 model McpOauthState {
-  id          String   @id @default(cuid())
+  id            String   @id @default(cuid())
   /// Random nonce embedded in the `state` query param. Indexed so the
   /// callback handler can look the row up in one query.
-  nonce       String   @unique
-  projectId   String
-  userId      String
-  mcpServerId String
+  nonce         String   @unique
+  projectId     String
+  userId        String
+  mcpServerId   String
   /// PKCE code-verifier (RFC 7636), base64url. The challenge is derived
   /// from this and sent on the authorization request.
-  codeVerifier String
+  codeVerifier  String
   /// Issuer base URL — re-used at exchange time to look up the token
   /// endpoint without re-running discovery.
-  issuer       String
+  issuer        String
   /// Token endpoint cached at start time; saves one round-trip on
   /// callback. May be re-discovered if the IdP rotates endpoints.
   tokenEndpoint String
   /// Client id captured at handshake start (DCR result or pre-registered).
-  clientId     String
+  clientId      String
   /// `enc:v1:` ciphertext of the client secret if one was issued.
-  clientSecret String?
+  clientSecret  String?
   /// Scopes requested at consent time, space-separated.
-  scopes       String
+  scopes        String
   /// Redirect URI we sent to the IdP — must match exactly on exchange.
-  redirectUri  String
-  expiresAt    DateTime
-  createdAt    DateTime @default(now())
+  redirectUri   String
+  expiresAt     DateTime
+  createdAt     DateTime @default(now())
 
   @@index([expiresAt])
 }
@@ -850,22 +863,22 @@ model Avatar {
 // ----------------------------------------------------------------------------
 
 model WebFetchEvent {
-  id          String   @id @default(cuid())
-  projectId   String
+  id           String   @id @default(cuid())
+  projectId    String
   /// Caller at the moment of the fetch. Kept as a string id (not a relation)
   /// so user deletion never cascade-erases this trail.
-  userId      String?
-  url         String
+  userId       String?
+  url          String
   /// 'ok' | 'error' | 'denied_disabled' | 'denied_url' |
   /// 'denied_host_allowlist' | 'denied_host_metadata' |
   /// 'denied_host_unresolved' | 'denied_redirect' | 'denied_type' |
   /// 'denied_size'. Free-text so the tool can grow new failure modes
   /// without a migration.
-  status      String
+  status       String
   /// Response Content-Type header on success; null on denial / error.
-  contentType String?
+  contentType  String?
   /// Bytes returned (after truncation, before HTML stripping). 0 on denial.
-  bytes       Int      @default(0)
+  bytes        Int      @default(0)
   /// Error text when status != 'ok' — SSRF denial reason, host mismatch,
   /// fetch error, etc. Null on success.
   errorMessage String?
@@ -873,13 +886,13 @@ model WebFetchEvent {
   /// response, or denial before fetch). true = HTML was successfully converted
   /// to markdown. false = cleaning was attempted but failed/produced empty
   /// output and the tool fell back to the raw body.
-  cleaned     Boolean?
+  cleaned      Boolean?
   /// UTF-8 byte length of the cleaned markdown when `cleaned = true`.
   cleanedBytes Int?
   /// Reason cleaning failed when `cleaned = false` (parser error, empty
   /// output, etc.).
-  cleanError  String?
-  createdAt   DateTime @default(now())
+  cleanError   String?
+  createdAt    DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 

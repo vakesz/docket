@@ -62,26 +62,22 @@ function proposalResult(final: { id: string; kind: string; status: string }) {
   };
 }
 
+const TransitionArgsSchema = z.object({
+  item_id: z.string().min(1).optional(),
+  intent: TransitionIntentEnum,
+  duplicate_of: z.string().min(1).optional(),
+});
+
 export const proposeTransitionTool: ToolFactory = (ctx) => ({
   def: {
     name: "propose_transition",
     description:
-      "Stage a state transition on the active item. Pass the transition name in `intent` (one of: start_work | pause | block | needs_info | close_done | close_wontfix | close_duplicate | reopen). Defaults to the conversation's anchored item; pass `item_id` only to act on a different item. Use `close_duplicate` when an item has been superseded by another in the same project — pair it with a propose_comment that names the canonical item. Returns a proposal id — the human still confirms in the UI.",
-    parameters: zodToJsonSchema(
-      z.object({
-        item_id: z.string().min(1).optional(),
-        intent: TransitionIntentEnum,
-      }),
-    ),
+      "Stage a state transition on the active item. Pass the transition name in `intent` (one of: start_work | pause | block | needs_info | close_done | close_wontfix | close_duplicate | reopen). Defaults to the conversation's anchored item; pass `item_id` only to act on a different item. For `close_duplicate`, you MUST pass `duplicate_of` (the provider id of the canonical item this is a duplicate of) — pair it with a propose_comment that names the canonical item. `duplicate_of` is rejected for any other intent. Returns a proposal id — the human still confirms in the UI.",
+    parameters: zodToJsonSchema(TransitionArgsSchema),
   },
   guardrailScan: PROPOSAL_SCAN,
   handler: async (raw) => {
-    const args = z
-      .object({
-        item_id: z.string().min(1).optional(),
-        intent: TransitionIntentEnum,
-      })
-      .parse(raw);
+    const args = TransitionArgsSchema.parse(raw);
     const itemId = resolveItemId(ctx, args.item_id);
     if (!itemId) {
       return fail("item_id is required when no item is anchored on this conversation.");
@@ -90,6 +86,7 @@ export const proposeTransitionTool: ToolFactory = (ctx) => ({
       const row = await proposeTransition(builderCtx(ctx), {
         providerItemId: itemId,
         intent: args.intent,
+        ...(args.duplicate_of ? { canonicalItemId: args.duplicate_of } : {}),
       });
       const final = await maybeAutoAccept(builderCtx(ctx), row);
       return ok(proposalResult(final));

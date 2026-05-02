@@ -80,9 +80,7 @@ export function filterByAssignees<T extends Pick<Item, "assignee">>(
   const wantUnassigned = assignees.includes("");
   const set = new Set(assignees.filter((a) => a !== ""));
   return items.filter((item) => {
-    if (item.assignee === null || item.assignee === undefined) {
-      return wantUnassigned;
-    }
+    if (item.assignee === null) return wantUnassigned;
     return set.has(item.assignee);
   });
 }

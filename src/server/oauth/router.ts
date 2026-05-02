@@ -73,16 +73,13 @@ function auxFor(kind: string): OauthAuxSlot {
 
 /**
  * Read the kind-appropriate aux value from a row. Used by `list` so the
- * admin form sees the right value regardless of where the row stored it.
- * Falls back to `baseUrl` for `azure_devops` rows that haven't migrated
- * yet (mirrors the fallback in `auth-build.ts`).
+ * admin form sees the right value regardless of which slot the row uses.
  */
 function readAux(row: { kind: string; baseUrl: string; metadata: unknown }): string {
   if (auxFor(row.kind) === "metadataTenant") {
     const meta = asPlainObject(row.metadata);
     const tenant = meta["tenant"];
-    if (typeof tenant === "string" && tenant.length > 0) return tenant;
-    return row.baseUrl;
+    return typeof tenant === "string" ? tenant : "";
   }
   return row.baseUrl;
 }
@@ -97,8 +94,6 @@ function writeAux(
   if (auxFor(kind) === "metadataTenant") {
     if (trimmed) meta["tenant"] = trimmed;
     else delete meta["tenant"];
-    // Clear `baseUrl` so a stale value from a pre-migration row doesn't
-    // shadow the metadata read in `auth-build.ts`'s fallback path.
     return { baseUrl: "", metadata: meta as Prisma.InputJsonValue };
   }
   return { baseUrl: trimmed, metadata: meta as Prisma.InputJsonValue };
@@ -108,8 +103,8 @@ export const oauthProvidersRouter = router({
   /**
    * List all configured OAuth providers. Visible to any authenticated user.
    * The `aux` field is the kind-appropriate value for the form's "Base URL /
-   * tenant" input — pulled from `baseUrl` for most kinds, `metadata.tenant`
-   * for `azure_devops`. The UI never reads `baseUrl` or `metadata` directly.
+   * tenant" input — `baseUrl` for most kinds, `metadata.tenant` for
+   * `azure_devops`. The UI never reads `baseUrl` or `metadata` directly.
    */
   list: protectedProcedure.query(async ({ ctx }) => {
     const rows = await ctx.db.oauthProviderConfig.findMany({

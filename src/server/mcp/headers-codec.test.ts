@@ -29,16 +29,8 @@ describe("mcp headers-codec", () => {
     expect(decodeHeaders({})).toEqual({});
   });
 
-  it("decodes legacy plaintext object as-is", () => {
-    expect(decodeHeaders({ Authorization: "Bearer raw" })).toEqual({
-      Authorization: "Bearer raw",
-    });
-  });
-
-  it("filters non-string legacy values", () => {
-    expect(decodeHeaders({ Authorization: "Bearer raw", count: 3 })).toEqual({
-      Authorization: "Bearer raw",
-    });
+  it("returns {} for unencrypted objects (no _enc field)", () => {
+    expect(decodeHeaders({ Authorization: "Bearer raw" })).toEqual({});
   });
 
   it("returns {} for null / undefined / array", () => {
