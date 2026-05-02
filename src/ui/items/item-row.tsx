@@ -52,6 +52,12 @@ export function ItemRow({
   return (
     <Link
       href={`/projects/${projectSlug}/items/${item.itemNumber}`}
+      // `content-visibility: auto` lets the browser skip layout / paint /
+      // FreshnessStamp re-render cost for rows scrolled out of view in a long
+      // backlog. `contain-intrinsic-size` provides a stable placeholder height
+      // (~78px matches the 2-line title rows) so the scrollbar stays sane and
+      // anchor jumps don't shift content.
+      style={{ contentVisibility: "auto", containIntrinsicSize: "auto 78px" }}
       className={cn(
         "flex w-full flex-col gap-1 border-border border-b px-3 py-2 text-left transition-colors",
         "hover:bg-muted",

@@ -33,24 +33,39 @@ export async function listConversations(db: Database, args: ListArgs): Promise<C
   });
 }
 
+/**
+ * Defense-in-depth cap on the live transcript size. The compaction service
+ * (`src/server/conversations/compaction.ts`) is what *should* keep this
+ * bounded by folding old messages into a synthetic summary; the cap here
+ * protects the agent loop and UI from a runaway conversation that slipped
+ * past compaction (long-running session, compaction not yet run, etc.).
+ *
+ * Read as "the most recent 500 non-compacted messages" — large enough that
+ * normal use never trips it, small enough that loading is bounded.
+ */
+const LIVE_TRANSCRIPT_CAP = 500;
+
 export async function getConversation(
   db: Database,
   conversationId: string,
 ): Promise<(Conversation & { messages: Message[] }) | null> {
-  return db.conversation.findUnique({
+  const conv = await db.conversation.findUnique({
     where: { id: conversationId },
     include: {
       messages: {
         where: { compacted: false },
-        // Secondary `id` tiebreaker: assistant + tool-result rows are
-        // written back-to-back during a turn and can collide on
-        // microsecond `createdAt`. Without a tiebreaker the display order
-        // becomes nondeterministic across refetches — visible as messages
-        // shuffling around in the chat after the stream completes.
-        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        // Take the latest N then reverse to ascending — Prisma can't express
+        // "latest N ordered ascending" directly. The secondary `id` tiebreaker
+        // keeps assistant + tool-result rows that share a microsecond
+        // `createdAt` deterministically ordered (otherwise refetches shuffle
+        // them in the chat UI).
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: LIVE_TRANSCRIPT_CAP,
       },
     },
   });
+  if (!conv) return null;
+  return { ...conv, messages: conv.messages.slice().reverse() };
 }
 
 export async function ownsConversation(
@@ -64,6 +79,24 @@ export async function ownsConversation(
     select: { id: true },
   });
   return found !== null;
+}
+
+/**
+ * Owner-scoped fetch that returns the fields the SSE route needs in one
+ * round-trip — ownership check + the per-conversation LLM override that
+ * adapter resolution consumes. Returns `null` if the conversation doesn't
+ * exist or the user/project pair doesn't own it.
+ */
+export async function getConversationForOwner(
+  db: Database,
+  conversationId: string,
+  projectId: string,
+  userId: string,
+): Promise<{ id: string; llmProviderIdOverride: string | null } | null> {
+  return db.conversation.findFirst({
+    where: { id: conversationId, projectId, userId },
+    select: { id: true, llmProviderIdOverride: true },
+  });
 }
 
 export async function createConversation(

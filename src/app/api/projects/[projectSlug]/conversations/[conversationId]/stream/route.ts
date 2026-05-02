@@ -22,7 +22,7 @@ import type { LoopEvent } from "@/agent/loop";
 import { runTurn } from "@/agent/loop";
 import { asUserId } from "@/core/types";
 import { auth } from "@/server/auth";
-import { ownsConversation } from "@/server/conversations/storage";
+import { getConversationForOwner } from "@/server/conversations/storage";
 import { db } from "@/server/db";
 import { logger } from "@/server/logger";
 import { projectForUser } from "@/server/projects/access";
@@ -63,14 +63,21 @@ export async function POST(req: Request, context: RouteContext): Promise<Respons
 
   // Project membership: shares `projectForUser` with the tRPC
   // `enforceProjectMembership` middleware so both surfaces use the same
-  // access check.
-  const project = await projectForUser(db, projectSlug, userId);
+  // access check. The read-only setting is independent of the access
+  // checks, so load it in parallel — saves one round-trip on every turn.
+  const [project, readOnly] = await Promise.all([
+    projectForUser(db, projectSlug, userId),
+    loadGlobalSetting(db, "app.read-only"),
+  ]);
   if (!project) {
     return NextResponse.json({ error: "no access to this project" }, { status: 403 });
   }
   const projectId = project.id;
 
-  if (!(await ownsConversation(db, conversationId, projectId, userId))) {
+  // Single round-trip that combines the ownership check with the
+  // `llmProviderIdOverride` read the adapter resolver needs below.
+  const conv = await getConversationForOwner(db, conversationId, projectId, userId);
+  if (!conv) {
     return NextResponse.json({ error: "conversation not found" }, { status: 404 });
   }
 
@@ -104,27 +111,19 @@ export async function POST(req: Request, context: RouteContext): Promise<Respons
   // Resolve the LLM adapter for this project (override > project default >
   // global default). Errors here are configuration problems, not stream
   // failures — surface them as a normal HTTP error. The read-only flag
-  // rides along: when global read-only is on, the agent registry strips
-  // mutating tools so the agent can't stage proposals against a DB the
-  // tRPC mutation procedures already refuse.
+  // (loaded above in parallel with project access) rides along: when global
+  // read-only is on, the agent registry strips mutating tools so the agent
+  // can't stage proposals against a DB the tRPC mutation procedures already
+  // refuse.
   let adapter: Awaited<ReturnType<typeof selectAdapterFor>>;
-  let readOnly: boolean;
   try {
-    const [conv, readOnlySetting] = await Promise.all([
-      db.conversation.findUnique({
-        where: { id: conversationId },
-        select: { llmProviderIdOverride: true },
-      }),
-      loadGlobalSetting(db, "app.read-only"),
-    ]);
-    readOnly = readOnlySetting;
     adapter = await selectAdapterFor(db, {
       project: {
         id: project.id,
         defaultLlmProviderId: project.defaultLlmProviderId,
         defaultTemperature: project.defaultTemperature,
       },
-      overrideId: conv?.llmProviderIdOverride ?? null,
+      overrideId: conv.llmProviderIdOverride,
     });
   } catch (err) {
     logger.error(

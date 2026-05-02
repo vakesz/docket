@@ -9,6 +9,7 @@
  */
 
 import "server-only";
+import { z } from "zod";
 
 export type DiscoveredEndpoints = {
   issuer: string;
@@ -19,6 +20,21 @@ export type DiscoveredEndpoints = {
 };
 
 const WELL_KNOWN = "/.well-known/oauth-authorization-server";
+
+// RFC 8414 metadata. We only require the two endpoints we actually drive a
+// flow through; everything else is best-effort. Unknown / non-string array
+// entries in `scopes_supported` are dropped silently because some servers
+// return mixed-type arrays.
+const DiscoveryMetadataSchema = z.object({
+  issuer: z.string().optional(),
+  authorization_endpoint: z.string(),
+  token_endpoint: z.string(),
+  registration_endpoint: z.string().optional(),
+  scopes_supported: z
+    .array(z.unknown())
+    .optional()
+    .transform((arr) => arr?.filter((s): s is string => typeof s === "string")),
+});
 
 /** Pull the origin from a server URL, dropping any path / query. */
 export function originOf(serverUrl: string): string {
@@ -35,22 +51,21 @@ export async function discoverOauthEndpoints(serverUrl: string): Promise<Discove
       `oauth discovery failed: ${metadataUrl} returned ${res.status} ${res.statusText}`,
     );
   }
-  const body = (await res.json()) as Record<string, unknown>;
-  const authorizationEndpoint = body["authorization_endpoint"];
-  const tokenEndpoint = body["token_endpoint"];
-  if (typeof authorizationEndpoint !== "string" || typeof tokenEndpoint !== "string") {
+  const raw: unknown = await res.json();
+  const parsed = DiscoveryMetadataSchema.safeParse(raw);
+  if (!parsed.success) {
     throw new Error(`oauth discovery at ${metadataUrl} missing authorization/token endpoints`);
   }
-  const scopesSupported = Array.isArray(body["scopes_supported"])
-    ? body["scopes_supported"].filter((s): s is string => typeof s === "string")
-    : undefined;
-  const registrationEndpoint =
-    typeof body["registration_endpoint"] === "string" ? body["registration_endpoint"] : undefined;
+  const meta = parsed.data;
   return {
-    issuer: typeof body["issuer"] === "string" ? body["issuer"] : origin,
-    authorizationEndpoint,
-    tokenEndpoint,
-    ...(registrationEndpoint !== undefined ? { registrationEndpoint } : {}),
-    ...(scopesSupported !== undefined ? { scopesSupported } : {}),
+    issuer: meta.issuer ?? origin,
+    authorizationEndpoint: meta.authorization_endpoint,
+    tokenEndpoint: meta.token_endpoint,
+    ...(meta.registration_endpoint !== undefined
+      ? { registrationEndpoint: meta.registration_endpoint }
+      : {}),
+    ...(meta.scopes_supported !== undefined && meta.scopes_supported.length > 0
+      ? { scopesSupported: meta.scopes_supported }
+      : {}),
   };
 }

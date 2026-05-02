@@ -35,7 +35,7 @@ import { loadCodeSnippetCapOptions } from "@/agent/post/load-options";
 import { buildSystemPrefix } from "@/agent/prompt";
 import { loadPrompts } from "@/agent/prompt-loader";
 import { buildToolRegistry } from "@/agent/tools/registry";
-import type { AgentTool, ToolContext } from "@/agent/tools/types";
+import type { AgentTool, ToolContext, ToolResult } from "@/agent/tools/types";
 import { asProjectId, type ItemKind, type ProjectId, type UserId } from "@/core/types";
 import type { Conversation, Message } from "@/db/generated/client";
 import { getBudgetStatus } from "@/server/billing/budget";
@@ -428,7 +428,7 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
       };
 
       const tool = toolByName.get(call.name);
-      let result: unknown;
+      let result: ToolResult;
       let dispatchOk = true;
       const toolStartedAt = Date.now();
       if (!tool) {
@@ -464,8 +464,7 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
       // Tools that catch internally and return `fail()` don't throw — without
       // the explicit envelope check we'd render a ✗ outcome as ✓ in the UI
       // and miss every guarded provider error in the logs.
-      const resultEnvelope = result as { ok?: unknown; error?: unknown };
-      if (dispatchOk && resultEnvelope?.ok === false) {
+      if (dispatchOk && !result.ok) {
         dispatchOk = false;
         logger.warn(
           {
@@ -474,7 +473,7 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
             callId: call.id,
             name: call.name,
             toolMs: Date.now() - toolStartedAt,
-            toolError: typeof resultEnvelope.error === "string" ? resultEnvelope.error : undefined,
+            toolError: result.error,
           },
           "agent: tool returned failure",
         );
@@ -583,7 +582,7 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
       }
 
       // Special-case the two structured tool payloads the UI cares about.
-      const data = (result as { ok?: boolean; data?: unknown }).data;
+      const data = result.ok ? result.data : null;
       if (data && typeof data === "object") {
         const d = data as Record<string, unknown>;
         if (

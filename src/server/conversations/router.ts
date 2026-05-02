@@ -75,18 +75,25 @@ export const conversationsRouter = router({
   }),
 
   get: projectScopedProcedure.input(ConversationRef).query(async ({ ctx, input }) => {
-    return assertFound(
+    const conv = assertFound(
       await ctx.db.conversation.findFirst({
         where: { id: input.conversationId, projectId: ctx.projectId, userId: ctx.userId },
         include: {
           messages: {
             where: { compacted: false },
-            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+            // Latest-N descending then reverse — same defense-in-depth cap as
+            // `getConversation` storage helper, see LIVE_TRANSCRIPT_CAP. The
+            // compaction service is what's *supposed* to keep this bounded;
+            // the cap protects the UI from runaway conversations that slipped
+            // past compaction.
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+            take: 500,
           },
         },
       }),
       "conversation not found",
     );
+    return { ...conv, messages: conv.messages.slice().reverse() };
   }),
 
   create: projectScopedMutationProcedure.input(CreateInput).mutation(async ({ ctx, input }) => {

@@ -280,14 +280,34 @@ export const itemsRouter = router({
     const { view, archivedFlag } = await resolveViewFilter(ctx.db, ctx.projectId, userId, input);
     const where = buildItemListWhere(ctx.projectId, input, view, archivedFlag);
     const axesActive = hasAxisFilter(view);
-    // The provider matcher reads providerRaw via liftRowToCanonical, so we
-    // can only narrow the SQL projection when no axis filter is active.
-    // Otherwise we'd lose the column the matcher needs.
+    // Both paths return the same response shape — only the axes-active path
+    // has to keep `providerRaw` plus the canonical fields the matcher reads
+    // off the row. The no-axes path drops providerRaw (often kilobytes per
+    // row of unfiltered provider response).
     const rows = axesActive
       ? await ctx.db.item.findMany({
           where,
           orderBy: [{ updatedAt: "desc" }],
           take: Math.min(input.limit * 4, 800),
+          select: {
+            id: true,
+            projectId: true,
+            providerItemId: true,
+            kind: true,
+            title: true,
+            description: true,
+            state: true,
+            assignee: true,
+            author: true,
+            parentId: true,
+            tags: true,
+            url: true,
+            createdAt: true,
+            updatedAt: true,
+            syncedAt: true,
+            repositoryUrl: true,
+            providerRaw: true,
+          },
         })
       : await ctx.db.item.findMany({
           where,

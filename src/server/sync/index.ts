@@ -23,6 +23,7 @@
 
 import "server-only";
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
 import type { Comment as CanonicalComment, Item as CanonicalItem, ChangedItem } from "@/core/types";
 import { Prisma } from "@/db/generated/client";
 import { warmAvatars } from "@/server/avatars/service";
@@ -98,23 +99,39 @@ const CHUNK_SIZE = 200;
  */
 const MAX_INFLIGHT_CHUNKS = 2;
 
-function isSyncPhase(value: unknown): value is SyncPhase {
-  return value === "stream" || value === "persist" || value === "archive" || value === "cursor";
-}
+// Single source of truth for the persisted snapshot shape: zod parses the
+// raw JSON, validates string enums, coerces ISO date strings to Date, and
+// clamps counters to non-negative integers. The previous hand-rolled type
+// guards drifted from `PersistedSyncProgressSnapshot` whenever a field was
+// added; with the schema, runtime validation and the inferred type can't.
+const isoDate = z
+  .string()
+  .refine((s) => !Number.isNaN(new Date(s).getTime()), { message: "invalid ISO date" })
+  .transform((s) => new Date(s));
 
-function isSyncMode(value: unknown): value is SyncMode {
-  return value === "incremental" || value === "full";
-}
+const nonNegInt = z
+  .number()
+  .finite()
+  .transform((n) => Math.max(0, Math.floor(n)))
+  .catch(0);
 
-function isSyncProgressStatus(value: unknown): value is SyncProgressStatus {
-  return value === "running" || value === "done" || value === "failed";
-}
-
-function toDate(value: unknown): Date | null {
-  if (typeof value !== "string") return null;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
+const PersistedSyncProgressSchema = z.object({
+  runId: z.string().min(1),
+  mode: z.enum(["incremental", "full"]),
+  status: z.enum(["running", "done", "failed"]),
+  phase: z.enum(["stream", "persist", "archive", "cursor"]),
+  startedAt: isoDate,
+  updatedAt: isoDate,
+  finishedAt: z.union([z.null(), isoDate]),
+  chunksCompleted: nonNegInt,
+  itemsSeen: nonNegInt,
+  upserted: nonNegInt,
+  archived: nonNegInt,
+  inboundConversations: nonNegInt,
+  commentsReconciled: nonNegInt,
+  watermark: z.union([z.null(), isoDate]),
+  error: z.string().nullable().catch(null),
+});
 
 function encodeProgress(snapshot: SyncProgressSnapshot): string {
   const persisted: PersistedSyncProgressSnapshot = {
@@ -139,47 +156,14 @@ function encodeProgress(snapshot: SyncProgressSnapshot): string {
 
 function decodeProgress(raw: string | null): SyncProgressSnapshot | null {
   if (!raw) return null;
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (!isSyncMode(parsed["mode"])) return null;
-    if (!isSyncProgressStatus(parsed["status"])) return null;
-    if (!isSyncPhase(parsed["phase"])) return null;
-    if (typeof parsed["runId"] !== "string" || parsed["runId"].length === 0) return null;
-    const startedAt = toDate(parsed["startedAt"]);
-    const updatedAt = toDate(parsed["updatedAt"]);
-    const finishedAt = parsed["finishedAt"] === null ? null : toDate(parsed["finishedAt"]);
-    const watermark = parsed["watermark"] === null ? null : toDate(parsed["watermark"]);
-    if (!startedAt || !updatedAt) return null;
-    if (parsed["finishedAt"] !== null && !finishedAt) return null;
-    if (parsed["watermark"] !== null && !watermark) return null;
-
-    const readInt = (key: keyof PersistedSyncProgressSnapshot) => {
-      const value = parsed[key];
-      return typeof value === "number" && Number.isFinite(value)
-        ? Math.max(0, Math.floor(value))
-        : 0;
-    };
-
-    return {
-      runId: parsed["runId"],
-      mode: parsed["mode"],
-      status: parsed["status"],
-      phase: parsed["phase"],
-      startedAt,
-      updatedAt,
-      finishedAt,
-      chunksCompleted: readInt("chunksCompleted"),
-      itemsSeen: readInt("itemsSeen"),
-      upserted: readInt("upserted"),
-      archived: readInt("archived"),
-      inboundConversations: readInt("inboundConversations"),
-      commentsReconciled: readInt("commentsReconciled"),
-      watermark,
-      error: typeof parsed["error"] === "string" ? parsed["error"] : null,
-    };
+    parsed = JSON.parse(raw);
   } catch {
     return null;
   }
+  const result = PersistedSyncProgressSchema.safeParse(parsed);
+  return result.success ? result.data : null;
 }
 
 async function upsertProgress(

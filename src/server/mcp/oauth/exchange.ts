@@ -9,6 +9,7 @@
  */
 
 import "server-only";
+import { z } from "zod";
 
 export type TokenResponse = {
   accessToken: string;
@@ -17,17 +18,22 @@ export type TokenResponse = {
   scope: string | null;
 };
 
-function parseTokenResponse(raw: Record<string, unknown>): TokenResponse {
-  if (typeof raw["access_token"] !== "string") {
-    throw new Error("oauth token response missing access_token");
-  }
-  return {
-    accessToken: raw["access_token"],
-    refreshToken: typeof raw["refresh_token"] === "string" ? raw["refresh_token"] : null,
-    expiresInSec: typeof raw["expires_in"] === "number" ? raw["expires_in"] : null,
-    scope: typeof raw["scope"] === "string" ? raw["scope"] : null,
-  };
-}
+// RFC 6749 §5.1 token response. `access_token` is the only mandatory field.
+const TokenResponseSchema = z
+  .object({
+    access_token: z.string(),
+    refresh_token: z.string().nullish(),
+    expires_in: z.number().nullish(),
+    scope: z.string().nullish(),
+  })
+  .transform((raw) => ({
+    accessToken: raw.access_token,
+    refreshToken: raw.refresh_token ?? null,
+    expiresInSec: raw.expires_in ?? null,
+    scope: raw.scope ?? null,
+  }));
+
+const TokenErrorSchema = z.object({ error: z.string().optional() }).catch({ error: undefined });
 
 async function postForm(
   endpoint: string,
@@ -47,13 +53,17 @@ async function postForm(
     headers,
     body: new URLSearchParams(form).toString(),
   });
-  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  const raw: unknown = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const detail =
-      typeof body["error"] === "string" ? body["error"] : `${res.status} ${res.statusText}`;
+    const errBody = TokenErrorSchema.parse(raw);
+    const detail = errBody.error ?? `${res.status} ${res.statusText}`;
     throw new Error(`oauth token exchange failed: ${detail}`);
   }
-  return parseTokenResponse(body);
+  const parsed = TokenResponseSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error("oauth token response missing access_token");
+  }
+  return parsed.data;
 }
 
 export async function exchangeAuthCode(args: {

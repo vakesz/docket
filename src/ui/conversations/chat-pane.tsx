@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useRef, useState } from "react";
 import { useSettingsMap } from "@/lib/settings-client";
 import { trpc } from "@/lib/trpc-client";
 import { type ToolDisplayMode, useToolDisplayMode } from "@/lib/ui-prefs";
@@ -88,6 +88,12 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
   const renderUnits = buildRenderUnits(messages);
   const inFlight = !streaming.done;
   const conversation = detail.data ?? null;
+  // Deferred text for the live assistant bubble: dense token deltas would
+  // otherwise re-render the markdown pipeline on every chunk and starve the
+  // composer's input from React. `useDeferredValue` lets React skip
+  // intermediate paints when the main thread is busy so typing stays
+  // responsive even while a long answer streams in.
+  const deferredStreamingText = useDeferredValue(streaming.text);
 
   // Suppress `pendingUserMessage` once its persisted twin has landed in
   // `messages`. Without this we'd render the same user bubble twice for
@@ -325,7 +331,9 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
               // biome-ignore lint/suspicious/noArrayIndexKey: settledRounds is append-only during one stream; index is stable for the lifetime of the snapshot.
               <SettledRoundView key={`settled:${idx}`} round={round} mode={toolDisplayMode} />
             ))}
-            {inFlight && streaming.text && <Bubble messageRole="assistant" text={streaming.text} />}
+            {inFlight && deferredStreamingText && (
+              <Bubble messageRole="assistant" text={deferredStreamingText} />
+            )}
             {streaming.toolCalls.length > 0 && (
               <ToolCallProgress
                 toolCalls={streaming.toolCalls}

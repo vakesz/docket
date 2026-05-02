@@ -18,7 +18,7 @@
 import "server-only";
 import type { Item as CanonicalItem, ItemState } from "@/core/types";
 import type { Item as ItemRow } from "@/db/generated/client";
-import { activeConversationsForItem, appendMessage } from "@/server/conversations/storage";
+import { activeConversationsForItem } from "@/server/conversations/storage";
 import type { db as Db } from "@/server/db";
 import { logger } from "@/server/logger";
 
@@ -95,18 +95,17 @@ export async function injectExternalChange(
   if (conversations.length === 0) return { injectedInto: 0 };
 
   const body = formatInboundChange(args.providerItemId, args.changes);
-  // Each appendMessage is an independent insert against a different
-  // Conversation row — fan out so a project with many active conversations
-  // doesn't pay N round-trips serially during sync.
-  await Promise.all(
-    conversations.map((conv) =>
-      appendMessage(db, {
-        conversationId: conv.id,
-        role: "system",
-        content: body,
-      }),
-    ),
-  );
+  // One batched insert instead of N parallel `INSERT` round-trips. A project
+  // with 50 active conversations on a chatty item used to cost 50 separate
+  // statements per material change; `createMany` collapses that to a single
+  // multi-row insert.
+  await db.message.createMany({
+    data: conversations.map((conv) => ({
+      conversationId: conv.id,
+      role: "system" as const,
+      content: body,
+    })),
+  });
   logger.debug(
     {
       projectId: args.projectId,

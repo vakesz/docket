@@ -39,8 +39,10 @@ export function BacklogPane({
 }) {
   const [bucket, setBucket] = useState<BacklogBucket>("open");
   const [kind, setKind] = useState<ItemKind | "all">("all");
-  const [activeTags, setActiveTags] = useState<ReadonlySet<string>>(new Set());
-  const [activeAssignees, setActiveAssignees] = useState<ReadonlySet<string>>(new Set());
+  // Lazy initializer: passing a function avoids allocating a fresh Set on
+  // every render — useState only invokes the factory once, on mount.
+  const [activeTags, setActiveTags] = useState<ReadonlySet<string>>(() => new Set());
+  const [activeAssignees, setActiveAssignees] = useState<ReadonlySet<string>>(() => new Set());
   const [query, setQuery] = useState("");
   // useDeferredValue lets the keystroke commit immediately while the
   // (expensive) filtered/facets memos lag one render — same UX intent as the

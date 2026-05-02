@@ -9,11 +9,25 @@
  */
 
 import "server-only";
+import { z } from "zod";
 
 export type RegistrationResult = {
   clientId: string;
   clientSecret: string | null;
 };
+
+// RFC 7591 §3.2.1 dynamic client registration response. Only `client_id` is
+// mandatory in our flow; servers using `token_endpoint_auth_method: "none"`
+// (the public-client path) won't return `client_secret`.
+const RegistrationResponseSchema = z
+  .object({
+    client_id: z.string(),
+    client_secret: z.string().nullish(),
+  })
+  .transform((raw) => ({
+    clientId: raw.client_id,
+    clientSecret: raw.client_secret ?? null,
+  }));
 
 export async function registerOauthClient(
   registrationEndpoint: string,
@@ -38,12 +52,10 @@ export async function registerOauthClient(
       `oauth dynamic client registration failed: ${res.status} ${res.statusText} ${body.slice(0, 200)}`,
     );
   }
-  const body = (await res.json()) as Record<string, unknown>;
-  if (typeof body["client_id"] !== "string") {
+  const raw: unknown = await res.json();
+  const parsed = RegistrationResponseSchema.safeParse(raw);
+  if (!parsed.success) {
     throw new Error("oauth dynamic client registration: response missing client_id");
   }
-  return {
-    clientId: body["client_id"],
-    clientSecret: typeof body["client_secret"] === "string" ? body["client_secret"] : null,
-  };
+  return parsed.data;
 }

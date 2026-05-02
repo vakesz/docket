@@ -27,7 +27,7 @@ import { PatternGuardrail } from "@/agent/guardrail/pattern";
 import type { Guardrail, GuardrailKind } from "@/agent/guardrail/types";
 import { AnthropicJudgeClient } from "@/agent/llm/anthropic";
 import { OpenAiJudgeClient } from "@/agent/llm/openai";
-import type { LlmKind } from "@/agent/llm/types";
+import { isLlmKind, type LlmKind } from "@/agent/llm/types";
 import type { LlmProvider, Project } from "@/db/generated/client";
 import type { db as Db } from "@/server/db";
 import { logger } from "@/server/logger";
@@ -129,8 +129,15 @@ async function tryBuildLlmJudge(
  * pattern in that case.
  */
 function buildJudgeClient(row: LlmProvider): JudgeClient | null {
+  if (!isLlmKind(row.kind)) {
+    logger.warn(
+      { providerId: row.id, kind: row.kind, label: row.label },
+      "guardrail: provider row has unknown LLM kind",
+    );
+    return null;
+  }
   const apiKey = decryptSecret(row.apiKey);
-  const kind = row.kind as LlmKind;
+  const kind: LlmKind = row.kind;
   switch (kind) {
     case "openai":
       return new OpenAiJudgeClient({

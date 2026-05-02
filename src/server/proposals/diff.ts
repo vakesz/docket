@@ -157,6 +157,11 @@ export function isEmptyDiff(diff: ProposalDiff): boolean {
     case "attachment_upload":
     case "reaction_toggle":
       return false;
+    default: {
+      const exhaustive: never = diff;
+      void exhaustive;
+      return false;
+    }
   }
 }
 

@@ -27,7 +27,7 @@ export function QuestionCard({
   disabled?: boolean;
   onSubmit: (answer: string) => void;
 }) {
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [other, setOther] = useState("");
 
   const hasOptions = question.options && question.options.length > 0;

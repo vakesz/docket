@@ -14,6 +14,7 @@
  */
 
 import "server-only";
+import { cache } from "react";
 import type { db as Db } from "@/server/db";
 import {
   decodeSettingValue,
@@ -22,7 +23,17 @@ import {
   type SettingValue,
 } from "@/server/settings/catalog";
 
-export async function loadGlobalSetting<K extends SettingKey>(
+/**
+ * Wrapped in `React.cache` so multiple server components (page + layout +
+ * children) reading the same setting in one render pass share a single DB
+ * round-trip. Outside an RSC render the wrapper is effectively a passthrough,
+ * so tRPC / API-route call sites pay no penalty.
+ *
+ * Cache key is the full argument list — `db` is the stable Prisma singleton,
+ * so identity holds across the request and dedup keys reduce to (key) /
+ * (projectId, key) / (userId, key) per scope.
+ */
+export const loadGlobalSetting = cache(async function loadGlobalSetting<K extends SettingKey>(
   db: typeof Db,
   key: K,
 ): Promise<SettingValue<K>> {
@@ -36,9 +47,9 @@ export async function loadGlobalSetting<K extends SettingKey>(
     select: { value: true },
   });
   return decodeSettingValue(key, row?.value ?? null);
-}
+});
 
-export async function loadProjectSetting<K extends SettingKey>(
+export const loadProjectSetting = cache(async function loadProjectSetting<K extends SettingKey>(
   db: typeof Db,
   projectId: string,
   key: K,
@@ -53,9 +64,9 @@ export async function loadProjectSetting<K extends SettingKey>(
     select: { value: true },
   });
   return decodeSettingValue(key, row?.value ?? null);
-}
+});
 
-export async function loadUserSetting<K extends SettingKey>(
+export const loadUserSetting = cache(async function loadUserSetting<K extends SettingKey>(
   db: typeof Db,
   userId: string,
   key: K,
@@ -70,4 +81,4 @@ export async function loadUserSetting<K extends SettingKey>(
     select: { value: true },
   });
   return decodeSettingValue(key, row?.value ?? null);
-}
+});

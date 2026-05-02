@@ -297,7 +297,7 @@ function AutoAcceptSection({ projectSlug }: { projectSlug: string }) {
   const utils = trpc.useUtils();
   const projectSettings = trpc.settings.projectList.useQuery({ projectSlug });
 
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
 
   const seededForRef = useRef<string | null>(null);
   useEffect(() => {

@@ -19,6 +19,10 @@
 export const LLM_KINDS = ["openai", "anthropic"] as const;
 export type LlmKind = (typeof LLM_KINDS)[number];
 
+export function isLlmKind(value: string): value is LlmKind {
+  return (LLM_KINDS as readonly string[]).includes(value);
+}
+
 /** Human-readable name shown in the LLM provider form picker. */
 export const LLM_KIND_LABELS: Record<LlmKind, string> = {
   openai: "OpenAI / OpenAI-compatible",

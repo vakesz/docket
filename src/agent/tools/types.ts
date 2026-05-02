@@ -49,21 +49,25 @@ export type GuardrailScan =
   | { mode: "full" }
   | { mode: "fields"; untrusted: readonly string[] };
 
-export type AgentTool = {
-  def: LlmToolDef;
-  handler: (args: Record<string, unknown>) => Promise<unknown>;
-  /** Optional. Defaults to `{ mode: "full" }` when omitted. */
-  guardrailScan?: GuardrailScan;
-};
-
-export type ToolFactory = (ctx: ToolContext) => AgentTool;
-
 /**
  * Stable result envelope every tool returns. The agent re-feeds this as
  * the next-turn `tool` message — keeping the shape uniform makes it easy
  * for the model to learn the pattern across tools.
  */
 export type ToolResult<T = unknown> = { ok: true; data: T } | { ok: false; error: string };
+
+export type AgentTool = {
+  def: LlmToolDef;
+  // The registry erases per-tool data shapes (the loop dispatches by name
+  // and the LLM passes raw `unknown`-typed args), so the handler signature
+  // is the broadest envelope: `Record<string, unknown>` in, `ToolResult` out.
+  // The discriminated `ok | error` shape lets the loop narrow without casts.
+  handler: (args: Record<string, unknown>) => Promise<ToolResult>;
+  /** Optional. Defaults to `{ mode: "full" }` when omitted. */
+  guardrailScan?: GuardrailScan;
+};
+
+export type ToolFactory = (ctx: ToolContext) => AgentTool;
 
 export function ok<T>(data: T): ToolResult<T> {
   return { ok: true, data };
