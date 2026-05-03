@@ -150,11 +150,15 @@ export type ProposalPayload = z.infer<typeof proposalPayloadSchema>;
  * Validate-then-encode a proposal payload for the JSON column. The Zod parse
  * runs the same discriminated-union schema we use on the read side, so a
  * builder bug producing the wrong shape fails at write time instead of
- * crashing inside the executor on a future hydrate. Drizzle types JSON
- * columns natively via `.$type<>()`, so the parsed value flows through
- * without further casts.
+ * crashing inside the executor on a future hydrate.
+ *
+ * Input is typed as `ProposalPayload` so callers (builders + executor) catch
+ * shape mistakes at compile time; the runtime parse is defense-in-depth for
+ * `passthrough()` fields and the close_duplicate superRefine. The return is
+ * cast to `Record<string, unknown>` because TS doesn't see a union of object
+ * literals as structurally assignable to a record — every variant is one
+ * by construction.
  */
-export function toJsonProposalPayload(draft: unknown): Record<string, unknown> {
-  const parsed = proposalPayloadSchema.parse(draft);
-  return parsed as Record<string, unknown>;
+export function toJsonProposalPayload(draft: ProposalPayload): Record<string, unknown> {
+  return proposalPayloadSchema.parse(draft) as Record<string, unknown>;
 }

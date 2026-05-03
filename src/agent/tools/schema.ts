@@ -25,8 +25,12 @@ type ZodDef = {
   values?: readonly string[];
 };
 
+function defOf(schema: z.ZodTypeAny): ZodDef {
+  return schema._def as unknown as ZodDef;
+}
+
 export function zodToJsonSchema(schema: z.ZodTypeAny): Record<string, unknown> {
-  const def = schema._def as unknown as ZodDef;
+  const def = defOf(schema);
   if (def.typeName === "ZodObject" && def.shape) {
     const shape = def.shape();
     const properties: Record<string, unknown> = {};
@@ -64,6 +68,6 @@ export function zodToJsonSchema(schema: z.ZodTypeAny): Record<string, unknown> {
 }
 
 export function isOptional(schema: z.ZodTypeAny): boolean {
-  const def = schema._def as { typeName?: string };
+  const def = defOf(schema);
   return def.typeName === "ZodOptional" || def.typeName === "ZodDefault";
 }

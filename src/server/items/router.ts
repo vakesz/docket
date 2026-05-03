@@ -15,6 +15,7 @@ import {
 } from "@/core/types";
 import { applyViewFilter, STATE_BUCKET_MEMBERS, type ViewFilter } from "@/core/view-filter";
 import type { Db } from "@/db";
+import { escapeLike } from "@/db/like";
 import { comments, items, savedViews, syncCursors } from "@/db/schema";
 import type { Item as ItemRow } from "@/db/schema/types";
 import { asPlainObject } from "@/lib/json";
@@ -176,7 +177,7 @@ function buildItemListWhere(
   }
 
   if (input.search) {
-    const pattern = `%${input.search}%`;
+    const pattern = `%${escapeLike(input.search)}%`;
     const searchClause = or(
       ilike(items.title, pattern),
       ilike(items.description, pattern),
@@ -420,7 +421,7 @@ export const itemsRouter = router({
       }),
     )
     .query(async ({ ctx, input }) => {
-      const pattern = `%${input.q}%`;
+      const pattern = `%${escapeLike(input.q)}%`;
       const rows = await ctx.db.query.items.findMany({
         where: and(
           eq(items.projectId, ctx.projectId),

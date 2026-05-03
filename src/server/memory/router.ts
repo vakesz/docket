@@ -15,6 +15,7 @@
 import "server-only";
 import { and, arrayContains, desc, eq, ilike, or } from "drizzle-orm";
 import { z } from "zod";
+import { escapeLike } from "@/db/like";
 import { memoryEntries } from "@/db/schema";
 import { proposeMemoryDelete, proposeMemoryWrite } from "@/server/proposals/builders";
 import { maybeAutoAccept } from "@/server/proposals/executor";
@@ -52,7 +53,7 @@ export const memoryRouter = router({
     const conditions = [eq(memoryEntries.projectId, ctx.projectId)];
     if (input.tag) conditions.push(arrayContains(memoryEntries.tags, [input.tag]));
     if (input.search) {
-      const needle = `%${input.search}%`;
+      const needle = `%${escapeLike(input.search)}%`;
       const orClause = or(ilike(memoryEntries.title, needle), ilike(memoryEntries.body, needle));
       if (orClause) conditions.push(orClause);
     }

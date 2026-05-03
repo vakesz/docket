@@ -18,6 +18,7 @@ import { and, arrayContains, desc, eq, ilike, or } from "drizzle-orm";
 import { z } from "zod";
 import type { ToolFactory } from "@/agent/tools/types";
 import { defineTool, fail, ok } from "@/agent/tools/types";
+import { escapeLike } from "@/db/like";
 import { memoryEntries } from "@/db/schema";
 
 export const listMemoryTool: ToolFactory = (ctx) =>
@@ -34,7 +35,7 @@ export const listMemoryTool: ToolFactory = (ctx) =>
     // user-authored. Body markdown is fetched separately via get_memory.
     guardrailScan: { mode: "fields", untrusted: ["[].title"] },
     handler: async (args) => {
-      const searchPattern = args.search ? `%${args.search}%` : null;
+      const searchPattern = args.search ? `%${escapeLike(args.search)}%` : null;
       const searchClause = searchPattern
         ? or(ilike(memoryEntries.title, searchPattern), ilike(memoryEntries.body, searchPattern))
         : undefined;

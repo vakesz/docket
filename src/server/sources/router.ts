@@ -17,6 +17,7 @@ import "server-only";
 import { TRPCError } from "@trpc/server";
 import { and, arrayContains, desc, eq, ilike, or } from "drizzle-orm";
 import { z } from "zod";
+import { escapeLike } from "@/db/like";
 import { sourceDocs } from "@/db/schema";
 import {
   assertFound,
@@ -59,7 +60,7 @@ export const sourcesRouter = router({
     if (input.kind) conditions.push(eq(sourceDocs.kind, input.kind));
     if (input.tag) conditions.push(arrayContains(sourceDocs.tags, [input.tag]));
     if (input.search) {
-      const needle = `%${input.search}%`;
+      const needle = `%${escapeLike(input.search)}%`;
       const orClause = or(ilike(sourceDocs.title, needle), ilike(sourceDocs.body, needle));
       if (orClause) conditions.push(orClause);
     }

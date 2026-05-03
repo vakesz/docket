@@ -45,7 +45,11 @@ import { items, memoryEntries, proposals } from "@/db/schema";
 import type { Proposal as ProposalRow } from "@/db/schema/types";
 import { assertFound } from "@/server/errors";
 import { snapshotFromRow } from "@/server/proposals/item-snapshot";
-import { proposalPayloadSchema, toJsonProposalPayload } from "@/server/proposals/schema";
+import {
+  type ProposalPayload,
+  proposalPayloadSchema,
+  toJsonProposalPayload,
+} from "@/server/proposals/schema";
 import { jaccardSimilarity } from "@/server/recommendations/similarity";
 
 /**
@@ -64,7 +68,7 @@ type ProposalContext = {
 
 async function persist(
   ctx: ProposalContext,
-  draft: Omit<Proposal, "id">,
+  draft: ProposalPayload,
   providerItemId: ProviderItemId | null,
   advisory: string | null = null,
 ): Promise<ProposalRow> {

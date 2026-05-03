@@ -13,6 +13,7 @@ import { and, arrayContains, desc, eq, ilike, or } from "drizzle-orm";
 import { z } from "zod";
 import type { ToolFactory } from "@/agent/tools/types";
 import { defineTool, fail, ok } from "@/agent/tools/types";
+import { escapeLike } from "@/db/like";
 import { sourceDocs } from "@/db/schema";
 
 export const listSourcesTool: ToolFactory = (ctx) =>
@@ -98,7 +99,7 @@ export const searchSourcesTool: ToolFactory = (ctx) =>
     // Same shape as list_sources — title is the only author-authored field.
     guardrailScan: { mode: "fields", untrusted: ["[].title"] },
     handler: async (args) => {
-      const pattern = `%${args.query}%`;
+      const pattern = `%${escapeLike(args.query)}%`;
       const searchClause = or(ilike(sourceDocs.title, pattern), ilike(sourceDocs.body, pattern));
       const rows = await ctx.db
         .select({

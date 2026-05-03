@@ -12,6 +12,7 @@ import { z } from "zod";
 import type { AgentTool, ToolContext, ToolFactory } from "@/agent/tools/types";
 import { defineTool, fail, ok, withProvider } from "@/agent/tools/types";
 import type { ItemState, ProposalId } from "@/core/types";
+import { escapeLike } from "@/db/like";
 import { audits, items as itemsTable } from "@/db/schema";
 
 export const searchItemsTool: ToolFactory = (ctx) =>
@@ -30,7 +31,7 @@ export const searchItemsTool: ToolFactory = (ctx) =>
     handler: async (args) => {
       const openStates: ItemState[] = ["new", "active", "blocked", "needs_info"];
       const closedStates: ItemState[] = ["resolved", "closed"];
-      const pattern = `%${args.query}%`;
+      const pattern = `%${escapeLike(args.query)}%`;
       const searchClause = or(
         ilike(itemsTable.title, pattern),
         ilike(itemsTable.description, pattern),
