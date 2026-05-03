@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useId } from "react";
+import { GUARDRAIL_KINDS, type GuardrailKind } from "@/agent/guardrail/types";
 import { useProjectSettingsForm } from "@/lib/settings-client";
 import { trpc } from "@/lib/trpc-client";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/primitives/alert";
@@ -15,8 +16,6 @@ import {
   SelectValue,
 } from "@/ui/primitives/select";
 import { Switch } from "@/ui/primitives/switch";
-
-type GuardrailKind = "noop" | "pattern" | "llm-judge" | "composite";
 
 const KIND_OPTIONS: { value: GuardrailKind; label: string; hint: string }[] = [
   {
@@ -63,20 +62,24 @@ export function GuardrailPanel({ projectSlug }: { projectSlug: string }) {
     projectSlug,
     initial: {
       enabled: true,
-      kind: "composite" as GuardrailKind,
+      kind: "composite",
       blockOnInjection: true,
       blockOffTopic: true,
       scopeCheckEnabled: true,
       outputCheckEnabled: false,
+    } satisfies {
+      enabled: boolean;
+      kind: GuardrailKind;
+      blockOnInjection: boolean;
+      blockOffTopic: boolean;
+      scopeCheckEnabled: boolean;
+      outputCheckEnabled: boolean;
     },
     seed: (view) => {
       const k = view.raw("guardrail.kind");
       return {
         enabled: view.bool("guardrail.enabled", true),
-        kind:
-          k === "noop" || k === "pattern" || k === "llm-judge" || k === "composite"
-            ? (k as GuardrailKind)
-            : ("composite" as GuardrailKind),
+        kind: GUARDRAIL_KINDS.find((g) => g === k) ?? "composite",
         blockOnInjection: view.bool("guardrail.block-on-injection", true),
         blockOffTopic: view.bool("guardrail.block-off-topic", true),
         scopeCheckEnabled: view.bool("guardrail.scope-check-enabled", true),

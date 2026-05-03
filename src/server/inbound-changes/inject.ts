@@ -16,13 +16,7 @@
  */
 
 import "server-only";
-import {
-  assertItemState,
-  type Item as CanonicalItem,
-  type ItemId,
-  type ProjectId,
-  type ProviderItemId,
-} from "@/core/types";
+import type { Item as CanonicalItem, ItemId, ProjectId, ProviderItemId } from "@/core/types";
 import type { Db } from "@/db";
 import { messages } from "@/db/schema";
 import type { Item as ItemRow } from "@/db/schema/types";
@@ -45,11 +39,7 @@ export function materialDiff(
 ): MaterialChange[] {
   const out: MaterialChange[] = [];
   if (cached.state !== fresh.state) {
-    out.push({
-      field: "state",
-      before: assertItemState(cached.state, "cached Item.state"),
-      after: fresh.state,
-    });
+    out.push({ field: "state", before: cached.state, after: fresh.state });
   }
   if (cached.title !== fresh.title) {
     out.push({ field: "title", before: cached.title, after: fresh.title });

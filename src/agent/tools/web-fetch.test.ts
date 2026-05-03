@@ -8,7 +8,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ToolContext } from "@/agent/tools/types";
-import { asProjectId, asUserId } from "@/core/types";
+import type { ProjectId, UserId } from "@/core/types";
 
 const settings = vi.hoisted(() => ({
   enabled: true as boolean,
@@ -50,8 +50,8 @@ const { webFetchTool } = await import("@/agent/tools/web-fetch");
 
 const ctx: ToolContext = {
   db: {} as unknown as ToolContext["db"],
-  projectId: asProjectId("proj_1"),
-  userId: asUserId("user_1"),
+  projectId: "proj_1" as ProjectId,
+  userId: "user_1" as UserId,
   itemId: null,
   providerItemId: null,
 };

@@ -1,13 +1,12 @@
 import "server-only";
 import { TRPCError } from "@trpc/server";
-import { and, arrayContains, asc, desc, eq, ilike, isNotNull, ne, or, sql } from "drizzle-orm";
+import { and, arrayContains, asc, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
-  assertItemKind,
-  assertItemState,
-  asProviderItemId,
   BACKLOG_BUCKETS,
   type BacklogBucket,
+  ITEM_KINDS,
+  ITEM_STATES,
   type Item,
   type ProjectId,
   type ProviderItemId,
@@ -55,14 +54,14 @@ function resolveProviderItemId(
       message: `invalid item identifier "${itemNumber}" for this project`,
     });
   }
-  return asProviderItemId(providerItemId);
+  return providerItemId;
 }
 
 const BacklogBucketEnum = z.enum(BACKLOG_BUCKETS);
 
 const ListInput = projectSlugSchema.extend({
-  kind: z.string().optional(),
-  state: z.string().optional(),
+  kind: z.enum(ITEM_KINDS).optional(),
+  state: z.enum(ITEM_STATES).optional(),
   bucket: BacklogBucketEnum.default("open"),
   viewId: z.string().min(1).optional(),
   assignees: z.array(z.string().min(0).max(200)).max(50).default([]),
@@ -148,10 +147,10 @@ function buildItemListWhere(
 ) {
   const conditions = [eq(items.projectId, projectId)];
   if (archivedFlag !== undefined) conditions.push(eq(items.archived, archivedFlag));
-  if (input.kind) conditions.push(eq(items.kind, assertItemKind(input.kind, "ListInput.kind")));
+  if (input.kind) conditions.push(eq(items.kind, input.kind));
 
   if (input.state) {
-    conditions.push(eq(items.state, assertItemState(input.state, "ListInput.state")));
+    conditions.push(eq(items.state, input.state));
   } else if (view.stateBucket !== "all") {
     const states = STATE_BUCKET_MEMBERS[view.stateBucket];
     conditions.push(
@@ -228,6 +227,7 @@ const LIST_NARROW_COLUMNS = {
 } as const;
 
 type ListRow = Pick<ItemRow, keyof typeof LIST_ROW_COLUMNS>;
+type NarrowRow = Pick<ItemRow, keyof typeof LIST_NARROW_COLUMNS>;
 
 function filterRowsByFacets(rows: ListRow[], view: ViewFilter, providerKind: string): ListRow[] {
   if (!hasFacetFilter(view)) return rows;
@@ -249,11 +249,11 @@ function filterRowsByFacets(rows: ListRow[], view: ViewFilter, providerKind: str
 function liftRowToCanonical(row: ListRow, providerKind: string): Item {
   const providerRaw = asPlainObject(row.providerRaw);
   return {
-    id: row.id,
-    kind: assertItemKind(row.kind, `Item ${row.id}.kind`),
+    id: row.providerItemId,
+    kind: row.kind,
     title: row.title,
     description: row.description,
-    state: assertItemState(row.state, `Item ${row.id}.state`),
+    state: row.state,
     assignee: row.assignees[0] ?? null,
     parentId: row.parentId,
     tags: row.tags,
@@ -273,24 +273,23 @@ export const itemsRouter = router({
     const userId = ctx.userId;
     const { view, archivedFlag } = await resolveViewFilter(ctx.db, ctx.projectId, userId, input);
     const where = buildItemListWhere(ctx.projectId, input, view, archivedFlag);
-    const facetsActive = hasFacetFilter(view);
-    const rows = facetsActive
-      ? await ctx.db.query.items.findMany({
-          where,
-          orderBy: [desc(items.updatedAt)],
-          limit: Math.min(input.limit * 4, 800),
-          columns: LIST_ROW_COLUMNS,
-        })
+    const filteredRows: NarrowRow[] = hasFacetFilter(view)
+      ? filterRowsByFacets(
+          await ctx.db.query.items.findMany({
+            where,
+            orderBy: [desc(items.updatedAt)],
+            limit: Math.min(input.limit * 4, 800),
+            columns: LIST_ROW_COLUMNS,
+          }),
+          view,
+          ctx.project.providerKind,
+        ).slice(0, input.limit)
       : await ctx.db.query.items.findMany({
           where,
           orderBy: [desc(items.updatedAt)],
           limit: input.limit,
           columns: LIST_NARROW_COLUMNS,
         });
-
-    const filteredRows = facetsActive
-      ? filterRowsByFacets(rows as ListRow[], view, ctx.project.providerKind).slice(0, input.limit)
-      : rows;
 
     const spec = getProviderSpec(ctx.project.providerKind);
     const formatItemNumber = spec?.itemNumberCodec.formatItemNumber ?? ((id: string) => id);
@@ -299,9 +298,9 @@ export const itemsRouter = router({
       id: row.id,
       providerItemId: row.providerItemId,
       itemNumber: formatItemNumber(row.providerItemId),
-      kind: assertItemKind(row.kind, `Item ${row.id}.kind`),
+      kind: row.kind,
       title: row.title,
-      state: assertItemState(row.state, `Item ${row.id}.state`),
+      state: row.state,
       assignee: row.assignees[0] ?? null,
       author: row.author,
       tags: row.tags,
@@ -387,9 +386,7 @@ export const itemsRouter = router({
     const reserved = new Set(
       (spec?.capabilities.stateEncodingTags ?? []).map((t) => t.toLowerCase()),
     );
-    return (rows as Array<{ tag: string }>)
-      .map((r) => r.tag)
-      .filter((tag) => tag && !reserved.has(tag.toLowerCase()));
+    return rows.map((r) => r.tag).filter((tag) => tag && !reserved.has(tag.toLowerCase()));
   }),
 
   /**
@@ -403,9 +400,7 @@ export const itemsRouter = router({
       ORDER BY assignee ASC
       LIMIT 500
     `);
-    return (rows as Array<{ assignee: string }>)
-      .map((r) => r.assignee)
-      .filter((a): a is string => !!a);
+    return rows.map((r) => r.assignee).filter((a): a is string => !!a);
   }),
 
   currentUserIdentity: projectScopedProcedure.input(projectSlugSchema).query(async ({ ctx }) => {
@@ -553,7 +548,3 @@ export const itemsRouter = router({
     return { commentsCount: providerComments.length, inboundConversations };
   }),
 });
-
-// Quiet unused import warnings.
-void ne;
-void isNotNull;

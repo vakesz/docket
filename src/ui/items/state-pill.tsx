@@ -1,3 +1,4 @@
+import type { ItemState } from "@/core/types";
 import { formatState } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -7,7 +8,7 @@ import { cn } from "@/lib/utils";
  * ever come back, do it via a per-state token map and per-theme overrides
  * rather than scattering color literals across surfaces.
  */
-export function StatePill({ state, className }: { state: string; className?: string }) {
+export function StatePill({ state, className }: { state: ItemState; className?: string }) {
   return (
     <span
       className={cn(

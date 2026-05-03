@@ -14,7 +14,7 @@
 import "server-only";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
-import { asProviderItemId } from "@/core/types";
+import type { ProviderItemId } from "@/core/types";
 import { items, watchlistEntries } from "@/db/schema";
 import { getProviderSpec } from "@/server/provider-registry";
 import {
@@ -29,7 +29,10 @@ const ListInput = projectSlugSchema.extend({
 });
 
 const PinInput = projectSlugSchema.extend({
-  providerItemId: z.string().min(1).transform(asProviderItemId),
+  providerItemId: z
+    .string()
+    .min(1)
+    .transform((v) => v as ProviderItemId),
 });
 
 export const watchlistRouter = router({

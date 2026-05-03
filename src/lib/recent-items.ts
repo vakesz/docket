@@ -13,6 +13,7 @@
  * lose ids the user might want back when they raise it.
  */
 
+import { asPlainObject } from "@/lib/json";
 import { RECENT_LIMIT_MAX, readRecentEnabled, readRecentLimit, useLocalPref } from "@/lib/ui-prefs";
 
 const STORAGE_KEY = "docket.recentItems";
@@ -25,10 +26,8 @@ function readStore(): Store {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
     const out: Store = {};
-    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+    for (const [k, v] of Object.entries(asPlainObject(JSON.parse(raw)))) {
       if (Array.isArray(v)) {
         out[k] = v.filter((x): x is string => typeof x === "string").slice(0, RECENT_LIMIT_MAX);
       }

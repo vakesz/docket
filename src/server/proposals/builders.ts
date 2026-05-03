@@ -32,13 +32,13 @@ import type {
   StateChangeProposal,
   TagsChangeProposal,
 } from "@/core/proposal-types";
-import {
-  asProviderItemId,
-  type CreateFields,
-  type ItemKind,
-  type ProjectId,
-  type TransitionIntent,
-  type UserId,
+import type {
+  CreateFields,
+  ItemKind,
+  ProjectId,
+  ProviderItemId,
+  TransitionIntent,
+  UserId,
 } from "@/core/types";
 import type { Db } from "@/db";
 import { items, memoryEntries, proposals } from "@/db/schema";
@@ -65,7 +65,7 @@ type ProposalContext = {
 async function persist(
   ctx: ProposalContext,
   draft: Omit<Proposal, "id">,
-  providerItemId: string | null,
+  providerItemId: ProviderItemId | null,
   advisory: string | null = null,
 ): Promise<ProposalRow> {
   // The row's own surrogate id is canonical; the payload omits it and
@@ -79,7 +79,7 @@ async function persist(
       userId: ctx.userId,
       kind: draft.kind,
       origin: ctx.origin,
-      providerItemId: providerItemId as ProposalRow["providerItemId"],
+      providerItemId,
       payload: toJsonProposalPayload(draft),
       status: "pending",
       advisory,
@@ -99,15 +99,12 @@ const COMMENT_ECHO_THRESHOLD = 0.6;
  */
 const MEMORY_BODY_ADVISORY_BYTES = 4096;
 
-async function loadCachedItem(ctx: ProposalContext, providerItemId: string) {
+async function loadCachedItem(ctx: ProposalContext, providerItemId: ProviderItemId) {
   // (projectId, providerItemId) is the canonical compound unique on `Item` —
   // a `findFirst` against both columns hits the same unique index.
   return assertFound(
     await ctx.db.query.items.findFirst({
-      where: and(
-        eq(items.projectId, ctx.projectId),
-        eq(items.providerItemId, asProviderItemId(providerItemId)),
-      ),
+      where: and(eq(items.projectId, ctx.projectId), eq(items.providerItemId, providerItemId)),
     }),
     `Item '${providerItemId}' not found in cache; sync the project first.`,
   );
@@ -131,9 +128,9 @@ export function buildDuplicateCommentBody(canonical: {
 export async function proposeTransition(
   ctx: ProposalContext,
   args: {
-    providerItemId: string;
+    providerItemId: ProviderItemId;
     intent: TransitionIntent;
-    canonicalItemId?: string;
+    canonicalItemId?: ProviderItemId;
   },
 ): Promise<ProposalRow> {
   const row = await loadCachedItem(ctx, args.providerItemId);
@@ -213,7 +210,7 @@ export function appendPreviousVersionFooter(
 export async function proposeDescriptionPatch(
   ctx: ProposalContext,
   args: {
-    providerItemId: string;
+    providerItemId: ProviderItemId;
     newDescription: string;
     /**
      * When true, the existing description is appended as a "Previous version"
@@ -264,7 +261,7 @@ export async function proposeDescriptionPatch(
 
 export async function proposeComment(
   ctx: ProposalContext,
-  args: { providerItemId: string; body: string },
+  args: { providerItemId: ProviderItemId; body: string },
 ): Promise<ProposalRow> {
   if (!args.body.trim()) {
     throw new TRPCError({ code: "BAD_REQUEST", message: "comment body is empty" });
@@ -318,7 +315,7 @@ function normalizeTags(input: readonly string[]): string[] {
 
 export async function proposeTagsChange(
   ctx: ProposalContext,
-  args: { providerItemId: string; nextTags: readonly string[] },
+  args: { providerItemId: ProviderItemId; nextTags: readonly string[] },
 ): Promise<ProposalRow> {
   const row = await loadCachedItem(ctx, args.providerItemId);
   const item = snapshotFromRow(row);
@@ -340,7 +337,7 @@ export async function proposeTagsChange(
 
 export async function proposeAssigneeChange(
   ctx: ProposalContext,
-  args: { providerItemId: string; nextAssignee: string | null },
+  args: { providerItemId: ProviderItemId; nextAssignee: string | null },
 ): Promise<ProposalRow> {
   const row = await loadCachedItem(ctx, args.providerItemId);
   const item = snapshotFromRow(row);
@@ -377,7 +374,7 @@ export async function proposeNewItem(
 export async function proposeReactionToggle(
   ctx: ProposalContext,
   args: {
-    providerItemId: string;
+    providerItemId: ProviderItemId;
     targetKind: "item" | "comment";
     targetId: string;
     reaction: string;

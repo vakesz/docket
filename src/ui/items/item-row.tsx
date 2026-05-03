@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { ItemKind, ItemState } from "@/core/types";
 import { displayTag, formatKind } from "@/lib/format";
 import { freshnessTone } from "@/lib/staleness";
 import { cn } from "@/lib/utils";
@@ -11,9 +12,9 @@ export type ListItem = {
   id: string;
   providerItemId: string;
   itemNumber: string;
-  kind: string;
+  kind: ItemKind;
   title: string;
-  state: string;
+  state: ItemState;
   assignee: string | null;
   tags: string[];
   updatedAt: Date;
@@ -24,8 +25,8 @@ export type PinnedListItem = {
   providerItemId: string;
   itemNumber: string;
   title: string;
-  state: string;
-  kind: string;
+  state: ItemState;
+  kind: ItemKind;
 };
 
 export function ItemRow({

@@ -9,7 +9,6 @@
 import "server-only";
 
 import { isNull } from "drizzle-orm";
-import { asProjectId, asUserId } from "@/core/types";
 import { db } from "@/db";
 import { projects as projectsTable } from "@/db/schema";
 import type { Project } from "@/db/schema/types";
@@ -28,22 +27,21 @@ type SchedulerState = {
 };
 
 // Stash on globalThis so Next.js HMR re-imports don't leak duplicate timers
-// (same trick `src/server/db.ts` uses for the Prisma client). Cast through
-// `unknown` so we don't have to declare a global var.
-const globalForScheduler = globalThis as unknown as {
-  __docketSyncScheduler?: SchedulerState;
-};
+// (same trick `src/db/client.ts` uses for the Drizzle client). Declared via
+// `declare global` so the access is fully typed without an `as unknown as`
+// escape.
+declare global {
+  var __docketSyncScheduler: SchedulerState | undefined;
+}
 
 function getState(): SchedulerState {
-  if (!globalForScheduler.__docketSyncScheduler) {
-    globalForScheduler.__docketSyncScheduler = {
-      started: false,
-      inFlight: new Set(),
-      lastFiredAt: new Map(),
-      supervisor: null,
-    };
-  }
-  return globalForScheduler.__docketSyncScheduler;
+  globalThis.__docketSyncScheduler ??= {
+    started: false,
+    inFlight: new Set(),
+    lastFiredAt: new Map(),
+    supervisor: null,
+  };
+  return globalThis.__docketSyncScheduler;
 }
 
 /**
@@ -100,18 +98,14 @@ async function supervisorTick(): Promise<void> {
 export async function tickProject(project: SchedulerProject): Promise<void> {
   const state = getState();
   if (state.inFlight.has(project.id)) return;
-  // Project rows arrive from Prisma with plain string ids; brand here so
-  // the typed sync API doesn't have to widen.
-  const projectId = asProjectId(project.id);
-  const ownerUserId = asUserId(project.ownerUserId);
-  const intervalSeconds = await loadProjectSetting(db, projectId, "sync.interval-seconds");
+  const intervalSeconds = await loadProjectSetting(db, project.id, "sync.interval-seconds");
   if (intervalSeconds === 0) return;
   const lastFiredAt = state.lastFiredAt.get(project.id) ?? 0;
   if (Date.now() - lastFiredAt < intervalSeconds * 1000) return;
   state.lastFiredAt.set(project.id, Date.now());
   state.inFlight.add(project.id);
   try {
-    await runIncrementalSync(db, project, ownerUserId);
+    await runIncrementalSync(db, project, project.ownerUserId);
   } catch (err) {
     logger.error({ projectId: project.id, ...errFields(err) }, "sync scheduler: tick failed");
   } finally {
@@ -121,7 +115,7 @@ export async function tickProject(project: SchedulerProject): Promise<void> {
 
 /** Test-only: clear the globalThis stash and stop the supervisor. */
 export function __resetSchedulerForTests(): void {
-  const state = globalForScheduler.__docketSyncScheduler;
+  const state = globalThis.__docketSyncScheduler;
   if (state?.supervisor) clearInterval(state.supervisor);
-  delete globalForScheduler.__docketSyncScheduler;
+  globalThis.__docketSyncScheduler = undefined;
 }

@@ -1,7 +1,6 @@
 import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
-import { asUserId } from "@/core/types";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { auth } from "@/server/auth";
@@ -41,7 +40,7 @@ export default async function SettingsLayout({
     redirect("/");
   }
 
-  const userId = asUserId(session.user.id);
+  const userId = session.user.id;
   const trpc = await createCaller();
 
   const [me, userProjects, readOnly] = await Promise.all([

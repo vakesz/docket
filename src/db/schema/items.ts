@@ -40,7 +40,7 @@ export const items = pgTable(
     reviewers: emptyTextArray(),
     // Provider-native ids of items linked to this one (cross-references,
     // AzDO relations).
-    linkedItemIds: emptyTextArray(),
+    linkedItemIds: emptyTextArray<ProviderItemId>(),
     author: text(),
     // Parent's providerItemId, not the surrogate uuid. Resolved at query time.
     parentId: text().$type<ProviderItemId>(),

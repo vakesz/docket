@@ -9,16 +9,14 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import {
-  asProjectId,
-  asProviderItemId,
-  type Comment as CanonicalComment,
-  type Item as CanonicalItem,
-  type ChangedItem,
-  type ItemId,
-  type ProjectId,
-  type ProviderItemId,
-  type UserId,
+import type {
+  Comment as CanonicalComment,
+  Item as CanonicalItem,
+  ChangedItem,
+  ItemId,
+  ProjectId,
+  ProviderItemId,
+  UserId,
 } from "@/core/types";
 import type { Db, DbTx } from "@/db";
 import { comments, items, settings, syncCursors } from "@/db/schema";
@@ -294,7 +292,7 @@ export type ItemRow = {
   state: CanonicalItem["state"];
   assignees: string[];
   reviewers: string[];
-  linkedItemIds: string[];
+  linkedItemIds: ProviderItemId[];
   author: string | null;
   parentId: ProviderItemId | null;
   tags: string[];
@@ -317,7 +315,7 @@ export function toItemRow(canonical: CanonicalItem, projectId: ProjectId, synced
   const assignees = canonical.assignees ?? (canonical.assignee ? [canonical.assignee] : []);
   return {
     projectId,
-    providerItemId: asProviderItemId(canonical.id),
+    providerItemId: canonical.id,
     kind: canonical.kind,
     title: canonical.title,
     description: canonical.description,
@@ -326,9 +324,9 @@ export function toItemRow(canonical: CanonicalItem, projectId: ProjectId, synced
     reviewers: [...(canonical.reviewers ?? [])],
     linkedItemIds: [...(canonical.linkedItemIds ?? [])],
     author: canonical.author ?? null,
-    parentId: canonical.parentId ? asProviderItemId(canonical.parentId) : null,
+    parentId: canonical.parentId,
     tags: [...canonical.tags],
-    providerRaw: canonical.providerRaw as Record<string, unknown>,
+    providerRaw: { ...canonical.providerRaw },
     url: canonical.url ?? null,
     repositoryUrl: canonical.repositoryUrl ?? null,
     createdAt: canonical.createdAt ?? null,
@@ -376,7 +374,7 @@ async function processChunk(
   ctx: { syncId: string; chunkIndex: number; providerKind: string },
 ): Promise<ChunkResult> {
   const startedAt = Date.now();
-  const ids = bundles.map((b) => asProviderItemId(b.item.id));
+  const ids = bundles.map((b) => b.item.id);
   const cachedRows = await db
     .select({
       id: items.id,
@@ -400,7 +398,7 @@ async function processChunk(
 
   for (const bundle of bundles) {
     const item = bundle.item;
-    const providerItemId = asProviderItemId(item.id);
+    const providerItemId = item.id;
     const row = toItemRow(item, projectId, syncedAt);
     const cached = cachedMap.get(providerItemId);
     if (cached) {
@@ -792,7 +790,7 @@ async function runSync(
   userId: UserId,
   mode: SyncMode,
 ): Promise<SyncResult> {
-  const projectId = asProjectId(project.id);
+  const projectId = project.id;
   const syncId = randomUUID();
   const startedAt = Date.now();
   const runStartedAt = new Date(startedAt);

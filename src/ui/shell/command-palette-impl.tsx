@@ -3,6 +3,7 @@
 import type { Route } from "next";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
+import type { ItemKind, ItemState } from "@/core/types";
 import { formatKind } from "@/lib/format";
 import { shortcut } from "@/lib/platform";
 import { trpc } from "@/lib/trpc-client";
@@ -29,9 +30,9 @@ type ItemSummary = {
   id: string;
   providerItemId: string;
   itemNumber: string;
-  kind: string;
+  kind: ItemKind;
   title: string;
-  state: string;
+  state: ItemState;
   url: string | null;
 };
 

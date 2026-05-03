@@ -39,8 +39,8 @@ const STATE_LABELS: Record<ItemState, string> = {
   closed: "Closed",
 };
 
-export function formatState(state: ItemState | string): string {
-  return STATE_LABELS[state as ItemState] ?? state;
+export function formatState(state: ItemState): string {
+  return STATE_LABELS[state];
 }
 
 const KIND_LABELS: Record<ItemKind, string> = {
@@ -51,8 +51,8 @@ const KIND_LABELS: Record<ItemKind, string> = {
   bug: "Bug",
 };
 
-export function formatKind(kind: ItemKind | string): string {
-  return KIND_LABELS[kind as ItemKind] ?? kind;
+export function formatKind(kind: ItemKind): string {
+  return KIND_LABELS[kind];
 }
 
 const INTENT_LABELS: Record<TransitionIntent, string> = {
@@ -66,8 +66,8 @@ const INTENT_LABELS: Record<TransitionIntent, string> = {
   reopen: "Reopen",
 };
 
-export function formatIntent(intent: TransitionIntent | string): string {
-  return INTENT_LABELS[intent as TransitionIntent] ?? intent;
+export function formatIntent(intent: TransitionIntent): string {
+  return INTENT_LABELS[intent];
 }
 
 /**

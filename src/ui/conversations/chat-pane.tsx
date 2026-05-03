@@ -12,7 +12,7 @@ import type { SettledRound } from "@/ui/conversations/chat-stream";
 import { LlmSwitcher } from "@/ui/conversations/llm-switcher";
 import { QuestionCard } from "@/ui/conversations/question-card";
 import { ToolCallProgress, ToolCallRow } from "@/ui/conversations/tool-call-row";
-import { buildRenderUnits, type PersistedMessage } from "@/ui/conversations/transcript";
+import { buildRenderUnits } from "@/ui/conversations/transcript";
 import { useChatStream } from "@/ui/conversations/use-chat-stream";
 import { extractSeedKind } from "@/ui/items/suggest-seeds";
 import { Alert, AlertDescription } from "@/ui/primitives/alert";
@@ -84,7 +84,7 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
   const settings = useSettingsMap();
   const sendOnEnter = settings.bool("chat.send-on-enter", true);
 
-  const messages = (detail.data?.messages ?? []) as PersistedMessage[];
+  const messages = detail.data?.messages ?? [];
   const renderUnits = buildRenderUnits(messages);
   const inFlight = !streaming.done;
   const conversation = detail.data ?? null;

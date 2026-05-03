@@ -1,7 +1,7 @@
 #!/bin/sh
 # Docker container entrypoint. Auto-generates boot secrets on first run if
-# the operator didn't pre-set them, applies the schema, runs the bootstrap
-# seed (idempotent — fills any rows DEV_* envs cover), then execs CMD.
+# the operator didn't pre-set them, applies the schema, runs the provider
+# bootstrap (idempotent — fills any rows DEV_* envs cover), then execs CMD.
 #
 # Boot secrets (`AUTH_SECRET`, `SECRETS_KEY`) live in
 # `/app/data/secrets.env` if generated here. The path is mounted as the
@@ -72,14 +72,14 @@ require_env PUBLIC_BASE_URL "Canonical URL the app is reached at, e.g. https://d
 # and recorded in `__drizzle_migrations`. Idempotent across boots; failures
 # halt the boot so we don't run the app against a half-applied schema.
 echo "[entrypoint] Applying database migrations..."
-node bin/migrate.mjs
+node bin/db-migrate.mjs
 
-# Bootstrap seed: writes the initial LlmProvider + OauthProviderConfig rows
-# from BOOTSTRAP/DEV_* env vars. Idempotent — once a row of a given kind
-# exists, the seed leaves it alone, so the wizard's writes and env-driven
-# writes coexist.
-echo "[entrypoint] Running bootstrap seed (idempotent)..."
-node bin/seed-dev.mjs || echo "[entrypoint] Seed exited non-zero; continuing."
+# Provider bootstrap: writes the initial LlmProvider + OauthProviderConfig
+# rows from DEV_* env vars. Idempotent — once a row of a given kind exists,
+# the bootstrap leaves it alone, so the wizard's writes and env-driven writes
+# coexist.
+echo "[entrypoint] Running provider bootstrap (idempotent)..."
+node bin/bootstrap-providers.mjs || echo "[entrypoint] Bootstrap exited non-zero; continuing."
 
 echo "[entrypoint] Starting: $*"
 exec "$@"

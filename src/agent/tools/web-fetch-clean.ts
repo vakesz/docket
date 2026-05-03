@@ -43,13 +43,11 @@ export function cleanHtml(html: string, baseUrl: string): CleanedHtml {
   // document's base URL, so anchor.href / img.src / link.href reflect the
   // resolved value. Writing it back to the attribute makes Turndown emit
   // absolute URLs without needing its own base-URL plumbing.
-  for (const a of Array.from(doc.querySelectorAll("a[href]"))) {
-    const resolved = (a as HTMLAnchorElement).href;
-    if (resolved) a.setAttribute("href", resolved);
+  for (const a of Array.from(doc.querySelectorAll<HTMLAnchorElement>("a[href]"))) {
+    if (a.href) a.setAttribute("href", a.href);
   }
-  for (const img of Array.from(doc.querySelectorAll("img[src]"))) {
-    const resolved = (img as HTMLImageElement).src;
-    if (resolved) img.setAttribute("src", resolved);
+  for (const img of Array.from(doc.querySelectorAll<HTMLImageElement>("img[src]"))) {
+    if (img.src) img.setAttribute("src", img.src);
   }
 
   const root = doc.body ?? doc.documentElement;

@@ -3,7 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { and, asc, desc, eq, exists, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 import { slugify } from "@/core/slug";
-import { asConversationId, type ProjectId } from "@/core/types";
+import type { ConversationId, ProjectId } from "@/core/types";
 import { llmProviders, projectMemberships, projects, users } from "@/db/schema";
 import { asPlainObject } from "@/lib/json";
 import { logger } from "@/server/logger";
@@ -383,7 +383,7 @@ export const projectsRouter = router({
         cursor: z
           .object({
             startedAt: z.string(),
-            conversationId: z.string().transform(asConversationId),
+            conversationId: z.string().transform((v) => v as ConversationId),
           })
           .nullish(),
       }),

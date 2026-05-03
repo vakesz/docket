@@ -63,10 +63,9 @@ export function ShortcutHelp() {
             <li key={s.label} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
               <span className="text-foreground">{s.label}</span>
               <span className="flex items-center gap-1">
-                {s.keys.map((k, i) => (
+                {s.keys.map((k) => (
                   <kbd
-                    // biome-ignore lint/suspicious/noArrayIndexKey: stable list rendered once.
-                    key={`${s.label}-${i}`}
+                    key={`${s.label}-${k}`}
                     className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
                   >
                     {k === "mod" ? modKey : k}

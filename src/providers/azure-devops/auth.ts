@@ -10,6 +10,7 @@
 
 import "server-only";
 import type { OIDCConfig } from "next-auth/providers";
+import type { UserId } from "@/core/types";
 import { db } from "@/db";
 import { avatarUrl } from "@/lib/avatar-url";
 import { fetchAvatarFromProvider } from "@/server/avatars/fetchers";
@@ -118,7 +119,7 @@ export function azureDevOpsProvider(
         await captureAzureDevOpsAvatar(identifier, accessToken);
       }
       return {
-        id: profile.oid || profile.sub,
+        id: (profile.oid || profile.sub) as UserId,
         name: profile.name ?? null,
         email: profile.email ?? profile.preferred_username ?? null,
         image: identifier ? avatarUrl("azure_devops", identifier) : null,

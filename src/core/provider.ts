@@ -20,6 +20,7 @@ import type {
   ItemKind,
   ItemState,
   PRMatch,
+  ProviderItemId,
   PullRequestDetail,
   PullRequestDiff,
   Reactions,
@@ -91,11 +92,16 @@ export class ProviderAuthError extends ProviderError {
  */
 const NETWORK_ERROR_RE = /fetch failed|ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN/i;
 
+function readStatus(err: unknown): number | null {
+  if (err === null || typeof err !== "object") return null;
+  const obj = err as { statusCode?: unknown; status?: unknown };
+  if (typeof obj.statusCode === "number") return obj.statusCode;
+  if (typeof obj.status === "number") return obj.status;
+  return null;
+}
+
 export function wrapProviderError(err: unknown, label: string): never {
-  const status =
-    (err as { statusCode?: number; status?: number } | null)?.statusCode ??
-    (err as { status?: number } | null)?.status ??
-    null;
+  const status = readStatus(err);
   const message = err instanceof Error ? err.message : String(err);
   if (status === 401 || status === 403) {
     throw new ProviderAuthError(`${label} auth rejected: ${message}`);
@@ -441,8 +447,8 @@ export type ScopeFacet = {
  * rows agree with what the route expects.
  */
 export type ProviderItemNumberCodec = {
-  parseItemNumber: (scope: Record<string, unknown>, urlNumber: string) => string | null;
-  formatItemNumber: (providerItemId: string) => string;
+  parseItemNumber: (scope: Record<string, unknown>, urlNumber: string) => ProviderItemId | null;
+  formatItemNumber: (providerItemId: ProviderItemId) => string;
 };
 
 export type ProviderCapabilities = {

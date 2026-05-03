@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import type { Session } from "next-auth";
 import superjson from "superjson";
 import { ZodError, z } from "zod";
-import { asUserId, type UserId } from "@/core/types";
+import type { UserId } from "@/core/types";
 import { db } from "@/db";
 import { projectMemberships } from "@/db/schema";
 import { auth } from "@/server/auth";
@@ -31,7 +31,7 @@ export type Context = {
 };
 
 export async function createContext(): Promise<Context> {
-  const session = (await auth()) as Session | null;
+  const session = await auth();
   // Lazy-start the server-side sync scheduler on first authenticated
   // request. Idempotent; safe to call here. Skipped during `next build`
   // because that flow doesn't construct authenticated tRPC contexts.
@@ -87,19 +87,14 @@ export const publicProcedure = t.procedure;
 export const projectSlugSchema = z.object({ projectSlug: z.string().min(1) });
 
 const requireSession = t.middleware(({ ctx, next }) => {
-  const rawUserId = ctx.session?.user?.id;
-  if (!ctx.session?.user || !rawUserId) {
+  if (!ctx.session?.user?.id) {
     throw new TRPCError({ code: "UNAUTHORIZED" });
   }
-  const userId = asUserId(rawUserId);
   return next({
     ctx: {
       ...ctx,
-      userId,
-      session: {
-        ...ctx.session,
-        user: { ...ctx.session.user, id: rawUserId },
-      },
+      userId: ctx.session.user.id,
+      session: ctx.session,
     },
   });
 });

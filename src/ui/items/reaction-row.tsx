@@ -4,6 +4,7 @@ import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { Reactions } from "@/core/types";
+import { asPlainObject } from "@/lib/json";
 import { trpc } from "@/lib/trpc-client";
 import { cn } from "@/lib/utils";
 import { ProposalDialog } from "@/ui/proposals/proposal-dialog";
@@ -44,10 +45,10 @@ function labelFor(kind: string): string {
 }
 
 function asReactions(value: unknown, supported: readonly string[]): Reactions {
-  if (!value || typeof value !== "object") return {};
+  const obj = asPlainObject(value);
   const out: Reactions = {};
   for (const k of supported) {
-    const n = (value as Record<string, unknown>)[k];
+    const n = obj[k];
     if (typeof n === "number" && n > 0) out[k] = n;
   }
   return out;

@@ -100,7 +100,7 @@ const memoryWrite = z.object({
   title: z.string(),
   body: z.string(),
   tags: z.array(z.string()).readonly(),
-  source: z.string(),
+  source: z.enum(["user", "agent"]),
   memoryId: z.string().nullable(),
   previousTitle: z.string(),
   previousBody: z.string(),

@@ -38,7 +38,8 @@ export const cents = () => integer().notNull().default(0);
 // as the previous Prisma `Decimal` column — no JS-side `Decimal` math.
 export const decimal4 = () => numeric({ precision: 12, scale: 4 }).$type<string>();
 
-export const emptyTextArray = () => text().array().notNull().default(sql`'{}'`);
+export const emptyTextArray = <Brand extends string = string>() =>
+  text().array().$type<Brand[]>().notNull().default(sql`'{}'`);
 
 export const emptyJsonbObject = <Shape = Record<string, unknown>>() =>
   jsonb().$type<Shape>().notNull().default(sql`'{}'::jsonb`);

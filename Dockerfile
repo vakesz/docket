@@ -61,18 +61,18 @@ COPY bin ./bin
 # artifact that may have slipped into the build context before we generate
 # our own. If these existed in the context, they shouldn't influence the
 # image we ship.
-RUN rm -rf .next out .turbo .vercel build dist bin/seed-dev.mjs bin/migrate.mjs \
+RUN rm -rf .next out .turbo .vercel build dist bin/bootstrap-providers.mjs bin/db-migrate.mjs \
     && find . -name '*.tsbuildinfo' -delete
 
 RUN pnpm run build
-# Bundle the bootstrap seed and the migrate runner into single self-contained
-# ESM files so the runtime image doesn't need the TS source tree.
-# `--conditions=react-server` resolves the `server-only` marker package to its
-# no-op shim instead of the throw-on-import default. The `createRequire`
-# banner lets any CJS deps inside the bundle keep using `require()` from an
-# ESM context.
-RUN pnpm exec esbuild bin/seed-dev.ts --bundle --platform=node --target=node22 --format=esm --conditions=react-server --outfile=bin/seed-dev.mjs --banner:js='import { createRequire } from "node:module"; const require = createRequire(import.meta.url);'
-RUN pnpm exec esbuild bin/migrate.ts --bundle --platform=node --target=node22 --format=esm --conditions=react-server --outfile=bin/migrate.mjs --banner:js='import { createRequire } from "node:module"; const require = createRequire(import.meta.url);'
+# Bundle the provider bootstrap and the migration runner into single
+# self-contained ESM files so the runtime image doesn't need the TS source
+# tree. `--conditions=react-server` resolves the `server-only` marker package
+# to its no-op shim instead of the throw-on-import default. The
+# `createRequire` banner lets any CJS deps inside the bundle keep using
+# `require()` from an ESM context.
+RUN pnpm exec esbuild bin/bootstrap-providers.ts --bundle --platform=node --target=node22 --format=esm --conditions=react-server --outfile=bin/bootstrap-providers.mjs --banner:js='import { createRequire } from "node:module"; const require = createRequire(import.meta.url);'
+RUN pnpm exec esbuild bin/db-migrate.ts --bundle --platform=node --target=node22 --format=esm --conditions=react-server --outfile=bin/db-migrate.mjs --banner:js='import { createRequire } from "node:module"; const require = createRequire(import.meta.url);'
 
 # ---------------------------------------------------------------------------
 # prod-deps — production-only node_modules for the runtime image
@@ -122,8 +122,8 @@ COPY --from=builder --chown=docket:docket /app/drizzle ./drizzle
 # Only the runtime files — the .ts sources are bundled into the .mjs files
 # in the builder stage and not needed at runtime.
 COPY --from=builder --chown=docket:docket /app/bin/docker-entrypoint.sh ./bin/docker-entrypoint.sh
-COPY --from=builder --chown=docket:docket /app/bin/seed-dev.mjs ./bin/seed-dev.mjs
-COPY --from=builder --chown=docket:docket /app/bin/migrate.mjs ./bin/migrate.mjs
+COPY --from=builder --chown=docket:docket /app/bin/bootstrap-providers.mjs ./bin/bootstrap-providers.mjs
+COPY --from=builder --chown=docket:docket /app/bin/db-migrate.mjs ./bin/db-migrate.mjs
 COPY --from=builder --chown=docket:docket /app/package.json ./package.json
 
 RUN chmod +x ./bin/docker-entrypoint.sh

@@ -20,10 +20,10 @@ import { buildAuthProvider, UnknownOauthKindError } from "@/server/providers/aut
  * `OauthProviderConfig.scopes` column for now, since the schema already has
  * a free-form string field for provider-specific config).
  *
- * Env vars are intentionally not consulted here. The dev seed
- * (`bin/seed-dev.ts`, wired to `predev`) writes a row from `.env.local`'s
- * `DEV_GITHUB_CLIENT_ID` / `DEV_GITHUB_CLIENT_SECRET` so the runtime path
- * stays identical between dev and prod.
+ * Env vars are intentionally not consulted here. The provider bootstrap
+ * (`bin/bootstrap-providers.ts`, wired to `predev`) writes a row from
+ * `.env.local`'s `DEV_GITHUB_CLIENT_ID` / `DEV_GITHUB_CLIENT_SECRET` so the
+ * runtime path stays identical between dev and prod.
  */
 async function buildProviders(): Promise<NextAuthConfig["providers"]> {
   let rows: Awaited<ReturnType<typeof db.query.oauthProviderConfigs.findMany>>;

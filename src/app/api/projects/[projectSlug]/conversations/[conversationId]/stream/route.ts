@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 import { selectAdapterFor } from "@/agent/llm/registry";
 import type { LoopEvent } from "@/agent/loop";
 import { runTurn } from "@/agent/loop";
-import { asConversationId, asUserId } from "@/core/types";
+import type { ConversationId } from "@/core/types";
 import { db } from "@/db";
 import { auth } from "@/server/auth";
 import { getConversationForOwner } from "@/server/conversations/storage";
@@ -48,9 +48,9 @@ export async function POST(req: Request, context: RouteContext): Promise<Respons
   if (!session?.user?.id) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  const userId = asUserId(session.user.id);
+  const userId = session.user.id;
   const { projectSlug, conversationId: rawConversationId } = await context.params;
-  const conversationId = asConversationId(rawConversationId);
+  const conversationId = rawConversationId as ConversationId;
 
   // Project membership: shares `projectForUser` with the tRPC
   // `enforceProjectMembership` middleware so both surfaces use the same

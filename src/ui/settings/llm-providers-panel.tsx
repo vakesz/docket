@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { LLM_KIND_META, LLM_KINDS } from "@/agent/llm/types";
-import { trpc } from "@/lib/trpc-client";
+import { type RouterOutputs, trpc } from "@/lib/trpc-client";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/primitives/alert";
 import { Badge } from "@/ui/primitives/badge";
 import { Separator } from "@/ui/primitives/separator";
@@ -10,18 +10,7 @@ import { LlmProviderForm } from "@/ui/settings/llm-provider-form";
 
 type Role = "chat" | "guardrail";
 
-type Row = {
-  id: string;
-  kind: string;
-  role: string;
-  label: string;
-  model: string;
-  baseUrl: string;
-  inputPriceCentsPerMtok: number | null;
-  outputPriceCentsPerMtok: number | null;
-  isDefault: boolean;
-  enabled: boolean;
-};
+type Row = RouterOutputs["llmProviders"]["list"][number];
 
 /**
  * LLM-providers section, mounted inside the unified settings page. Reads
@@ -44,7 +33,7 @@ export function LlmProvidersPanel() {
     return <p className="text-destructive text-sm">{list.error.message}</p>;
   }
 
-  const rows = list.data as Row[];
+  const rows = list.data;
   const chatRows = rows.filter((r) => r.role === "chat");
   const guardrailRows = rows.filter((r) => r.role === "guardrail");
 

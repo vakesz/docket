@@ -42,10 +42,8 @@ export function ViewBar({ projectSlug }: Props) {
   const utils = trpc.useUtils();
 
   const activeViewId = params.get("viewId") ?? "";
-  const bucketParam = params.get("bucket") ?? "open";
-  const bucket: StateBucket = (BUCKETS as readonly string[]).includes(bucketParam)
-    ? (bucketParam as StateBucket)
-    : "open";
+  const bucketParam = params.get("bucket");
+  const bucket: StateBucket = BUCKETS.find((b) => b === bucketParam) ?? "open";
 
   const views = trpc.views.list.useQuery({ projectSlug });
   const create = trpc.views.create.useMutation({

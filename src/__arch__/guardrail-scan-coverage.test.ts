@@ -20,7 +20,7 @@ import { describe, expect, it } from "vitest";
 import { mcpTools } from "@/agent/mcp/tools";
 import { buildToolRegistry } from "@/agent/tools/registry";
 import type { GuardrailScan, ToolContext } from "@/agent/tools/types";
-import { asProjectId, asUserId } from "@/core/types";
+import type { ProjectId, UserId } from "@/core/types";
 
 type ScanMode = GuardrailScan["mode"];
 
@@ -74,8 +74,8 @@ const fakeCtx: ToolContext = {
       settings: { findFirst: async () => undefined },
     },
   } as unknown as ToolContext["db"],
-  projectId: asProjectId("proj_arch_test"),
-  userId: asUserId("user_arch_test"),
+  projectId: "proj_arch_test" as ProjectId,
+  userId: "user_arch_test" as UserId,
   itemId: null,
   providerItemId: null,
 };

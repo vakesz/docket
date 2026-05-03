@@ -149,7 +149,10 @@ export function CreateItemForm({ projectSlug }: { projectSlug: string }) {
                   </Label>
                   <Select
                     value={itemKind}
-                    onValueChange={(v) => setItemKind(v as ItemKind)}
+                    onValueChange={(v) => {
+                      const next = creatableKinds.find((k) => k === v);
+                      if (next) setItemKind(next);
+                    }}
                     disabled={propose.isPending}
                   >
                     <SelectTrigger id={kindId} className="w-full">

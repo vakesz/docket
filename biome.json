@@ -15,6 +15,7 @@
       "!**/build",
       "!**/coverage",
       "!**/drizzle/**/*.sql",
+      "!**/drizzle/meta",
       "!src/app/globals.css"
     ]
   },

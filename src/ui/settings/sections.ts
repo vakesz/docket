@@ -248,9 +248,8 @@ export function readPersistedSection(): SectionKey | null {
   if (typeof window === "undefined") return null;
   try {
     const v = window.localStorage.getItem(SECTION_STORAGE_KEY);
-    if (v && SECTIONS.some((s) => s.key === v)) {
-      return v as SectionKey;
-    }
+    const match = SECTIONS.find((s) => s.key === v);
+    if (match) return match.key;
   } catch {
     // ignore
   }

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { asProjectId, asUserId } from "@/core/types";
+import type { ProjectId, UserId } from "@/core/types";
 import type { Project } from "@/db/schema/types";
 
 const state = vi.hoisted(() => ({
@@ -68,8 +68,8 @@ const sampleProject: Pick<
   Project,
   "id" | "ownerUserId" | "providerKind" | "providerScope" | "name"
 > = {
-  id: asProjectId("p1"),
-  ownerUserId: asUserId("u1"),
+  id: "p1" as ProjectId,
+  ownerUserId: "u1" as UserId,
   providerKind: "github",
   providerScope: {},
   name: "Sample",
@@ -139,8 +139,7 @@ describe("sync scheduler", () => {
     // Simulate a module re-evaluation: pre-populate the stash, then call
     // ensureSchedulerRunning. It should observe `started=true` and return
     // without re-arming the supervisor.
-    const g = globalThis as unknown as { __docketSyncScheduler: unknown };
-    g.__docketSyncScheduler = {
+    globalThis.__docketSyncScheduler = {
       started: true,
       inFlight: new Set<string>(),
       lastFiredAt: new Map<string, number>(),

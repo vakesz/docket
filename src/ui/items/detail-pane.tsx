@@ -1,6 +1,11 @@
 import { Clock, ExternalLink, GitBranch, Tag, User, UserX } from "lucide-react";
 import Link from "next/link";
-import { canonicalIntentsFor, isItemKind, isItemState, type TransitionIntent } from "@/core/types";
+import {
+  canonicalIntentsFor,
+  type ItemKind,
+  type ItemState,
+  type TransitionIntent,
+} from "@/core/types";
 import { formatKind, formatRelative } from "@/lib/format";
 import { getProviderSpec } from "@/server/provider-registry";
 import { AssigneeEditor } from "@/ui/items/assignee-editor";
@@ -34,9 +39,9 @@ type DetailItem = {
   id: string;
   providerItemId: string;
   itemNumber: string;
-  kind: string;
+  kind: ItemKind;
   title: string;
-  state: string;
+  state: ItemState;
   assignee: string | null;
   author: string | null;
   parentId: string | null;
@@ -87,10 +92,9 @@ export function DetailPane({
     identity && spec?.profileUrl ? spec.profileUrl(identity) : null;
   const authorProfileUrl = profileFor(item.author);
   const assigneeProfileUrl = profileFor(item.assignee);
-  const transitionIntents = ((): readonly TransitionIntent[] => {
-    if (!isItemState(item.state)) return [];
-    return spec ? spec.availableIntents(item.state) : canonicalIntentsFor(item.state);
-  })();
+  const transitionIntents: readonly TransitionIntent[] = spec
+    ? spec.availableIntents(item.state)
+    : canonicalIntentsFor(item.state);
   return (
     <ScrollArea className="h-full bg-background">
       <RecentRecorder projectSlug={projectSlug} itemNumber={item.itemNumber} />
@@ -112,8 +116,8 @@ export function DetailPane({
           </div>
           <div className="flex items-center gap-2">
             <SuggestActionButton
-              kind={isItemKind(item.kind) ? item.kind : null}
-              state={isItemState(item.state) ? item.state : null}
+              kind={item.kind}
+              state={item.state}
               title={item.title}
               body={item.description}
               commentCount={item.comments.length}

@@ -10,7 +10,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { asUserId } from "@/core/types";
+import type { UserId } from "@/core/types";
 import { db } from "@/db";
 import { auth } from "@/server/auth";
 import { logger } from "@/server/logger";
@@ -64,7 +64,7 @@ export async function GET(req: Request): Promise<Response> {
   try {
     const { projectSlug, mcpServerId } = await completeMcpOauth({
       db,
-      sessionUserId: asUserId(userId),
+      sessionUserId: userId as UserId,
       nonce: state,
       code,
     });

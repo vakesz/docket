@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { parseStringMap } from "@/lib/json";
 import { trpc } from "@/lib/trpc-client";
 import { Alert, AlertDescription } from "@/ui/primitives/alert";
 import { Badge } from "@/ui/primitives/badge";
@@ -52,17 +53,12 @@ export function McpPane({ projectSlug }: { projectSlug: string }) {
     let headersJson: Record<string, string> = {};
     if (draftHeaders.trim()) {
       try {
-        const parsed = JSON.parse(draftHeaders);
-        if (
-          typeof parsed !== "object" ||
-          parsed === null ||
-          Array.isArray(parsed) ||
-          Object.values(parsed).some((v) => typeof v !== "string")
-        ) {
+        const stringMap = parseStringMap(JSON.parse(draftHeaders));
+        if (!stringMap) {
           setHeadersError("Headers must be a JSON object of string → string.");
           return;
         }
-        headersJson = parsed as Record<string, string>;
+        headersJson = stringMap;
       } catch (err) {
         setHeadersError(`Invalid JSON: ${err instanceof Error ? err.message : String(err)}`);
         return;

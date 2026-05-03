@@ -11,25 +11,14 @@ import { z } from "zod";
 import { selectGuardrailFor } from "@/agent/guardrail/registry";
 import type { GuardrailUsage } from "@/agent/guardrail/types";
 import { extractUntrustedFields } from "@/agent/guardrail/types";
-import type { LlmAdapter, LlmEvent, LlmMessage, LlmToolCall } from "@/agent/llm/types";
+import type { LlmAdapter, LlmMessage, LlmToolCall } from "@/agent/llm/types";
 import { capCodeSnippets } from "@/agent/post/code-snippet-cap";
 import { loadCodeSnippetCapOptions } from "@/agent/post/load-options";
 import { buildSystemPrefix, NO_PROMPT_CAPABILITIES, type PromptCapabilities } from "@/agent/prompt";
 import { loadPrompts } from "@/agent/prompt-loader";
 import { buildToolRegistry } from "@/agent/tools/registry";
 import type { AgentTool, ToolContext, ToolResult } from "@/agent/tools/types";
-import {
-  asMessageId,
-  asProjectId,
-  asProviderItemId,
-  assertItemKind,
-  type ConversationId,
-  type ItemKind,
-  type MessageId,
-  type ProjectId,
-  type ProviderItemId,
-  type UserId,
-} from "@/core/types";
+import type { ConversationId, ItemKind, MessageId, ProviderItemId, UserId } from "@/core/types";
 import type { Db } from "@/db";
 import { conversations, items, messages } from "@/db/schema";
 import type { Conversation, Message } from "@/db/schema/types";
@@ -165,7 +154,7 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
     yield { kind: "error", message: `conversation '${conversationId}' not found` };
     return;
   }
-  const projectId: ProjectId = asProjectId(conv.projectId);
+  const projectId = conv.projectId;
 
   const baseCtx = {
     turnId,
@@ -226,7 +215,7 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
   const inputDecision = await guardrail.checkInput(userMessage, signal);
   accumulateGuardrailUsage(guardrailUsage, inputDecision.usage);
   if (inputDecision.action !== "allow") {
-    await markMessageFlagged(db, asMessageId(userMessageRow.id), inputDecision.reason);
+    await markMessageFlagged(db, userMessageRow.id, inputDecision.reason);
     yield {
       kind: inputDecision.action === "block" ? "guardrail_blocked" : "guardrail_flagged",
       stage: "input",
@@ -349,7 +338,7 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
     });
 
     let sawDone = false;
-    for await (const event of stream as AsyncIterable<LlmEvent>) {
+    for await (const event of stream) {
       switch (event.kind) {
         case "text_delta":
           assistantBuffer += event.delta;
@@ -594,7 +583,7 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
         toolName: formatted.toolName,
       });
       if (toolBlockReason !== null) {
-        await markMessageFlagged(db, asMessageId(toolRow.id), toolBlockReason);
+        await markMessageFlagged(db, toolRow.id, toolBlockReason);
         // Surface the block to the user as a final assistant turn so the
         // chat thread shows *why* the agent stopped instead of trailing
         // off mid-thought. Pinned at the end of this round; the outer
@@ -667,7 +656,7 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
     const outputDecision = await guardrail.checkOutput(assistantBuffer, signal);
     accumulateGuardrailUsage(guardrailUsage, outputDecision.usage);
     if (outputDecision.action !== "allow") {
-      await markMessageFlagged(db, asMessageId(finalAssistantRow.id), outputDecision.reason);
+      await markMessageFlagged(db, finalAssistantRow.id, outputDecision.reason);
       yield {
         kind: "guardrail_flagged",
         stage: "output",
@@ -885,7 +874,7 @@ async function loadItemContext(db: Database, conv: Conversation): Promise<ItemCo
   ];
   return {
     summary: lines.join("\n"),
-    kind: assertItemKind(item.kind, `Item ${item.providerItemId}.kind`),
-    providerItemId: asProviderItemId(item.providerItemId),
+    kind: item.kind,
+    providerItemId: item.providerItemId,
   };
 }

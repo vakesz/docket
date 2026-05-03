@@ -20,6 +20,7 @@ import { callMcpTool, listMcpTools, type McpServer } from "@/agent/mcp/client";
 import type { AgentTool, ToolContext } from "@/agent/tools/types";
 import { fail, ok } from "@/agent/tools/types";
 import { mcpServerConfigs } from "@/db/schema";
+import { asPlainObject } from "@/lib/json";
 import { errFields } from "@/server/log-fields";
 import { logger } from "@/server/logger";
 import { decodeHeaders } from "@/server/mcp/headers-codec";
@@ -67,7 +68,7 @@ function adaptTool(
     guardrailScan: { mode: "full" },
     handler: async (raw) => {
       try {
-        const args = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+        const args = asPlainObject(raw);
         const result = await callMcpTool(server, schema.name, args);
         return result.ok ? ok({ text: result.text }) : fail(result.text || "MCP tool failed");
       } catch (err) {

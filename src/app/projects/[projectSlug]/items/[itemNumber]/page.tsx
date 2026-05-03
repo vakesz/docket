@@ -3,7 +3,6 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { Session } from "next-auth";
 import { cache } from "react";
-import { asProjectId, asUserId } from "@/core/types";
 import { db } from "@/db";
 import { resolveEffectiveStaleThreshold } from "@/lib/staleness";
 import { auth } from "@/server/auth";
@@ -68,6 +67,10 @@ export default async function ItemDetailPage({
   // auth() doesn't depend on the item or project fetch, so include it in
   // the same fan-out. The session result is awaited up-front but its
   // round-trip overlaps with the tRPC reads instead of running after.
+  // The cast is load-bearing: NextAuth's `auth` is a multi-overload export
+  // (server-action / route-handler / middleware) and the no-arg call resolves
+  // to the wrong arm in `Promise.all`. The same pattern works fine when
+  // awaited directly, so the cast is the minimum bridge here.
   let item: Awaited<ReturnType<typeof loadItem>>;
   let project: Awaited<ReturnType<typeof loadProject>>;
   let session: Session | null;
@@ -75,7 +78,7 @@ export default async function ItemDetailPage({
     [item, project, session] = await Promise.all([
       loadItem(projectSlug, itemNumber),
       loadProject(projectSlug),
-      auth() as Promise<Session | null>,
+      auth(),
     ]);
   } catch (err) {
     if (err instanceof TRPCError && (err.code === "FORBIDDEN" || err.code === "NOT_FOUND")) {
@@ -85,18 +88,13 @@ export default async function ItemDetailPage({
   }
 
   const userId = session?.user?.id ?? null;
-  const brandedUserId = userId ? asUserId(userId) : null;
   const [projectStale, userStale, showHeaderReactions, showCommentReactions] = await Promise.all([
-    loadProjectSetting(db, asProjectId(project.id), "items.stale-after-days"),
-    brandedUserId
-      ? loadUserSetting(db, brandedUserId, "items.stale-after-days.user")
+    loadProjectSetting(db, project.id, "items.stale-after-days"),
+    userId
+      ? loadUserSetting(db, userId, "items.stale-after-days.user")
       : Promise.resolve<number>(-1),
-    brandedUserId
-      ? loadUserSetting(db, brandedUserId, "items.show-reactions-header")
-      : Promise.resolve(true),
-    brandedUserId
-      ? loadUserSetting(db, brandedUserId, "items.show-reactions-comments")
-      : Promise.resolve(true),
+    userId ? loadUserSetting(db, userId, "items.show-reactions-header") : Promise.resolve(true),
+    userId ? loadUserSetting(db, userId, "items.show-reactions-comments") : Promise.resolve(true),
   ]);
   const staleThresholdDays = resolveEffectiveStaleThreshold(userStale, projectStale);
 

@@ -55,11 +55,17 @@ export type Db = PostgresJsDatabase<typeof schema>;
 // caller-owned transaction take `tx: DbTx` rather than `db: Db`.
 export type DbTx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
-const globalForDb = globalThis as unknown as { __docketDb?: Db };
+// Stash on globalThis so Next.js HMR re-imports don't leak duplicate clients
+// — `globalThis` survives module re-evaluation, the module-scoped variable
+// does not. Declared via `declare global` so the access is fully typed
+// without an `as unknown as` escape.
+declare global {
+  var __docketDb: Db | undefined;
+}
 
 function getClient(): Db {
-  globalForDb.__docketDb ??= makeClient();
-  return globalForDb.__docketDb;
+  globalThis.__docketDb ??= makeClient();
+  return globalThis.__docketDb;
 }
 
 /**

@@ -16,7 +16,7 @@
 import { describe, expect, it } from "vitest";
 import { buildToolRegistry, TOOL_ORDER } from "@/agent/tools/registry";
 import type { ToolContext } from "@/agent/tools/types";
-import { asProjectId, asUserId } from "@/core/types";
+import type { ProjectId, UserId } from "@/core/types";
 
 // Tool factories don't dispatch on db at construction time — they only
 // call db inside handlers. A typed-null keeps the test pure for the core
@@ -32,8 +32,8 @@ const fakeCtx: ToolContext = {
       settings: { findFirst: async () => undefined },
     },
   } as unknown as ToolContext["db"],
-  projectId: asProjectId("proj_arch_test"),
-  userId: asUserId("user_arch_test"),
+  projectId: "proj_arch_test" as ProjectId,
+  userId: "user_arch_test" as UserId,
   itemId: null,
   providerItemId: null,
 };

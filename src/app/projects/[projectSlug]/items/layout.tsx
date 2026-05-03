@@ -1,6 +1,5 @@
 import { notFound, redirect } from "next/navigation";
 import type { ReactNode } from "react";
-import { asUserId } from "@/core/types";
 import { db } from "@/db";
 import { resolveEffectiveStaleThreshold } from "@/lib/staleness";
 import { auth } from "@/server/auth";
@@ -30,7 +29,7 @@ export default async function ItemsLayout({
   const { projectSlug } = await params;
   const session = await auth();
   if (!session?.user?.id) redirect("/");
-  const userId = asUserId(session.user.id);
+  const userId = session.user.id;
 
   const project = await projectForUser(db, projectSlug, userId);
   if (!project) notFound();

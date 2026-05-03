@@ -9,19 +9,17 @@
 import "server-only";
 import { TRPCError } from "@trpc/server";
 import { and, eq, lt } from "drizzle-orm";
-import {
-  asProposalId,
-  asProviderItemId,
-  type Comment as CanonicalComment,
-  type Item as CanonicalItem,
-  type ItemId,
-  type ProjectId,
-  type ProposalId,
-  type Reactions,
-  type UserId,
+import type {
+  Comment as CanonicalComment,
+  Item as CanonicalItem,
+  ItemId,
+  ProjectId,
+  ProposalId,
+  ProviderItemId,
+  Reactions,
+  UserId,
 } from "@/core/types";
 import type { Db } from "@/db";
-import type { MemorySource } from "@/db/schema";
 import { audits, comments, items, memoryEntries, projects, proposals } from "@/db/schema";
 import type { Proposal as ProposalRow } from "@/db/schema/types";
 import { assertFound } from "@/server/errors";
@@ -42,7 +40,7 @@ type ConfirmPhase = "load" | "provider_build" | "provider_call" | "finalize";
 type ReactionUpdate =
   | {
       kind: "item";
-      providerItemId: string;
+      providerItemId: ProviderItemId;
       reactions: Reactions | null;
     }
   | {
@@ -209,7 +207,7 @@ export async function confirmProposal(
             const cachedItem = await ctx.db.query.items.findFirst({
               where: and(
                 eq(items.projectId, ctx.projectId),
-                eq(items.providerItemId, asProviderItemId(proposal.item.id)),
+                eq(items.providerItemId, proposal.item.id),
               ),
               columns: { id: true },
             });
@@ -246,7 +244,7 @@ export async function confirmProposal(
         const cachedItem = await ctx.db.query.items.findFirst({
           where: and(
             eq(items.projectId, ctx.projectId),
-            eq(items.providerItemId, asProviderItemId(proposal.item.id)),
+            eq(items.providerItemId, proposal.item.id),
           ),
           columns: { id: true },
         });
@@ -284,7 +282,7 @@ export async function confirmProposal(
           const cachedItem = await ctx.db.query.items.findFirst({
             where: and(
               eq(items.projectId, ctx.projectId),
-              eq(items.providerItemId, asProviderItemId(proposal.item.id)),
+              eq(items.providerItemId, proposal.item.id),
             ),
             columns: { id: true },
           });
@@ -353,7 +351,7 @@ export async function confirmProposal(
           .where(
             and(
               eq(items.projectId, ctx.projectId),
-              eq(items.providerItemId, asProviderItemId(reactionUpdate.providerItemId)),
+              eq(items.providerItemId, reactionUpdate.providerItemId),
             ),
           );
       } else if (reactionUpdate?.kind === "comment") {
@@ -375,7 +373,7 @@ export async function confirmProposal(
               title: proposal.title,
               body: proposal.body,
               tags: [...proposal.tags],
-              source: proposal.source as MemorySource,
+              source: proposal.source,
             })
             .where(eq(memoryEntries.id, proposal.memoryId));
         } else {
@@ -384,7 +382,7 @@ export async function confirmProposal(
             title: proposal.title,
             body: proposal.body,
             tags: [...proposal.tags],
-            source: proposal.source as MemorySource,
+            source: proposal.source,
           });
         }
       } else if (proposal.kind === "memory_delete") {
@@ -402,7 +400,7 @@ export async function confirmProposal(
         .set({
           executedAt: new Date(),
           ...(commentId && proposal.kind === "comment_add"
-            ? { providerItemId: asProviderItemId(proposal.item.id) }
+            ? { providerItemId: proposal.item.id }
             : {}),
         })
         .where(eq(proposals.id, row.id))
@@ -412,7 +410,7 @@ export async function confirmProposal(
         projectId: ctx.projectId,
         userId: ctx.userId,
         action: okAction,
-        proposalId: asProposalId(row.id),
+        proposalId: row.id,
         payload: {
           kind: row.kind,
           providerItemId: row.providerItemId,
@@ -458,7 +456,7 @@ export async function confirmProposal(
           .where(eq(proposals.id, row.id))
           .returning();
     if (!failed) throw new Error("confirmProposal: failure update returned no row");
-    await recordFailureAudit(ctx, failAction, asProposalId(row.id), {
+    await recordFailureAudit(ctx, failAction, row.id, {
       kind: row.kind,
       providerItemId: row.providerItemId,
       error: message,
@@ -521,7 +519,7 @@ export async function maybeAutoAccept(
     );
     if (!(extras as readonly string[]).includes(row.kind)) return row;
   }
-  return confirmProposal(ctx, asProposalId(row.id), { source: "auto" });
+  return confirmProposal(ctx, row.id, { source: "auto" });
 }
 
 export async function rejectProposal(
@@ -541,7 +539,7 @@ export async function rejectProposal(
       projectId: ctx.projectId,
       userId: ctx.userId,
       action: "proposal.reject",
-      proposalId: asProposalId(row.id),
+      proposalId: row.id,
       payload: {
         kind: row.kind,
         providerItemId: row.providerItemId,

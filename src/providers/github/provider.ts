@@ -20,6 +20,7 @@ import type {
   Item,
   ItemKind,
   PRMatch,
+  ProviderItemId,
   PullRequestDetail,
   PullRequestDiff,
   Reactions,
@@ -38,7 +39,11 @@ import {
   mergeMatches,
   titleMentionsIssue,
 } from "@/providers/github/pr-link-heuristics";
-import { GITHUB_REACTION_KINDS, type GithubReactionKind } from "@/providers/github/reactions";
+import {
+  GITHUB_REACTION_KINDS,
+  type GithubReactionKind,
+  isGithubReactionKind,
+} from "@/providers/github/reactions";
 import {
   type GithubIssueState,
   type GithubStateReason,
@@ -71,8 +76,8 @@ function readConfig(raw: Record<string, unknown>): Config {
   return { owner, repo, accessToken, ...(baseUrl !== undefined ? { baseUrl } : {}) };
 }
 
-function makeProviderItemId(owner: string, repo: string, number: number): string {
-  return `${owner}/${repo}#${number}`;
+function makeProviderItemId(owner: string, repo: string, number: number): ProviderItemId {
+  return `${owner}/${repo}#${number}` as ProviderItemId;
 }
 
 function parseProviderItemId(id: string): { owner: string; repo: string; number: number } {
@@ -163,9 +168,7 @@ function reactionsOf(raw: GithubReactionsSummary | undefined): Reactions | null 
 }
 
 function assertGithubReaction(reaction: string): GithubReactionKind {
-  if ((GITHUB_REACTION_KINDS as readonly string[]).includes(reaction)) {
-    return reaction as GithubReactionKind;
-  }
+  if (isGithubReactionKind(reaction)) return reaction;
   throw new ProviderError(
     `GitHub does not support reaction kind '${reaction}'. Supported: ${GITHUB_REACTION_KINDS.join(", ")}`,
   );
@@ -252,7 +255,7 @@ export class GitHubProvider implements WorkItemProvider {
       url: issue.html_url ?? null,
       repositoryUrl: `https://github.com/${this.config.owner}/${this.config.repo}`,
       attachments: [],
-      providerRaw: { ...(issue as Record<string, unknown>) },
+      providerRaw: { ...issue },
       providerKey: this.providerKey,
     };
   }

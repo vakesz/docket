@@ -19,13 +19,7 @@ import "server-only";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
-import {
-  asConversationId,
-  asItemId,
-  type ConversationId,
-  type ProjectId,
-  type UserId,
-} from "@/core/types";
+import type { ConversationId, ItemId, ProjectId, UserId } from "@/core/types";
 import type { Db } from "@/db";
 import { conversations, llmProviders, messages } from "@/db/schema";
 import {
@@ -44,7 +38,10 @@ import {
 } from "@/server/trpc";
 
 const ConversationRef = projectSlugSchema.extend({
-  conversationId: z.string().min(1).transform(asConversationId),
+  conversationId: z
+    .string()
+    .min(1)
+    .transform((v) => v as ConversationId),
 });
 
 const ListInput = projectSlugSchema.extend({
@@ -52,7 +49,7 @@ const ListInput = projectSlugSchema.extend({
     .string()
     .nullable()
     .default(null)
-    .transform((v) => (v === null ? null : asItemId(v))),
+    .transform((v) => (v === null ? null : (v as ItemId))),
   limit: z.number().int().min(1).max(100).default(50),
   archived: z.boolean().default(false),
 });
@@ -62,7 +59,7 @@ const CreateInput = projectSlugSchema.extend({
     .string()
     .nullable()
     .default(null)
-    .transform((v) => (v === null ? null : asItemId(v))),
+    .transform((v) => (v === null ? null : (v as ItemId))),
 });
 
 const SetLlmOverrideInput = ConversationRef.extend({

@@ -9,6 +9,7 @@
  */
 
 import "server-only";
+import { asPlainObject, parseStringMap } from "@/lib/json";
 import { decryptSecret, encryptSecret } from "@/server/secrets/encryption";
 
 const ENC_KEY = "_enc";
@@ -29,20 +30,10 @@ export function encodeHeaders(plain: Record<string, string>): EncodedHeaders {
  *   - `{}` / null / undefined  — empty
  */
 export function decodeHeaders(stored: unknown): Record<string, string> {
-  if (!stored || typeof stored !== "object" || Array.isArray(stored)) return {};
-  const enc = (stored as Record<string, unknown>)[ENC_KEY];
+  const enc = asPlainObject(stored)[ENC_KEY];
   if (typeof enc !== "string") return {};
   try {
-    const parsed = JSON.parse(decryptSecret(enc));
-    if (
-      parsed &&
-      typeof parsed === "object" &&
-      !Array.isArray(parsed) &&
-      Object.values(parsed).every((v) => typeof v === "string")
-    ) {
-      return parsed as Record<string, string>;
-    }
-    return {};
+    return parseStringMap(JSON.parse(decryptSecret(enc))) ?? {};
   } catch {
     return {};
   }

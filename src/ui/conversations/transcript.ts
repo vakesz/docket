@@ -4,6 +4,7 @@
  * surrounding "use client" islands don't grow when these are imported.
  */
 
+import { asPlainObject } from "@/lib/json";
 import { extractSeedKind, type SeedKind } from "@/ui/items/suggest-seeds";
 
 export type PersistedMessage = {
@@ -57,16 +58,11 @@ export function parseAssistantToolCalls(raw: unknown): AssistantToolCall[] {
   if (!Array.isArray(raw)) return [];
   const out: AssistantToolCall[] = [];
   for (const entry of raw) {
-    if (!entry || typeof entry !== "object") continue;
-    const e = entry as Record<string, unknown>;
+    const e = asPlainObject(entry);
     const id = typeof e["id"] === "string" ? e["id"] : null;
     const name = typeof e["name"] === "string" ? e["name"] : null;
-    const args =
-      e["arguments"] && typeof e["arguments"] === "object"
-        ? (e["arguments"] as Record<string, unknown>)
-        : {};
     if (!id || !name) continue;
-    out.push({ id, name, arguments: args });
+    out.push({ id, name, arguments: asPlainObject(e["arguments"]) });
   }
   return out;
 }

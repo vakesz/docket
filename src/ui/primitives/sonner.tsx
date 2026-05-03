@@ -10,9 +10,12 @@ import {
 import { useTheme } from "next-themes";
 import { Toaster as Sonner, type ToasterProps } from "sonner";
 
+type SonnerTheme = NonNullable<ToasterProps["theme"]>;
+const SONNER_THEMES: readonly SonnerTheme[] = ["light", "dark", "system"];
+
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme();
-  const resolvedTheme = (theme ?? "system") as NonNullable<ToasterProps["theme"]>;
+  const { theme } = useTheme();
+  const resolvedTheme: SonnerTheme = SONNER_THEMES.find((t) => t === theme) ?? "system";
 
   return (
     <Sonner

@@ -17,6 +17,7 @@ import type {
   LlmToolCall,
   LlmToolResult,
 } from "@/agent/llm/types";
+import { asPlainObject } from "@/lib/json";
 import { logger } from "@/server/logger";
 
 const DEFAULT_MODEL = "gpt-5";
@@ -75,7 +76,7 @@ export class OpenAiAdapter implements LlmAdapter {
       type: "function" as const,
       name: t.name,
       description: t.description,
-      parameters: t.parameters as Record<string, unknown>,
+      parameters: t.parameters,
       strict: false,
     }));
 
@@ -168,7 +169,7 @@ export class OpenAiAdapter implements LlmAdapter {
           const callId = (evt["call_id"] as string | undefined) ?? itemId;
           let parsed: Record<string, unknown> = {};
           try {
-            parsed = slot.argsBuf ? (JSON.parse(slot.argsBuf) as Record<string, unknown>) : {};
+            parsed = slot.argsBuf ? asPlainObject(JSON.parse(slot.argsBuf)) : {};
           } catch {
             parsed = { __unparsable_arguments__: slot.argsBuf };
           }

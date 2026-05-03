@@ -13,6 +13,7 @@
  */
 
 import type { LabelTemplate, ProviderItemNumberCodec, ProviderSpec } from "@/core/provider";
+import type { ProviderItemId } from "@/core/types";
 import { githubAvatarFetcher } from "@/providers/github/avatar";
 import { GitHubLogo } from "@/providers/github/logo";
 import { githubProfileUrl } from "@/providers/github/profile";
@@ -31,7 +32,7 @@ const itemNumberCodec: ProviderItemNumberCodec = {
     const owner = typeof scope["owner"] === "string" ? scope["owner"].trim() : "";
     const repo = typeof scope["repo"] === "string" ? scope["repo"].trim() : "";
     if (!owner || !repo) return null;
-    return `${owner}/${repo}#${urlNumber}`;
+    return `${owner}/${repo}#${urlNumber}` as ProviderItemId;
   },
   formatItemNumber: (providerItemId) => {
     const hash = providerItemId.lastIndexOf("#");

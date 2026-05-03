@@ -9,7 +9,7 @@ import type {
   ProviderItemNumberCodec,
   ProviderSpec,
 } from "@/core/provider";
-import type { Item } from "@/core/types";
+import type { Item, ProviderItemId } from "@/core/types";
 import { asPlainObject } from "@/lib/json";
 import { azureDevOpsAvatarFetcher } from "@/providers/azure-devops/avatar";
 import { AzureDevOpsLogo } from "@/providers/azure-devops/logo";
@@ -21,7 +21,8 @@ import { availableIntentsForState, STATE_ENCODING_TAGS } from "@/providers/azure
  * URL slot carries the same digits the provider stores in `providerItemId`.
  */
 const itemNumberCodec: ProviderItemNumberCodec = {
-  parseItemNumber: (_scope, urlNumber) => (/^\d+$/.test(urlNumber) ? urlNumber : null),
+  parseItemNumber: (_scope, urlNumber) =>
+    /^\d+$/.test(urlNumber) ? (urlNumber as ProviderItemId) : null,
   formatItemNumber: (providerItemId) => providerItemId,
 };
 

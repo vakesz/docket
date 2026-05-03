@@ -1,6 +1,5 @@
 import { and, desc, eq, exists, isNull, or } from "drizzle-orm";
 import { redirect } from "next/navigation";
-import { asUserId } from "@/core/types";
 import { db } from "@/db";
 import { projectMemberships, projects, users } from "@/db/schema";
 import { auth } from "@/server/auth";
@@ -34,7 +33,7 @@ export default async function Home() {
   if (!session.user.id) {
     redirect("/api/auth/signin");
   }
-  const userId = asUserId(session.user.id);
+  const userId = session.user.id;
   const me = await db.query.users.findFirst({
     where: eq(users.id, userId),
     columns: { defaultProjectId: true },

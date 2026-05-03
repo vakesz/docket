@@ -5,14 +5,14 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-6-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Node](https://img.shields.io/badge/Node-22-339933?logo=node.js&logoColor=white)](https://nodejs.org)
 [![pnpm](https://img.shields.io/badge/pnpm-9-f69220?logo=pnpm&logoColor=white)](https://pnpm.io)
-[![Prisma](https://img.shields.io/badge/Prisma-7-2d3748?logo=prisma)](https://www.prisma.io)
+[![Drizzle](https://img.shields.io/badge/Drizzle-ORM-c5f74f?logo=drizzle&logoColor=black)](https://orm.drizzle.team)
 [![Self-hostable](https://img.shields.io/badge/self--hostable-Docker-2496ed?logo=docker&logoColor=white)](https://docs.docker.com)
 
 > Browser-first work-item triage — Postgres-backed, multi-provider, with an AI assistant that asks before it writes.
 
 One web app over your GitHub Issues and Azure DevOps work items. The backlog, the selected item, and a chat panel live on the same screen. Every write — UI button, agent tool, raw API — flows through a **proposal → diff → confirm** gate, so the assistant can never quietly transition a ticket, edit a description, or post a comment behind your back.
 
-**Stack:** Next.js 16 App Router · tRPC v11 · Prisma 7 · Postgres 16 · NextAuth v5 · Node 22 (pnpm 9)
+**Stack:** Next.js 16 App Router · tRPC v11 · Drizzle ORM · Postgres 16 · NextAuth v5 · Node 22 (pnpm 9)
 
 ---
 
@@ -60,21 +60,23 @@ corepack enable          # one-time, activates the pinned pnpm version
 pnpm install
 cp .env.example .env.local
 $EDITOR .env.local       # DATABASE_URL required; DEV_* seeds optional
-pnpm dev                 # prisma db push + seed + next dev (Turbopack)
+pnpm dev                 # drizzle migrate + seed + next dev (Turbopack)
 ```
 
-Leave `DEV_*` empty and you'll land on the setup wizard at `http://localhost:3000`. If you don't have a local Postgres, `docker compose up -d db` starts just the bundled DB service.
+Leave `DEV_*` empty and you'll land on the setup wizard at `http://localhost:3000`. If you don't have a local Postgres, `pnpm db:up` starts just the bundled DB service.
 
 ```bash
+pnpm db:up               # start bundled Postgres (idempotent; skip if using a remote DB)
+pnpm db:down             # stop the bundled Postgres (data persists)
 pnpm dev                 # next dev (Turbopack) + auto-seed
 pnpm build && pnpm start # production build
 pnpm check               # biome + tsc + vitest
 pnpm test                # vitest
 pnpm test:watch          # vitest watch
-pnpm exec prisma migrate dev   # schema migration
-pnpm exec prisma db push       # push schema without a migration file
-pnpm exec prisma generate      # regenerate client into src/db/generated/
-pnpm exec prisma studio        # browse the DB
+pnpm db:generate         # diff schema vs migrations, emit a new SQL file in drizzle/
+pnpm db:migrate          # apply pending migrations against $DATABASE_URL
+pnpm db:check            # validate the migration set
+pnpm db:studio           # browse the DB
 ```
 
 ---
@@ -93,6 +95,7 @@ Adding a new provider (Jira, Linear, …) is an isolated `src/providers/<name>/`
 ## Features
 
 ### Workspace
+
 - **Three-pane shell** — backlog / item detail / chat on one screen. Filter by state, assignee, and provider scope axes; free-text search across cached items.
 - **Saved views** — named filters per user, one optional default per project.
 - **Watchlist & Recents** — pin items that survive cache scope changes; recently viewed items surface on the home screen and in the command palette.
@@ -101,6 +104,7 @@ Adding a new provider (Jira, Linear, …) is an isolated `src/providers/<name>/`
 - **Triage home** — landing screen surfaces pending proposals and recently viewed items.
 
 ### Chat & Agent
+
 - **Streaming chat** over SSE, anchored to an item or project-wide. Stop button, per-conversation LLM override, auto-compaction, and a "Suggest next action" one-click prompt.
 - **Read-only tools** — item/PR/commit/CI reads, memory and source reads, `ask_user_question`, `web_fetch` (HTML auto-cleaned to Markdown; `raw: true` to opt out), `search_items`, `list_audit_log`, `get_pull_request_diff`, `search_code`, `search_pull_requests`, plus project-scoped MCP tools.
 - **Mutating tools** — `propose_transition`, `propose_description_patch`, `propose_comment`, `propose_new_item`, `propose_item_tags`, `propose_memory_write`, `propose_memory_delete`. All stage proposals; none execute without human confirmation.
@@ -110,13 +114,15 @@ Adding a new provider (Jira, Linear, …) is an isolated `src/providers/<name>/`
 - **Guardrail** — pluggable safety pipeline (`noop` / `pattern` / `llm-judge` / `composite`). Toggles for prompt-injection, off-topic, scope, and output checks.
 
 ### Proposals & Mutations
+
 - **Proposal-first** — every write stages a `Proposal`, renders a side-by-side diff, and requires an explicit confirm. No fast lane for any origin (UI, agent, or HTTP).
-- **Auto-accept floor** — UI-origin `comment_add` and `reaction_toggle` always auto-confirm (no policy gate); per-project `proposals.auto-accept-extra-kinds` opts in additional local-DB kinds on top. Agent proposals always wait for a human regardless.
+- **Auto-accept floor** — UI-origin `comment_add`, `reaction_toggle`, `tags_change`, `assignee_change`, and `description_patch` always auto-confirm (no policy gate); per-project `proposals.auto-accept-extra-kinds` opts in additional local-DB kinds on top. Agent proposals always wait for a human regardless.
 - **Project memory & sources** — durable facts and reference docs per project. Agent reads; humans write.
 - **MCP fleet** — per-project HTTP MCP servers; tools namespaced `${server}__${tool}`, rebuilt on project switch, stripped in read-only mode.
 - **Inbound-change injection** — external edits during an active chat arrive as synthetic system messages so the model doesn't reason over stale state.
 
 ### Administration
+
 - **Roles** — `viewer` / `member` / `approver` per project, plus owner. Approvers confirm proposals; viewers cannot mutate.
 - **Read-only mode** — system-wide `app.read-only` flag refuses every mutation and strips mutating agent tools.
 - **Audit log** — append-only; one row per proposal confirm/reject, retained even after user deletion.
@@ -134,7 +140,7 @@ Browser (src/ui/  +  src/app/)
 tRPC routers  (src/server/routers/)
         |
         +--> per-feature services  (src/server/<feature>/)
-        |       reads Prisma · calls providers via registry · stages proposals
+        |       reads Drizzle · calls providers via registry · stages proposals
         |
         +--> Proposal executor  (src/server/proposals/executor.ts)
         |       sole caller of provider write methods · records audit · refreshes cache

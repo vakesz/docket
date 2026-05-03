@@ -12,44 +12,26 @@
 
 /**
  * Branded id types. Plain strings at runtime, but the compiler refuses to
- * mix a `UserId` where a `ProjectId` is expected. The brand is attached at
- * the access boundary (`projectForUser`, the project-membership middleware,
- * session resolution); inside the system it flows through tRPC ctx and the
- * proposal executor without further casts. Prisma `where` clauses accept
- * the branded value transparently because brands are subtypes of `string`.
+ * mix a `UserId` where a `ProjectId` is expected. Drizzle column factories
+ * (`pkUuid<ProjectId>()`, `fkUuid<UserId>()`) and Zod transforms attach the
+ * brand at the access boundary; inside the system, branded values flow
+ * through tRPC ctx and the proposal executor untouched. The brand is a
+ * subtype of `string`, so `eq(table.col, value)` and other typed-builder
+ * call sites accept it transparently.
  */
 declare const __brand: unique symbol;
 export type ProjectId = string & { readonly [__brand]: "ProjectId" };
 export type UserId = string & { readonly [__brand]: "UserId" };
 export type ProposalId = string & { readonly [__brand]: "ProposalId" };
-/** Prisma PK for an `Item` row (cuid). NOT the provider-native id. */
+/** PK for an `Item` row (uuid). NOT the provider-native id. */
 export type ItemId = string & { readonly [__brand]: "ItemId" };
 /** Provider-native item id (e.g. `owner/repo#123`, ADO work item URL). */
 export type ProviderItemId = string & { readonly [__brand]: "ProviderItemId" };
 export type ConversationId = string & { readonly [__brand]: "ConversationId" };
 export type MessageId = string & { readonly [__brand]: "MessageId" };
 
-export const asProjectId = (value: string): ProjectId => value as ProjectId;
-export const asUserId = (value: string): UserId => value as UserId;
-export const asProposalId = (value: string): ProposalId => value as ProposalId;
-export const asItemId = (value: string): ItemId => value as ItemId;
-export const asProviderItemId = (value: string): ProviderItemId => value as ProviderItemId;
-export const asConversationId = (value: string): ConversationId => value as ConversationId;
-export const asMessageId = (value: string): MessageId => value as MessageId;
-
 export const ITEM_KINDS = ["epic", "feature", "story", "task", "bug"] as const;
 export type ItemKind = (typeof ITEM_KINDS)[number];
-
-export function isItemKind(value: string): value is ItemKind {
-  return (ITEM_KINDS as readonly string[]).includes(value);
-}
-
-export function assertItemKind(value: string, context = "ItemKind"): ItemKind {
-  if (!isItemKind(value)) {
-    throw new Error(`${context}: '${value}' is not a canonical ItemKind`);
-  }
-  return value;
-}
 
 export const ITEM_STATES = [
   "new",
@@ -60,17 +42,6 @@ export const ITEM_STATES = [
   "closed",
 ] as const;
 export type ItemState = (typeof ITEM_STATES)[number];
-
-export function isItemState(value: string): value is ItemState {
-  return (ITEM_STATES as readonly string[]).includes(value);
-}
-
-export function assertItemState(value: string, context = "ItemState"): ItemState {
-  if (!isItemState(value)) {
-    throw new Error(`${context}: '${value}' is not a canonical ItemState`);
-  }
-  return value;
-}
 
 export const TRANSITION_INTENTS = [
   "start_work",
@@ -83,10 +54,6 @@ export const TRANSITION_INTENTS = [
   "reopen",
 ] as const;
 export type TransitionIntent = (typeof TRANSITION_INTENTS)[number];
-
-export function isTransitionIntent(value: string): value is TransitionIntent {
-  return (TRANSITION_INTENTS as readonly string[]).includes(value);
-}
 
 /**
  * Canonical "intents that move an item out of where it is" per state.
@@ -160,7 +127,7 @@ export type Reactions = Partial<Record<string, number>>;
  * be filtered to the active provider.
  */
 export type Item = {
-  id: string;
+  id: ProviderItemId;
   kind: ItemKind;
   title: string;
   description: string;
@@ -181,8 +148,8 @@ export type Item = {
    * Provider-native ids of items linked to this one (cross-references, AzDO
    * relations). Empty when the provider doesn't surface linked items.
    */
-  linkedItemIds?: string[];
-  parentId: string | null;
+  linkedItemIds?: ProviderItemId[];
+  parentId: ProviderItemId | null;
   tags: string[];
   /**
    * Reaction counts. `null` = provider doesn't model reactions; `{}` = no

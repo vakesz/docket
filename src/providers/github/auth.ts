@@ -16,6 +16,7 @@
 import "server-only";
 import type { Provider } from "next-auth/providers";
 import GitHub from "next-auth/providers/github";
+import type { UserId } from "@/core/types";
 import { db } from "@/db";
 import { avatarUrl } from "@/lib/avatar-url";
 import { fetchAvatarFromProvider } from "@/server/avatars/fetchers";
@@ -49,7 +50,7 @@ export function githubAuthProvider(opts: GitHubAuthOptions): Provider {
       const login = profile.login;
       const image = login ? await captureAvatarBytes(login) : null;
       return {
-        id: String(profile.id),
+        id: String(profile.id) as UserId,
         name: profile.name ?? login ?? null,
         email: profile.email ?? null,
         image,

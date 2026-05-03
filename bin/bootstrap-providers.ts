@@ -1,9 +1,9 @@
 /**
- * Bootstrap seed. Mirrors values from environment variables (`.env.local` in
- * dev, the docker-compose env file in prod) into DB tables so the runtime
- * auth / LLM paths (DB-driven, no env fallback) have something to read on
- * the very first boot. Wired to `predev` for dev and to the docker entrypoint
- * for production self-host.
+ * Bootstrap LlmProvider + OauthProviderConfig rows from `DEV_*` env vars so
+ * the DB-driven auth / LLM paths have something to read on first boot. Wired
+ * to `predev` for local dev (loads `.env.local`/`.env` via dotenv) and to
+ * `bin/docker-entrypoint.sh` for self-host (env arrives directly from
+ * docker-compose, dotenv calls are no-ops).
  *
  * Branches (each is independent and idempotent):
  *   - `DEV_OPENAI_API_KEY` → `LlmProvider` row (kind=openai, role=chat).
@@ -34,7 +34,7 @@ import * as schema from "../src/db/schema";
 import { llmProviders, oauthProviderConfigs } from "../src/db/schema";
 import { encryptSecret } from "../src/server/secrets/encryption";
 
-type SeedDb = PostgresJsDatabase<typeof schema>;
+type BootstrapDb = PostgresJsDatabase<typeof schema>;
 
 // Match drizzle.config.ts precedence: .env.local first, then .env fills any gaps.
 loadEnv({ path: ".env.local" });
@@ -43,7 +43,7 @@ loadEnv({ path: ".env" });
 async function main(): Promise<void> {
   const databaseUrl = process.env["DATABASE_URL"];
   if (!databaseUrl) {
-    console.warn("[seed-dev] DATABASE_URL not set — skipping.");
+    console.warn("[bootstrap] DATABASE_URL not set — skipping.");
     return;
   }
 
@@ -56,16 +56,16 @@ async function main(): Promise<void> {
     await seedAzureDevOpsOAuth(db);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.warn(`[seed-dev] Skipped: ${message}`);
+    console.warn(`[bootstrap] Skipped: ${message}`);
   } finally {
     await sql.end({ timeout: 5 });
   }
 }
 
-async function seedOpenAi(db: SeedDb): Promise<void> {
+async function seedOpenAi(db: BootstrapDb): Promise<void> {
   const apiKey = process.env["DEV_OPENAI_API_KEY"];
   if (!apiKey) {
-    console.warn("[seed-dev] DEV_OPENAI_API_KEY not set — skipping OpenAI seed.");
+    console.warn("[bootstrap] DEV_OPENAI_API_KEY not set — skipping OpenAI seed.");
     return;
   }
 
@@ -99,7 +99,7 @@ async function seedOpenAi(db: SeedDb): Promise<void> {
       isDefault: chatCount === 0,
       enabled: true,
     });
-    console.log(`[seed-dev] Created LlmProvider(${label}) (encrypted).`);
+    console.log(`[bootstrap] Created LlmProvider(${label}) (encrypted).`);
     return;
   }
 
@@ -131,7 +131,7 @@ async function seedOpenAi(db: SeedDb): Promise<void> {
 
   await db.update(llmProviders).set(data).where(eq(llmProviders.id, existing.id));
   const extras = filled.length ? ` + filled blanks: ${filled.join(", ")}` : "";
-  console.log(`[seed-dev] Refreshed LlmProvider(${existing.label}) apiKey${extras}.`);
+  console.log(`[bootstrap] Refreshed LlmProvider(${existing.label}) apiKey${extras}.`);
 }
 
 function parsePrice(raw: string | undefined): string | null {
@@ -140,12 +140,12 @@ function parsePrice(raw: string | undefined): string | null {
   return Number.isFinite(n) ? n.toString() : null;
 }
 
-async function seedGithubOAuth(db: SeedDb): Promise<void> {
+async function seedGithubOAuth(db: BootstrapDb): Promise<void> {
   const clientId = process.env["DEV_GITHUB_CLIENT_ID"];
   const clientSecret = process.env["DEV_GITHUB_CLIENT_SECRET"];
   if (!clientId || !clientSecret) {
     console.warn(
-      "[seed-dev] DEV_GITHUB_CLIENT_ID / DEV_GITHUB_CLIENT_SECRET not set — skipping GitHub OAuth seed.",
+      "[bootstrap] DEV_GITHUB_CLIENT_ID / DEV_GITHUB_CLIENT_SECRET not set — skipping GitHub OAuth seed.",
     );
     return;
   }
@@ -164,7 +164,7 @@ async function seedGithubOAuth(db: SeedDb): Promise<void> {
       scopes: "read:user user:email repo",
       enabled: true,
     });
-    console.log("[seed-dev] Created OauthProviderConfig(kind=github) (encrypted).");
+    console.log("[bootstrap] Created OauthProviderConfig(kind=github) (encrypted).");
     return;
   }
 
@@ -176,18 +176,18 @@ async function seedGithubOAuth(db: SeedDb): Promise<void> {
       .update(oauthProviderConfigs)
       .set({ clientId, clientSecret: writeSecret, enabled: true })
       .where(eq(oauthProviderConfigs.id, existing.id));
-    console.log("[seed-dev] Updated OauthProviderConfig(kind=github) credentials.");
+    console.log("[bootstrap] Updated OauthProviderConfig(kind=github) credentials.");
   } else {
-    console.log("[seed-dev] OauthProviderConfig(kind=github) already up to date.");
+    console.log("[bootstrap] OauthProviderConfig(kind=github) already up to date.");
   }
 }
 
-async function seedAzureDevOpsOAuth(db: SeedDb): Promise<void> {
+async function seedAzureDevOpsOAuth(db: BootstrapDb): Promise<void> {
   const clientId = process.env["DEV_AZURE_DEVOPS_CLIENT_ID"];
   const clientSecret = process.env["DEV_AZURE_DEVOPS_CLIENT_SECRET"];
   if (!clientId || !clientSecret) {
     console.warn(
-      "[seed-dev] DEV_AZURE_DEVOPS_CLIENT_ID / DEV_AZURE_DEVOPS_CLIENT_SECRET not set — skipping Azure DevOps OAuth seed.",
+      "[bootstrap] DEV_AZURE_DEVOPS_CLIENT_ID / DEV_AZURE_DEVOPS_CLIENT_SECRET not set — skipping Azure DevOps OAuth seed.",
     );
     return;
   }
@@ -208,7 +208,7 @@ async function seedAzureDevOpsOAuth(db: SeedDb): Promise<void> {
       metadata: tenant ? { tenant } : {},
       enabled: true,
     });
-    console.log("[seed-dev] Created OauthProviderConfig(kind=azure_devops) (encrypted).");
+    console.log("[bootstrap] Created OauthProviderConfig(kind=azure_devops) (encrypted).");
     return;
   }
 
@@ -231,13 +231,13 @@ async function seedAzureDevOpsOAuth(db: SeedDb): Promise<void> {
         enabled: true,
       })
       .where(eq(oauthProviderConfigs.id, existing.id));
-    console.log("[seed-dev] Updated OauthProviderConfig(kind=azure_devops) credentials.");
+    console.log("[bootstrap] Updated OauthProviderConfig(kind=azure_devops) credentials.");
   } else {
-    console.log("[seed-dev] OauthProviderConfig(kind=azure_devops) already up to date.");
+    console.log("[bootstrap] OauthProviderConfig(kind=azure_devops) already up to date.");
   }
 }
 
 main().catch((err) => {
-  console.warn(`[seed-dev] Unexpected failure (non-fatal): ${err}`);
+  console.warn(`[bootstrap] Unexpected failure (non-fatal): ${err}`);
   process.exit(0);
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { trpc } from "@/lib/trpc-client";
+import { type RouterOutputs, trpc } from "@/lib/trpc-client";
 import {
   Select,
   SelectContent,
@@ -9,15 +9,7 @@ import {
   SelectValue,
 } from "@/ui/primitives/select";
 
-type LlmRow = {
-  id: string;
-  kind: string;
-  role: string;
-  label: string;
-  model: string;
-  isDefault: boolean;
-  enabled: boolean;
-};
+type LlmRow = RouterOutputs["llmProviders"]["list"][number];
 
 const DEFAULT_VALUE = "default";
 
@@ -53,7 +45,7 @@ export function LlmSwitcher({
 
   // Switcher is chat-only — guardrail rows are not selectable as a
   // conversation-level LLM and would silently fail role enforcement.
-  const rows = ((list.data ?? []) as LlmRow[]).filter((r) => r.role === "chat");
+  const rows = (list.data ?? []).filter((r) => r.role === "chat");
   const enabled = rows.filter((r) => r.enabled);
   const onlyOne = enabled.length <= 1;
   const disabled = !conversationId || onlyOne || setOverride.isPending;

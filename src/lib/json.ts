@@ -14,3 +14,18 @@ export function asPlainObject(value: unknown): Record<string, unknown> {
   }
   return {};
 }
+
+/**
+ * Narrow an unknown value to `Record<string, string>` if every entry is a
+ * string; otherwise return `null`. Use for parsed JSON payloads where the
+ * caller wants to surface a typed object or report a validation error.
+ */
+export function parseStringMap(value: unknown): Record<string, string> | null {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(value)) {
+    if (typeof v !== "string") return null;
+    out[k] = v;
+  }
+  return out;
+}

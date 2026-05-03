@@ -1,6 +1,5 @@
 import { and, desc, eq, exists, isNull, or } from "drizzle-orm";
 import { redirect } from "next/navigation";
-import { asUserId } from "@/core/types";
 import { db } from "@/db";
 import { projectMemberships, projects, users } from "@/db/schema";
 import { publicBaseUrl } from "@/lib/public-base-url";
@@ -51,13 +50,10 @@ export default async function SettingsPage({
     redirect("/");
   }
 
-  const userId = asUserId(session.user.id);
+  const userId = session.user.id;
   const params = await searchParams;
   const requested = params.project ?? null;
-  const requestedSection: SectionKey | undefined =
-    params.section && (SECTION_KEYS as readonly string[]).includes(params.section)
-      ? (params.section as SectionKey)
-      : undefined;
+  const requestedSection: SectionKey | undefined = SECTION_KEYS.find((k) => k === params.section);
 
   const accessClause = or(
     eq(projects.ownerUserId, userId),

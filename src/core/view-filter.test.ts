@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Item, ItemKind, ItemState } from "@/core/types";
+import type { Item, ProviderItemId } from "@/core/types";
 import { ITEM_STATES } from "@/core/types";
 import {
   applyViewFilter,
@@ -11,13 +11,13 @@ import {
   type ViewFilter,
 } from "@/core/view-filter";
 
-function fakeItem(overrides: Partial<Item> & { id: string }): Item {
+function fakeItem(overrides: Omit<Partial<Item>, "id"> & { id: string }): Item {
   return {
-    id: overrides.id,
-    kind: (overrides.kind ?? "task") as ItemKind,
+    id: overrides.id as ProviderItemId,
+    kind: overrides.kind ?? "task",
     title: overrides.title ?? "t",
     description: overrides.description ?? "",
-    state: (overrides.state ?? "active") as ItemState,
+    state: overrides.state ?? "active",
     assignee: overrides.assignee ?? null,
     parentId: overrides.parentId ?? null,
     tags: overrides.tags ?? [],

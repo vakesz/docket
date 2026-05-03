@@ -12,7 +12,7 @@ import { and, asc, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import { z } from "zod";
 import type { AgentTool, ToolContext, ToolFactory } from "@/agent/tools/types";
 import { defineTool, fail, ok, withProvider } from "@/agent/tools/types";
-import { asProviderItemId, type ItemKind, type ItemState } from "@/core/types";
+import { ITEM_KINDS, type ItemState, type ProviderItemId } from "@/core/types";
 import { items } from "@/db/schema";
 
 export const listItemsTool: ToolFactory = (ctx) =>
@@ -25,7 +25,7 @@ export const listItemsTool: ToolFactory = (ctx) =>
         .enum(["open", "closed", "all"])
         .default("open")
         .describe("'open' | 'closed' | 'all'"),
-      kind: z.string().optional().describe("ItemKind filter (epic|feature|story|task|bug)"),
+      kind: z.enum(ITEM_KINDS).optional().describe("ItemKind filter (epic|feature|story|task|bug)"),
       search: z.string().max(200).optional(),
       limit: z.number().int().min(1).max(50).default(20),
     }),
@@ -54,7 +54,7 @@ export const listItemsTool: ToolFactory = (ctx) =>
           and(
             eq(items.projectId, ctx.projectId),
             eq(items.archived, false),
-            ...(args.kind ? [eq(items.kind, args.kind as ItemKind)] : []),
+            ...(args.kind ? [eq(items.kind, args.kind)] : []),
             ...(args.bucket === "open"
               ? [inArray(items.state, openStates)]
               : args.bucket === "closed"
@@ -83,7 +83,13 @@ export const getItemTool: ToolFactory = (ctx) =>
     name: "get_item",
     description:
       "Read the active item's cached description and recent comments. Defaults to the item this conversation is anchored on; pass `item_id` (e.g. 'owner/repo#42') only to read a different item. Returns title, description (markdown), state, assignee, comments (each with markdown body) — call this before drafting any propose_* on the active item so you're not echoing stale content.",
-    schema: z.object({ item_id: z.string().min(1).optional() }),
+    schema: z.object({
+      item_id: z
+        .string()
+        .min(1)
+        .transform((v) => v as ProviderItemId)
+        .optional(),
+    }),
     // Foreign content lives in title, description, and each comment's body.
     // The surrounding ids/state/tags/url/timestamps are server-controlled
     // cache columns.
@@ -99,10 +105,7 @@ export const getItemTool: ToolFactory = (ctx) =>
         );
       }
       const item = await ctx.db.query.items.findFirst({
-        where: and(
-          eq(items.projectId, ctx.projectId),
-          eq(items.providerItemId, asProviderItemId(itemId)),
-        ),
+        where: and(eq(items.projectId, ctx.projectId), eq(items.providerItemId, itemId)),
         with: { comments: { orderBy: (c) => [asc(c.createdAt)] } },
       });
       if (!item) return fail(`Item '${itemId}' not in cache; the user may need to sync.`);

@@ -16,6 +16,7 @@ import type {
   LlmToolCall,
   LlmToolResult,
 } from "@/agent/llm/types";
+import { asPlainObject } from "@/lib/json";
 import { logger } from "@/server/logger";
 
 const DEFAULT_MODEL = "claude-sonnet-4-6";
@@ -176,7 +177,7 @@ export class AnthropicAdapter implements LlmAdapter {
           if (!slot) continue;
           let parsed: Record<string, unknown> = {};
           try {
-            parsed = slot.argsBuf ? (JSON.parse(slot.argsBuf) as Record<string, unknown>) : {};
+            parsed = slot.argsBuf ? asPlainObject(JSON.parse(slot.argsBuf)) : {};
           } catch {
             parsed = { __unparsable_arguments__: slot.argsBuf };
           }

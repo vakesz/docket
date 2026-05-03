@@ -6,7 +6,10 @@
 import { Readable } from "node:stream";
 import * as azdev from "azure-devops-node-api";
 import type { IGitApi } from "azure-devops-node-api/GitApi.js";
-import type { JsonPatchOperation } from "azure-devops-node-api/interfaces/common/VSSInterfaces.js";
+import {
+  type JsonPatchOperation,
+  Operation,
+} from "azure-devops-node-api/interfaces/common/VSSInterfaces.js";
 import {
   type Comment as AzdoComment,
   type WorkItem,
@@ -23,11 +26,13 @@ import type {
   Item,
   ItemKind,
   PRMatch,
+  ProviderItemId,
   PullRequestDetail,
   PullRequestFile,
   PullRequestReview,
   TransitionIntent,
 } from "@/core/types";
+import { asPlainObject } from "@/lib/json";
 import {
   changeTypeToStatus,
   parseAzdoPullRequestId,
@@ -109,13 +114,11 @@ function parseTags(raw: unknown): string[] {
 function readAssignee(raw: unknown): string | null {
   if (!raw) return null;
   if (typeof raw === "string") return raw;
-  if (typeof raw === "object" && raw !== null) {
-    const obj = raw as Record<string, unknown>;
-    const unique = obj["uniqueName"] ?? obj["unique_name"];
-    if (typeof unique === "string" && unique) return unique;
-    const display = obj["displayName"] ?? obj["display_name"];
-    if (typeof display === "string" && display) return display;
-  }
+  const obj = asPlainObject(raw);
+  const unique = obj["uniqueName"] ?? obj["unique_name"];
+  if (typeof unique === "string" && unique) return unique;
+  const display = obj["displayName"] ?? obj["display_name"];
+  if (typeof display === "string" && display) return display;
   return null;
 }
 
@@ -127,6 +130,10 @@ function readDate(raw: unknown): Date | null {
     return Number.isNaN(d.getTime()) ? null : d;
   }
   return null;
+}
+
+function readString(raw: unknown): string | null {
+  return typeof raw === "string" ? raw : null;
 }
 
 /**
@@ -183,20 +190,21 @@ export class AzureDevOpsProvider implements WorkItemProvider {
     const wit = typeof witType === "string" ? witType : "";
     const kind = KIND_BY_WIT[wit];
     if (!kind) return null;
-    const id = String(payload.id ?? fields["System.Id"] ?? "");
-    if (!id) return null;
+    const idRaw = String(payload.id ?? fields["System.Id"] ?? "");
+    if (!idRaw) return null;
+    const id = idRaw as ProviderItemId;
     const tags = parseTags(fields["System.Tags"]);
     const stateField = fields["System.State"];
     const stateString = typeof stateField === "string" ? stateField : "";
     const parentRaw = fields["System.Parent"];
-    const parent =
+    const parent: ProviderItemId | null =
       typeof parentRaw === "number"
-        ? String(parentRaw)
+        ? (String(parentRaw) as ProviderItemId)
         : typeof parentRaw === "string" && parentRaw
-          ? parentRaw
+          ? (parentRaw as ProviderItemId)
           : null;
     const assignee = readAssignee(fields["System.AssignedTo"]);
-    const linkedItemIds: string[] = [];
+    const linkedItemIds: ProviderItemId[] = [];
     for (const rel of payload.relations ?? []) {
       const relType = rel.rel ?? "";
       if (!relType.startsWith("System.LinkTypes.") && !relType.startsWith("Microsoft.VSTS")) {
@@ -204,22 +212,15 @@ export class AzureDevOpsProvider implements WorkItemProvider {
       }
       const url = rel.url ?? "";
       const tail = url.replace(/\/+$/, "").split("/").pop() ?? "";
-      if (/^\d+$/.test(tail) && tail !== id) linkedItemIds.push(tail);
+      if (/^\d+$/.test(tail) && tail !== id) linkedItemIds.push(tail as ProviderItemId);
     }
-    const iteration =
-      typeof fields["System.IterationPath"] === "string"
-        ? (fields["System.IterationPath"] as string)
-        : null;
-    const area =
-      typeof fields["System.AreaPath"] === "string" ? (fields["System.AreaPath"] as string) : null;
+    const iteration = readString(fields["System.IterationPath"]);
+    const area = readString(fields["System.AreaPath"]);
     return {
       id,
       kind,
-      title: typeof fields["System.Title"] === "string" ? (fields["System.Title"] as string) : "",
-      description:
-        typeof fields["System.Description"] === "string"
-          ? (fields["System.Description"] as string)
-          : "",
+      title: readString(fields["System.Title"]) ?? "",
+      description: readString(fields["System.Description"]) ?? "",
       state: mapState(kind, stateString, tags),
       assignee,
       assignees: assignee ? [assignee] : [],
@@ -264,11 +265,15 @@ export class AzureDevOpsProvider implements WorkItemProvider {
     // to null so `@me` falls back to "no narrowing" instead of hiding rows.
     try {
       const profile = await this.connection().getProfileApi();
-      const me = await profile.getProfile("me");
-      const email = (me as { emailAddress?: string }).emailAddress;
-      if (typeof email === "string" && email) return email;
-      const display = (me as { displayName?: string }).displayName;
-      return typeof display === "string" && display ? display : null;
+      // Profile responses from the v1.0 endpoint carry `emailAddress` and
+      // `displayName` on the wire even though the SDK's `Profile` interface
+      // only models `coreAttributes`. A single bridge cast keeps the access
+      // honest.
+      const me = (await profile.getProfile("me")) as unknown as {
+        emailAddress?: string;
+        displayName?: string;
+      };
+      return me.emailAddress || me.displayName || null;
     } catch {
       return null;
     }
@@ -339,10 +344,9 @@ export class AzureDevOpsProvider implements WorkItemProvider {
     const resp = await wit.getComments(this.config.project, Number.parseInt(id, 10));
     const comments: AzdoComment[] = resp.comments ?? [];
     return comments.map((c) => {
-      const author =
-        (c.createdBy?.uniqueName as string | undefined) || c.createdBy?.displayName || "unknown";
+      const author = c.createdBy?.uniqueName || c.createdBy?.displayName || "unknown";
       const created = c.createdDate ?? new Date();
-      const modified = (c as { modifiedDate?: Date }).modifiedDate ?? null;
+      const modified = c.modifiedDate ?? null;
       return {
         id: String(c.id ?? ""),
         itemId: id,
@@ -431,13 +435,13 @@ export class AzureDevOpsProvider implements WorkItemProvider {
     const newTags = mergeTags(current.tags, plan);
     const patch: JsonPatchOperation[] = [];
     if (plan.state !== null) {
-      patch.push({ op: 0, path: "/fields/System.State", value: plan.state } as JsonPatchOperation);
+      patch.push({ op: Operation.Add, path: "/fields/System.State", value: plan.state });
     }
     patch.push({
-      op: 0,
+      op: Operation.Add,
       path: "/fields/System.Tags",
       value: newTags.join("; "),
-    } as JsonPatchOperation);
+    });
     const wit = await this.witApi();
     try {
       const raw = await wit.updateWorkItem(null, patch, Number.parseInt(id, 10));
@@ -453,7 +457,7 @@ export class AzureDevOpsProvider implements WorkItemProvider {
 
   async patchDescription(id: string, newDescription: string): Promise<Item> {
     const patch: JsonPatchOperation[] = [
-      { op: 0, path: "/fields/System.Description", value: newDescription } as JsonPatchOperation,
+      { op: Operation.Add, path: "/fields/System.Description", value: newDescription },
     ];
     const wit = await this.witApi();
     try {
@@ -493,14 +497,14 @@ export class AzureDevOpsProvider implements WorkItemProvider {
     }
     const patch: JsonPatchOperation[] = [
       {
-        op: 0,
+        op: Operation.Add,
         path: "/relations/-",
         value: {
           rel: "AttachedFile",
           url,
           attributes: { name: filename, comment: "" },
         },
-      } as JsonPatchOperation,
+      },
     ];
     try {
       await wit.updateWorkItem(null, patch, Number.parseInt(id, 10));
@@ -604,7 +608,7 @@ export class AzureDevOpsProvider implements WorkItemProvider {
             this.config.project,
           );
           files = (changes.changeEntries ?? []).map((c) => ({
-            path: (c.item as { path?: string } | undefined)?.path ?? "",
+            path: c.item?.path ?? "",
             status: changeTypeToStatus(
               c.changeType === undefined ? undefined : Number(c.changeType),
             ),
@@ -663,14 +667,11 @@ export class AzureDevOpsProvider implements WorkItemProvider {
         Number.parseInt(id, 10),
       );
       const created = resp.createdDate ?? new Date();
-      const modified = (resp as { modifiedDate?: Date }).modifiedDate ?? null;
+      const modified = resp.modifiedDate ?? null;
       return {
         id: String(resp.id ?? ""),
         itemId: id,
-        author:
-          (resp.createdBy?.uniqueName as string | undefined) ||
-          resp.createdBy?.displayName ||
-          "unknown",
+        author: resp.createdBy?.uniqueName || resp.createdBy?.displayName || "unknown",
         body: resp.text ?? body,
         createdAt: created,
         updatedAt: modified ?? null,
@@ -698,10 +699,10 @@ export class AzureDevOpsProvider implements WorkItemProvider {
     out.sort();
     const patch: JsonPatchOperation[] = [
       {
-        op: 0,
+        op: Operation.Add,
         path: "/fields/System.Tags",
         value: out.join("; "),
-      } as JsonPatchOperation,
+      },
     ];
     const wit = await this.witApi();
     try {
@@ -724,16 +725,16 @@ export class AzureDevOpsProvider implements WorkItemProvider {
     const patch: JsonPatchOperation[] = assignee
       ? [
           {
-            op: 0,
+            op: Operation.Add,
             path: "/fields/System.AssignedTo",
             value: assignee,
-          } as JsonPatchOperation,
+          },
         ]
       : [
           {
-            op: 1,
+            op: Operation.Remove,
             path: "/fields/System.AssignedTo",
-          } as JsonPatchOperation,
+          },
         ];
     const wit = await this.witApi();
     try {
@@ -754,39 +755,39 @@ export class AzureDevOpsProvider implements WorkItemProvider {
       throw new ProviderError(`unsupported kind for create: ${kind}`);
     }
     const patch: JsonPatchOperation[] = [
-      { op: 0, path: "/fields/System.Title", value: fields.title } as JsonPatchOperation,
+      { op: Operation.Add, path: "/fields/System.Title", value: fields.title },
     ];
     if (fields.description) {
       patch.push({
-        op: 0,
+        op: Operation.Add,
         path: "/fields/System.Description",
         value: fields.description,
-      } as JsonPatchOperation);
+      });
     }
     if (fields.assignee) {
       patch.push({
-        op: 0,
+        op: Operation.Add,
         path: "/fields/System.AssignedTo",
         value: fields.assignee,
-      } as JsonPatchOperation);
+      });
     }
     if (fields.tags.length > 0) {
       patch.push({
-        op: 0,
+        op: Operation.Add,
         path: "/fields/System.Tags",
         value: fields.tags.join("; "),
-      } as JsonPatchOperation);
+      });
     }
     if (fields.parentId) {
       patch.push({
-        op: 0,
+        op: Operation.Add,
         path: "/relations/-",
         value: {
           rel: "System.LinkTypes.Hierarchy-Reverse",
           url: `${this.config.orgUrl}/_apis/wit/workItems/${fields.parentId}`,
           attributes: {},
         },
-      } as JsonPatchOperation);
+      });
     }
     const wit = await this.witApi();
     try {

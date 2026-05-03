@@ -1,9 +1,10 @@
 import { boolean, index, pgTable, text } from "drizzle-orm/pg-core";
 import { emptyJsonbObject, pkUuid, timestamps } from "@/db/columns";
 
-// Per-deployment OAuth provider config. Bootstrap happens via env-driven seed
-// (`bin/seed-dev.ts`); afterwards the operator manages rows from `/settings`.
-// Multi-row from day one; `kind` accepts future vendors without a migration.
+// Per-deployment OAuth provider config. Bootstrap happens via env-driven
+// `bin/bootstrap-providers.ts`; afterwards the operator manages rows from
+// `/settings`. Multi-row from day one; `kind` accepts future vendors without
+// a migration.
 
 export type OauthProviderConfigMetadata = {
   /** Entra tenant id for `azure_devops` (`common` / `organizations` / GUID). */

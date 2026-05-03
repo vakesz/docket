@@ -12,7 +12,7 @@
  * a breaking change for in-flight conversations and clients.
  */
 
-import type { CreateFields, Item, ItemKind, TransitionIntent } from "@/core/types";
+import type { CreateFields, Item, ItemKind, ProviderItemId, TransitionIntent } from "@/core/types";
 
 export const PROPOSAL_KINDS = [
   "state_change",
@@ -47,7 +47,7 @@ export type ProposalOrigin = (typeof PROPOSAL_ORIGINS)[number];
  * even though neither GitHub nor Azure DevOps has a native "duplicate" reason.
  */
 export type CanonicalItemRef = {
-  providerItemId: string;
+  providerItemId: ProviderItemId;
   title: string;
 };
 
@@ -155,6 +155,14 @@ export type ReactionToggleProposal = {
  * ever show "what's about to land", which doesn't read like a diff for a
  * human reviewer.
  */
+/**
+ * Origin of a staged memory write. Mirrors the `MemorySource` enum on the
+ * `MemoryEntry` row so the executor can write the value through without a
+ * widening cast. Kept here (not imported from `@/db/schema`) to preserve
+ * `core/`'s no-DB-imports rule.
+ */
+export type MemoryWriteSource = "user" | "agent";
+
 export type MemoryWriteProposal = {
   kind: "memory_write";
   id: string;
@@ -162,8 +170,7 @@ export type MemoryWriteProposal = {
   title: string;
   body: string;
   tags: readonly string[];
-  /** "user" | "agent" — informational. */
-  source: string;
+  source: MemoryWriteSource;
   memoryId: string | null;
   previousTitle: string;
   previousBody: string;
