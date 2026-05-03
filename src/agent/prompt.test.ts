@@ -138,15 +138,26 @@ describe("buildSystemPrefix", () => {
       expect(DEFAULT_SYSTEM_BASE).toContain("3. RECOMMEND");
     });
 
-    it("system base carries the silent-exit gate before recommendation modes", () => {
-      const silentIdx = DEFAULT_SYSTEM_BASE.indexOf("# Before any mode");
+    it("system base frames the assistant as recommender, not autonomous agent", () => {
+      expect(DEFAULT_SYSTEM_BASE).toContain("# Your role: recommend, don't act");
+      expect(DEFAULT_SYSTEM_BASE).toContain("recommendation assistant for a human user");
+    });
+
+    it("system base carries the no-proposal-fit gate before recommendation modes", () => {
+      const gateIdx = DEFAULT_SYSTEM_BASE.indexOf("# When no proposal fits");
       const modesIdx = DEFAULT_SYSTEM_BASE.indexOf("# Recommendation modes");
-      expect(silentIdx).toBeGreaterThan(-1);
-      expect(modesIdx).toBeGreaterThan(silentIdx);
+      expect(gateIdx).toBeGreaterThan(-1);
+      expect(modesIdx).toBeGreaterThan(gateIdx);
     });
 
     it("system base forbids fabricated tool-argument values", () => {
       expect(DEFAULT_SYSTEM_BASE).toContain("Never invent values for tool arguments");
+    });
+
+    it("system base requires every reply to close with a recommendation", () => {
+      expect(DEFAULT_SYSTEM_BASE).toContain(
+        "Every reply ends with an actionable recommendation TO the user",
+      );
     });
 
     it("each kind prompt names its grounding target", () => {
@@ -168,16 +179,17 @@ describe("buildSystemPrefix", () => {
         itemSummary: null,
         maxToolRounds: 12,
       });
-      expect(out).toBe(`${DEFAULT_SYSTEM_BASE}\n\n${toolRoundsBudgetLine(12)}`);
+      expect(out).toBe(`${DEFAULT_SYSTEM_BASE}\n\n${toolRoundsBudgetLine(11)}`);
     });
 
-    it("interpolates the cap value into the budget line", () => {
+    it("reports cap - 1 to the model so a final reply round stays reserved", () => {
       const out = buildSystemPrefix({
         itemKind: null,
         itemSummary: null,
         maxToolRounds: 4,
       });
-      expect(out).toContain("at most 4 tool-call rounds per turn");
+      expect(out).toContain("at most 3 tool-call rounds per turn");
+      expect(out).not.toContain("at most 4 tool-call rounds per turn");
     });
 
     it("places the budget block before capability + kind addenda", () => {
@@ -187,7 +199,7 @@ describe("buildSystemPrefix", () => {
         capabilities: { pullRequestDiffs: true },
         maxToolRounds: 8,
       });
-      const budgetIdx = out.indexOf(toolRoundsBudgetLine(8));
+      const budgetIdx = out.indexOf(toolRoundsBudgetLine(7));
       const prGuidanceIdx = out.indexOf(PR_TOOLS_SYSTEM_GUIDANCE);
       const bugKindIdx = out.indexOf(DEFAULT_KIND_PROMPTS.bug);
       const summaryIdx = out.indexOf(`Item under discussion:\n${ITEM_SUMMARY}`);
