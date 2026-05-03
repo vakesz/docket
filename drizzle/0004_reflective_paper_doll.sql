@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "llm_providers_role_default_unique_idx" ON "llm_providers" USING btree ("role") WHERE "llm_providers"."is_default" = TRUE;

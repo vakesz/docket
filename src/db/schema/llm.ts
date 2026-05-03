@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, index, pgTable, text } from "drizzle-orm/pg-core";
+import { boolean, check, index, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 import { decimal4, pkUuid, timestamps } from "@/db/columns";
 
 // LlmProvider rows feed two disjoint resolvers — chat and guardrail. The
@@ -41,5 +41,12 @@ export const llmProviders = pgTable(
     // PostgreSQL B-tree indexes can be probed by a leading-column subset of
     // their key.
     index("llm_providers_role_is_default_idx").on(t.role, t.isDefault),
+    // At most one default per role. The `setDefault` / `create` flows clear
+    // existing defaults inside a transaction, but a partial-unique index
+    // hardens the invariant against direct DB writes and concurrent paths
+    // racing without the right WHERE filter.
+    uniqueIndex("llm_providers_role_default_unique_idx")
+      .on(t.role)
+      .where(sql`${t.isDefault} = TRUE`),
   ],
 );

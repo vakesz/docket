@@ -19,12 +19,30 @@ import { completeMcpOauth } from "@/server/mcp/oauth/router";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// Cap on the human-readable `message` value passed back to the settings UI.
+// IdPs can return arbitrarily long `error_description` blurbs (some embed a
+// stack trace or a full request id chain); copying that verbatim into the
+// redirect makes the URL grow past common 4–8 KB header limits and surfaces
+// as a useless "headers too large" error in the browser. The UI only needs
+// enough text to render an inline alert.
+const MESSAGE_MAX_BYTES = 512;
+
+function trimMessage(raw: string): string {
+  if (raw.length <= MESSAGE_MAX_BYTES) return raw;
+  return `${raw.slice(0, MESSAGE_MAX_BYTES - 1)}…`;
+}
+
 function settingsRedirect(
   origin: string,
   projectSlug: string | null,
   params: Record<string, string>,
 ): NextResponse {
-  const search = new URLSearchParams(params);
+  const safeParams = { ...params };
+  const rawMessage = safeParams["message"];
+  if (typeof rawMessage === "string") {
+    safeParams["message"] = trimMessage(rawMessage);
+  }
+  const search = new URLSearchParams(safeParams);
   const target = projectSlug
     ? `/settings?project=${encodeURIComponent(projectSlug)}&group=mcp&${search.toString()}`
     : `/?${search.toString()}`;

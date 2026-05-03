@@ -146,102 +146,112 @@ export async function POST(req: Request, context: RouteContext): Promise<Respons
   );
 
   const encoder = new TextEncoder();
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      // Tracks whether the underlying stream has been torn down (client
-      // disconnect → `cancel`, or normal completion → `close`). Any further
-      // `enqueue` / `close` would throw, so we gate both on this flag.
-      let closed = false;
-      const send = (event: LoopEvent) => {
-        if (closed) return;
-        try {
-          controller.enqueue(encoder.encode(formatSseEvent(event)));
-        } catch {
+  const stream = new ReadableStream<Uint8Array>(
+    {
+      async start(controller) {
+        // Single source of truth for "stream is dead" — set by client abort,
+        // by a normal `done`/`error` finish, or by a failed enqueue. Any
+        // further `enqueue` / `close` after this is a no-op, which keeps the
+        // teardown paths from racing each other.
+        let closed = false;
+        const closeOnce = () => {
+          if (closed) return;
           closed = true;
-        }
-      };
-      // Eagerly tear down the controller on client disconnect so subsequent
-      // `enqueue`s no-op immediately even before `runTurn` reaches its next
-      // yield point. `runTurn` itself receives `req.signal` and should bail
-      // at the next checkpoint; this ensures the consumer side stops here.
-      const onAbort = () => {
-        if (closed) return;
-        closed = true;
+          try {
+            controller.close();
+          } catch {
+            // Already torn down by the consumer; nothing to do.
+          }
+        };
+        const send = async (event: LoopEvent) => {
+          if (closed) return;
+          try {
+            controller.enqueue(encoder.encode(formatSseEvent(event)));
+          } catch {
+            closed = true;
+            return;
+          }
+          // Opportunistic backpressure: when the controller's internal queue
+          // exceeds the highWaterMark below, `desiredSize` goes ≤ 0. Yielding
+          // the microtask queue lets the consumer drain a chunk before the
+          // next runTurn iteration enqueues the following event. The default
+          // `start`-only ReadableStream has no real backpressure plumbing,
+          // but pausing here keeps a chatty turn from ballooning memory when
+          // the network is slow.
+          if ((controller.desiredSize ?? 1) <= 0) {
+            await new Promise<void>((resolve) => setTimeout(resolve, 0));
+          }
+        };
+        // Eagerly tear down the controller on client disconnect so subsequent
+        // `enqueue`s no-op immediately even before `runTurn` reaches its next
+        // yield point. `runTurn` itself receives `req.signal` and should bail
+        // at the next checkpoint; this ensures the consumer side stops here.
+        req.signal.addEventListener("abort", closeOnce, { once: true });
+        let terminal: "done" | "error" | "aborted" = "aborted";
+        let lastErrorMessage: string | undefined;
         try {
-          controller.close();
-        } catch {
-          // Already torn down; nothing to do.
-        }
-      };
-      req.signal.addEventListener("abort", onAbort, { once: true });
-      let terminal: "done" | "error" | "aborted" = "aborted";
-      let lastErrorMessage: string | undefined;
-      try {
-        for await (const event of runTurn({
-          db,
-          adapter,
-          conversationId,
-          userId,
-          userMessage: content,
-          readOnly,
-          signal: req.signal,
-        })) {
-          send(event);
-          if (event.kind === "done") {
-            terminal = "done";
-            break;
+          for await (const event of runTurn({
+            db,
+            adapter,
+            conversationId,
+            userId,
+            userMessage: content,
+            readOnly,
+            signal: req.signal,
+          })) {
+            await send(event);
+            if (event.kind === "done") {
+              terminal = "done";
+              break;
+            }
+            if (event.kind === "error") {
+              terminal = "error";
+              lastErrorMessage = event.message;
+              break;
+            }
           }
-          if (event.kind === "error") {
+        } catch (err) {
+          // AbortError from `req.signal` means the client closed the connection.
+          // That's expected, not an error — skip the error event/log.
+          if (req.signal.aborted || (err instanceof Error && err.name === "AbortError")) {
+            terminal = "aborted";
+          } else {
             terminal = "error";
-            lastErrorMessage = event.message;
-            break;
+            lastErrorMessage = err instanceof Error ? err.message : String(err);
+            logger.error(
+              {
+                projectId,
+                conversationId,
+                userId,
+                durationMs: Date.now() - streamStartedAt,
+                err: lastErrorMessage,
+                stack: err instanceof Error ? err.stack : undefined,
+              },
+              "stream: runTurn threw",
+            );
+            await send({ kind: "error", message: lastErrorMessage });
           }
-        }
-      } catch (err) {
-        // AbortError from `req.signal` means the client closed the connection.
-        // That's expected, not an error — skip the error event/log.
-        if (req.signal.aborted || (err instanceof Error && err.name === "AbortError")) {
-          terminal = "aborted";
-        } else {
-          terminal = "error";
-          lastErrorMessage = err instanceof Error ? err.message : String(err);
-          logger.error(
+        } finally {
+          req.signal.removeEventListener("abort", closeOnce);
+          closeOnce();
+          logger.info(
             {
               projectId,
               conversationId,
               userId,
+              terminal,
               durationMs: Date.now() - streamStartedAt,
-              err: lastErrorMessage,
-              stack: err instanceof Error ? err.stack : undefined,
+              ...(lastErrorMessage ? { errMessage: lastErrorMessage } : {}),
             },
-            "stream: runTurn threw",
+            "stream: closed",
           );
-          send({ kind: "error", message: lastErrorMessage });
         }
-      } finally {
-        req.signal.removeEventListener("abort", onAbort);
-        if (!closed) {
-          try {
-            controller.close();
-          } catch {
-            // Already closed by the consumer side; nothing to do.
-          }
-          closed = true;
-        }
-        logger.info(
-          {
-            projectId,
-            conversationId,
-            userId,
-            terminal,
-            durationMs: Date.now() - streamStartedAt,
-            ...(lastErrorMessage ? { errMessage: lastErrorMessage } : {}),
-          },
-          "stream: closed",
-        );
-      }
+      },
     },
-  });
+    // Small queue with a count strategy: enough for a few rapid-fire deltas,
+    // small enough that a slow consumer trips backpressure quickly.
+    new CountQueuingStrategy({ highWaterMark: 16 }),
+  );
 
   return new Response(stream, {
     status: 200,

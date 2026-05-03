@@ -34,6 +34,15 @@ function startOfMonthUtc(now: Date = new Date()): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
 }
 
+// `sum()` over an integer column comes back as `numeric` from postgres-js,
+// which surfaces as a decimal string. Bad/missing rows fall back to 0
+// instead of poisoning the total with NaN.
+function toCents(raw: string | null | undefined): number {
+  if (raw == null) return 0;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
 export async function getBudgetStatus(db: Db): Promise<BudgetStatus> {
   const [capCents, action] = await Promise.all([
     loadGlobalSetting(db, "llm.monthly-cost-cap-cents"),
@@ -49,10 +58,7 @@ export async function getBudgetStatus(db: Db): Promise<BudgetStatus> {
     })
     .from(conversations)
     .where(gte(conversations.startedAt, since));
-  const chat = Number(agg?.chat ?? 0);
-  const guardrail = Number(agg?.guardrail ?? 0);
-  const monthCents =
-    (Number.isFinite(chat) ? chat : 0) + (Number.isFinite(guardrail) ? guardrail : 0);
+  const monthCents = toCents(agg?.chat) + toCents(agg?.guardrail);
   const capReached = capCents > 0 && monthCents >= capCents;
   const remainingCents = capCents > 0 ? Math.max(0, capCents - monthCents) : 0;
   return { monthCents, capCents, remainingCents, capReached, action };
