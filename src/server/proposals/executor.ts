@@ -21,7 +21,7 @@ import type {
   Reactions,
   UserId,
 } from "@/core/types";
-import type { Db } from "@/db";
+import type { Db, DbTx } from "@/db";
 import { audits, comments, items, memoryEntries, projects, proposals } from "@/db/schema";
 import type { Proposal as ProposalRow } from "@/db/schema/types";
 import type { AuditAction } from "@/server/audit/log";
@@ -229,72 +229,8 @@ export async function confirmProposal(
     //     stamp errorMessage so the UI surfaces the partial state.
     phase = "finalize";
     const updated = await ctx.db.transaction(async (tx) => {
-      if (canonical) {
-        const itemRow = toItemRow(canonical, ctx.projectId, new Date());
-        await tx
-          .insert(items)
-          .values(itemRow)
-          .onConflictDoUpdate({
-            target: [items.projectId, items.providerItemId],
-            set: { ...itemRow, archived: false },
-          });
-      }
-      if (postedComment) {
-        await reconcileComments(tx, [
-          { itemSurrogate: postedComment.itemSurrogate, comments: [postedComment.comment] },
-        ]);
-      }
-      if (reactionUpdate?.kind === "item") {
-        await tx
-          .update(items)
-          .set({ reactions: reactionUpdate.reactions })
-          .where(
-            and(
-              eq(items.projectId, ctx.projectId),
-              eq(items.providerItemId, reactionUpdate.providerItemId),
-            ),
-          );
-      } else if (reactionUpdate?.kind === "comment") {
-        await tx
-          .update(comments)
-          .set({ reactions: reactionUpdate.reactions })
-          .where(
-            and(
-              eq(comments.itemId, reactionUpdate.itemSurrogate),
-              eq(comments.providerCommentId, reactionUpdate.providerCommentId),
-            ),
-          );
-      }
-      if (proposal.kind === "memory_write") {
-        if (proposal.memoryId) {
-          await tx
-            .update(memoryEntries)
-            .set({
-              title: proposal.title,
-              body: proposal.body,
-              tags: [...proposal.tags],
-              source: proposal.source,
-            })
-            .where(eq(memoryEntries.id, proposal.memoryId));
-        } else {
-          await tx.insert(memoryEntries).values({
-            projectId: ctx.projectId,
-            title: proposal.title,
-            body: proposal.body,
-            tags: [...proposal.tags],
-            source: proposal.source,
-          });
-        }
-      } else if (proposal.kind === "memory_delete") {
-        await tx
-          .delete(memoryEntries)
-          .where(
-            and(
-              eq(memoryEntries.id, proposal.memoryId),
-              eq(memoryEntries.projectId, ctx.projectId),
-            ),
-          );
-      }
+      await applyCacheWrites(tx, ctx, { canonical, postedComment, reactionUpdate });
+      await applyMemoryProposal(tx, ctx, proposal);
       const [updatedRow] = await tx
         .update(proposals)
         .set({
@@ -615,4 +551,100 @@ async function dispatchReactionToggle(
       reactions: reactionsJson,
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 finalize — apply the dispatch outcome to the local cache and run
+// memory ops inside the executor's finalize transaction. Split out from
+// confirmProposal so each branch reads as one cohesive write instead of a
+// chain of per-shape `if`s.
+// ---------------------------------------------------------------------------
+
+type CacheWriteOutcome = {
+  canonical: CanonicalItem | null;
+  postedComment: { itemSurrogate: ItemId; comment: CanonicalComment } | null;
+  reactionUpdate: ReactionUpdate | null;
+};
+
+async function applyCacheWrites(
+  tx: DbTx,
+  ctx: ExecutorContext,
+  outcome: CacheWriteOutcome,
+): Promise<void> {
+  if (outcome.canonical) {
+    const itemRow = toItemRow(outcome.canonical, ctx.projectId, new Date());
+    await tx
+      .insert(items)
+      .values(itemRow)
+      .onConflictDoUpdate({
+        target: [items.projectId, items.providerItemId],
+        set: { ...itemRow, archived: false },
+      });
+  }
+  if (outcome.postedComment) {
+    await reconcileComments(tx, [
+      {
+        itemSurrogate: outcome.postedComment.itemSurrogate,
+        comments: [outcome.postedComment.comment],
+      },
+    ]);
+  }
+  const reactionUpdate = outcome.reactionUpdate;
+  if (reactionUpdate?.kind === "item") {
+    await tx
+      .update(items)
+      .set({ reactions: reactionUpdate.reactions })
+      .where(
+        and(
+          eq(items.projectId, ctx.projectId),
+          eq(items.providerItemId, reactionUpdate.providerItemId),
+        ),
+      );
+  } else if (reactionUpdate?.kind === "comment") {
+    await tx
+      .update(comments)
+      .set({ reactions: reactionUpdate.reactions })
+      .where(
+        and(
+          eq(comments.itemId, reactionUpdate.itemSurrogate),
+          eq(comments.providerCommentId, reactionUpdate.providerCommentId),
+        ),
+      );
+  }
+}
+
+async function applyMemoryProposal(
+  tx: DbTx,
+  ctx: ExecutorContext,
+  proposal: Proposal,
+): Promise<void> {
+  if (proposal.kind === "memory_write") {
+    if (proposal.memoryId) {
+      await tx
+        .update(memoryEntries)
+        .set({
+          title: proposal.title,
+          body: proposal.body,
+          tags: [...proposal.tags],
+          source: proposal.source,
+        })
+        .where(eq(memoryEntries.id, proposal.memoryId));
+      return;
+    }
+    await tx.insert(memoryEntries).values({
+      projectId: ctx.projectId,
+      title: proposal.title,
+      body: proposal.body,
+      tags: [...proposal.tags],
+      source: proposal.source,
+    });
+    return;
+  }
+  if (proposal.kind === "memory_delete") {
+    await tx
+      .delete(memoryEntries)
+      .where(
+        and(eq(memoryEntries.id, proposal.memoryId), eq(memoryEntries.projectId, ctx.projectId)),
+      );
+  }
 }

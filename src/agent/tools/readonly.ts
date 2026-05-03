@@ -12,9 +12,10 @@ import { and, asc, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import { z } from "zod";
 import type { AgentTool, ToolContext, ToolFactory } from "@/agent/tools/types";
 import { defineTool, fail, ok, toToolFailure, withProvider } from "@/agent/tools/types";
-import { ITEM_KINDS, type ItemState, type ProviderItemId } from "@/core/types";
+import { ITEM_KINDS, type ItemState } from "@/core/types";
 import { escapeLike } from "@/db/like";
 import { items } from "@/db/schema";
+import { providerItemIdSchema } from "@/lib/zod-ids";
 
 export const listItemsTool: ToolFactory = (ctx) =>
   defineTool({
@@ -85,11 +86,7 @@ export const getItemTool: ToolFactory = (ctx) =>
     description:
       "Read the active item's cached description and recent comments. Defaults to the item this conversation is anchored on; pass `item_id` (e.g. 'owner/repo#42') only to read a different item. Returns title, description (markdown), state, assignee, comments (each with markdown body) — call this before drafting any propose_* on the active item so you're not echoing stale content.",
     schema: z.object({
-      item_id: z
-        .string()
-        .min(1)
-        .transform((v) => v as ProviderItemId)
-        .optional(),
+      item_id: providerItemIdSchema.optional(),
     }),
     // Foreign content lives in title, description, and each comment's body.
     // The surrounding ids/state/tags/url/timestamps are server-controlled

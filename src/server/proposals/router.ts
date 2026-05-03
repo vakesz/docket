@@ -1,17 +1,11 @@
 import "server-only";
 import { and, count, desc, eq } from "drizzle-orm";
 import { z } from "zod";
-import {
-  ITEM_KINDS,
-  type ProjectId,
-  type ProposalId,
-  type ProviderItemId,
-  TRANSITION_INTENTS,
-  type UserId,
-} from "@/core/types";
+import { ITEM_KINDS, type ProjectId, TRANSITION_INTENTS, type UserId } from "@/core/types";
 import type { Db } from "@/db";
 import { audits, proposals } from "@/db/schema";
 import type { Proposal as ProposalRow } from "@/db/schema/types";
+import { proposalIdSchema, providerItemIdSchema } from "@/lib/zod-ids";
 import {
   hydrateProposal,
   proposeAssigneeChange,
@@ -49,56 +43,44 @@ const CountInput = projectSlugSchema.extend({
 });
 
 const ProposalIdInput = projectSlugSchema.extend({
-  proposalId: z
-    .string()
-    .min(1)
-    .transform((v) => v as ProposalId),
+  proposalId: proposalIdSchema,
 });
 
 const AuditListInput = projectSlugSchema.extend({
-  proposalId: z
-    .string()
-    .min(1)
-    .transform((v) => v as ProposalId)
-    .optional(),
+  proposalId: proposalIdSchema.optional(),
   action: z.string().min(1).max(64).optional(),
   limit: z.number().int().min(1).max(200).default(50),
 });
 
-const ProviderItemIdSchema = z
-  .string()
-  .min(1)
-  .transform((v) => v as ProviderItemId);
-
 const ProposeTransitionInput = projectSlugSchema.extend({
-  providerItemId: ProviderItemIdSchema,
+  providerItemId: providerItemIdSchema,
   intent: TransitionIntentEnum,
-  canonicalItemId: ProviderItemIdSchema.optional(),
+  canonicalItemId: providerItemIdSchema.optional(),
 });
 
 const ProposeDescriptionPatchInput = projectSlugSchema.extend({
-  providerItemId: ProviderItemIdSchema,
+  providerItemId: providerItemIdSchema,
   newDescription: z.string().max(50_000),
   includePreviousVersion: z.boolean().optional(),
 });
 
 const ProposeCommentInput = projectSlugSchema.extend({
-  providerItemId: ProviderItemIdSchema,
+  providerItemId: providerItemIdSchema,
   body: z.string().min(1).max(50_000),
 });
 
 const ProposeTagsChangeInput = projectSlugSchema.extend({
-  providerItemId: ProviderItemIdSchema,
+  providerItemId: providerItemIdSchema,
   nextTags: z.array(z.string().min(1).max(80)).max(50),
 });
 
 const ProposeAssigneeChangeInput = projectSlugSchema.extend({
-  providerItemId: ProviderItemIdSchema,
+  providerItemId: providerItemIdSchema,
   nextAssignee: z.string().max(200).nullable(),
 });
 
 const ProposeReactionToggleInput = projectSlugSchema.extend({
-  providerItemId: ProviderItemIdSchema,
+  providerItemId: providerItemIdSchema,
   targetKind: ReactionTargetKindEnum,
   targetId: z.string().min(1),
   reaction: ReactionKindSchema,

@@ -9,6 +9,7 @@ import { z } from "zod";
 import type { ToolFactory } from "@/agent/tools/types";
 import { builderCtxFromTool, defineTool, fail, runProposalAction } from "@/agent/tools/types";
 import { ITEM_KINDS, type ProviderItemId, TRANSITION_INTENTS } from "@/core/types";
+import { providerItemIdSchema } from "@/lib/zod-ids";
 import {
   proposeComment,
   proposeDescriptionPatch,
@@ -20,10 +21,7 @@ import { maybeAutoAccept } from "@/server/proposals/executor";
 
 const ItemKindEnum = z.enum(ITEM_KINDS);
 const TransitionIntentEnum = z.enum(TRANSITION_INTENTS);
-const ItemIdSchema = z
-  .string()
-  .min(1)
-  .transform((v) => v as ProviderItemId);
+const ItemIdSchema = providerItemIdSchema;
 
 function resolveItemId(
   ctx: Parameters<ToolFactory>[0],

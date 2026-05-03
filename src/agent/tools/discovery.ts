@@ -11,9 +11,10 @@ import { and, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import { z } from "zod";
 import type { AgentTool, ToolContext, ToolFactory } from "@/agent/tools/types";
 import { defineTool, fail, ok, toToolFailure, withProvider } from "@/agent/tools/types";
-import type { ItemState, ProposalId } from "@/core/types";
+import type { ItemState } from "@/core/types";
 import { escapeLike } from "@/db/like";
 import { audits, items as itemsTable } from "@/db/schema";
+import { proposalIdSchema } from "@/lib/zod-ids";
 
 export const searchItemsTool: ToolFactory = (ctx) =>
   defineTool({
@@ -102,11 +103,7 @@ export const listAuditLogTool: ToolFactory = (ctx) =>
       "Read the project's append-only audit log of confirmed/rejected proposals. Use this to answer 'what was changed recently?' or to check whether a specific proposal kind has fired. Filter by `action` (e.g. 'proposal.confirm', 'proposal.reject', 'proposal.auto_confirm', 'proposal.confirm.failed') or by `proposal_id` for a single proposal's trail. Each row's `payload` is capped per-row; when truncated the field becomes `{truncated: true, bytes_total, bytes_kept, preview}` — refetch with `proposal_id` for the full body.",
     schema: z.object({
       action: z.string().min(1).max(64).optional(),
-      proposal_id: z
-        .string()
-        .min(1)
-        .transform((v) => v as ProposalId)
-        .optional(),
+      proposal_id: proposalIdSchema.optional(),
       limit: z.number().int().min(1).max(100).default(25),
     }),
     // The audit envelope is server-controlled, but `payload` is a JSON blob
