@@ -6,6 +6,12 @@
 
 import OpenAI from "openai";
 import type {
+  ResponseFunctionToolCall,
+  ResponseInputItem,
+  ResponseOutputItem,
+  ResponseStreamEvent,
+} from "openai/resources/responses/responses";
+import type {
   JudgeClassifyArgs,
   JudgeClassifyResult,
   JudgeClient,
@@ -13,6 +19,7 @@ import type {
 import type {
   LlmAdapter,
   LlmEvent,
+  LlmMessage,
   LlmRequest,
   LlmToolCall,
   LlmToolResult,
@@ -99,19 +106,19 @@ export class OpenAiAdapter implements LlmAdapter {
       "llm: request start",
     );
 
-    let stream: AsyncIterable<unknown>;
+    let stream: AsyncIterable<ResponseStreamEvent>;
     try {
-      stream = (await this.client.responses.create(
+      stream = await this.client.responses.create(
         {
           model,
           input,
-          tools: tools.length > 0 ? tools : undefined,
           stream: true,
+          ...(tools.length > 0 ? { tools } : {}),
           ...(req.maxOutputTokens ? { max_output_tokens: req.maxOutputTokens } : {}),
           ...(effectiveTemperature !== undefined ? { temperature: effectiveTemperature } : {}),
-        } as unknown as Parameters<OpenAI["responses"]["create"]>[0],
+        },
         req.signal ? { signal: req.signal } : undefined,
-      )) as AsyncIterable<unknown>;
+      );
     } catch (err) {
       logger.error(
         {
@@ -135,59 +142,45 @@ export class OpenAiAdapter implements LlmAdapter {
 
     try {
       for await (const event of stream) {
-        const evt = event as { type?: string; [k: string]: unknown };
-        const type = evt.type ?? "";
-
-        if (type === "response.output_text.delta") {
-          const delta = (evt["delta"] as string | undefined) ?? "";
-          if (delta) yield { kind: "text_delta", delta };
+        if (event.type === "response.output_text.delta") {
+          if (event.delta) yield { kind: "text_delta", delta: event.delta };
           continue;
         }
 
-        if (type === "response.output_item.added") {
-          const item = evt["item"] as
-            | { type?: string; id?: string; call_id?: string; name?: string }
-            | undefined;
-          if (item?.type === "function_call" && item.call_id && item.name) {
+        if (event.type === "response.output_item.added") {
+          const item = event.item;
+          if (isFunctionCallItem(item)) {
             pending.set(item.id ?? item.call_id, { name: item.name, argsBuf: "" });
           }
           continue;
         }
 
-        if (type === "response.function_call_arguments.delta") {
-          const itemId = (evt["item_id"] as string | undefined) ?? "";
-          const delta = (evt["delta"] as string | undefined) ?? "";
-          const slot = pending.get(itemId);
-          if (slot) slot.argsBuf += delta;
+        if (event.type === "response.function_call_arguments.delta") {
+          const slot = pending.get(event.item_id);
+          if (slot) slot.argsBuf += event.delta;
           continue;
         }
 
-        if (type === "response.function_call_arguments.done") {
-          const itemId = (evt["item_id"] as string | undefined) ?? "";
-          const slot = pending.get(itemId);
+        if (event.type === "response.function_call_arguments.done") {
+          const slot = pending.get(event.item_id);
           if (!slot) continue;
-          const callId = (evt["call_id"] as string | undefined) ?? itemId;
           let parsed: Record<string, unknown> = {};
           try {
             parsed = slot.argsBuf ? asPlainObject(JSON.parse(slot.argsBuf)) : {};
           } catch {
             parsed = { __unparsable_arguments__: slot.argsBuf };
           }
-          const call: LlmToolCall = { id: callId, name: slot.name, arguments: parsed };
-          pending.delete(itemId);
+          const call: LlmToolCall = { id: event.item_id, name: slot.name, arguments: parsed };
+          pending.delete(event.item_id);
           yield { kind: "tool_call", call };
           continue;
         }
 
-        if (type === "response.completed") {
-          const usage = (
-            evt["response"] as
-              | { usage?: { input_tokens?: number; output_tokens?: number } }
-              | undefined
-          )?.usage;
+        if (event.type === "response.completed") {
+          const usage = event.response.usage;
           if (usage) {
-            const tokensIn = usage.input_tokens ?? 0;
-            const tokensOut = usage.output_tokens ?? 0;
+            const tokensIn = usage.input_tokens;
+            const tokensOut = usage.output_tokens;
             const costCents = this.estimateCostCents(tokensIn, tokensOut);
             yield {
               kind: "usage",
@@ -200,9 +193,8 @@ export class OpenAiAdapter implements LlmAdapter {
           return;
         }
 
-        if (type === "response.error" || type === "error") {
-          const message =
-            (evt["error"] as { message?: string } | undefined)?.message ?? "OpenAI stream error";
+        if (event.type === "error") {
+          const message = event.message || "OpenAI stream error";
           logger.error(
             {
               adapter: this.kind,
@@ -247,6 +239,10 @@ export class OpenAiAdapter implements LlmAdapter {
       content: typeof result === "string" ? result : JSON.stringify(result),
     };
   }
+}
+
+function isFunctionCallItem(item: ResponseOutputItem): item is ResponseFunctionToolCall {
+  return item.type === "function_call";
 }
 
 /**
@@ -332,7 +328,7 @@ function isReasoningModel(model: string): boolean {
   return /^(gpt-5|o1|o3|o4)\b/.test(m);
 }
 
-function toResponsesInput(messages: readonly import("@/agent/llm/types").LlmMessage[]) {
+function toResponsesInput(messages: readonly LlmMessage[]): ResponseInputItem[] {
   // The Responses API accepts a flat input array of typed items: messages,
   // function_call, function_call_output. Tool calls are attached to the
   // assistant turn that produced them.
@@ -340,26 +336,24 @@ function toResponsesInput(messages: readonly import("@/agent/llm/types").LlmMess
   // We emit the explicit `type: "message"` + content-parts form rather than
   // the bare `{ role, content }` shorthand — api.openai.com infers the type,
   // but Azure AI Foundry's stricter validator rejects items without one.
-  const out: Record<string, unknown>[] = [];
+  const out: ResponseInputItem[] = [];
   for (const m of messages) {
-    if (m.role === "system") {
+    if (m.role === "system" || m.role === "user") {
       out.push({
         type: "message",
-        role: "system",
-        content: [{ type: "input_text", text: m.content }],
-      });
-    } else if (m.role === "user") {
-      out.push({
-        type: "message",
-        role: "user",
+        role: m.role,
         content: [{ type: "input_text", text: m.content }],
       });
     } else if (m.role === "assistant") {
       if (m.content) {
+        // `input_text` (not `output_text`) on assistant: echoing a prior
+        // assistant turn back as input uses `EasyInputMessage`, whose
+        // content list only accepts `input_text`. `output_text` belongs to
+        // `ResponseOutputMessage`, which requires id/status we don't have.
         out.push({
           type: "message",
           role: "assistant",
-          content: [{ type: "output_text", text: m.content }],
+          content: [{ type: "input_text", text: m.content }],
         });
       }
       for (const call of m.toolCalls ?? []) {

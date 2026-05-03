@@ -27,7 +27,7 @@ const DaysInput = z.object({ days: z.number().int().min(1).max(365).default(14) 
 
 export const analyticsRouter = router({
   projectDaily: projectScopedProcedure
-    .input(DaysInput.merge(projectSlugSchema))
+    .input(DaysInput.extend(projectSlugSchema.shape))
     .query(async ({ ctx, input }) => {
       return aggregateProjectDaily(ctx.db, ctx.projectId, input.days);
     }),

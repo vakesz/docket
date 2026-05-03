@@ -26,6 +26,12 @@ export type Context = {
    * procedures through a single createContext() call, so any middleware
    * (e.g. the read-only gate that runs on every mutation) hits the DB once
    * per HTTP request instead of once per procedure.
+   *
+   * Stored as `unknown` because TS's mapped types can't track per-key value
+   * types through a Map's generic API. The single cast lives in
+   * `getGlobalSettingCached` below — at the read boundary, where the
+   * generic K is in scope and the `SettingValue<K>` invariant is honored
+   * by construction (we only ever store what `loadGlobalSetting` returns).
    */
   globalSettings: Map<SettingKey, unknown>;
 };
@@ -132,15 +138,12 @@ export const mutationProcedure = protectedProcedure.use(enforceReadWrite);
  *
  * Procedures that compose this MUST .input() a Zod schema that includes
  * `projectSlug: z.string()` — the middleware reads it via getRawInput().
+ *
+ * Defined as an inline `.use(...)` on `protectedProcedure` so the chained
+ * context inference picks up `ctx.userId` from `requireSession` upstream
+ * without a manual cast.
  */
-const enforceProjectMembership = t.middleware(async ({ ctx, getRawInput, next }) => {
-  // `requireSession` runs upstream and narrows ctx.userId to a non-empty string.
-  const sessionCtx = ctx as Context & { userId?: UserId };
-  const userId = sessionCtx.userId;
-  if (!userId) {
-    throw new TRPCError({ code: "UNAUTHORIZED" });
-  }
-
+export const projectScopedProcedure = protectedProcedure.use(async ({ ctx, getRawInput, next }) => {
   const raw = await getRawInput();
   const parsed = z.object({ projectSlug: z.string().min(1) }).safeParse(raw);
   if (!parsed.success) {
@@ -150,7 +153,7 @@ const enforceProjectMembership = t.middleware(async ({ ctx, getRawInput, next })
     });
   }
 
-  const project = await projectForUser(ctx.db, parsed.data.projectSlug, userId);
+  const project = await projectForUser(ctx.db, parsed.data.projectSlug, ctx.userId);
   if (!project) {
     throw new TRPCError({
       code: "FORBIDDEN",
@@ -160,14 +163,11 @@ const enforceProjectMembership = t.middleware(async ({ ctx, getRawInput, next })
 
   return next({
     ctx: {
-      ...ctx,
       projectId: project.id,
       project,
     },
   });
 });
-
-export const projectScopedProcedure = protectedProcedure.use(enforceProjectMembership);
 
 /**
  * Look up the caller's effective role on `ctx.project`. Owners are reported
@@ -175,19 +175,14 @@ export const projectScopedProcedure = protectedProcedure.use(enforceProjectMembe
  * stored role; users with no membership row return `null`.
  */
 async function effectiveProjectRole(
-  ctx: Context & { userId?: UserId; project?: AuthorizedProject },
+  ctx: Context & { userId: UserId; project: AuthorizedProject },
 ): Promise<"owner" | "approver" | "member" | "viewer" | null> {
-  const project = ctx.project;
-  const userId = ctx.userId;
-  if (!project || !userId) {
-    throw new TRPCError({
-      code: "INTERNAL_SERVER_ERROR",
-      message: "effectiveProjectRole requires projectScopedProcedure upstream",
-    });
-  }
-  if (project.ownerUserId === userId) return "owner";
+  if (ctx.project.ownerUserId === ctx.userId) return "owner";
   const membership = await ctx.db.query.projectMemberships.findFirst({
-    where: and(eq(projectMemberships.projectId, project.id), eq(projectMemberships.userId, userId)),
+    where: and(
+      eq(projectMemberships.projectId, ctx.project.id),
+      eq(projectMemberships.userId, ctx.userId),
+    ),
     columns: { role: true },
   });
   if (!membership) return null;
@@ -201,35 +196,33 @@ async function effectiveProjectRole(
  * must have a role other than `viewer`. Layers the system-wide read-only
  * gate so a single toggle can lock the whole app.
  */
-const rejectViewerRole = t.middleware(async ({ ctx, next }) => {
-  const role = await effectiveProjectRole(ctx as Context & { project?: AuthorizedProject });
-  if (role === "viewer" || role === null) {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "viewers cannot perform mutations on this project",
-    });
-  }
-  return next();
-});
-
 export const projectScopedMutationProcedure = projectScopedProcedure
   .use(enforceReadWrite)
-  .use(rejectViewerRole);
+  .use(async ({ ctx, next }) => {
+    const role = await effectiveProjectRole(ctx);
+    if (role === "viewer" || role === null) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "viewers cannot perform mutations on this project",
+      });
+    }
+    return next();
+  });
 
 /**
  * Approver-or-owner gate for confirming/rejecting proposals. Non-owner
  * members with role `member` (or below) can stage proposals but can't
  * execute them — the human-in-the-loop on writes.
  */
-const requireApprover = t.middleware(async ({ ctx, next }) => {
-  const role = await effectiveProjectRole(ctx as Context & { project?: AuthorizedProject });
-  if (role !== "owner" && role !== "approver") {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "only project owners and approvers can confirm or reject proposals",
-    });
-  }
-  return next();
-});
-
-export const projectScopedApproverProcedure = projectScopedMutationProcedure.use(requireApprover);
+export const projectScopedApproverProcedure = projectScopedMutationProcedure.use(
+  async ({ ctx, next }) => {
+    const role = await effectiveProjectRole(ctx);
+    if (role !== "owner" && role !== "approver") {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "only project owners and approvers can confirm or reject proposals",
+      });
+    }
+    return next();
+  },
+);

@@ -60,7 +60,7 @@ const askUserQuestionPayloadSchema = z.object({
 });
 
 function isProposalToolName(name: string): name is ProposalToolName {
-  return (PROPOSAL_TOOL_NAMES as readonly string[]).includes(name);
+  return PROPOSAL_TOOL_NAMES.some((n) => n === name);
 }
 
 export type LoopEvent =
@@ -379,7 +379,7 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
           // forces a case here rather than silently dropping the event.
           const exhaustive: never = event;
           logger.error(
-            { ...baseCtx, round: rounds, event: exhaustive as unknown },
+            { ...baseCtx, round: rounds, event: exhaustive },
             "agent: unhandled LLM event kind",
           );
         }

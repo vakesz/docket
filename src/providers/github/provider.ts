@@ -153,18 +153,38 @@ function labelsOf(issue: IssueLikePayload): string[] {
 }
 
 /**
- * Extract a `Reactions` count map from a GitHub reaction summary blob.
- * Returns null when the field is missing entirely (older payload shape);
- * an empty `{}` when there are no reactions yet.
+ * Extract a `Reactions` count map from any object that carries a GitHub
+ * reaction summary on a `.reactions` field. Octokit's typings don't surface
+ * `reactions` on every payload that actually returns it (issue comments are
+ * the prime offender), so callers pass the holder and we narrow internally.
+ * Returns null when the holder lacks the field or sets it to null; an empty
+ * `{}` when the field is present but has no positive counts.
  */
-function reactionsOf(raw: GithubReactionsSummary | undefined): Reactions | null {
-  if (!raw) return null;
+function reactionsOf(holder: unknown): Reactions | null {
+  if (holder === null || typeof holder !== "object") return null;
+  const summary = (holder as { reactions?: GithubReactionsSummary }).reactions;
+  if (!summary) return null;
   const out: Reactions = {};
   for (const key of GITHUB_REACTION_KINDS) {
-    const v = raw[key];
+    const v = summary[key];
     if (typeof v === "number" && v > 0) out[key] = v;
   }
   return out;
+}
+
+const STATE_REASONS = [
+  "completed",
+  "not_planned",
+  "duplicate",
+  "reopened",
+] as const satisfies readonly Exclude<GithubStateReason, null>[];
+
+function asIssueState(state: string): GithubIssueState {
+  return state === "closed" ? "closed" : "open";
+}
+
+function asStateReason(reason: string | null | undefined): GithubStateReason {
+  return STATE_REASONS.find((r) => r === reason) ?? null;
 }
 
 function assertGithubReaction(reaction: string): GithubReactionKind {
@@ -231,17 +251,14 @@ export class GitHubProvider implements WorkItemProvider {
       title: issue.title ?? "",
       description: issue.body ?? "",
       state: toCanonicalState(
-        {
-          state: issue.state as GithubIssueState,
-          stateReason: (issue.state_reason ?? null) as GithubStateReason,
-        },
+        { state: asIssueState(issue.state), stateReason: asStateReason(issue.state_reason) },
         labels,
       ),
       assignee: singleAssignee,
       assignees: assignees.length > 0 ? assignees : singleAssignee ? [singleAssignee] : [],
       reviewers: [],
       linkedItemIds: [],
-      reactions: reactionsOf(issue.reactions),
+      reactions: reactionsOf(issue),
       milestone: issue.milestone?.title ?? null,
       iteration: null,
       area: null,
@@ -285,7 +302,7 @@ export class GitHubProvider implements WorkItemProvider {
         this.octokit.issues.listForRepo,
         params,
       )) {
-        for (const issue of page.data as IssueLikePayload[]) {
+        for (const issue of page.data) {
           if (issue.pull_request) continue;
           const item = this.toCanonicalItem(issue);
           // Fetch comments inline so the cache stays current without an extra
@@ -323,7 +340,7 @@ export class GitHubProvider implements WorkItemProvider {
     return all.map((c): Comment => {
       const created = new Date(c.created_at);
       const updated = c.updated_at ? new Date(c.updated_at) : null;
-      const reactions = reactionsOf((c as { reactions?: GithubReactionsSummary }).reactions);
+      const reactions = reactionsOf(c);
       return {
         id: String(c.id),
         itemId: id,
@@ -433,7 +450,7 @@ export class GitHubProvider implements WorkItemProvider {
         createdAt: created,
         updatedAt: updated,
         edited: updated ? updated.getTime() > created.getTime() : false,
-        reactions: reactionsOf((c as { reactions?: GithubReactionsSummary }).reactions),
+        reactions: reactionsOf(c),
       };
     } catch (err) {
       wrapOctokitError(err);
@@ -453,8 +470,7 @@ export class GitHubProvider implements WorkItemProvider {
         });
         const updated = await this.octokit.issues.get({ owner, repo, issue_number: number });
         return {
-          reactions:
-            reactionsOf((updated.data as { reactions?: GithubReactionsSummary }).reactions) ?? {},
+          reactions: reactionsOf(updated.data) ?? {},
         };
       }
       const commentNumber = Number.parseInt(target.id, 10);
@@ -470,8 +486,7 @@ export class GitHubProvider implements WorkItemProvider {
         comment_id: commentNumber,
       });
       return {
-        reactions:
-          reactionsOf((refreshed.data as { reactions?: GithubReactionsSummary }).reactions) ?? {},
+        reactions: reactionsOf(refreshed.data) ?? {},
       };
     } catch (err) {
       wrapOctokitError(err);
@@ -510,8 +525,7 @@ export class GitHubProvider implements WorkItemProvider {
         }
         const updated = await this.octokit.issues.get({ owner, repo, issue_number: number });
         return {
-          reactions:
-            reactionsOf((updated.data as { reactions?: GithubReactionsSummary }).reactions) ?? {},
+          reactions: reactionsOf(updated.data) ?? {},
         };
       }
       const commentNumber = Number.parseInt(target.id, 10);
@@ -539,8 +553,7 @@ export class GitHubProvider implements WorkItemProvider {
         comment_id: commentNumber,
       });
       return {
-        reactions:
-          reactionsOf((refreshed.data as { reactions?: GithubReactionsSummary }).reactions) ?? {},
+        reactions: reactionsOf(refreshed.data) ?? {},
       };
     } catch (err) {
       wrapOctokitError(err);
