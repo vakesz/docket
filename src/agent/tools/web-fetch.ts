@@ -339,7 +339,3 @@ export const webFetchTool: ToolFactory = (ctx) =>
       });
     },
   });
-
-export function webFetchTools(ctx: Parameters<ToolFactory>[0]) {
-  return [webFetchTool(ctx)] as const;
-}

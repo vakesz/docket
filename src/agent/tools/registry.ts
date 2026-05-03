@@ -7,7 +7,7 @@
 import "server-only";
 import { mcpTools } from "@/agent/mcp/tools";
 import { discoveryTools } from "@/agent/tools/discovery";
-import { linkTools } from "@/agent/tools/links";
+import { findRelatedPullRequestsTool } from "@/agent/tools/links";
 import { memoryReadonlyTools } from "@/agent/tools/memory";
 import { memoryMutatingTools } from "@/agent/tools/memory-mutating";
 import { mutatingTools } from "@/agent/tools/mutating";
@@ -15,7 +15,7 @@ import { questionTools } from "@/agent/tools/question";
 import { readonlyTools } from "@/agent/tools/readonly";
 import { sourceReadonlyTools } from "@/agent/tools/source";
 import type { AgentTool, ToolContext } from "@/agent/tools/types";
-import { webFetchTools } from "@/agent/tools/web-fetch";
+import { webFetchTool } from "@/agent/tools/web-fetch";
 import { loadProjectSetting } from "@/server/settings/effective";
 
 export type ToolRegistryOptions = {
@@ -85,7 +85,7 @@ export async function buildToolRegistry(
   // (1)
   tools.push(...readonlyTools(ctx));
   // (2)
-  tools.push(...linkTools(ctx));
+  tools.push(findRelatedPullRequestsTool(ctx));
   // (3)
   tools.push(...memoryReadonlyTools(ctx));
   // (4)
@@ -111,7 +111,7 @@ export async function buildToolRegistry(
   // never use it. The handler still re-checks the flag on every call,
   // so a flip mid-conversation is honored on the next turn.
   if (await loadProjectSetting(ctx.db, ctx.projectId, "web-fetch.enabled")) {
-    tools.push(...webFetchTools(ctx));
+    tools.push(webFetchTool(ctx));
   }
   // (9) discovery — read-only, pinned at the tail. Always present.
   tools.push(...discoveryTools(ctx));

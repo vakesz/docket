@@ -49,7 +49,3 @@ export const findRelatedPullRequestsTool: ToolFactory = (ctx) =>
       }
     },
   });
-
-export function linkTools(ctx: Parameters<ToolFactory>[0]) {
-  return [findRelatedPullRequestsTool(ctx)] as const;
-}
