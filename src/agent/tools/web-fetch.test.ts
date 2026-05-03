@@ -14,6 +14,8 @@ const settings = vi.hoisted(() => ({
   enabled: true as boolean,
   allowlist: [] as string[],
   maxBytes: 200_000 as number,
+  timeoutSeconds: 10 as number,
+  maxRedirects: 5 as number,
 }));
 
 interface AuditRow {
@@ -28,6 +30,8 @@ vi.mock("@/server/settings/effective", () => ({
     if (key === "web-fetch.enabled") return settings.enabled;
     if (key === "web-fetch.allowed-hosts") return settings.allowlist;
     if (key === "web-fetch.max-bytes") return settings.maxBytes;
+    if (key === "web-fetch.timeout-seconds") return settings.timeoutSeconds;
+    if (key === "web-fetch.max-redirects") return settings.maxRedirects;
     throw new Error(`unmocked setting ${key}`);
   },
 }));

@@ -11,9 +11,6 @@ import { loadProjectSetting } from "@/server/settings/effective";
 import { recordWebFetchEvent } from "@/server/web-fetch/audit";
 import { assertFetchTargetSafe } from "@/server/web-fetch/ssrf";
 
-const FETCH_TIMEOUT_MS = 10_000;
-const MAX_REDIRECTS = 5;
-
 const TEXTUAL_CONTENT_TYPE_PREFIXES: readonly string[] = [
   "text/",
   "application/json",
@@ -69,11 +66,14 @@ export const webFetchTool: ToolFactory = (ctx) =>
         url: args.url,
       };
 
-      const [enabled, allowlist, maxBytes] = await Promise.all([
+      const [enabled, allowlist, maxBytes, timeoutSeconds, maxRedirects] = await Promise.all([
         loadProjectSetting(ctx.db, ctx.projectId, "web-fetch.enabled"),
         loadProjectSetting(ctx.db, ctx.projectId, "web-fetch.allowed-hosts"),
         loadProjectSetting(ctx.db, ctx.projectId, "web-fetch.max-bytes"),
+        loadProjectSetting(ctx.db, ctx.projectId, "web-fetch.timeout-seconds"),
+        loadProjectSetting(ctx.db, ctx.projectId, "web-fetch.max-redirects"),
       ]);
+      const fetchTimeoutMs = timeoutSeconds * 1_000;
 
       if (!enabled) {
         await recordWebFetchEvent(ctx.db, {
@@ -108,7 +108,7 @@ export const webFetchTool: ToolFactory = (ctx) =>
       // target after passing the initial guard, so we drive redirects ourselves
       // and re-validate each Location.
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+      const timeoutId = setTimeout(() => controller.abort(), fetchTimeoutMs);
       let response: Response;
       let currentUrl = parsed;
       try {
@@ -172,7 +172,7 @@ export const webFetchTool: ToolFactory = (ctx) =>
             // ignore
           }
 
-          if (hop >= MAX_REDIRECTS) {
+          if (hop >= maxRedirects) {
             clearTimeout(timeoutId);
             await recordWebFetchEvent(ctx.db, {
               ...auditBase,
@@ -180,9 +180,9 @@ export const webFetchTool: ToolFactory = (ctx) =>
               status: "denied_redirect",
               contentType: null,
               bytes: 0,
-              errorMessage: `exceeded ${MAX_REDIRECTS} redirects`,
+              errorMessage: `exceeded ${maxRedirects} redirects`,
             });
-            return fail(`fetch denied: exceeded ${MAX_REDIRECTS} redirects`);
+            return fail(`fetch denied: exceeded ${maxRedirects} redirects`);
           }
 
           const location = hopResponse.headers.get("location") ?? "";

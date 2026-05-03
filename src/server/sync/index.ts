@@ -1,9 +1,9 @@
 // `runFullSync` archives any cached row not seen in the walk — that's
 // what makes "closed at the provider but never re-synced" observable.
-// Items are drained in `CHUNK_SIZE` batches: one findMany per chunk to
-// load existing rows, drizzle insert for new ids, then a parallel set
-// of updates — bulk pipelining beats thousands of sequential round-trips
-// on first-time / full syncs.
+// Items are drained in `tunables.chunkSize` batches: one findMany per
+// chunk to load existing rows, drizzle insert for new ids, then a
+// parallel set of updates — bulk pipelining beats thousands of
+// sequential round-trips on first-time / full syncs.
 
 import "server-only";
 import { randomUUID } from "node:crypto";
@@ -29,6 +29,7 @@ import {
 import { errFields } from "@/server/log-fields";
 import { logger } from "@/server/logger";
 import { buildProviderForUser } from "@/server/providers/build";
+import { loadGlobalSetting } from "@/server/settings/effective";
 
 type SyncPhase = "stream" | "persist" | "archive" | "cursor";
 type SyncMode = "incremental" | "full";
@@ -98,23 +99,49 @@ export type SyncResult = {
 };
 
 const SYNC_PROGRESS_KEY = "sync.progress";
-const STALE_SYNC_PROGRESS_MS = 15 * 60 * 1000;
-const CHUNK_SIZE = 200;
+
 /**
- * Cap on concurrent chunk-persist tasks. With this > 1, fetching the next
- * page from the provider overlaps with persisting the previous chunk.
- * Kept low so we don't hammer the DB with parallel write transactions on
- * disjoint chunks; 2 is enough to hide one round-trip behind the other.
+ * Sync runtime tunables loaded from the settings catalog at the start of
+ * a run and threaded through the pipeline. Pulling them once per run
+ * (instead of on every chunk) keeps the hot path off the settings table
+ * and makes a run's behavior consistent even if an operator edits a
+ * value mid-run. Defaults live in `src/server/settings/catalog.ts`.
  */
-const MAX_INFLIGHT_CHUNKS = 2;
-/**
- * Max concurrency for per-row writes inside one chunk (item updates,
- * inbound-change injection, comment reconciliation). Keeps fan-out
- * bounded on chatty repos where a single chunk can carry hundreds of
- * rows; the previous unbounded `Promise.all` could open >1k parallel
- * write transactions on first sync of a large repo.
- */
-const MAX_INTRA_CHUNK_CONCURRENCY = 8;
+type SyncTunables = {
+  /** Items per chunk drained from the provider stream. */
+  chunkSize: number;
+  /**
+   * Cap on concurrent chunk-persist tasks. With this > 1, fetching the
+   * next page from the provider overlaps with persisting the previous
+   * chunk. Bounded so we don't open unbounded parallel write transactions
+   * on disjoint chunks.
+   */
+  maxInflightChunks: number;
+  /**
+   * Max concurrency for per-row writes inside one chunk (item updates,
+   * inbound-change injection, comment reconciliation). The previous
+   * unbounded `Promise.all` could open >1k parallel write transactions
+   * on first sync of a large repo.
+   */
+  maxIntraChunkConcurrency: number;
+  /** Lease takeover threshold for stuck syncs, in milliseconds. */
+  staleProgressMs: number;
+};
+
+async function loadSyncTunables(db: Db): Promise<SyncTunables> {
+  const [chunkSize, maxInflightChunks, maxIntraChunkConcurrency, staleMinutes] = await Promise.all([
+    loadGlobalSetting(db, "sync.chunk-size"),
+    loadGlobalSetting(db, "sync.max-inflight-chunks"),
+    loadGlobalSetting(db, "sync.max-intra-chunk-concurrency"),
+    loadGlobalSetting(db, "sync.stale-progress-minutes"),
+  ]);
+  return {
+    chunkSize,
+    maxInflightChunks,
+    maxIntraChunkConcurrency,
+    staleProgressMs: staleMinutes * 60_000,
+  };
+}
 
 // Single source of truth for the persisted snapshot shape: zod parses the
 // raw JSON, validates string enums, coerces ISO date strings to Date, and
@@ -200,7 +227,7 @@ function decodeProgress(raw: string | null | undefined): SyncProgressSnapshot | 
  * project. Caught by `runSync` so the losing instance exits cleanly.
  *
  * The lease is the `sync.progress` row itself: only one runId can be
- * "running" at a time within `STALE_SYNC_PROGRESS_MS`. The atomic
+ * "running" at a time within `tunables.staleProgressMs`. The atomic
  * upsert below either takes the lease or returns no row, and that
  * empty result is what raises this error.
  */
@@ -221,7 +248,7 @@ class SyncLeaseConflictError extends Error {
  * The `setWhere` admits an update only when:
  *   - it's our own runId (heartbeat / phase transition / final write), OR
  *   - the existing run already finished (`done` / `failed`), OR
- *   - the existing run hasn't heartbeat in `STALE_SYNC_PROGRESS_MS` (crash
+ *   - the existing run hasn't heartbeat in `tunables.staleProgressMs` (crash
  *     recovery — assume the previous instance is dead).
  *
  * The previous implementation did `findFirst` → branch insert/update with
@@ -233,9 +260,10 @@ async function upsertProgress(
   db: Db,
   projectId: ProjectId,
   snapshot: SyncProgressSnapshot,
+  staleProgressMs: number,
 ): Promise<boolean> {
   const encoded = encodeProgress(snapshot);
-  const staleBefore = new Date(Date.now() - STALE_SYNC_PROGRESS_MS).toISOString();
+  const staleBefore = new Date(Date.now() - staleProgressMs).toISOString();
   const rows = await db
     .insert(settings)
     .values({
@@ -277,9 +305,11 @@ export async function loadSyncProgress(
   const snapshot = decodeProgress(row?.value);
   if (!snapshot) return null;
 
+  const staleMinutes = await loadGlobalSetting(db, "sync.stale-progress-minutes");
+  const staleProgressMs = staleMinutes * 60_000;
   if (
     snapshot.status === "running" &&
-    Date.now() - snapshot.updatedAt.getTime() > STALE_SYNC_PROGRESS_MS
+    Date.now() - snapshot.updatedAt.getTime() > staleProgressMs
   ) {
     const failed: SyncProgressSnapshot = {
       ...snapshot,
@@ -289,7 +319,7 @@ export async function loadSyncProgress(
       error: snapshot.error ?? "Sync appears stale (no progress heartbeat).",
     };
     // Best-effort: if a fresher run beat us to the row, the upsert no-ops.
-    await upsertProgress(db, projectId, failed);
+    await upsertProgress(db, projectId, failed, staleProgressMs);
     return failed;
   }
 
@@ -450,6 +480,7 @@ async function processChunk(
   bundles: readonly ChangedItem[],
   syncedAt: Date,
   ctx: { syncId: string; chunkIndex: number; providerKind: string },
+  tunables: SyncTunables,
 ): Promise<ChunkResult> {
   const startedAt = Date.now();
   const ids = bundles.map((b) => b.item.id);
@@ -516,7 +547,7 @@ async function processChunk(
     // and the next cycle re-syncs them.
     const settled = await mapWithConcurrencySettled(
       toUpdate,
-      MAX_INTRA_CHUNK_CONCURRENCY,
+      tunables.maxIntraChunkConcurrency,
       ({ providerItemId, row }) =>
         db
           .update(items)
@@ -552,7 +583,7 @@ async function processChunk(
   if (changedExisting.length > 0) {
     const settled = await mapWithConcurrencySettled(
       changedExisting,
-      MAX_INTRA_CHUNK_CONCURRENCY,
+      tunables.maxIntraChunkConcurrency,
       (c) =>
         injectExternalChange(db, {
           projectId,
@@ -610,7 +641,11 @@ async function processChunk(
       if (!surrogate) continue;
       reconcileBundles.push({ itemSurrogate: surrogate, comments: b.comments ?? [] });
     }
-    const reconcileResult = await reconcileComments(db, reconcileBundles);
+    const reconcileResult = await reconcileComments(
+      db,
+      reconcileBundles,
+      tunables.maxIntraChunkConcurrency,
+    );
     commentsReconciled += reconcileResult.touched;
     failedComments += reconcileResult.failed;
     if (reconcileResult.warnings.length > 0) warnings.push(...reconcileResult.warnings);
@@ -685,10 +720,13 @@ function collectAssignees(bundles: readonly ChangedItem[]): string[] {
 /**
  * Reconcile cached comments against provider snapshots, batched over
  * arbitrary many items. One select covers every item in the call, then
- * per-comment writes fan out under `MAX_INTRA_CHUNK_CONCURRENCY`. Skip-
- * rewrite: comments whose `providerUpdatedAt` matches the cached row
- * (and whose body matches) are left untouched. Returns counts of writes
- * that touched the DB and writes that failed (with per-failure warnings).
+ * per-comment writes fan out under the caller-supplied `concurrency` (the
+ * sync pipeline threads `tunables.maxIntraChunkConcurrency` here; the
+ * executor passes a small default since it reconciles one bundle at a
+ * time). Skip-rewrite: comments whose `providerUpdatedAt` matches the
+ * cached row (and whose body matches) are left untouched. Returns counts
+ * of writes that touched the DB and writes that failed (with per-failure
+ * warnings).
  *
  * Deletions: not handled here. Providers don't reliably surface comment
  * deletions through their listing endpoints, and an over-eager delete would
@@ -723,6 +761,7 @@ type CommentUpdate = {
 export async function reconcileComments(
   db: Db | DbTx,
   bundles: readonly CommentReconcileBundle[],
+  concurrency = 8,
 ): Promise<ReconcileCommentsResult> {
   const nonEmpty = bundles.filter((b) => b.comments.length > 0);
   if (nonEmpty.length === 0) return { touched: 0, failed: 0, warnings: [] };
@@ -804,7 +843,7 @@ export async function reconcileComments(
     } catch (err) {
       // Batched insert failed atomically — we don't know which row was the
       // offender. Re-run one row at a time so the rest still land.
-      const settled = await mapWithConcurrencySettled(inserts, MAX_INTRA_CHUNK_CONCURRENCY, (row) =>
+      const settled = await mapWithConcurrencySettled(inserts, concurrency, (row) =>
         db
           .insert(comments)
           .values(row)
@@ -829,7 +868,7 @@ export async function reconcileComments(
   }
 
   if (updates.length > 0) {
-    const settled = await mapWithConcurrencySettled(updates, MAX_INTRA_CHUNK_CONCURRENCY, (u) =>
+    const settled = await mapWithConcurrencySettled(updates, concurrency, (u) =>
       db
         .update(comments)
         .set(u.fields)
@@ -863,6 +902,7 @@ async function upsertItems(
   bundles: AsyncIterable<ChangedItem>,
   syncedAt: Date,
   syncId: string,
+  tunables: SyncTunables,
   onProgress?: (snapshot: UpsertProgressSnapshot) => Promise<void> | void,
 ): Promise<{
   upserted: number;
@@ -892,11 +932,18 @@ async function upsertItems(
 
   const fire = (chunk: readonly ChangedItem[]) => {
     const chunkIndex = chunks++;
-    const task = processChunk(db, projectId, chunk, syncedAt, {
-      syncId,
-      chunkIndex,
-      providerKind,
-    }).then(async (r) => {
+    const task = processChunk(
+      db,
+      projectId,
+      chunk,
+      syncedAt,
+      {
+        syncId,
+        chunkIndex,
+        providerKind,
+      },
+      tunables,
+    ).then(async (r) => {
       upserted += r.upserted;
       inboundConversations += r.inboundConversations;
       commentsReconciled += r.commentsReconciled;
@@ -942,14 +989,14 @@ async function upsertItems(
     if (item.updatedAt && (!latestUpdatedAt || item.updatedAt > latestUpdatedAt)) {
       latestUpdatedAt = item.updatedAt;
     }
-    if (buffer.length >= CHUNK_SIZE) {
+    if (buffer.length >= tunables.chunkSize) {
       const chunk = buffer;
       buffer = [];
       fire(chunk);
       // Bound the number of in-flight chunks so we hide one DB round-trip
       // behind the next provider-page fetch without spawning unbounded
       // parallel write transactions.
-      while (inflight.size >= MAX_INFLIGHT_CHUNKS) {
+      while (inflight.size >= tunables.maxInflightChunks) {
         await Promise.race(inflight);
       }
     }
@@ -1059,6 +1106,8 @@ async function runSync(
     error: null,
   };
 
+  const tunables = await loadSyncTunables(db);
+
   // Returns whether this run still owns the lease. On the very first call,
   // a `false` means another run already holds it — we abort cleanly.
   const persistProgress = async (): Promise<boolean> => {
@@ -1067,7 +1116,7 @@ async function runSync(
       updatedAt: new Date(),
       warnings: trimWarnings(progress.warnings),
     };
-    return upsertProgress(db, projectId, progress);
+    return upsertProgress(db, projectId, progress, tunables.staleProgressMs);
   };
 
   try {
@@ -1117,6 +1166,7 @@ async function runSync(
       provider.listChangesSince(watermark),
       syncedAt,
       syncId,
+      tunables,
       async (chunkProgress) => {
         progress = {
           ...progress,

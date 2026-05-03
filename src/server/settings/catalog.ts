@@ -85,6 +85,24 @@ const CostCapActionSchema = z.enum(["block", "warn"]);
 // can't strand a project at "sync once a day". The settings UI presents
 // this as minutes; the stored unit stays in seconds.
 const SyncIntervalSecondsSchema = z.number().int().min(0).max(3600);
+// Sync runtime tunables — operator-facing knobs that pair with the per-
+// project sync interval. Defaults match the in-code constants they
+// replaced; the bounds keep operators from setting values that would
+// either no-op the pipeline or pin the database.
+const SyncChunkSizeSchema = z.number().int().min(10).max(1000);
+const SyncMaxInflightChunksSchema = z.number().int().min(1).max(10);
+const SyncMaxIntraChunkConcurrencySchema = z.number().int().min(1).max(32);
+// Lease takeover threshold for stuck syncs. A run whose `updatedAt` is
+// older than this is considered abandoned (process crashed mid-run) and
+// another replica may steal the lease. 1 minute is the floor (anything
+// shorter risks a healthy run getting stolen during a long provider
+// call); 24 hours is generous for catastrophically large initial syncs.
+const SyncStaleProgressMinutesSchema = z.number().int().min(1).max(1440);
+// Web-fetch tool tunables that pair with the existing host allowlist /
+// size cap. Both are project-scoped so the same project can ratchet down
+// for high-trust internal docs vs. a wide-open research project.
+const WebFetchTimeoutSecondsSchema = z.number().int().min(1).max(120);
+const WebFetchMaxRedirectsSchema = z.number().int().min(0).max(10);
 // Allowlist of fully-qualified hostnames the web_fetch tool may target.
 // Empty list = no allowlist (any non-SSRF host is reachable). Hosts are
 // matched case-insensitively against the URL's hostname only — no path /
@@ -618,6 +636,60 @@ export const SETTINGS_CATALOG = {
     label: "Auto-accept proposals — extra kinds",
     description:
       "Additional proposal kinds that confirm automatically without a human tap when the user originates them in the UI. UI-origin comments, reactions, and tag changes always auto-confirm regardless of this setting (chip-level edits the user already made in the UI). This list opts in extra local-DB kinds (memory writes/deletes); provider-touching kinds beyond the floor (state changes, descriptions, assignee changes, new items) always require explicit review. Agent-staged proposals never auto-confirm regardless. Read-only mode still wins.",
+  },
+  "sync.chunk-size": {
+    key: "sync.chunk-size",
+    scope: "global",
+    schema: SyncChunkSizeSchema,
+    default: 200,
+    label: "Sync — items per chunk",
+    description:
+      "How many items each sync chunk fetches and persists. Larger chunks cut overhead per round-trip; smaller chunks bound peak memory and reduce blast radius if a chunk fails partway. Range 10–1000.",
+  },
+  "sync.max-inflight-chunks": {
+    key: "sync.max-inflight-chunks",
+    scope: "global",
+    schema: SyncMaxInflightChunksSchema,
+    default: 2,
+    label: "Sync — max concurrent chunks per project",
+    description:
+      "Upper bound on chunks a single project syncs in parallel. Bumping this trades provider rate-limit headroom for shorter wall-clock per sync. Range 1–10.",
+  },
+  "sync.max-intra-chunk-concurrency": {
+    key: "sync.max-intra-chunk-concurrency",
+    scope: "global",
+    schema: SyncMaxIntraChunkConcurrencySchema,
+    default: 8,
+    label: "Sync — per-row write concurrency inside a chunk",
+    description:
+      "Cap on parallel DB writes inside one chunk (per-row item upserts, per-comment reconciles). Lower if your Postgres connection pool is small; raise if writes dominate sync wall time. Range 1–32.",
+  },
+  "sync.stale-progress-minutes": {
+    key: "sync.stale-progress-minutes",
+    scope: "global",
+    schema: SyncStaleProgressMinutesSchema,
+    default: 15,
+    label: "Sync — stale-progress lease takeover (minutes)",
+    description:
+      "How long a sync run may sit without progress updates before another replica may steal its lease and start fresh. Raise for very large initial syncs; lower if you frequently see crashed runs blocking new syncs. Range 1 minute–24 hours.",
+  },
+  "web-fetch.timeout-seconds": {
+    key: "web-fetch.timeout-seconds",
+    scope: "project",
+    schema: WebFetchTimeoutSecondsSchema,
+    default: 10,
+    label: "Web-fetch — per-request timeout (seconds)",
+    description:
+      "Hard deadline that spans the entire web_fetch attempt — connect, headers, body read, and any redirect hops all share this single budget. Lower to fail fast on flaky hosts; raise when fetching large but legitimate docs. Range 1–120.",
+  },
+  "web-fetch.max-redirects": {
+    key: "web-fetch.max-redirects",
+    scope: "project",
+    schema: WebFetchMaxRedirectsSchema,
+    default: 5,
+    label: "Web-fetch — max redirect hops",
+    description:
+      "Stops redirect loops and cuts off chains that fan out across hosts. 0 disables redirect following entirely (3xx becomes denied_redirect). Range 0–10.",
   },
 } as const satisfies Record<string, SettingDef<z.ZodTypeAny>>;
 
