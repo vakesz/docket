@@ -7,6 +7,7 @@ import type { Db } from "@/db";
 import type { OauthProviderConfigMetadata } from "@/db/schema";
 import { llmProviders, oauthProviderConfigs } from "@/db/schema";
 import { LLM_ROLES } from "@/server/llm/lookup";
+import { PriceCentsPerMtokSchema, priceToString } from "@/server/llm/pricing";
 import { logger } from "@/server/logger";
 import { getProviderSpec, listProviderSpecs } from "@/server/provider-registry";
 import { encryptSecret } from "@/server/secrets/encryption";
@@ -38,8 +39,6 @@ const LLM_DEFAULTS_BY_KIND: Record<(typeof LLM_KINDS)[number], LlmKindDefaults> 
 
 const LlmRole = z.enum(LLM_ROLES);
 const LlmKind = z.enum(LLM_KINDS);
-
-const PriceCentsPerMtok = z.number().min(0).max(1_000_000).nullable();
 
 /**
  * Per-provider OAuth input the wizard collects. `typeId` picks which spec
@@ -78,8 +77,8 @@ const LlmInput = z.object({
   /** Optional vendor-specific base URL override (Azure OpenAI proxy, etc.). */
   baseUrl: z.string().max(500).default(""),
   /** USD per million tokens × 100, matches LlmProvider columns. Null = unknown / unlogged. */
-  inputPriceCentsPerMtok: PriceCentsPerMtok.default(null),
-  outputPriceCentsPerMtok: PriceCentsPerMtok.default(null),
+  inputPriceCentsPerMtok: PriceCentsPerMtokSchema.default(null),
+  outputPriceCentsPerMtok: PriceCentsPerMtokSchema.default(null),
 });
 
 export const BootstrapInput = z
@@ -230,10 +229,8 @@ export async function applyBootstrap(db: Db, input: BootstrapInputType): Promise
       apiKey: encryptSecret(llm.apiKey),
       model: llm.model.trim() || defaults.model,
       baseUrl: llm.baseUrl.trim(),
-      inputPriceCentsPerMtok:
-        llm.inputPriceCentsPerMtok === null ? null : llm.inputPriceCentsPerMtok.toString(),
-      outputPriceCentsPerMtok:
-        llm.outputPriceCentsPerMtok === null ? null : llm.outputPriceCentsPerMtok.toString(),
+      inputPriceCentsPerMtok: priceToString(llm.inputPriceCentsPerMtok),
+      outputPriceCentsPerMtok: priceToString(llm.outputPriceCentsPerMtok),
       isDefault: anyForRole === 0,
       enabled: true,
     });

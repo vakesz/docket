@@ -4,6 +4,7 @@ import { and, asc, desc, eq, exists, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 import { slugify } from "@/core/slug";
 import type { ConversationId, ProjectId } from "@/core/types";
+import { isUniqueViolation } from "@/db/errors";
 import { llmProviders, projectMemberships, projects, users } from "@/db/schema";
 import { asPlainObject } from "@/lib/json";
 import { logger } from "@/server/logger";
@@ -47,18 +48,6 @@ function nameToSlug(name: string): string {
     });
   }
   return slug;
-}
-
-/**
- * Postgres unique-violation SQLSTATE. postgres-js surfaces it on `err.code`.
- */
-function isUniqueViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as { code: string }).code === "23505"
-  );
 }
 
 export const projectsRouter = router({

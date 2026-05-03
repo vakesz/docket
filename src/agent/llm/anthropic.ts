@@ -8,6 +8,7 @@ import type {
   JudgeClassifyResult,
   JudgeClient,
 } from "@/agent/guardrail/judge-client";
+import { estimateCostCents } from "@/agent/llm/pricing";
 import type {
   LlmAdapter,
   LlmEvent,
@@ -230,10 +231,12 @@ export class AnthropicAdapter implements LlmAdapter {
   }
 
   private estimateCostCents(tokensIn: number, tokensOut: number): number | undefined {
-    const priceIn = this.inputPriceCentsPerMtok;
-    const priceOut = this.outputPriceCentsPerMtok;
-    if (priceIn === undefined || priceOut === undefined) return undefined;
-    return Math.round((tokensIn * priceIn + tokensOut * priceOut) / 1_000_000);
+    return estimateCostCents({
+      tokensIn,
+      tokensOut,
+      inputPriceCentsPerMtok: this.inputPriceCentsPerMtok,
+      outputPriceCentsPerMtok: this.outputPriceCentsPerMtok,
+    });
   }
 
   formatToolResult(call: LlmToolCall, result: unknown): LlmToolResult {

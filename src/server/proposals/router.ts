@@ -127,8 +127,19 @@ function ctxFor(ctx: { db: Db; projectId: ProjectId; userId: UserId }): Proposal
   return { db: ctx.db, projectId: ctx.projectId, userId: ctx.userId, origin: "ui" };
 }
 
-async function stageAndAccept(c: ProposalCtx, builderResult: Promise<ProposalRow>) {
-  const row = await maybeAutoAccept(c, await builderResult);
+/**
+ * Stage a proposal via `build`, run it through the auto-accept gate, and
+ * return the shape the UI expects (`{ id, status, diff }`). Every UI-
+ * initiated propose endpoint reduces to one call to this helper, which
+ * keeps the ctx-stamping + auto-accept + diff-rendering steps off each
+ * route body.
+ */
+async function stageAndAccept(
+  ctx: { db: Db; projectId: ProjectId; userId: UserId },
+  build: (c: ProposalCtx) => Promise<ProposalRow>,
+) {
+  const c = ctxFor(ctx);
+  const row = await maybeAutoAccept(c, await build(c));
   return { id: row.id, status: row.status, diff: diffOf(hydrateProposal(row)) };
 }
 
@@ -177,24 +188,20 @@ export const proposalsRouter = router({
 
   proposeTransition: projectScopedMutationProcedure
     .input(ProposeTransitionInput)
-    .mutation(async ({ ctx, input }) => {
-      const c = ctxFor(ctx);
-      return stageAndAccept(
-        c,
+    .mutation(({ ctx, input }) =>
+      stageAndAccept(ctx, (c) =>
         proposeTransition(c, {
           providerItemId: input.providerItemId,
           intent: input.intent,
           ...(input.canonicalItemId ? { canonicalItemId: input.canonicalItemId } : {}),
         }),
-      );
-    }),
+      ),
+    ),
 
   proposeDescriptionPatch: projectScopedMutationProcedure
     .input(ProposeDescriptionPatchInput)
-    .mutation(async ({ ctx, input }) => {
-      const c = ctxFor(ctx);
-      return stageAndAccept(
-        c,
+    .mutation(({ ctx, input }) =>
+      stageAndAccept(ctx, (c) =>
         proposeDescriptionPatch(c, {
           providerItemId: input.providerItemId,
           newDescription: input.newDescription,
@@ -202,61 +209,51 @@ export const proposalsRouter = router({
             ? { includePreviousVersion: input.includePreviousVersion }
             : {}),
         }),
-      );
-    }),
+      ),
+    ),
 
   proposeComment: projectScopedMutationProcedure
     .input(ProposeCommentInput)
-    .mutation(async ({ ctx, input }) => {
-      const c = ctxFor(ctx);
-      return stageAndAccept(
-        c,
+    .mutation(({ ctx, input }) =>
+      stageAndAccept(ctx, (c) =>
         proposeComment(c, { providerItemId: input.providerItemId, body: input.body }),
-      );
-    }),
+      ),
+    ),
 
   proposeNewItem: projectScopedMutationProcedure
     .input(ProposeNewItemInput)
-    .mutation(async ({ ctx, input }) => {
-      const c = ctxFor(ctx);
-      return stageAndAccept(
-        c,
+    .mutation(({ ctx, input }) =>
+      stageAndAccept(ctx, (c) =>
         proposeNewItem(c, { itemKind: input.itemKind, fields: input.fields }),
-      );
-    }),
+      ),
+    ),
 
   proposeTagsChange: projectScopedMutationProcedure
     .input(ProposeTagsChangeInput)
-    .mutation(async ({ ctx, input }) => {
-      const c = ctxFor(ctx);
-      return stageAndAccept(
-        c,
+    .mutation(({ ctx, input }) =>
+      stageAndAccept(ctx, (c) =>
         proposeTagsChange(c, {
           providerItemId: input.providerItemId,
           nextTags: input.nextTags,
         }),
-      );
-    }),
+      ),
+    ),
 
   proposeAssigneeChange: projectScopedMutationProcedure
     .input(ProposeAssigneeChangeInput)
-    .mutation(async ({ ctx, input }) => {
-      const c = ctxFor(ctx);
-      return stageAndAccept(
-        c,
+    .mutation(({ ctx, input }) =>
+      stageAndAccept(ctx, (c) =>
         proposeAssigneeChange(c, {
           providerItemId: input.providerItemId,
           nextAssignee: input.nextAssignee,
         }),
-      );
-    }),
+      ),
+    ),
 
   proposeReactionToggle: projectScopedMutationProcedure
     .input(ProposeReactionToggleInput)
-    .mutation(async ({ ctx, input }) => {
-      const c = ctxFor(ctx);
-      return stageAndAccept(
-        c,
+    .mutation(({ ctx, input }) =>
+      stageAndAccept(ctx, (c) =>
         proposeReactionToggle(c, {
           providerItemId: input.providerItemId,
           targetKind: input.targetKind,
@@ -264,8 +261,8 @@ export const proposalsRouter = router({
           reaction: input.reaction,
           op: input.op,
         }),
-      );
-    }),
+      ),
+    ),
 
   confirm: projectScopedApproverProcedure
     .input(ProposalIdInput)

@@ -194,7 +194,9 @@ async function effectiveProjectRole(
 /**
  * Mutating, project-scoped procedure. Owners always pass; non-owner members
  * must have a role other than `viewer`. Layers the system-wide read-only
- * gate so a single toggle can lock the whole app.
+ * gate so a single toggle can lock the whole app. Resolves the caller's
+ * role once and stashes it on `ctx.projectRole` so the approver gate
+ * downstream doesn't re-query the membership table.
  */
 export const projectScopedMutationProcedure = projectScopedProcedure
   .use(enforceReadWrite)
@@ -206,18 +208,19 @@ export const projectScopedMutationProcedure = projectScopedProcedure
         message: "viewers cannot perform mutations on this project",
       });
     }
-    return next();
+    return next({ ctx: { projectRole: role } });
   });
 
 /**
  * Approver-or-owner gate for confirming/rejecting proposals. Non-owner
  * members with role `member` (or below) can stage proposals but can't
- * execute them — the human-in-the-loop on writes.
+ * execute them — the human-in-the-loop on writes. Reads the role from
+ * `ctx.projectRole` (resolved upstream by `projectScopedMutationProcedure`)
+ * so confirm/reject only takes one DB hit for the membership lookup.
  */
 export const projectScopedApproverProcedure = projectScopedMutationProcedure.use(
   async ({ ctx, next }) => {
-    const role = await effectiveProjectRole(ctx);
-    if (role !== "owner" && role !== "approver") {
+    if (ctx.projectRole !== "owner" && ctx.projectRole !== "approver") {
       throw new TRPCError({
         code: "FORBIDDEN",
         message: "only project owners and approvers can confirm or reject proposals",

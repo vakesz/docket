@@ -5,6 +5,7 @@ import { z } from "zod";
 import { LLM_KINDS } from "@/agent/llm/types";
 import { llmProviders, projects } from "@/db/schema";
 import { LLM_ROLES } from "@/server/llm/lookup";
+import { PriceCentsPerMtokSchema, priceFromString, priceToString } from "@/server/llm/pricing";
 import { logger } from "@/server/logger";
 import { encryptSecret } from "@/server/secrets/encryption";
 import {
@@ -17,8 +18,6 @@ import {
 
 const LLM_KIND = z.enum(LLM_KINDS);
 
-const PriceCentsPerMtok = z.number().min(0).max(1_000_000).nullable();
-
 const LLM_ROLE = z.enum(LLM_ROLES);
 
 const CreateLlmProviderInput = z.object({
@@ -28,8 +27,8 @@ const CreateLlmProviderInput = z.object({
   apiKey: z.string().min(1),
   model: z.string().max(120).default(""),
   baseUrl: z.string().max(500).default(""),
-  inputPriceCentsPerMtok: PriceCentsPerMtok.default(null),
-  outputPriceCentsPerMtok: PriceCentsPerMtok.default(null),
+  inputPriceCentsPerMtok: PriceCentsPerMtokSchema.default(null),
+  outputPriceCentsPerMtok: PriceCentsPerMtokSchema.default(null),
   isDefault: z.boolean().default(false),
 });
 
@@ -40,17 +39,9 @@ const UpdateLlmProviderInput = z.object({
   apiKey: z.string().max(500).default(""),
   model: z.string().max(120).default(""),
   baseUrl: z.string().max(500).default(""),
-  inputPriceCentsPerMtok: PriceCentsPerMtok.default(null),
-  outputPriceCentsPerMtok: PriceCentsPerMtok.default(null),
+  inputPriceCentsPerMtok: PriceCentsPerMtokSchema.default(null),
+  outputPriceCentsPerMtok: PriceCentsPerMtokSchema.default(null),
 });
-
-function priceToString(value: number | null): string | null {
-  return value === null ? null : value.toString();
-}
-
-function priceFromString(value: string | null): number | null {
-  return value === null ? null : Number(value);
-}
 
 export const llmProvidersRouter = router({
   list: protectedProcedure.query(async ({ ctx }) => {

@@ -31,8 +31,9 @@ import { buildDuplicateCommentBody, hydrateProposal } from "@/server/proposals/b
 import { toJsonProposalPayload } from "@/server/proposals/schema";
 import { buildProviderForUser } from "@/server/providers/build";
 import {
-  AUTO_ACCEPT_EXTRA_ELIGIBLE_KINDS_LIST,
-  AUTO_ACCEPT_FLOOR_KINDS_LIST,
+  AUTO_ACCEPT_EXTRA_ELIGIBLE_KINDS,
+  AUTO_ACCEPT_FLOOR_KINDS,
+  isAutoAcceptKind,
 } from "@/server/settings/catalog";
 import { loadGlobalSetting, loadProjectSetting } from "@/server/settings/effective";
 import { reconcileComments, toItemRow } from "@/server/sync";
@@ -409,8 +410,8 @@ export async function maybeAutoAccept(
 ): Promise<ProposalRow> {
   if (row.status !== "pending") return row;
   if (row.origin !== "ui") return row;
-  const isFloor = AUTO_ACCEPT_FLOOR_KINDS_LIST.includes(row.kind);
-  const isExtraEligible = AUTO_ACCEPT_EXTRA_ELIGIBLE_KINDS_LIST.includes(row.kind);
+  const isFloor = isAutoAcceptKind(row.kind, AUTO_ACCEPT_FLOOR_KINDS);
+  const isExtraEligible = isAutoAcceptKind(row.kind, AUTO_ACCEPT_EXTRA_ELIGIBLE_KINDS);
   if (!isFloor && !isExtraEligible) return row;
   const readOnly = await loadGlobalSetting(ctx.db, "app.read-only");
   if (readOnly) return row;

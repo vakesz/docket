@@ -7,7 +7,7 @@
 import "server-only";
 import { z } from "zod";
 import type { ToolFactory } from "@/agent/tools/types";
-import { defineTool, fail, ok } from "@/agent/tools/types";
+import { builderCtxFromTool, defineTool, fail, ok } from "@/agent/tools/types";
 import { ITEM_KINDS, type ProviderItemId, TRANSITION_INTENTS } from "@/core/types";
 import {
   proposeComment,
@@ -24,15 +24,6 @@ const ItemIdSchema = z
   .string()
   .min(1)
   .transform((v) => v as ProviderItemId);
-
-function builderCtx(ctx: Parameters<ToolFactory>[0]) {
-  return {
-    db: ctx.db,
-    projectId: ctx.projectId,
-    userId: ctx.userId,
-    origin: "agent" as const,
-  };
-}
 
 function resolveItemId(
   ctx: Parameters<ToolFactory>[0],
@@ -73,7 +64,7 @@ export const proposeTransitionTool: ToolFactory = (ctx) =>
         return fail("item_id is required when no item is anchored on this conversation.");
       }
       try {
-        const c = builderCtx(ctx);
+        const c = builderCtxFromTool(ctx);
         const row = await proposeTransition(c, {
           providerItemId: itemId,
           intent: args.intent,
@@ -102,7 +93,7 @@ export const proposeDescriptionPatchTool: ToolFactory = (ctx) =>
         return fail("item_id is required when no item is anchored on this conversation.");
       }
       try {
-        const c = builderCtx(ctx);
+        const c = builderCtxFromTool(ctx);
         const row = await proposeDescriptionPatch(c, {
           providerItemId: itemId,
           newDescription: args.new_description,
@@ -130,7 +121,7 @@ export const proposeCommentTool: ToolFactory = (ctx) =>
         return fail("item_id is required when no item is anchored on this conversation.");
       }
       try {
-        const c = builderCtx(ctx);
+        const c = builderCtxFromTool(ctx);
         const row = await proposeComment(c, { providerItemId: itemId, body: args.body });
         return ok(proposalResult(await maybeAutoAccept(c, row)));
       } catch (err) {
@@ -155,7 +146,7 @@ export const proposeNewItemTool: ToolFactory = (ctx) =>
     guardrailScan: PROPOSAL_SCAN,
     handler: async (args) => {
       try {
-        const c = builderCtx(ctx);
+        const c = builderCtxFromTool(ctx);
         const row = await proposeNewItem(c, {
           itemKind: args.kind,
           fields: {
@@ -189,7 +180,7 @@ export const proposeItemTagsTool: ToolFactory = (ctx) =>
         return fail("item_id is required when no item is anchored on this conversation.");
       }
       try {
-        const c = builderCtx(ctx);
+        const c = builderCtxFromTool(ctx);
         const row = await proposeTagsChange(c, {
           providerItemId: itemId,
           nextTags: args.tags,

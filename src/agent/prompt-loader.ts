@@ -26,6 +26,11 @@ const KIND_KEYS: Record<
   bug: "prompt.kind.bug",
 };
 
+// Empty-or-whitespace overrides fall back so an admin who clears a field
+// doesn't leave the model staring at no instructions.
+const orDefault = (override: string, fallback: string): string =>
+  override.trim().length > 0 ? override : fallback;
+
 export async function loadPrompts(db: Db): Promise<ResolvedPrompts> {
   const [systemBase, epic, feature, story, task, bug] = await Promise.all([
     loadGlobalSetting(db, "prompt.system-base"),
@@ -36,13 +41,13 @@ export async function loadPrompts(db: Db): Promise<ResolvedPrompts> {
     loadGlobalSetting(db, KIND_KEYS.bug),
   ]);
   return {
-    systemBase: systemBase.trim().length > 0 ? systemBase : DEFAULT_PROMPTS.systemBase,
+    systemBase: orDefault(systemBase, DEFAULT_PROMPTS.systemBase),
     kindPrompts: {
-      epic: epic.trim().length > 0 ? epic : DEFAULT_PROMPTS.kindPrompts.epic,
-      feature: feature.trim().length > 0 ? feature : DEFAULT_PROMPTS.kindPrompts.feature,
-      story: story.trim().length > 0 ? story : DEFAULT_PROMPTS.kindPrompts.story,
-      task: task.trim().length > 0 ? task : DEFAULT_PROMPTS.kindPrompts.task,
-      bug: bug.trim().length > 0 ? bug : DEFAULT_PROMPTS.kindPrompts.bug,
+      epic: orDefault(epic, DEFAULT_PROMPTS.kindPrompts.epic),
+      feature: orDefault(feature, DEFAULT_PROMPTS.kindPrompts.feature),
+      story: orDefault(story, DEFAULT_PROMPTS.kindPrompts.story),
+      task: orDefault(task, DEFAULT_PROMPTS.kindPrompts.task),
+      bug: orDefault(bug, DEFAULT_PROMPTS.kindPrompts.bug),
     },
   };
 }

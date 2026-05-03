@@ -160,19 +160,27 @@ export const AUTO_ACCEPT_FLOOR_KINDS = [
   "assignee_change",
   "description_patch",
 ] as const;
-export const AUTO_ACCEPT_FLOOR_KINDS_LIST: readonly string[] = AUTO_ACCEPT_FLOOR_KINDS;
 
 // Opt-in kinds the project may add on top of the floor. Memory writes/deletes
 // are local-DB only (no provider blast radius) so they're safe to auto-accept
 // when the project explicitly opts in. Provider-touching kinds beyond the
 // floor (state changes, item creation) are deliberately NOT eligible and
 // never make this list.
-const AUTO_ACCEPT_EXTRA_ELIGIBLE_KINDS = ["memory_write", "memory_delete"] as const;
-export const AUTO_ACCEPT_EXTRA_ELIGIBLE_KINDS_LIST: readonly string[] =
-  AUTO_ACCEPT_EXTRA_ELIGIBLE_KINDS;
+export const AUTO_ACCEPT_EXTRA_ELIGIBLE_KINDS = ["memory_write", "memory_delete"] as const;
 const AutoAcceptExtraKindsSchema = z
   .array(z.enum(AUTO_ACCEPT_EXTRA_ELIGIBLE_KINDS))
   .max(AUTO_ACCEPT_EXTRA_ELIGIBLE_KINDS.length);
+
+/**
+ * `Array.prototype.includes` requires the test value to match the literal
+ * tuple element type, which prevents passing in a `ProposalKind` (string).
+ * This wrapper widens the check so consumers can ask "is this kind in the
+ * floor / extras list?" with a plain string. Same pattern, two callsites,
+ * one helper.
+ */
+export function isAutoAcceptKind(kind: string, list: readonly string[]): boolean {
+  return list.includes(kind);
+}
 
 // Theme is intentionally browser-local (see `src/lib/theme.ts` +
 // ThemePicker in the top bar) — same pattern main uses. Keeping it out

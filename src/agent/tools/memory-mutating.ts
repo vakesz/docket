@@ -17,18 +17,9 @@
 import "server-only";
 import { z } from "zod";
 import type { ToolFactory } from "@/agent/tools/types";
-import { defineTool, fail, ok } from "@/agent/tools/types";
+import { builderCtxFromTool, defineTool, fail, ok } from "@/agent/tools/types";
 import { proposeMemoryDelete, proposeMemoryWrite } from "@/server/proposals/builders";
 import { maybeAutoAccept } from "@/server/proposals/executor";
-
-function builderCtx(ctx: Parameters<ToolFactory>[0]) {
-  return {
-    db: ctx.db,
-    projectId: ctx.projectId,
-    userId: ctx.userId,
-    origin: "agent" as const,
-  };
-}
 
 export const proposeMemoryWriteTool: ToolFactory = (ctx) =>
   defineTool({
@@ -45,7 +36,7 @@ export const proposeMemoryWriteTool: ToolFactory = (ctx) =>
     guardrailScan: { mode: "skip" },
     handler: async (args) => {
       try {
-        const c = builderCtx(ctx);
+        const c = builderCtxFromTool(ctx);
         const row = await proposeMemoryWrite(c, {
           memoryId: args.memory_id,
           title: args.title,
@@ -75,7 +66,7 @@ export const proposeMemoryDeleteTool: ToolFactory = (ctx) =>
     guardrailScan: { mode: "skip" },
     handler: async ({ memory_id: memoryId }) => {
       try {
-        const c = builderCtx(ctx);
+        const c = builderCtxFromTool(ctx);
         const row = await proposeMemoryDelete(c, { memoryId });
         const final = await maybeAutoAccept(c, row);
         return ok({

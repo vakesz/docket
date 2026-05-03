@@ -10,6 +10,7 @@ import "server-only";
 import { TRPCError } from "@trpc/server";
 import { and, asc, eq } from "drizzle-orm";
 import { z } from "zod";
+import { isUniqueViolation } from "@/db/errors";
 import { mcpServerConfigs } from "@/db/schema";
 import type { McpServerConfig } from "@/db/schema/types";
 import { decodeHeaders, encodeHeaders } from "@/server/mcp/headers-codec";
@@ -63,15 +64,6 @@ function shapeRow(row: McpServerConfig) {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
-}
-
-function isUniqueViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as { code: unknown }).code === "23505"
-  );
 }
 
 export const mcpRouter = router({

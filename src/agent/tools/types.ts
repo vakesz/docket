@@ -28,6 +28,22 @@ export type ToolContext = {
 };
 
 /**
+ * Project + caller fields a proposal builder needs, with the agent origin
+ * pre-stamped. Every mutating-tool factory (`mutating.ts`,
+ * `memory-mutating.ts`) calls this exactly once per handler invocation —
+ * keeping it here makes the `origin: "agent"` brand a single, audited
+ * source instead of one per tool group.
+ */
+export function builderCtxFromTool(ctx: ToolContext): {
+  db: Db;
+  projectId: ProjectId;
+  userId: UserId;
+  origin: "agent";
+} {
+  return { db: ctx.db, projectId: ctx.projectId, userId: ctx.userId, origin: "agent" };
+}
+
+/**
  * Trust classification for a tool's result, consumed by the agent loop's
  * tool-result guardrail check. Determines what (if anything) the LLM judge
  * sees before re-feeding the result to the chat model.
