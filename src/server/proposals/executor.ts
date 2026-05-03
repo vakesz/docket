@@ -9,6 +9,8 @@
 import "server-only";
 import { TRPCError } from "@trpc/server";
 import { and, eq, lt } from "drizzle-orm";
+import type { Proposal } from "@/core/proposal-types";
+import type { WorkItemProvider } from "@/core/provider";
 import type {
   Comment as CanonicalComment,
   Item as CanonicalItem,
@@ -69,16 +71,20 @@ export async function pruneAuditOlderThan(db: Db, cutoff: Date): Promise<number>
   return deleted.length;
 }
 
+type AuditWriteResult = { ok: true } | { ok: false; error: string };
+
 async function recordFailureAudit(
   ctx: ExecutorContext,
   action: string,
   proposalId: ProposalId,
   payload: Record<string, unknown>,
-): Promise<void> {
+): Promise<AuditWriteResult> {
   // Best-effort: failure audits run in the catch block; the DB may already be
   // sick. Don't let an audit miss swallow the user-visible result. Success
   // audits go through the finalize transaction below where they're atomic
-  // with executedAt.
+  // with executedAt. Returns the outcome so the caller can stamp the
+  // proposal's errorMessage with a degraded-audit note instead of leaving
+  // the failure invisible to the UI.
   try {
     await ctx.db.insert(audits).values({
       projectId: ctx.projectId,
@@ -87,6 +93,7 @@ async function recordFailureAudit(
       proposalId,
       payload,
     });
+    return { ok: true };
   } catch (err) {
     logger.error(
       {
@@ -98,6 +105,7 @@ async function recordFailureAudit(
       },
       "proposals: audit write failed",
     );
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
 
@@ -197,124 +205,11 @@ export async function confirmProposal(
     phase = "provider_call";
     const providerStartedAt = Date.now();
 
-    switch (proposal.kind) {
-      case "state_change": {
-        if (proposal.intent === "close_duplicate" && proposal.canonicalItem) {
-          if (!proposal.postedCommentId) {
-            const body = buildDuplicateCommentBody(proposal.canonicalItem);
-            const comment = await provider.addComment(proposal.item.id, body);
-            commentId = comment.id;
-            const cachedItem = await ctx.db.query.items.findFirst({
-              where: and(
-                eq(items.projectId, ctx.projectId),
-                eq(items.providerItemId, proposal.item.id),
-              ),
-              columns: { id: true },
-            });
-            // Atomic: reconcile the cached comment AND stamp postedCommentId
-            // before the transition call. A retry after transition failure
-            // sees postedCommentId and skips re-posting.
-            const { id: _, ...rest } = proposal;
-            const nextPayload = { ...rest, postedCommentId: comment.id };
-            await ctx.db.transaction(async (tx) => {
-              if (cachedItem) {
-                await reconcileComments(tx, [
-                  { itemSurrogate: cachedItem.id, comments: [comment] },
-                ]);
-              }
-              await tx
-                .update(proposals)
-                .set({ payload: toJsonProposalPayload(nextPayload) })
-                .where(eq(proposals.id, row.id));
-            });
-            proposal.postedCommentId = comment.id;
-          } else {
-            commentId = proposal.postedCommentId;
-          }
-        }
-        canonical = await provider.transition(proposal.item.id, proposal.intent);
-        break;
-      }
-      case "description_patch":
-        canonical = await provider.patchDescription(proposal.item.id, proposal.newDescription);
-        break;
-      case "comment_add": {
-        const comment = await provider.addComment(proposal.item.id, proposal.body);
-        commentId = comment.id;
-        const cachedItem = await ctx.db.query.items.findFirst({
-          where: and(
-            eq(items.projectId, ctx.projectId),
-            eq(items.providerItemId, proposal.item.id),
-          ),
-          columns: { id: true },
-        });
-        if (cachedItem) {
-          postedComment = { itemSurrogate: cachedItem.id, comment };
-        }
-        break;
-      }
-      case "item_create":
-        canonical = await provider.createItem(proposal.itemKind, proposal.fields);
-        break;
-      case "tags_change":
-        canonical = await provider.setTags(proposal.item.id, proposal.nextTags);
-        break;
-      case "assignee_change":
-        canonical = await provider.setAssignee(proposal.item.id, proposal.nextAssignee);
-        break;
-      case "reaction_toggle": {
-        const fn = proposal.op === "add" ? provider.addReaction : provider.removeReaction;
-        if (!fn) {
-          throw new Error(
-            `provider does not support reactions (op='${proposal.op}'); check capabilities.supportedReactions before staging`,
-          );
-        }
-        const target = { kind: proposal.targetKind, id: proposal.targetId } as const;
-        const result = await fn.call(provider, target, proposal.reaction);
-        const reactionsJson: Reactions | null = result.reactions ?? null;
-        if (proposal.targetKind === "item") {
-          reactionUpdate = {
-            kind: "item",
-            providerItemId: proposal.item.id,
-            reactions: reactionsJson,
-          };
-        } else {
-          const cachedItem = await ctx.db.query.items.findFirst({
-            where: and(
-              eq(items.projectId, ctx.projectId),
-              eq(items.providerItemId, proposal.item.id),
-            ),
-            columns: { id: true },
-          });
-          if (cachedItem) {
-            reactionUpdate = {
-              kind: "comment",
-              itemSurrogate: cachedItem.id,
-              providerCommentId: proposal.targetId,
-              reactions: reactionsJson,
-            };
-          }
-        }
-        break;
-      }
-      case "attachment_upload":
-        await provider.uploadAttachment(
-          proposal.item.id,
-          proposal.filename,
-          proposal.content,
-          proposal.contentType,
-        );
-        break;
-      case "memory_write":
-      case "memory_delete":
-        // Memory ops are local-only — their work runs in the finalize tx
-        // below so it's atomic with executedAt + audit.
-        break;
-      default: {
-        const exhaustive: never = proposal;
-        throw new Error(`Unhandled proposal kind: ${(exhaustive as { kind: string }).kind}`);
-      }
-    }
+    const outcome = await dispatchProviderCall(ctx, provider, proposal, row.id);
+    canonical = outcome.canonical ?? null;
+    commentId = outcome.commentId ?? null;
+    postedComment = outcome.postedComment ?? null;
+    reactionUpdate = outcome.reactionUpdate ?? null;
 
     providerMs = Date.now() - providerStartedAt;
 
@@ -456,12 +351,20 @@ export async function confirmProposal(
           .where(eq(proposals.id, row.id))
           .returning();
     if (!failed) throw new Error("confirmProposal: failure update returned no row");
-    await recordFailureAudit(ctx, failAction, row.id, {
+    const auditWrite = await recordFailureAudit(ctx, failAction, row.id, {
       kind: row.kind,
       providerItemId: row.providerItemId,
       error: message,
       ...(stuck ? { stuck: true } : {}),
     });
+    if (!auditWrite.ok) {
+      // The failure audit itself failed — surface it on the row so the UI
+      // shows the user the audit trail is incomplete for this proposal,
+      // instead of letting the miss disappear into the logs.
+      const note = `${failed.errorMessage ?? message} [audit write also failed: ${auditWrite.error}]`;
+      await ctx.db.update(proposals).set({ errorMessage: note }).where(eq(proposals.id, row.id));
+      failed.errorMessage = note;
+    }
     logger.error(
       {
         ...baseCtx,
@@ -558,4 +461,153 @@ export async function rejectProposal(
     "proposals: rejected",
   );
   return updated;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 1 dispatch — one helper per kind, called from confirmProposal above.
+// Each helper is responsible for the provider write and any pre-write
+// bookkeeping (e.g. close_duplicate's bundled comment). The combined outcome
+// is captured here and applied by phase 2's finalize transaction.
+// ---------------------------------------------------------------------------
+
+type ProviderCallOutcome = {
+  canonical?: CanonicalItem;
+  commentId?: string;
+  postedComment?: { itemSurrogate: ItemId; comment: CanonicalComment };
+  reactionUpdate?: ReactionUpdate;
+};
+
+async function dispatchProviderCall(
+  ctx: ExecutorContext,
+  provider: WorkItemProvider,
+  proposal: Proposal,
+  rowId: ProposalId,
+): Promise<ProviderCallOutcome> {
+  switch (proposal.kind) {
+    case "state_change":
+      return await dispatchStateChange(ctx, provider, proposal, rowId);
+    case "description_patch":
+      return {
+        canonical: await provider.patchDescription(proposal.item.id, proposal.newDescription),
+      };
+    case "comment_add":
+      return await dispatchCommentAdd(ctx, provider, proposal);
+    case "item_create":
+      return { canonical: await provider.createItem(proposal.itemKind, proposal.fields) };
+    case "tags_change":
+      return { canonical: await provider.setTags(proposal.item.id, proposal.nextTags) };
+    case "assignee_change":
+      return { canonical: await provider.setAssignee(proposal.item.id, proposal.nextAssignee) };
+    case "reaction_toggle":
+      return await dispatchReactionToggle(ctx, provider, proposal);
+    case "attachment_upload":
+      await provider.uploadAttachment(
+        proposal.item.id,
+        proposal.filename,
+        proposal.content,
+        proposal.contentType,
+      );
+      return {};
+    case "memory_write":
+    case "memory_delete":
+      // Memory ops are local-only — their work runs in the finalize tx so
+      // it's atomic with executedAt + audit.
+      return {};
+    default: {
+      const exhaustive: never = proposal;
+      throw new Error(`Unhandled proposal kind: ${(exhaustive as { kind: string }).kind}`);
+    }
+  }
+}
+
+async function dispatchStateChange(
+  ctx: ExecutorContext,
+  provider: WorkItemProvider,
+  proposal: Extract<Proposal, { kind: "state_change" }>,
+  rowId: ProposalId,
+): Promise<ProviderCallOutcome> {
+  let commentId: string | undefined;
+  if (proposal.intent === "close_duplicate" && proposal.canonicalItem) {
+    if (!proposal.postedCommentId) {
+      const body = buildDuplicateCommentBody(proposal.canonicalItem);
+      const comment = await provider.addComment(proposal.item.id, body);
+      commentId = comment.id;
+      const cachedItem = await ctx.db.query.items.findFirst({
+        where: and(eq(items.projectId, ctx.projectId), eq(items.providerItemId, proposal.item.id)),
+        columns: { id: true },
+      });
+      // Atomic: reconcile the cached comment AND stamp postedCommentId
+      // before the transition call. A retry after transition failure
+      // sees postedCommentId and skips re-posting.
+      const { id: _, ...rest } = proposal;
+      const nextPayload = { ...rest, postedCommentId: comment.id };
+      await ctx.db.transaction(async (tx) => {
+        if (cachedItem) {
+          await reconcileComments(tx, [{ itemSurrogate: cachedItem.id, comments: [comment] }]);
+        }
+        await tx
+          .update(proposals)
+          .set({ payload: toJsonProposalPayload(nextPayload) })
+          .where(eq(proposals.id, rowId));
+      });
+      proposal.postedCommentId = comment.id;
+    } else {
+      commentId = proposal.postedCommentId;
+    }
+  }
+  const canonical = await provider.transition(proposal.item.id, proposal.intent);
+  return commentId !== undefined ? { canonical, commentId } : { canonical };
+}
+
+async function dispatchCommentAdd(
+  ctx: ExecutorContext,
+  provider: WorkItemProvider,
+  proposal: Extract<Proposal, { kind: "comment_add" }>,
+): Promise<ProviderCallOutcome> {
+  const comment = await provider.addComment(proposal.item.id, proposal.body);
+  const cachedItem = await ctx.db.query.items.findFirst({
+    where: and(eq(items.projectId, ctx.projectId), eq(items.providerItemId, proposal.item.id)),
+    columns: { id: true },
+  });
+  return cachedItem
+    ? { commentId: comment.id, postedComment: { itemSurrogate: cachedItem.id, comment } }
+    : { commentId: comment.id };
+}
+
+async function dispatchReactionToggle(
+  ctx: ExecutorContext,
+  provider: WorkItemProvider,
+  proposal: Extract<Proposal, { kind: "reaction_toggle" }>,
+): Promise<ProviderCallOutcome> {
+  const fn = proposal.op === "add" ? provider.addReaction : provider.removeReaction;
+  if (!fn) {
+    throw new Error(
+      `provider does not support reactions (op='${proposal.op}'); check capabilities.supportedReactions before staging`,
+    );
+  }
+  const target = { kind: proposal.targetKind, id: proposal.targetId } as const;
+  const result = await fn.call(provider, target, proposal.reaction);
+  const reactionsJson: Reactions | null = result.reactions ?? null;
+  if (proposal.targetKind === "item") {
+    return {
+      reactionUpdate: {
+        kind: "item",
+        providerItemId: proposal.item.id,
+        reactions: reactionsJson,
+      },
+    };
+  }
+  const cachedItem = await ctx.db.query.items.findFirst({
+    where: and(eq(items.projectId, ctx.projectId), eq(items.providerItemId, proposal.item.id)),
+    columns: { id: true },
+  });
+  if (!cachedItem) return {};
+  return {
+    reactionUpdate: {
+      kind: "comment",
+      itemSurrogate: cachedItem.id,
+      providerCommentId: proposal.targetId,
+      reactions: reactionsJson,
+    },
+  };
 }

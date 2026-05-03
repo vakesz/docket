@@ -9,7 +9,7 @@ import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { selectGuardrailFor } from "@/agent/guardrail/registry";
-import type { GuardrailUsage } from "@/agent/guardrail/types";
+import type { Guardrail, GuardrailUsage } from "@/agent/guardrail/types";
 import { extractUntrustedFields } from "@/agent/guardrail/types";
 import type { LlmAdapter, LlmMessage, LlmToolCall } from "@/agent/llm/types";
 import { capCodeSnippets } from "@/agent/post/code-snippet-cap";
@@ -18,7 +18,14 @@ import { buildSystemPrefix, NO_PROMPT_CAPABILITIES, type PromptCapabilities } fr
 import { loadPrompts } from "@/agent/prompt-loader";
 import { buildToolRegistry } from "@/agent/tools/registry";
 import type { AgentTool, ToolContext, ToolResult } from "@/agent/tools/types";
-import type { ConversationId, ItemKind, MessageId, ProviderItemId, UserId } from "@/core/types";
+import type {
+  ConversationId,
+  ItemKind,
+  MessageId,
+  ProjectId,
+  ProviderItemId,
+  UserId,
+} from "@/core/types";
 import type { Db } from "@/db";
 import { conversations, items, messages } from "@/db/schema";
 import type { Conversation, Message } from "@/db/schema/types";
@@ -156,7 +163,7 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
   }
   const projectId = conv.projectId;
 
-  const baseCtx = {
+  const baseCtx: LoopContext = {
     turnId,
     conversationId,
     projectId,
@@ -326,75 +333,30 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
       return;
     }
 
-    assistantBuffer = "";
-    assistantToolCalls = [];
     const roundStartedAt = Date.now();
-
-    const stream = adapter.streamMessages({
-      model: "", // adapter falls back to its configured model
-      messages,
-      tools: tools.map((t) => t.def),
-      ...(signal ? { signal } : {}),
-    });
-
-    let sawDone = false;
-    for await (const event of stream) {
-      switch (event.kind) {
-        case "text_delta":
-          assistantBuffer += event.delta;
-          yield { kind: "text_delta", delta: event.delta };
-          break;
-        case "tool_call":
-          assistantToolCalls.push(event.call);
-          break;
-        case "usage":
-          totalTokensIn += event.tokensIn;
-          totalTokensOut += event.tokensOut;
-          totalCostCents = (totalCostCents ?? 0) + (event.costCents ?? 0);
-          break;
-        case "error":
-          logger.error(
-            {
-              ...baseCtx,
-              round: rounds,
-              roundMs: Date.now() - roundStartedAt,
-              llmError: event.message,
-            },
-            "agent: LLM stream error",
-          );
-          await persistAssistantTurn(
-            db,
-            conversationId,
-            assistantBuffer,
-            assistantToolCalls,
-            false,
-          );
-          yield { kind: "error", message: event.message };
-          return;
-        case "done":
-          sawDone = true;
-          break;
-        default: {
-          // Compile-time exhaustiveness check — adding a new LlmEvent kind
-          // forces a case here rather than silently dropping the event.
-          const exhaustive: never = event;
-          logger.error(
-            { ...baseCtx, round: rounds, event: exhaustive },
-            "agent: unhandled LLM event kind",
-          );
-        }
-      }
-      if (sawDone) break;
-    }
-
-    if (!sawDone) {
+    const round = yield* streamOneRound(adapter, messages, tools, signal, baseCtx, rounds);
+    assistantBuffer = round.assistantBuffer;
+    assistantToolCalls = round.toolCalls;
+    if (round.kind !== "ok") {
       logger.error(
-        { ...baseCtx, round: rounds, roundMs: Date.now() - roundStartedAt },
-        "agent: LLM stream ended without done",
+        {
+          ...baseCtx,
+          round: rounds,
+          roundMs: Date.now() - roundStartedAt,
+          ...(round.kind === "error" ? { llmError: round.message } : {}),
+        },
+        round.kind === "error" ? "agent: LLM stream error" : "agent: LLM stream ended without done",
       );
-      yield { kind: "error", message: "LLM stream ended without a done event" };
+      await persistAssistantTurn(db, conversationId, assistantBuffer, assistantToolCalls, false);
+      yield {
+        kind: "error",
+        message: round.kind === "error" ? round.message : "LLM stream ended without a done event",
+      };
       return;
     }
+    totalTokensIn += round.tokensIn;
+    totalTokensOut += round.tokensOut;
+    if (round.costCents > 0) totalCostCents = (totalCostCents ?? 0) + round.costCents;
 
     logger.debug(
       {
@@ -441,191 +403,27 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
     // hand the turn back to the user — when we hit one, drain remaining
     // tool calls (we still owe the model results) but do NOT loop again.
     for (const call of assistantToolCalls) {
-      yield {
-        kind: "tool_call_started",
-        callId: call.id,
-        name: call.name,
-        arguments: call.arguments,
-      };
-
-      const tool = toolByName.get(call.name);
-      let result: ToolResult;
-      let dispatchOk = true;
-      const toolStartedAt = Date.now();
-      if (!tool) {
-        result = { ok: false, error: `unknown tool '${call.name}'` };
-        dispatchOk = false;
-        logger.warn(
-          { ...baseCtx, round: rounds, callId: call.id, name: call.name },
-          "agent: unknown tool requested",
-        );
-      } else {
-        try {
-          result = await tool.handler(call.arguments);
-        } catch (err) {
-          result = {
-            ok: false,
-            error: `tool '${call.name}' threw: ${err instanceof Error ? err.message : String(err)}`,
-          };
-          dispatchOk = false;
-          logger.error(
-            {
-              ...baseCtx,
-              round: rounds,
-              callId: call.id,
-              name: call.name,
-              toolMs: Date.now() - toolStartedAt,
-              err: err instanceof Error ? err.message : String(err),
-              stack: err instanceof Error ? err.stack : undefined,
-            },
-            "agent: tool threw",
-          );
-        }
-      }
-      // Tools that catch internally and return `fail()` don't throw — without
-      // the explicit envelope check we'd render a ✗ outcome as ✓ in the UI
-      // and miss every guarded provider error in the logs.
-      if (dispatchOk && !result.ok) {
-        dispatchOk = false;
-        logger.warn(
-          {
-            ...baseCtx,
-            round: rounds,
-            callId: call.id,
-            name: call.name,
-            toolMs: Date.now() - toolStartedAt,
-            toolError: result.error,
-          },
-          "agent: tool returned failure",
-        );
-      } else {
-        logger.debug(
-          {
-            ...baseCtx,
-            round: rounds,
-            callId: call.id,
-            name: call.name,
-            ok: dispatchOk,
-            toolMs: Date.now() - toolStartedAt,
-          },
-          "agent: tool call",
-        );
-      }
-
-      // Guardrail tool-result scan. Runs on the structured payload before
-      // it's re-fed to the model — a `block` substitutes a refusal stub
-      // (the model never sees the original text) and aborts the round so
-      // the chat model doesn't keep generating off injected instructions.
-      //
-      // Tools tagged `guardrailScan: { mode: "skip" }` short-circuit here:
-      // their results are server-generated metadata only (proposal ids,
-      // echoed question text), so the LLM judge would just be flipping a
-      // coin on an opaque JSON envelope and occasionally producing
-      // false-positive blocks. No call, no usage accounting, no event.
-      //
-      // `mode: "fields"` extracts the listed dotted paths from
-      // `result.data` and hands the guardrail a focused string of just the
-      // foreign content (markdown body, comment text, diff). Empty
-      // extraction short-circuits the same way `skip` does — the result
-      // had no untrusted text to scan.
-      let toolBlockReason: string | null = null;
-      const scan = tool?.guardrailScan ?? { mode: "full" };
-      let runGuardrail = scan.mode !== "skip";
-      let untrusted: string | undefined;
-      if (scan.mode === "fields") {
-        untrusted = extractUntrustedFields(result, scan.untrusted);
-        if (untrusted.length === 0) runGuardrail = false;
-      }
-      if (runGuardrail) {
-        const toolDecision = await guardrail.checkToolResult(
-          {
-            toolName: call.name,
-            result,
-            ...(untrusted !== undefined ? { untrusted } : {}),
-          },
-          signal,
-        );
-        accumulateGuardrailUsage(guardrailUsage, toolDecision.usage);
-        if (toolDecision.action === "block") {
-          toolBlockReason = toolDecision.reason;
-          result = {
-            ok: false,
-            error: `tool result blocked by guardrail: ${toolDecision.reason}`,
-          };
-          yield {
-            kind: "guardrail_blocked",
-            stage: "tool_result",
-            reason: toolDecision.reason,
-            ...(toolDecision.categories ? { categories: toolDecision.categories } : {}),
-          };
-          logger.info(
-            { ...baseCtx, round: rounds, callId: call.id, reason: toolDecision.reason },
-            "agent: tool result blocked by guardrail",
-          );
-        } else if (toolDecision.action === "flag") {
-          yield {
-            kind: "guardrail_flagged",
-            stage: "tool_result",
-            reason: toolDecision.reason,
-            ...(toolDecision.categories ? { categories: toolDecision.categories } : {}),
-          };
-        }
-      }
-
-      const formatted = adapter.formatToolResult(call, result);
-      messages.push(formatted);
-
-      const toolRow = await appendMessage(db, {
+      const outcome = yield* dispatchToolCall(
+        call,
+        toolByName,
+        guardrail,
+        guardrailUsage,
+        adapter,
+        db,
         conversationId,
-        role: "tool",
-        content: formatted.content,
-        toolCallId: formatted.toolCallId,
-        toolName: formatted.toolName,
-      });
-      if (toolBlockReason !== null) {
-        await markMessageFlagged(db, toolRow.id, toolBlockReason);
-        // Surface the block to the user as a final assistant turn so the
-        // chat thread shows *why* the agent stopped instead of trailing
-        // off mid-thought. Pinned at the end of this round; the outer
-        // while-loop bails before the next stream starts.
-        await persistAssistantTurn(db, conversationId, refusalText(toolBlockReason), [], false);
-      }
-
-      yield { kind: "tool_call_completed", callId: call.id, ok: dispatchOk };
-
-      if (toolBlockReason !== null) {
+        baseCtx,
+        rounds,
+        signal,
+      );
+      messages.push(outcome.resultMessage);
+      if (outcome.blockReason !== null) {
         // Stop the model from being re-invoked: drain remaining tool
         // calls into the transcript above, then break out so the outer
         // loop never calls `streamMessages` again. Preserves the "model
         // doesn't keep generating after guardrail kicks in" invariant.
         guardrailTerminated = true;
-        continue;
       }
-
-      // Special-case the two structured tool payloads the UI cares about.
-      if (result.ok && isProposalToolName(call.name)) {
-        const parsed = proposalStagedPayloadSchema.safeParse(result.data);
-        if (parsed.success) {
-          yield {
-            kind: "proposal_staged",
-            proposalId: parsed.data.proposal_id,
-            proposalKind: parsed.data.kind ?? call.name,
-            toolName: call.name,
-          };
-        }
-      }
-      if (result.ok && call.name === "ask_user_question") {
-        const parsed = askUserQuestionPayloadSchema.safeParse(result.data);
-        if (parsed.success) {
-          askedQuestion = true;
-          yield {
-            kind: "ask_user_question",
-            question: parsed.data.question,
-            options: parsed.data.options ?? null,
-            multiSelect: parsed.data.multi_select ?? false,
-          };
-        }
-      }
+      if (outcome.askedQuestion) askedQuestion = true;
     }
 
     if (askedQuestion || guardrailTerminated) {
@@ -717,6 +515,291 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
 // ---------------------------------------------------------------------------
 // helpers — small, kept private to the loop module
 // ---------------------------------------------------------------------------
+
+type LoopContext = {
+  turnId: string;
+  conversationId: ConversationId;
+  projectId: ProjectId;
+  userId: UserId;
+  adapter: string;
+  readOnly: boolean;
+  userMessageLen: number;
+};
+
+type RoundOutcome =
+  | {
+      kind: "ok";
+      assistantBuffer: string;
+      toolCalls: LlmToolCall[];
+      tokensIn: number;
+      tokensOut: number;
+      costCents: number;
+    }
+  | { kind: "error"; message: string; assistantBuffer: string; toolCalls: LlmToolCall[] }
+  | { kind: "no_done"; assistantBuffer: string; toolCalls: LlmToolCall[] };
+
+/**
+ * Stream one LLM round. Yields `text_delta` events as they arrive and
+ * accumulates the assembled buffer + tool calls + usage into the return
+ * value. The caller decides how to react to a non-ok outcome (persisting
+ * partial output, emitting an `error` event, etc.).
+ */
+async function* streamOneRound(
+  adapter: LlmAdapter,
+  messages: readonly LlmMessage[],
+  tools: readonly AgentTool[],
+  signal: AbortSignal | undefined,
+  baseCtx: LoopContext,
+  round: number,
+): AsyncGenerator<LoopEvent, RoundOutcome> {
+  const stream = adapter.streamMessages({
+    model: "", // adapter falls back to its configured model
+    messages: [...messages],
+    tools: tools.map((t) => t.def),
+    ...(signal ? { signal } : {}),
+  });
+  let assistantBuffer = "";
+  const toolCalls: LlmToolCall[] = [];
+  let tokensIn = 0;
+  let tokensOut = 0;
+  let costCents = 0;
+  let sawDone = false;
+  for await (const event of stream) {
+    switch (event.kind) {
+      case "text_delta":
+        assistantBuffer += event.delta;
+        yield { kind: "text_delta", delta: event.delta };
+        break;
+      case "tool_call":
+        toolCalls.push(event.call);
+        break;
+      case "usage":
+        tokensIn += event.tokensIn;
+        tokensOut += event.tokensOut;
+        costCents += event.costCents ?? 0;
+        break;
+      case "error":
+        return { kind: "error", message: event.message, assistantBuffer, toolCalls };
+      case "done":
+        sawDone = true;
+        break;
+      default: {
+        const exhaustive: never = event;
+        logger.error({ ...baseCtx, round, event: exhaustive }, "agent: unhandled LLM event kind");
+      }
+    }
+    if (sawDone) break;
+  }
+  if (!sawDone) return { kind: "no_done", assistantBuffer, toolCalls };
+  return { kind: "ok", assistantBuffer, toolCalls, tokensIn, tokensOut, costCents };
+}
+
+type ToolDispatchOutcome = {
+  /** The formatted tool-result message that the caller appends to the in-flight transcript. */
+  resultMessage: LlmMessage;
+  /** Non-null when the guardrail blocked the result; carries the reason. */
+  blockReason: string | null;
+  /** True when the dispatched tool was `ask_user_question`. */
+  askedQuestion: boolean;
+};
+
+/**
+ * Dispatch one tool call: execute the tool, run the guardrail tool-result
+ * scan, persist the tool row, and yield the lifecycle events. Mutates
+ * `guardrailUsage` in place with any usage burnt by the scan.
+ */
+async function* dispatchToolCall(
+  call: LlmToolCall,
+  toolByName: ReadonlyMap<string, AgentTool>,
+  guardrail: Guardrail,
+  guardrailUsage: GuardrailUsage,
+  adapter: LlmAdapter,
+  db: Database,
+  conversationId: ConversationId,
+  baseCtx: LoopContext,
+  round: number,
+  signal: AbortSignal | undefined,
+): AsyncGenerator<LoopEvent, ToolDispatchOutcome> {
+  yield {
+    kind: "tool_call_started",
+    callId: call.id,
+    name: call.name,
+    arguments: call.arguments,
+  };
+
+  const tool = toolByName.get(call.name);
+  let result: ToolResult;
+  let dispatchOk = true;
+  const toolStartedAt = Date.now();
+  if (!tool) {
+    result = { ok: false, error: `unknown tool '${call.name}'` };
+    dispatchOk = false;
+    logger.warn(
+      { ...baseCtx, round, callId: call.id, name: call.name },
+      "agent: unknown tool requested",
+    );
+  } else {
+    try {
+      result = await tool.handler(call.arguments);
+    } catch (err) {
+      result = {
+        ok: false,
+        error: `tool '${call.name}' threw: ${err instanceof Error ? err.message : String(err)}`,
+      };
+      dispatchOk = false;
+      logger.error(
+        {
+          ...baseCtx,
+          round,
+          callId: call.id,
+          name: call.name,
+          toolMs: Date.now() - toolStartedAt,
+          err: err instanceof Error ? err.message : String(err),
+          stack: err instanceof Error ? err.stack : undefined,
+        },
+        "agent: tool threw",
+      );
+    }
+  }
+  // Tools that catch internally and return `fail()` don't throw — without
+  // the explicit envelope check we'd render a ✗ outcome as ✓ in the UI
+  // and miss every guarded provider error in the logs.
+  if (dispatchOk && !result.ok) {
+    dispatchOk = false;
+    logger.warn(
+      {
+        ...baseCtx,
+        round,
+        callId: call.id,
+        name: call.name,
+        toolMs: Date.now() - toolStartedAt,
+        toolError: result.error,
+      },
+      "agent: tool returned failure",
+    );
+  } else {
+    logger.debug(
+      {
+        ...baseCtx,
+        round,
+        callId: call.id,
+        name: call.name,
+        ok: dispatchOk,
+        toolMs: Date.now() - toolStartedAt,
+      },
+      "agent: tool call",
+    );
+  }
+
+  // Guardrail tool-result scan. Runs on the structured payload before
+  // it's re-fed to the model — a `block` substitutes a refusal stub
+  // (the model never sees the original text) and aborts the round so
+  // the chat model doesn't keep generating off injected instructions.
+  //
+  // Tools tagged `guardrailScan: { mode: "skip" }` short-circuit here:
+  // their results are server-generated metadata only (proposal ids,
+  // echoed question text), so the LLM judge would just be flipping a
+  // coin on an opaque JSON envelope and occasionally producing
+  // false-positive blocks. No call, no usage accounting, no event.
+  //
+  // `mode: "fields"` extracts the listed dotted paths from
+  // `result.data` and hands the guardrail a focused string of just the
+  // foreign content (markdown body, comment text, diff). Empty
+  // extraction short-circuits the same way `skip` does — the result
+  // had no untrusted text to scan.
+  let blockReason: string | null = null;
+  const scan = tool?.guardrailScan ?? { mode: "full" };
+  let runGuardrail = scan.mode !== "skip";
+  let untrusted: string | undefined;
+  if (scan.mode === "fields") {
+    untrusted = extractUntrustedFields(result, scan.untrusted);
+    if (untrusted.length === 0) runGuardrail = false;
+  }
+  if (runGuardrail) {
+    const toolDecision = await guardrail.checkToolResult(
+      {
+        toolName: call.name,
+        result,
+        ...(untrusted !== undefined ? { untrusted } : {}),
+      },
+      signal,
+    );
+    accumulateGuardrailUsage(guardrailUsage, toolDecision.usage);
+    if (toolDecision.action === "block") {
+      blockReason = toolDecision.reason;
+      result = {
+        ok: false,
+        error: `tool result blocked by guardrail: ${toolDecision.reason}`,
+      };
+      yield {
+        kind: "guardrail_blocked",
+        stage: "tool_result",
+        reason: toolDecision.reason,
+        ...(toolDecision.categories ? { categories: toolDecision.categories } : {}),
+      };
+      logger.info(
+        { ...baseCtx, round, callId: call.id, reason: toolDecision.reason },
+        "agent: tool result blocked by guardrail",
+      );
+    } else if (toolDecision.action === "flag") {
+      yield {
+        kind: "guardrail_flagged",
+        stage: "tool_result",
+        reason: toolDecision.reason,
+        ...(toolDecision.categories ? { categories: toolDecision.categories } : {}),
+      };
+    }
+  }
+
+  const formatted = adapter.formatToolResult(call, result);
+  const toolRow = await appendMessage(db, {
+    conversationId,
+    role: "tool",
+    content: formatted.content,
+    toolCallId: formatted.toolCallId,
+    toolName: formatted.toolName,
+  });
+  if (blockReason !== null) {
+    await markMessageFlagged(db, toolRow.id, blockReason);
+    // Surface the block to the user as a final assistant turn so the
+    // chat thread shows *why* the agent stopped instead of trailing
+    // off mid-thought. Pinned at the end of this round; the outer
+    // while-loop bails before the next stream starts.
+    await persistAssistantTurn(db, conversationId, refusalText(blockReason), [], false);
+  }
+
+  yield { kind: "tool_call_completed", callId: call.id, ok: dispatchOk };
+
+  let askedQuestion = false;
+  if (blockReason === null) {
+    // Special-case the two structured tool payloads the UI cares about.
+    if (result.ok && isProposalToolName(call.name)) {
+      const parsed = proposalStagedPayloadSchema.safeParse(result.data);
+      if (parsed.success) {
+        yield {
+          kind: "proposal_staged",
+          proposalId: parsed.data.proposal_id,
+          proposalKind: parsed.data.kind ?? call.name,
+          toolName: call.name,
+        };
+      }
+    }
+    if (result.ok && call.name === "ask_user_question") {
+      const parsed = askUserQuestionPayloadSchema.safeParse(result.data);
+      if (parsed.success) {
+        askedQuestion = true;
+        yield {
+          kind: "ask_user_question",
+          question: parsed.data.question,
+          options: parsed.data.options ?? null,
+          multiSelect: parsed.data.multi_select ?? false,
+        };
+      }
+    }
+  }
+
+  return { resultMessage: formatted, blockReason, askedQuestion };
+}
 
 function accumulateGuardrailUsage(total: GuardrailUsage, add: GuardrailUsage | undefined): void {
   if (!add) return;
