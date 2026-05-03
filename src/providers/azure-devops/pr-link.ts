@@ -6,6 +6,7 @@
  * the SDK shim. The numeric enum mirrors live in `./constants.ts`.
  */
 
+import type { PRState } from "@/core/types";
 import { AZDO_PR_STATUS, AZDO_REVIEWER_VOTE } from "@/providers/azure-devops/constants";
 
 export type VstfsPRRef = {
@@ -69,7 +70,7 @@ export function parseAzdoPullRequestId(input: string): number | null {
  * `"open"` so we don't surface a blank state field — callers can re-fetch
  * if they need certainty.
  */
-export function pullRequestStatusToCanonical(status: number | undefined | null): string {
+export function pullRequestStatusToCanonical(status: number | undefined | null): PRState {
   if (status === AZDO_PR_STATUS.Completed) return "merged";
   if (status === AZDO_PR_STATUS.Abandoned) return "closed";
   return "open";

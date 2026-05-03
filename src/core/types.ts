@@ -240,6 +240,13 @@ export type SyncSummary = {
 };
 
 /**
+ * Canonical PR lifecycle state. Providers normalize their native values
+ * (GitHub's `closed + merged_at`, AzDO's numeric `PullRequestStatus`) onto
+ * this union before handing the row to the agent / UI.
+ */
+export type PRState = "open" | "merged" | "closed";
+
+/**
  * A pull request that might be related to a work item.
  *
  * `confidence` is a soft hint (0.0–1.0) the provider attaches based on how
@@ -251,8 +258,7 @@ export type PRMatch = {
   url: string;
   title: string;
   branch: string;
-  /** "open" | "merged" | "closed" — provider-specific labels OK. */
-  state: string;
+  state: PRState;
   author: string;
   confidence: number;
 };

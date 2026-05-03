@@ -20,6 +20,7 @@ import type {
   Item,
   ItemKind,
   PRMatch,
+  PRState,
   ProviderItemId,
   PullRequestDetail,
   PullRequestDiff,
@@ -212,7 +213,7 @@ type TimelineEvent = {
   } | null;
 };
 
-function derivePRState(state: string | null | undefined, mergedAt: string | null): string {
+function derivePRState(state: string | null | undefined, mergedAt: string | null): PRState {
   if (mergedAt) return "merged";
   return state === "closed" ? "closed" : "open";
 }

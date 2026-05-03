@@ -23,7 +23,7 @@ import { getProviderSpec } from "@/server/provider-registry";
 
 export async function buildProviderForUser(
   db: Db,
-  project: Pick<Project, "id" | "providerKind" | "providerScope" | "name">,
+  project: Pick<Project, "id" | "providerKind" | "providerScope">,
   userId: UserId,
 ): Promise<WorkItemProvider> {
   const spec = getProviderSpec(project.providerKind);
@@ -51,5 +51,5 @@ export async function buildProviderForUser(
 
   const scope = asPlainObject(project.providerScope);
   const config = { ...scope, accessToken: account.access_token };
-  return spec.factory(config, project.name);
+  return spec.factory(config);
 }

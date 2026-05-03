@@ -271,13 +271,10 @@ export type SetupField = {
 };
 
 /**
- * Constructs a live provider from `(config, displayName)`. Configs are
- * already validated and normalized by the time the factory sees them.
+ * Constructs a live provider from a normalized config. Configs are already
+ * validated and normalized by the time the factory sees them.
  */
-export type ProviderFactory = (
-  config: Record<string, unknown>,
-  displayName: string,
-) => WorkItemProvider;
+export type ProviderFactory = (config: Record<string, unknown>) => WorkItemProvider;
 
 /**
  * Normalizer called before a provider config is validated and persisted.
