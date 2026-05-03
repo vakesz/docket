@@ -144,6 +144,7 @@ async function loadSyncTunables(db: Db): Promise<SyncTunables> {
     loadGlobalSetting(db, "sync.stale-progress-minutes"),
     loadGlobalSetting(db, "sync.max-snapshot-warnings"),
   ]);
+  warnIfTunablesOverPool(maxInflightChunks, maxIntraChunkConcurrency);
   return {
     chunkSize,
     maxInflightChunks,
@@ -151,6 +152,30 @@ async function loadSyncTunables(db: Db): Promise<SyncTunables> {
     staleProgressMs: staleMinutes * 60_000,
     maxSnapshotWarnings,
   };
+}
+
+// Warn (once per run) when sync tunables can issue more concurrent DB
+// statements than DB_POOL_MAX permits. postgres-js queues over-cap requests
+// rather than failing, so this isn't a hard error — the cap just becomes
+// silent throughput tax. The warning gives operators something concrete to
+// tune (raise the pool, or lower one of the two sync tunables).
+let warnedTunablePoolMismatch = false;
+function warnIfTunablesOverPool(maxInflightChunks: number, maxIntraChunkConcurrency: number) {
+  if (warnedTunablePoolMismatch) return;
+  const poolMax = Number(process.env["DB_POOL_MAX"] ?? 10);
+  if (!Number.isFinite(poolMax) || poolMax <= 0) return;
+  const peak = maxInflightChunks * maxIntraChunkConcurrency;
+  if (peak <= poolMax) return;
+  warnedTunablePoolMismatch = true;
+  logger.warn(
+    {
+      poolMax,
+      maxInflightChunks,
+      maxIntraChunkConcurrency,
+      peakConcurrentStatements: peak,
+    },
+    "sync: tunables exceed DB pool — chunks may queue on connection acquisition; consider raising DB_POOL_MAX or lowering sync.max-inflight-chunks / sync.max-intra-chunk-concurrency",
+  );
 }
 
 // Single source of truth for the persisted snapshot shape: zod parses the
@@ -589,103 +614,26 @@ async function processChunk(
     }
   }
 
-  let inboundConversations = 0;
-  if (changedExisting.length > 0) {
-    const settled = await mapWithConcurrencySettled(
-      changedExisting,
-      tunables.maxIntraChunkConcurrency,
-      (c) =>
-        injectExternalChange(db, {
-          projectId,
-          itemId: c.itemId,
-          providerItemId: c.providerItemId,
-          changes: c.changes,
-        }),
-    );
-    for (let i = 0; i < settled.length; i++) {
-      const r = settled[i];
-      if (!r) continue;
-      if (r.status === "fulfilled") {
-        inboundConversations += r.value.injectedInto;
-      } else {
-        const offender = changedExisting[i];
-        if (offender) {
-          warnings.push(`item ${offender.providerItemId}: inbound-change inject failed`);
-          logger.warn(
-            {
-              syncId: ctx.syncId,
-              projectId,
-              chunkIndex: ctx.chunkIndex,
-              providerItemId: offender.providerItemId,
-              err: r.reason instanceof Error ? r.reason.message : String(r.reason),
-            },
-            "sync: inbound-change injection failed (continuing)",
-          );
-        }
-      }
-    }
-  }
+  const { inboundConversations, warnings: injectWarnings } = await injectMaterialChanges(
+    db,
+    projectId,
+    changedExisting,
+    ctx,
+    tunables,
+  );
+  if (injectWarnings.length > 0) warnings.push(...injectWarnings);
 
-  let commentsReconciled = 0;
-  let failedComments = 0;
-  const bundlesWithComments = bundles.filter((b) => b.comments !== null);
-  if (bundlesWithComments.length > 0) {
-    // Surrogates: existing rows already came back in `cachedMap` with their
-    // ids — we only need a refetch for the freshly-created ones, since the
-    // batched insert above doesn't return id-by-providerItemId. Saves one
-    // full-chunk select on every chunk where we've seen the items before
-    // (the common case after the first sync).
-    const surrogateMap = new Map<string, ItemId>();
-    for (const r of cachedRows) surrogateMap.set(r.providerItemId, r.id);
-    const newIds = toCreate.map((r) => r.providerItemId).filter((id) => !surrogateMap.has(id));
-    if (newIds.length > 0) {
-      const newRows = await db
-        .select({ id: items.id, providerItemId: items.providerItemId })
-        .from(items)
-        .where(and(eq(items.projectId, projectId), inArray(items.providerItemId, newIds)));
-      for (const r of newRows) surrogateMap.set(r.providerItemId, r.id);
-    }
-    const reconcileBundles: CommentReconcileBundle[] = [];
-    for (const b of bundlesWithComments) {
-      const surrogate = surrogateMap.get(b.item.id);
-      if (!surrogate) continue;
-      reconcileBundles.push({ itemSurrogate: surrogate, comments: b.comments ?? [] });
-    }
-    const reconcileResult = await reconcileComments(
-      db,
-      reconcileBundles,
-      tunables.maxIntraChunkConcurrency,
-    );
-    commentsReconciled += reconcileResult.touched;
-    failedComments += reconcileResult.failed;
-    if (reconcileResult.warnings.length > 0) warnings.push(...reconcileResult.warnings);
-  }
+  const reconcile = await reconcileChunkComments(
+    db,
+    projectId,
+    bundles,
+    cachedRows,
+    toCreate,
+    tunables,
+  );
+  if (reconcile.warnings.length > 0) warnings.push(...reconcile.warnings);
 
-  // Warm the avatar cache for assignees in this chunk so the first item-
-  // list render after sync has bytes ready instead of flickering through
-  // the lazy-fetch path. Best-effort + fire-and-forget — sync should never
-  // fail because an avatar fetch did, and the loop itself bounds
-  // concurrency internally. Failures are recorded as a snapshot warning so
-  // the operator can tell when the asset cache is stale.
-  const assigneeLogins = collectAssignees(bundles);
-  if (assigneeLogins.length > 0) {
-    void warmAvatars(db, {
-      providerKind: ctx.providerKind,
-      identifiers: assigneeLogins,
-    }).catch((err) => {
-      const reason = err instanceof Error ? err.message : String(err);
-      warnings.push(`avatar warm: ${reason}`);
-      logger.warn(
-        {
-          syncId: ctx.syncId,
-          projectId,
-          chunkIndex: ctx.chunkIndex,
-          err: reason,
-        },
-        "sync: avatar warm failed",
-      );
-    });
-  }
+  warmChunkAvatars(db, ctx, bundles, warnings);
 
   logger.debug(
     {
@@ -697,9 +645,9 @@ async function processChunk(
       updated: toUpdate.length,
       materialChanges: changedExisting.length,
       inboundConversations,
-      commentsReconciled,
+      commentsReconciled: reconcile.commentsReconciled,
       failedItems,
-      failedComments,
+      failedComments: reconcile.failedComments,
       chunkMs: Date.now() - startedAt,
     },
     "sync: chunk persisted",
@@ -708,11 +656,135 @@ async function processChunk(
   return {
     upserted,
     inboundConversations,
-    commentsReconciled,
+    commentsReconciled: reconcile.commentsReconciled,
     failedItems,
-    failedComments,
+    failedComments: reconcile.failedComments,
     warnings,
   };
+}
+
+type CachedItemRow = {
+  id: ItemId;
+  providerItemId: ProviderItemId;
+};
+
+type ChangedExisting = {
+  itemId: ItemId;
+  providerItemId: ProviderItemId;
+  changes: MaterialChange[];
+};
+
+async function injectMaterialChanges(
+  db: Db,
+  projectId: ProjectId,
+  changedExisting: readonly ChangedExisting[],
+  ctx: { syncId: string; chunkIndex: number },
+  tunables: SyncTunables,
+): Promise<{ inboundConversations: number; warnings: string[] }> {
+  if (changedExisting.length === 0) return { inboundConversations: 0, warnings: [] };
+  const warnings: string[] = [];
+  let inboundConversations = 0;
+  const settled = await mapWithConcurrencySettled(
+    changedExisting,
+    tunables.maxIntraChunkConcurrency,
+    (c) =>
+      injectExternalChange(db, {
+        projectId,
+        itemId: c.itemId,
+        providerItemId: c.providerItemId,
+        changes: c.changes,
+      }),
+  );
+  for (let i = 0; i < settled.length; i++) {
+    const r = settled[i];
+    if (!r) continue;
+    if (r.status === "fulfilled") {
+      inboundConversations += r.value.injectedInto;
+      continue;
+    }
+    const offender = changedExisting[i];
+    if (!offender) continue;
+    warnings.push(`item ${offender.providerItemId}: inbound-change inject failed`);
+    logger.warn(
+      {
+        syncId: ctx.syncId,
+        projectId,
+        chunkIndex: ctx.chunkIndex,
+        providerItemId: offender.providerItemId,
+        err: r.reason instanceof Error ? r.reason.message : String(r.reason),
+      },
+      "sync: inbound-change injection failed (continuing)",
+    );
+  }
+  return { inboundConversations, warnings };
+}
+
+async function reconcileChunkComments(
+  db: Db,
+  projectId: ProjectId,
+  bundles: readonly ChangedItem[],
+  cachedRows: readonly CachedItemRow[],
+  toCreate: readonly ItemRow[],
+  tunables: SyncTunables,
+): Promise<{ commentsReconciled: number; failedComments: number; warnings: string[] }> {
+  const bundlesWithComments = bundles.filter((b) => b.comments !== null);
+  if (bundlesWithComments.length === 0) {
+    return { commentsReconciled: 0, failedComments: 0, warnings: [] };
+  }
+  // Surrogates: existing rows already came back in `cachedRows` with their
+  // ids — we only need a refetch for the freshly-created ones, since the
+  // batched insert above doesn't return id-by-providerItemId. Saves one
+  // full-chunk select on every chunk where we've seen the items before
+  // (the common case after the first sync).
+  const surrogateMap = new Map<string, ItemId>();
+  for (const r of cachedRows) surrogateMap.set(r.providerItemId, r.id);
+  const newIds = toCreate.map((r) => r.providerItemId).filter((id) => !surrogateMap.has(id));
+  if (newIds.length > 0) {
+    const newRows = await db
+      .select({ id: items.id, providerItemId: items.providerItemId })
+      .from(items)
+      .where(and(eq(items.projectId, projectId), inArray(items.providerItemId, newIds)));
+    for (const r of newRows) surrogateMap.set(r.providerItemId, r.id);
+  }
+  const reconcileBundles: CommentReconcileBundle[] = [];
+  for (const b of bundlesWithComments) {
+    const surrogate = surrogateMap.get(b.item.id);
+    if (!surrogate) continue;
+    reconcileBundles.push({ itemSurrogate: surrogate, comments: b.comments ?? [] });
+  }
+  const result = await reconcileComments(db, reconcileBundles, tunables.maxIntraChunkConcurrency);
+  return {
+    commentsReconciled: result.touched,
+    failedComments: result.failed,
+    warnings: result.warnings,
+  };
+}
+
+// Warm the avatar cache for assignees in this chunk so the first item-list
+// render after sync has bytes ready instead of flickering through the lazy-
+// fetch path. Best-effort + fire-and-forget — sync should never fail because
+// an avatar fetch did, and the loop itself bounds concurrency internally.
+// Failures are recorded as a snapshot warning so the operator can tell when
+// the asset cache is stale.
+function warmChunkAvatars(
+  db: Db,
+  ctx: { syncId: string; chunkIndex: number; providerKind: string },
+  bundles: readonly ChangedItem[],
+  warnings: string[],
+): void {
+  const assigneeLogins = collectAssignees(bundles);
+  if (assigneeLogins.length === 0) return;
+  void warmAvatars(db, {
+    providerKind: ctx.providerKind,
+    identifiers: assigneeLogins,
+  }).catch((err) => {
+    const reason = err instanceof Error ? err.message : String(err);
+    warnings.push(`avatar warm: ${reason}`);
+    logger.warn(
+      { syncId: ctx.syncId, chunkIndex: ctx.chunkIndex, err: reason },
+      "sync: avatar warm failed",
+    );
+  });
 }
 
 function collectAssignees(bundles: readonly ChangedItem[]): string[] {
