@@ -285,6 +285,7 @@ export async function* runTurn(args: RunTurnArgs): AsyncGenerator<LoopEvent> {
     itemSummary: itemContext.summary,
     prompts,
     capabilities: promptCapabilities,
+    maxToolRounds: cap,
   });
 
   const toolCtx: ToolContext = {

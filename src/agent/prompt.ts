@@ -156,10 +156,21 @@ export function buildSystemPrefix(args: {
   itemSummary: string | null;
   prompts?: ResolvedPrompts;
   capabilities?: PromptCapabilities;
+  /**
+   * Hard cap on tool-call rounds per turn (the user's `chat.max-tool-rounds`
+   * setting at turn-start, or a test override). Embedded in the prefix so
+   * the model knows the ceiling and can budget reads accordingly. The value
+   * becomes part of the prompt-cache key — turns where it changes incur a
+   * cache miss the same way an operator prompt edit does.
+   */
+  maxToolRounds?: number;
 }): string {
   const prompts = args.prompts ?? DEFAULT_PROMPTS;
   const capabilities = args.capabilities ?? NO_PROMPT_CAPABILITIES;
   const parts = [prompts.systemBase];
+  if (typeof args.maxToolRounds === "number") {
+    parts.push("", toolRoundsBudgetLine(args.maxToolRounds));
+  }
   if (capabilities.pullRequestDiffs) {
     parts.push("", PR_TOOLS_SYSTEM_GUIDANCE);
   }
@@ -173,4 +184,13 @@ export function buildSystemPrefix(args: {
     parts.push("", `Item under discussion:\n${args.itemSummary}`);
   }
   return parts.join("\n");
+}
+
+/**
+ * Single source of truth for the budget sentence so the prompt and any
+ * future tests / docs reference identical text.
+ */
+export function toolRoundsBudgetLine(maxToolRounds: number): string {
+  return `# Tool-call budget
+You have at most ${maxToolRounds} tool-call rounds per turn (one round = one assistant response that includes tool calls); the loop aborts after that. Plan reads (get_item, list_memory, search_*) up front and avoid speculative chains — finish with a clear reply or a staged proposal before the cap.`;
 }

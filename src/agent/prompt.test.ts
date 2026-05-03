@@ -6,6 +6,7 @@ import {
   DEFAULT_SYSTEM_BASE,
   PR_TOOLS_BUG_GUIDANCE,
   PR_TOOLS_SYSTEM_GUIDANCE,
+  toolRoundsBudgetLine,
 } from "@/agent/prompt";
 import type { ItemKind } from "@/core/types";
 
@@ -126,6 +127,56 @@ describe("buildSystemPrefix", () => {
       const bugAddendumIdx = out.indexOf(PR_TOOLS_BUG_GUIDANCE);
       expect(bugAddendumIdx).toBeGreaterThan(-1);
       expect(summaryIdx).toBeGreaterThan(bugAddendumIdx);
+    });
+  });
+
+  describe("tool-call budget", () => {
+    it("omits the budget block when maxToolRounds is undefined", () => {
+      const out = buildSystemPrefix({ itemKind: null, itemSummary: null });
+      expect(out).not.toContain("Tool-call budget");
+    });
+
+    it("appends the budget block right after the system base when maxToolRounds is set", () => {
+      const out = buildSystemPrefix({
+        itemKind: null,
+        itemSummary: null,
+        maxToolRounds: 12,
+      });
+      expect(out).toBe(`${DEFAULT_SYSTEM_BASE}\n\n${toolRoundsBudgetLine(12)}`);
+    });
+
+    it("interpolates the cap value into the budget line", () => {
+      const out = buildSystemPrefix({
+        itemKind: null,
+        itemSummary: null,
+        maxToolRounds: 4,
+      });
+      expect(out).toContain("at most 4 tool-call rounds per turn");
+    });
+
+    it("places the budget block before capability + kind addenda", () => {
+      const out = buildSystemPrefix({
+        itemKind: "bug",
+        itemSummary: ITEM_SUMMARY,
+        capabilities: { pullRequestDiffs: true },
+        maxToolRounds: 8,
+      });
+      const budgetIdx = out.indexOf(toolRoundsBudgetLine(8));
+      const prGuidanceIdx = out.indexOf(PR_TOOLS_SYSTEM_GUIDANCE);
+      const bugKindIdx = out.indexOf(DEFAULT_KIND_PROMPTS.bug);
+      const summaryIdx = out.indexOf(`Item under discussion:\n${ITEM_SUMMARY}`);
+      expect(budgetIdx).toBeGreaterThan(-1);
+      expect(prGuidanceIdx).toBeGreaterThan(budgetIdx);
+      expect(bugKindIdx).toBeGreaterThan(prGuidanceIdx);
+      expect(summaryIdx).toBeGreaterThan(bugKindIdx);
+    });
+
+    it("is byte-stable for the same cap and varies only when the cap changes", () => {
+      const a = buildSystemPrefix({ itemKind: "story", itemSummary: null, maxToolRounds: 12 });
+      const b = buildSystemPrefix({ itemKind: "story", itemSummary: null, maxToolRounds: 12 });
+      const c = buildSystemPrefix({ itemKind: "story", itemSummary: null, maxToolRounds: 6 });
+      expect(a).toBe(b);
+      expect(a).not.toBe(c);
     });
   });
 });
