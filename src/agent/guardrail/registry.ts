@@ -138,8 +138,7 @@ function buildJudgeClient(row: LlmProvider): JudgeClient | null {
         ...(row.baseUrl ? { baseUrl: row.baseUrl } : {}),
       });
     default: {
-      const exhaustive: never = kind;
-      void exhaustive;
+      const _exhaustive: never = kind;
       return null;
     }
   }

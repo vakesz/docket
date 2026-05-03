@@ -41,8 +41,6 @@ export async function serveAvatar(
   opts: {
     providerKind: string;
     identifier: string;
-    accessToken?: string | null;
-    isSelf?: boolean;
   },
 ): Promise<ServeResult> {
   const row = await db.query.avatars.findFirst({

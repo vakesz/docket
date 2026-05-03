@@ -72,12 +72,9 @@ export type CodeSnippetCapResult = {
  */
 function truncationCommentFor(rawLang: string): string {
   const lang = rawLang.trim().toLowerCase();
-  if (!lang || HTML_LANGUAGES.has(lang)) {
-    return `<!-- ${TRUNCATION_MESSAGE} -->`;
-  }
-  const prefix = COMMENT_BY_LANGUAGE[lang];
-  if (prefix) {
-    return `${prefix} ${TRUNCATION_MESSAGE}`;
+  if (lang && !HTML_LANGUAGES.has(lang)) {
+    const prefix = COMMENT_BY_LANGUAGE[lang];
+    if (prefix) return `${prefix} ${TRUNCATION_MESSAGE}`;
   }
   return `<!-- ${TRUNCATION_MESSAGE} -->`;
 }

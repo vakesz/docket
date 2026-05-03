@@ -158,8 +158,7 @@ export function isEmptyDiff(diff: ProposalDiff): boolean {
     case "reaction_toggle":
       return false;
     default: {
-      const exhaustive: never = diff;
-      void exhaustive;
+      const _exhaustive: never = diff;
       return false;
     }
   }

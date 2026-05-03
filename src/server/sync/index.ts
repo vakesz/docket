@@ -574,9 +574,7 @@ async function processChunk(
           .set({ ...row, archived: false })
           .where(and(eq(items.projectId, projectId), eq(items.providerItemId, providerItemId))),
     );
-    for (let i = 0; i < settled.length; i++) {
-      const r = settled[i];
-      if (!r) continue;
+    for (const [i, r] of settled.entries()) {
       if (r.status === "fulfilled") {
         upserted++;
       } else {
@@ -680,9 +678,7 @@ async function injectMaterialChanges(
         changes: c.changes,
       }),
   );
-  for (let i = 0; i < settled.length; i++) {
-    const r = settled[i];
-    if (!r) continue;
+  for (const [i, r] of settled.entries()) {
     if (r.status === "fulfilled") {
       inboundConversations += r.value.injectedInto;
       continue;
@@ -916,9 +912,7 @@ export async function reconcileComments(
           .values(row)
           .onConflictDoNothing({ target: [comments.itemId, comments.providerCommentId] }),
       );
-      for (let i = 0; i < settled.length; i++) {
-        const r = settled[i];
-        if (!r) continue;
+      for (const [i, r] of settled.entries()) {
         if (r.status === "fulfilled") {
           touched++;
         } else {
@@ -946,9 +940,7 @@ export async function reconcileComments(
           ),
         ),
     );
-    for (let i = 0; i < settled.length; i++) {
-      const r = settled[i];
-      if (!r) continue;
+    for (const [i, r] of settled.entries()) {
       if (r.status === "fulfilled") {
         touched++;
       } else {

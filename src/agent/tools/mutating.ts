@@ -8,7 +8,7 @@ import "server-only";
 import { z } from "zod";
 import type { ToolFactory } from "@/agent/tools/types";
 import { builderCtxFromTool, defineTool, fail, runProposalAction } from "@/agent/tools/types";
-import { ITEM_KINDS, type ProviderItemId, TRANSITION_INTENTS } from "@/core/types";
+import { ITEM_KINDS, TRANSITION_INTENTS } from "@/core/types";
 import { providerItemIdSchema } from "@/lib/zod-ids";
 import {
   proposeComment,
@@ -22,13 +22,6 @@ import { maybeAutoAccept } from "@/server/proposals/executor";
 const ItemKindEnum = z.enum(ITEM_KINDS);
 const TransitionIntentEnum = z.enum(TRANSITION_INTENTS);
 const ItemIdSchema = providerItemIdSchema;
-
-function resolveItemId(
-  ctx: Parameters<ToolFactory>[0],
-  arg: ProviderItemId | undefined,
-): ProviderItemId | null {
-  return arg ?? ctx.providerItemId;
-}
 
 // Every propose_* tool returns server-generated metadata only —
 // `{ proposal_id, kind, status, auto_confirmed }`. There is no foreign
@@ -48,7 +41,7 @@ export const proposeTransitionTool: ToolFactory = (ctx) =>
     }),
     guardrailScan: PROPOSAL_SCAN,
     handler: async (args) => {
-      const itemId = resolveItemId(ctx, args.item_id);
+      const itemId = args.item_id ?? ctx.providerItemId;
       if (!itemId) {
         return fail("item_id is required when no item is anchored on this conversation.");
       }
@@ -75,7 +68,7 @@ export const proposeDescriptionPatchTool: ToolFactory = (ctx) =>
     }),
     guardrailScan: PROPOSAL_SCAN,
     handler: async (args) => {
-      const itemId = resolveItemId(ctx, args.item_id);
+      const itemId = args.item_id ?? ctx.providerItemId;
       if (!itemId) {
         return fail("item_id is required when no item is anchored on this conversation.");
       }
@@ -101,7 +94,7 @@ export const proposeCommentTool: ToolFactory = (ctx) =>
     }),
     guardrailScan: PROPOSAL_SCAN,
     handler: async (args) => {
-      const itemId = resolveItemId(ctx, args.item_id);
+      const itemId = args.item_id ?? ctx.providerItemId;
       if (!itemId) {
         return fail("item_id is required when no item is anchored on this conversation.");
       }
@@ -156,7 +149,7 @@ export const proposeItemTagsTool: ToolFactory = (ctx) =>
     }),
     guardrailScan: PROPOSAL_SCAN,
     handler: async (args) => {
-      const itemId = resolveItemId(ctx, args.item_id);
+      const itemId = args.item_id ?? ctx.providerItemId;
       if (!itemId) {
         return fail("item_id is required when no item is anchored on this conversation.");
       }
