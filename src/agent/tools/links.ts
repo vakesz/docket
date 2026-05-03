@@ -12,7 +12,7 @@
 import "server-only";
 import { z } from "zod";
 import type { ToolFactory } from "@/agent/tools/types";
-import { defineTool, fail, ok, withProvider } from "@/agent/tools/types";
+import { defineTool, fail, ok, toToolFailure, withProvider } from "@/agent/tools/types";
 
 export const findRelatedPullRequestsTool: ToolFactory = (ctx) =>
   defineTool({
@@ -45,7 +45,7 @@ export const findRelatedPullRequestsTool: ToolFactory = (ctx) =>
           return ok({ matches });
         });
       } catch (err) {
-        return fail(err instanceof Error ? err.message : String(err));
+        return toToolFailure(err);
       }
     },
   });

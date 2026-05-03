@@ -10,7 +10,7 @@ import "server-only";
 import { and, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import { z } from "zod";
 import type { AgentTool, ToolContext, ToolFactory } from "@/agent/tools/types";
-import { defineTool, fail, ok, withProvider } from "@/agent/tools/types";
+import { defineTool, fail, ok, toToolFailure, withProvider } from "@/agent/tools/types";
 import type { ItemState, ProposalId } from "@/core/types";
 import { escapeLike } from "@/db/like";
 import { audits, items as itemsTable } from "@/db/schema";
@@ -75,11 +75,31 @@ export const searchItemsTool: ToolFactory = (ctx) =>
     },
   });
 
+// Per-row cap on the JSON payload that ships back to the model. Comment /
+// description bodies live inside this blob; with `limit=100` an unbounded
+// payload field can blow past the model's context window. Truncate the
+// stringified form and replace with a sentinel marker so the agent can tell
+// it was clipped and refetch a single row by `proposal_id` if it needs the
+// full body.
+const AUDIT_PAYLOAD_BYTES_PER_ROW = 4_096;
+
+function capAuditPayload(payload: unknown): unknown {
+  if (payload === null || payload === undefined) return payload;
+  const json = JSON.stringify(payload);
+  if (json.length <= AUDIT_PAYLOAD_BYTES_PER_ROW) return payload;
+  return {
+    truncated: true,
+    bytes_total: json.length,
+    bytes_kept: AUDIT_PAYLOAD_BYTES_PER_ROW,
+    preview: json.slice(0, AUDIT_PAYLOAD_BYTES_PER_ROW),
+  };
+}
+
 export const listAuditLogTool: ToolFactory = (ctx) =>
   defineTool({
     name: "list_audit_log",
     description:
-      "Read the project's append-only audit log of confirmed/rejected proposals. Use this to answer 'what was changed recently?' or to check whether a specific proposal kind has fired. Filter by `action` (e.g. 'proposal.confirm', 'proposal.reject', 'proposal.auto_confirm', 'proposal.confirm.failed') or by `proposal_id` for a single proposal's trail.",
+      "Read the project's append-only audit log of confirmed/rejected proposals. Use this to answer 'what was changed recently?' or to check whether a specific proposal kind has fired. Filter by `action` (e.g. 'proposal.confirm', 'proposal.reject', 'proposal.auto_confirm', 'proposal.confirm.failed') or by `proposal_id` for a single proposal's trail. Each row's `payload` is capped per-row; when truncated the field becomes `{truncated: true, bytes_total, bytes_kept, preview}` — refetch with `proposal_id` for the full body.",
     schema: z.object({
       action: z.string().min(1).max(64).optional(),
       proposal_id: z
@@ -119,7 +139,7 @@ export const listAuditLogTool: ToolFactory = (ctx) =>
           action: r.action,
           proposal_id: r.proposalId,
           created_at: r.createdAt,
-          payload: r.payload,
+          payload: capAuditPayload(r.payload),
         })),
       });
     },
@@ -141,7 +161,7 @@ export const getPullRequestDiffTool: ToolFactory = (ctx) =>
           return ok(await p.getPullRequestDiff(pullRequestId));
         });
       } catch (err) {
-        return fail(err instanceof Error ? err.message : String(err));
+        return toToolFailure(err);
       }
     },
   });
@@ -175,7 +195,7 @@ export const searchPullRequestsTool: ToolFactory = (ctx) =>
           return ok({ matches });
         });
       } catch (err) {
-        return fail(err instanceof Error ? err.message : String(err));
+        return toToolFailure(err);
       }
     },
   });
@@ -200,7 +220,7 @@ export const searchCodeTool: ToolFactory = (ctx) =>
           return ok(await p.searchCode(args.query, args.limit));
         });
       } catch (err) {
-        return fail(err instanceof Error ? err.message : String(err));
+        return toToolFailure(err);
       }
     },
   });

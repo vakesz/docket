@@ -11,7 +11,7 @@ import "server-only";
 import { and, asc, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import { z } from "zod";
 import type { AgentTool, ToolContext, ToolFactory } from "@/agent/tools/types";
-import { defineTool, fail, ok, withProvider } from "@/agent/tools/types";
+import { defineTool, fail, ok, toToolFailure, withProvider } from "@/agent/tools/types";
 import { ITEM_KINDS, type ItemState, type ProviderItemId } from "@/core/types";
 import { escapeLike } from "@/db/like";
 import { items } from "@/db/schema";
@@ -176,7 +176,7 @@ export const getPullRequestTool: ToolFactory = (ctx) =>
           });
         });
       } catch (err) {
-        return fail(err instanceof Error ? err.message : String(err));
+        return toToolFailure(err);
       }
     },
   });
@@ -209,7 +209,7 @@ export const getCommitTool: ToolFactory = (ctx) =>
           });
         });
       } catch (err) {
-        return fail(err instanceof Error ? err.message : String(err));
+        return toToolFailure(err);
       }
     },
   });
@@ -244,7 +244,7 @@ export const getCIStatusTool: ToolFactory = (ctx) =>
           });
         });
       } catch (err) {
-        return fail(err instanceof Error ? err.message : String(err));
+        return toToolFailure(err);
       }
     },
   });

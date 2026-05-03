@@ -17,7 +17,7 @@
 import "server-only";
 import { z } from "zod";
 import type { ToolFactory } from "@/agent/tools/types";
-import { builderCtxFromTool, defineTool, fail, ok } from "@/agent/tools/types";
+import { builderCtxFromTool, defineTool, runProposalAction } from "@/agent/tools/types";
 import { proposeMemoryDelete, proposeMemoryWrite } from "@/server/proposals/builders";
 import { maybeAutoAccept } from "@/server/proposals/executor";
 
@@ -35,8 +35,8 @@ export const proposeMemoryWriteTool: ToolFactory = (ctx) =>
     // Returns server-generated proposal metadata only — no foreign content.
     guardrailScan: { mode: "skip" },
     handler: async (args) => {
-      try {
-        const c = builderCtxFromTool(ctx);
+      const c = builderCtxFromTool(ctx);
+      return runProposalAction(async () => {
         const row = await proposeMemoryWrite(c, {
           memoryId: args.memory_id,
           title: args.title,
@@ -44,16 +44,8 @@ export const proposeMemoryWriteTool: ToolFactory = (ctx) =>
           tags: args.tags,
           source: "agent",
         });
-        const final = await maybeAutoAccept(c, row);
-        return ok({
-          proposal_id: final.id,
-          kind: final.kind,
-          status: final.status,
-          auto_confirmed: final.status === "confirmed",
-        });
-      } catch (err) {
-        return fail(err instanceof Error ? err.message : String(err));
-      }
+        return maybeAutoAccept(c, row);
+      });
     },
   });
 
@@ -65,19 +57,11 @@ export const proposeMemoryDeleteTool: ToolFactory = (ctx) =>
     // Returns server-generated proposal metadata only — no foreign content.
     guardrailScan: { mode: "skip" },
     handler: async ({ memory_id: memoryId }) => {
-      try {
-        const c = builderCtxFromTool(ctx);
+      const c = builderCtxFromTool(ctx);
+      return runProposalAction(async () => {
         const row = await proposeMemoryDelete(c, { memoryId });
-        const final = await maybeAutoAccept(c, row);
-        return ok({
-          proposal_id: final.id,
-          kind: final.kind,
-          status: final.status,
-          auto_confirmed: final.status === "confirmed",
-        });
-      } catch (err) {
-        return fail(err instanceof Error ? err.message : String(err));
-      }
+        return maybeAutoAccept(c, row);
+      });
     },
   });
 

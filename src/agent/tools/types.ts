@@ -118,6 +118,37 @@ export async function withProvider<T>(
 }
 
 /**
+ * Bridge a thrown error to a `ToolResult.error`. Handlers wrap proposal
+ * staging / provider calls in `try { ... } catch (err) { return toToolFailure(err); }`
+ * so the loop sees a uniform `{ ok: false, error }` shape rather than a
+ * thrown exception, and the message-extraction logic lives in one place.
+ */
+export function toToolFailure(err: unknown): ToolResult<never> {
+  return fail(err instanceof Error ? err.message : String(err));
+}
+
+/**
+ * Stage a proposal-bearing tool action. The factory wraps the common
+ * `try { stage; auto-accept; map; ok } catch { fail }` pattern shared by
+ * every `propose_*` tool so handler bodies focus on the call itself.
+ */
+export async function runProposalAction(
+  action: () => Promise<{ id: string; kind: string; status: string }>,
+): Promise<ToolResult> {
+  try {
+    const final = await action();
+    return ok({
+      proposal_id: final.id,
+      kind: final.kind,
+      status: final.status,
+      auto_confirmed: final.status === "confirmed",
+    });
+  } catch (err) {
+    return toToolFailure(err);
+  }
+}
+
+/**
  * Compose an `AgentTool` from a single zod schema. The schema is the
  * source of truth: it produces both the JSON Schema the LLM sees and the
  * type-safe parsed args the handler receives. Handlers no longer

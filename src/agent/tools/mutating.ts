@@ -7,7 +7,7 @@
 import "server-only";
 import { z } from "zod";
 import type { ToolFactory } from "@/agent/tools/types";
-import { builderCtxFromTool, defineTool, fail, ok } from "@/agent/tools/types";
+import { builderCtxFromTool, defineTool, fail, runProposalAction } from "@/agent/tools/types";
 import { ITEM_KINDS, type ProviderItemId, TRANSITION_INTENTS } from "@/core/types";
 import {
   proposeComment,
@@ -38,15 +38,6 @@ function resolveItemId(
 // coin on opaque JSON. Skip the scan entirely.
 const PROPOSAL_SCAN = { mode: "skip" } as const;
 
-function proposalResult(final: { id: string; kind: string; status: string }) {
-  return {
-    proposal_id: final.id,
-    kind: final.kind,
-    status: final.status,
-    auto_confirmed: final.status === "confirmed",
-  };
-}
-
 export const proposeTransitionTool: ToolFactory = (ctx) =>
   defineTool({
     name: "propose_transition",
@@ -63,17 +54,15 @@ export const proposeTransitionTool: ToolFactory = (ctx) =>
       if (!itemId) {
         return fail("item_id is required when no item is anchored on this conversation.");
       }
-      try {
-        const c = builderCtxFromTool(ctx);
+      const c = builderCtxFromTool(ctx);
+      return runProposalAction(async () => {
         const row = await proposeTransition(c, {
           providerItemId: itemId,
           intent: args.intent,
           ...(args.duplicate_of ? { canonicalItemId: args.duplicate_of } : {}),
         });
-        return ok(proposalResult(await maybeAutoAccept(c, row)));
-      } catch (err) {
-        return fail(err instanceof Error ? err.message : String(err));
-      }
+        return maybeAutoAccept(c, row);
+      });
     },
   });
 
@@ -92,16 +81,14 @@ export const proposeDescriptionPatchTool: ToolFactory = (ctx) =>
       if (!itemId) {
         return fail("item_id is required when no item is anchored on this conversation.");
       }
-      try {
-        const c = builderCtxFromTool(ctx);
+      const c = builderCtxFromTool(ctx);
+      return runProposalAction(async () => {
         const row = await proposeDescriptionPatch(c, {
           providerItemId: itemId,
           newDescription: args.new_description,
         });
-        return ok(proposalResult(await maybeAutoAccept(c, row)));
-      } catch (err) {
-        return fail(err instanceof Error ? err.message : String(err));
-      }
+        return maybeAutoAccept(c, row);
+      });
     },
   });
 
@@ -120,13 +107,11 @@ export const proposeCommentTool: ToolFactory = (ctx) =>
       if (!itemId) {
         return fail("item_id is required when no item is anchored on this conversation.");
       }
-      try {
-        const c = builderCtxFromTool(ctx);
+      const c = builderCtxFromTool(ctx);
+      return runProposalAction(async () => {
         const row = await proposeComment(c, { providerItemId: itemId, body: args.body });
-        return ok(proposalResult(await maybeAutoAccept(c, row)));
-      } catch (err) {
-        return fail(err instanceof Error ? err.message : String(err));
-      }
+        return maybeAutoAccept(c, row);
+      });
     },
   });
 
@@ -145,8 +130,8 @@ export const proposeNewItemTool: ToolFactory = (ctx) =>
     }),
     guardrailScan: PROPOSAL_SCAN,
     handler: async (args) => {
-      try {
-        const c = builderCtxFromTool(ctx);
+      const c = builderCtxFromTool(ctx);
+      return runProposalAction(async () => {
         const row = await proposeNewItem(c, {
           itemKind: args.kind,
           fields: {
@@ -157,10 +142,8 @@ export const proposeNewItemTool: ToolFactory = (ctx) =>
             tags: args.tags,
           },
         });
-        return ok(proposalResult(await maybeAutoAccept(c, row)));
-      } catch (err) {
-        return fail(err instanceof Error ? err.message : String(err));
-      }
+        return maybeAutoAccept(c, row);
+      });
     },
   });
 
@@ -179,16 +162,14 @@ export const proposeItemTagsTool: ToolFactory = (ctx) =>
       if (!itemId) {
         return fail("item_id is required when no item is anchored on this conversation.");
       }
-      try {
-        const c = builderCtxFromTool(ctx);
+      const c = builderCtxFromTool(ctx);
+      return runProposalAction(async () => {
         const row = await proposeTagsChange(c, {
           providerItemId: itemId,
           nextTags: args.tags,
         });
-        return ok(proposalResult(await maybeAutoAccept(c, row)));
-      } catch (err) {
-        return fail(err instanceof Error ? err.message : String(err));
-      }
+        return maybeAutoAccept(c, row);
+      });
     },
   });
 

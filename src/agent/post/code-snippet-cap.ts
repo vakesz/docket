@@ -137,14 +137,25 @@ function parseSegments(input: string): { segments: Segment[]; trailingNewline: b
       while (j < lines.length && !isClosing(lines[j] ?? "", opener)) {
         j += 1;
       }
-      if (j >= lines.length) {
-        // Unterminated fence — bail out and treat the rest as text so
-        // we don't accidentally swallow the whole document.
-        break;
-      }
       if (textBuffer.length > 0) {
         segments.push({ kind: "text", lines: textBuffer });
         textBuffer = [];
+      }
+      if (j >= lines.length) {
+        // Unterminated fence (LLM forgot to close it). Synthesize a closer
+        // so the cap still applies — otherwise the policy is bypassable by
+        // omitting the trailing fence. The synthesized closer matches the
+        // opener's character/length to round-trip cleanly.
+        const synthesized = opener.char.repeat(opener.count);
+        segments.push({
+          kind: "block",
+          openLine: line,
+          closeLine: synthesized,
+          bodyLines: lines.slice(i + 1),
+          opener,
+        });
+        i = lines.length;
+        break;
       }
       segments.push({
         kind: "block",
@@ -158,10 +169,6 @@ function parseSegments(input: string): { segments: Segment[]; trailingNewline: b
     }
     textBuffer.push(line);
     i += 1;
-  }
-  // Append any unterminated tail as plain text so the document round-trips.
-  if (i < lines.length) {
-    textBuffer.push(...lines.slice(i));
   }
   if (textBuffer.length > 0) {
     segments.push({ kind: "text", lines: textBuffer });

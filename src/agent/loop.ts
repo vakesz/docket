@@ -859,15 +859,25 @@ function refusalText(reason: string): string {
   return "Sorry, I can't continue with that request.";
 }
 
-/**
- * Narrow the JSON-column read back to `LlmToolCall[]`. The write side is
- * `persistAssistantTurn` below, which is the only producer of this column —
- * Prisma's structural `JsonValue` typing is what makes the assertion
- * necessary; the runtime shape is fixed.
- */
+// Schema mirror of `LlmToolCall` for runtime validation of the JSON column.
+// Persisted rows go through `appendMessage` from this process, but a
+// `JsonValue` from Drizzle is structurally `unknown` at the type level and
+// could carry data from an older schema if the row was rewritten by a
+// different code path. Validate at the read boundary so a malformed entry
+// surfaces as "drop this turn's tool calls" rather than as a downstream
+// crash inside the dispatcher.
+const ToolCallShape: z.ZodType<LlmToolCall> = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  arguments: z.record(z.string(), z.unknown()),
+});
+const ToolCallsArrayShape = z.array(ToolCallShape);
+
 function readToolCallsJson(raw: unknown): LlmToolCall[] | undefined {
   if (!Array.isArray(raw) || raw.length === 0) return undefined;
-  return raw as LlmToolCall[];
+  const parsed = ToolCallsArrayShape.safeParse(raw);
+  if (!parsed.success) return undefined;
+  return parsed.data;
 }
 
 async function persistAssistantTurn(
