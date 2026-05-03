@@ -27,6 +27,7 @@ import {
   DEFAULT_SUGGEST_ACTION_BULLETS,
   DEFAULT_SYSTEM_BASE,
 } from "@/agent/prompt";
+import type { ProposalKind } from "@/core/proposal-types";
 
 export const SETTING_SCOPES = ["user", "project", "global"] as const;
 export type SettingScope = (typeof SETTING_SCOPES)[number];
@@ -153,20 +154,28 @@ const PromptStringSchema = z.string().max(16_000);
 // be a second confirmation of what the user already did in the UI.
 // Agent-staged rows still always wait for a human regardless. Adding a
 // kind here is a security review event.
+//
+// `satisfies readonly ProposalKind[]` is load-bearing — a typo or stale
+// kind here would silently fail the runtime check in `maybeAutoAccept`
+// and make the floor invisible. The compiler refuses any value that
+// isn't a real `ProposalKind`.
 export const AUTO_ACCEPT_FLOOR_KINDS = [
   "comment_add",
   "reaction_toggle",
   "tags_change",
   "assignee_change",
   "description_patch",
-] as const;
+] as const satisfies readonly ProposalKind[];
 
 // Opt-in kinds the project may add on top of the floor. Memory writes/deletes
 // are local-DB only (no provider blast radius) so they're safe to auto-accept
 // when the project explicitly opts in. Provider-touching kinds beyond the
 // floor (state changes, item creation) are deliberately NOT eligible and
 // never make this list.
-export const AUTO_ACCEPT_EXTRA_ELIGIBLE_KINDS = ["memory_write", "memory_delete"] as const;
+export const AUTO_ACCEPT_EXTRA_ELIGIBLE_KINDS = [
+  "memory_write",
+  "memory_delete",
+] as const satisfies readonly ProposalKind[];
 const AutoAcceptExtraKindsSchema = z
   .array(z.enum(AUTO_ACCEPT_EXTRA_ELIGIBLE_KINDS))
   .max(AUTO_ACCEPT_EXTRA_ELIGIBLE_KINDS.length);

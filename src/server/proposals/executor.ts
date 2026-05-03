@@ -24,6 +24,7 @@ import type {
 import type { Db } from "@/db";
 import { audits, comments, items, memoryEntries, projects, proposals } from "@/db/schema";
 import type { Proposal as ProposalRow } from "@/db/schema/types";
+import type { AuditAction } from "@/server/audit/log";
 import { assertFound } from "@/server/errors";
 import { errFields } from "@/server/log-fields";
 import { logger } from "@/server/logger";
@@ -76,16 +77,18 @@ type AuditWriteResult = { ok: true } | { ok: false; error: string };
 
 async function recordFailureAudit(
   ctx: ExecutorContext,
-  action: string,
+  action: AuditAction,
   proposalId: ProposalId,
   payload: Record<string, unknown>,
 ): Promise<AuditWriteResult> {
-  // Best-effort: failure audits run in the catch block; the DB may already be
-  // sick. Don't let an audit miss swallow the user-visible result. Success
-  // audits go through the finalize transaction below where they're atomic
-  // with executedAt. Returns the outcome so the caller can stamp the
-  // proposal's errorMessage with a degraded-audit note instead of leaving
-  // the failure invisible to the UI.
+  // [degraded-audit] Best-effort: failure audits run in the catch block; the
+  // DB may already be sick. Don't let an audit miss swallow the user-visible
+  // result. Success audits go through the finalize transaction below where
+  // they're atomic with executedAt. Returns the outcome so the caller can
+  // stamp the proposal's errorMessage with a degraded-audit note instead of
+  // leaving the failure invisible to the UI. This is a deliberate tradeoff:
+  // we'd rather the user see a "[audit write also failed]" tag on the row
+  // than have the executor crash because the audit write didn't make it.
   try {
     await ctx.db.insert(audits).values({
       projectId: ctx.projectId,
@@ -135,8 +138,9 @@ export async function confirmProposal(
   options: { source?: ConfirmSource } = {},
 ): Promise<ProposalRow> {
   const source: ConfirmSource = options.source ?? "user";
-  const okAction = source === "auto" ? "proposal.auto_confirm" : "proposal.confirm";
-  const failAction = source === "auto" ? "proposal.auto_confirm.failed" : "proposal.confirm.failed";
+  const okAction: AuditAction = source === "auto" ? "proposal.auto_confirm" : "proposal.confirm";
+  const failAction: AuditAction =
+    source === "auto" ? "proposal.auto_confirm.failed" : "proposal.confirm.failed";
   const startedAt = Date.now();
   let phase: ConfirmPhase = "load";
 

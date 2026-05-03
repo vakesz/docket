@@ -16,17 +16,36 @@
  */
 
 import "server-only";
-import type { ProjectId, UserId } from "@/core/types";
+import type { ProjectId, ProposalId, UserId } from "@/core/types";
 import type { Db } from "@/db";
 import { audits } from "@/db/schema";
 import { errFields } from "@/server/log-fields";
 import { logger } from "@/server/logger";
 
+/**
+ * Closed set of audit actions. Every audit row's `action` column is one of
+ * these literal strings; adding a new event means adding it here first so the
+ * compiler refuses typos at every call site (`"proposal.confrim"` no longer
+ * compiles). When you add a value, also extend `AUDIT_ACTIONS` so the
+ * runtime guard can validate persisted rows on the way back in.
+ */
+export const AUDIT_ACTIONS = [
+  "proposal.confirm",
+  "proposal.confirm.failed",
+  "proposal.auto_confirm",
+  "proposal.auto_confirm.failed",
+  "proposal.reject",
+  "mcp.oauth.connected",
+  "mcp.oauth.disconnected",
+] as const;
+export type AuditAction = (typeof AUDIT_ACTIONS)[number];
+
 type WriteArgs = {
   db: Db;
   projectId: ProjectId;
   userId: UserId;
-  action: string;
+  action: AuditAction;
+  proposalId?: ProposalId;
   payload: Record<string, unknown>;
 };
 
@@ -36,6 +55,7 @@ async function writeAudit(args: WriteArgs): Promise<void> {
       projectId: args.projectId,
       userId: args.userId,
       action: args.action,
+      ...(args.proposalId ? { proposalId: args.proposalId } : {}),
       payload: args.payload,
     });
   } catch (err) {

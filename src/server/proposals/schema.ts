@@ -142,6 +142,13 @@ export const proposalPayloadSchema = z
         message: "canonicalItem only applies to close_duplicate transitions",
       });
     }
+    if (val.intent === "close_duplicate" && val.canonicalItem?.providerItemId === val.item.id) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["canonicalItem", "providerItemId"],
+        message: "An item cannot be a duplicate of itself.",
+      });
+    }
   });
 
 export type ProposalPayload = z.infer<typeof proposalPayloadSchema>;

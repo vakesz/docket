@@ -140,45 +140,24 @@ export async function proposeTransition(
   const row = await loadCachedItem(ctx, args.providerItemId);
   const item = snapshotFromRow(row);
 
-  if (args.intent === "close_duplicate") {
-    if (!args.canonicalItemId) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "close_duplicate requires a canonical item id",
-      });
-    }
-    if (args.canonicalItemId === args.providerItemId) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "An item cannot be a duplicate of itself.",
-      });
-    }
+  // Shape invariants (close_duplicate ↔ canonicalItem, no self-duplicate)
+  // are enforced once in `proposalPayloadSchema.superRefine` — the
+  // `toJsonProposalPayload` parse inside `persist` is the canonical guard.
+  // We just resolve the canonical row's title here when applicable.
+  let canonicalItem: StateChangeProposal["canonicalItem"] = null;
+  if (args.intent === "close_duplicate" && args.canonicalItemId) {
     const canonicalRow = await loadCachedItem(ctx, args.canonicalItemId);
-    const draft: Omit<StateChangeProposal, "id"> = {
-      kind: "state_change",
-      item,
-      intent: args.intent,
-      canonicalItem: {
-        providerItemId: canonicalRow.providerItemId,
-        title: canonicalRow.title,
-      },
-      postedCommentId: null,
+    canonicalItem = {
+      providerItemId: canonicalRow.providerItemId,
+      title: canonicalRow.title,
     };
-    return persist(ctx, draft, args.providerItemId);
-  }
-
-  if (args.canonicalItemId) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: "canonicalItemId only applies to close_duplicate transitions",
-    });
   }
 
   const draft: Omit<StateChangeProposal, "id"> = {
     kind: "state_change",
     item,
     intent: args.intent,
-    canonicalItem: null,
+    canonicalItem,
     postedCommentId: null,
   };
   return persist(ctx, draft, args.providerItemId);
