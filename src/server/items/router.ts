@@ -487,6 +487,9 @@ export const itemsRouter = router({
             archived: progress.archived,
             inboundConversations: progress.inboundConversations,
             commentsReconciled: progress.commentsReconciled,
+            failedItems: progress.failedItems,
+            failedComments: progress.failedComments,
+            warnings: progress.warnings,
             watermark: progress.watermark,
             error: progress.error,
           }

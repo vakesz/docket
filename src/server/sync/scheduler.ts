@@ -3,8 +3,13 @@
 // client. Justified exception to CLAUDE.md invariant #13: the scheduler
 // is out-of-band by design.
 //
-// Multi-instance: assumes one Node process. A second instance would
-// double-sync until a `pg_try_advisory_lock` is wired into `tickProject`.
+// Multi-instance: the in-process `inFlight` set dedupes ticks within one
+// Node process. Across processes, the cross-replica guard lives at the
+// data layer: `runIncrementalSync` acquires a lease via the atomic
+// `sync.progress` upsert in `src/server/sync/index.ts`. A second
+// replica's tick will read `acquired === false` from that upsert,
+// surface as `SyncLeaseConflictError`, and exit cleanly without
+// double-syncing or paging.
 
 import "server-only";
 

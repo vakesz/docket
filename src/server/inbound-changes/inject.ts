@@ -16,12 +16,29 @@
  */
 
 import "server-only";
-import type { Item as CanonicalItem, ItemId, ProjectId, ProviderItemId } from "@/core/types";
+import { and, eq, gte, inArray } from "drizzle-orm";
+import type {
+  Item as CanonicalItem,
+  ConversationId,
+  ItemId,
+  ProjectId,
+  ProviderItemId,
+} from "@/core/types";
 import type { Db } from "@/db";
 import { messages } from "@/db/schema";
 import type { Item as ItemRow } from "@/db/schema/types";
 import { activeConversationsForItem } from "@/server/conversations/storage";
 import { logger } from "@/server/logger";
+
+/**
+ * Look-back window for inbound-change deduplication. If sync fires twice
+ * in quick succession (e.g. supervisor catches up after a stall, or the
+ * scheduler interval fires while a previous run was still finishing), we
+ * could otherwise inject the same system message twice into the same
+ * conversation. 60s is wide enough to catch back-to-back syncs and
+ * narrower than any legitimate human-facing change rate.
+ */
+const INBOUND_CHANGE_DEDUPE_WINDOW_MS = 60_000;
 
 export type MaterialChange = {
   field: "state" | "title" | "description" | "assignee";
@@ -92,13 +109,35 @@ export async function injectExternalChange(
   if (conversations.length === 0) return { injectedInto: 0 };
 
   const body = formatInboundChange(args.providerItemId, args.changes);
+  // Drop any conversation that already received an identical body inside
+  // the dedupe window. Two near-simultaneous syncs would otherwise stack
+  // the same change notice into the transcript twice — confusing for the
+  // user and pointless for the agent.
+  const targets = await dropAlreadyInjected(
+    db,
+    conversations.map((c) => c.id),
+    body,
+  );
+  if (targets.length === 0) {
+    logger.debug(
+      {
+        projectId: args.projectId,
+        itemId: args.itemId,
+        providerItemId: args.providerItemId,
+        suppressed: conversations.length,
+      },
+      "inbound-changes: suppressed (already injected within dedupe window)",
+    );
+    return { injectedInto: 0 };
+  }
+
   // One batched insert instead of N parallel `INSERT` round-trips. A project
   // with 50 active conversations on a chatty item used to cost 50 separate
   // statements per material change; the multi-row insert collapses that to a
   // single statement.
   await db.insert(messages).values(
-    conversations.map((conv) => ({
-      conversationId: conv.id,
+    targets.map((conversationId) => ({
+      conversationId,
       role: "system" as const,
       content: body,
     })),
@@ -108,12 +147,40 @@ export async function injectExternalChange(
       projectId: args.projectId,
       itemId: args.itemId,
       providerItemId: args.providerItemId,
-      conversations: conversations.length,
+      conversations: targets.length,
+      suppressed: conversations.length - targets.length,
       fields: args.changes.map((c) => c.field),
     },
     "inbound-changes: injected into active conversations",
   );
-  return { injectedInto: conversations.length };
+  return { injectedInto: targets.length };
+}
+
+/**
+ * Filter `conversationIds` down to those that haven't already received a
+ * system message with `body` in the last `INBOUND_CHANGE_DEDUPE_WINDOW_MS`.
+ */
+async function dropAlreadyInjected(
+  db: Db,
+  conversationIds: readonly ConversationId[],
+  body: string,
+): Promise<ConversationId[]> {
+  if (conversationIds.length === 0) return [];
+  const since = new Date(Date.now() - INBOUND_CHANGE_DEDUPE_WINDOW_MS);
+  const recent = await db
+    .select({ conversationId: messages.conversationId })
+    .from(messages)
+    .where(
+      and(
+        inArray(messages.conversationId, conversationIds as ConversationId[]),
+        eq(messages.role, "system"),
+        eq(messages.content, body),
+        gte(messages.createdAt, since),
+      ),
+    );
+  if (recent.length === 0) return [...conversationIds];
+  const skip = new Set(recent.map((r) => r.conversationId));
+  return conversationIds.filter((id) => !skip.has(id));
 }
 
 function formatInboundChange(providerItemId: string, changes: readonly MaterialChange[]): string {

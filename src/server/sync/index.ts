@@ -49,11 +49,21 @@ export type SyncProgressSnapshot = {
   archived: number;
   inboundConversations: number;
   commentsReconciled: number;
+  failedItems: number;
+  failedComments: number;
+  warnings: string[];
   watermark: Date | null;
   error: string | null;
 };
 
+// Bumped when the persisted JSON shape changes. The parser defaults
+// missing/older versions to 1 so pre-existing rows still load cleanly;
+// future bumps can branch a migrate-up step on this value before
+// validating against the current schema.
+const CURRENT_SNAPSHOT_VERSION = 1 as const;
+
 type PersistedSyncProgressSnapshot = {
+  version: typeof CURRENT_SNAPSHOT_VERSION;
   runId: string;
   mode: SyncMode;
   status: SyncProgressStatus;
@@ -67,6 +77,9 @@ type PersistedSyncProgressSnapshot = {
   archived: number;
   inboundConversations: number;
   commentsReconciled: number;
+  failedItems: number;
+  failedComments: number;
+  warnings: string[];
   watermark: string | null;
   error: string | null;
 };
@@ -79,6 +92,9 @@ export type SyncResult = {
   watermark: Date | null;
   /** Number of (active) conversations that received an inbound-change notice. */
   inboundConversations: number;
+  failedItems: number;
+  failedComments: number;
+  warnings: string[];
 };
 
 const SYNC_PROGRESS_KEY = "sync.progress";
@@ -91,6 +107,14 @@ const CHUNK_SIZE = 200;
  * disjoint chunks; 2 is enough to hide one round-trip behind the other.
  */
 const MAX_INFLIGHT_CHUNKS = 2;
+/**
+ * Max concurrency for per-row writes inside one chunk (item updates,
+ * inbound-change injection, comment reconciliation). Keeps fan-out
+ * bounded on chatty repos where a single chunk can carry hundreds of
+ * rows; the previous unbounded `Promise.all` could open >1k parallel
+ * write transactions on first sync of a large repo.
+ */
+const MAX_INTRA_CHUNK_CONCURRENCY = 8;
 
 // Single source of truth for the persisted snapshot shape: zod parses the
 // raw JSON, validates string enums, coerces ISO date strings to Date, and
@@ -109,6 +133,8 @@ const nonNegInt = z
   .catch(0);
 
 const PersistedSyncProgressSchema = z.object({
+  // Default-missing → 1: rows written before the field existed parse as v1.
+  version: z.literal(CURRENT_SNAPSHOT_VERSION).catch(CURRENT_SNAPSHOT_VERSION),
   runId: z.string().min(1),
   mode: z.enum(["incremental", "full"]),
   status: z.enum(["running", "done", "failed"]),
@@ -122,12 +148,16 @@ const PersistedSyncProgressSchema = z.object({
   archived: nonNegInt,
   inboundConversations: nonNegInt,
   commentsReconciled: nonNegInt,
+  failedItems: nonNegInt.catch(0),
+  failedComments: nonNegInt.catch(0),
+  warnings: z.array(z.string()).catch([]),
   watermark: z.union([z.null(), isoDate]),
   error: z.string().nullable().catch(null),
 });
 
 function encodeProgress(snapshot: SyncProgressSnapshot): string {
   const persisted: PersistedSyncProgressSnapshot = {
+    version: CURRENT_SNAPSHOT_VERSION,
     runId: snapshot.runId,
     mode: snapshot.mode,
     status: snapshot.status,
@@ -141,6 +171,9 @@ function encodeProgress(snapshot: SyncProgressSnapshot): string {
     archived: snapshot.archived,
     inboundConversations: snapshot.inboundConversations,
     commentsReconciled: snapshot.commentsReconciled,
+    failedItems: snapshot.failedItems,
+    failedComments: snapshot.failedComments,
+    warnings: snapshot.warnings,
     watermark: snapshot.watermark ? snapshot.watermark.toISOString() : null,
     error: snapshot.error,
   };
@@ -156,84 +189,76 @@ function decodeProgress(raw: string | null | undefined): SyncProgressSnapshot | 
     return null;
   }
   const result = PersistedSyncProgressSchema.safeParse(parsed);
-  return result.success ? result.data : null;
+  if (!result.success) return null;
+  // Strip `version` from the in-memory snapshot — it's a wire-format concern.
+  const { version: _ignored, ...rest } = result.data;
+  return rest;
 }
 
+/**
+ * Thrown when a different sync run already holds the lease for this
+ * project. Caught by `runSync` so the losing instance exits cleanly.
+ *
+ * The lease is the `sync.progress` row itself: only one runId can be
+ * "running" at a time within `STALE_SYNC_PROGRESS_MS`. The atomic
+ * upsert below either takes the lease or returns no row, and that
+ * empty result is what raises this error.
+ */
+class SyncLeaseConflictError extends Error {
+  constructor(projectId: ProjectId, runId: string) {
+    super(`sync lease for project ${projectId} held by another run (this run=${runId})`);
+    this.name = "SyncLeaseConflictError";
+  }
+}
+
+/**
+ * Atomic upsert of the sync progress row, doubling as the cross-process
+ * lease. Single SQL statement: INSERT … ON CONFLICT … DO UPDATE … WHERE …
+ * RETURNING. Returns `true` if this run still holds the lease (insert ran
+ * or update applied), `false` if the conflicting row belongs to a fresher
+ * run and the update was filtered out by `setWhere`.
+ *
+ * The `setWhere` admits an update only when:
+ *   - it's our own runId (heartbeat / phase transition / final write), OR
+ *   - the existing run already finished (`done` / `failed`), OR
+ *   - the existing run hasn't heartbeat in `STALE_SYNC_PROGRESS_MS` (crash
+ *     recovery — assume the previous instance is dead).
+ *
+ * The previous implementation did `findFirst` → branch insert/update with
+ * a 23505 catch; that left a small race window between the read and the
+ * write. The single-statement form closes the window and works for two
+ * Node processes hitting the same project simultaneously.
+ */
 async function upsertProgress(
   db: Db,
   projectId: ProjectId,
   snapshot: SyncProgressSnapshot,
-): Promise<void> {
-  // Resolves the existing row to either a no-op (existing belongs to a
-  // strictly newer run) or an update; falls through to insert if no row was
-  // found. Same runId always passes: own-row writes (chunk updates,
-  // self-heal) never trip the guard. Older/undecodable rows get taken over
-  // so a brand-new run can replace a finished one.
-  const existing = await db.query.settings.findFirst({
-    where: and(
-      eq(settings.key, SYNC_PROGRESS_KEY),
-      eq(settings.scope, "project"),
-      eq(settings.projectId, projectId),
-    ),
-    orderBy: (s, { desc }) => [desc(s.updatedAt)],
-    columns: { id: true, value: true },
-  });
+): Promise<boolean> {
   const encoded = encodeProgress(snapshot);
-  if (existing) {
-    const current = decodeProgress(existing.value);
-    if (
-      current &&
-      current.runId !== snapshot.runId &&
-      current.startedAt.getTime() > snapshot.startedAt.getTime()
-    ) {
-      return;
-    }
-    await db
-      .update(settings)
-      .set({ value: encoded, updatedAt: new Date() })
-      .where(eq(settings.id, existing.id));
-    return;
-  }
-  // Race-safe: if a concurrent first-write inserted between findFirst and
-  // here, the partial unique on (key, projectId) for project-scope rows
-  // raises 23505. Catch it and re-resolve through the update path so this
-  // run's progress still lands.
-  try {
-    await db.insert(settings).values({
+  const staleBefore = new Date(Date.now() - STALE_SYNC_PROGRESS_MS).toISOString();
+  const rows = await db
+    .insert(settings)
+    .values({
       key: SYNC_PROGRESS_KEY,
       scope: "project",
       projectId,
       value: encoded,
-    });
-  } catch (err) {
-    if (isUniqueViolation(err)) {
-      const retry = await db.query.settings.findFirst({
-        where: and(
-          eq(settings.key, SYNC_PROGRESS_KEY),
-          eq(settings.scope, "project"),
-          eq(settings.projectId, projectId),
-        ),
-        columns: { id: true },
-      });
-      if (retry) {
-        await db
-          .update(settings)
-          .set({ value: encoded, updatedAt: new Date() })
-          .where(eq(settings.id, retry.id));
-      }
-      return;
-    }
-    throw err;
-  }
-}
-
-function isUniqueViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as { code: string }).code === "23505"
-  );
+    })
+    .onConflictDoUpdate({
+      target: [settings.key, settings.projectId],
+      targetWhere: sql`${settings.userId} IS NULL AND ${settings.projectId} IS NOT NULL`,
+      set: {
+        value: encoded,
+        updatedAt: new Date(),
+      },
+      setWhere: sql`
+        (${settings.value})::jsonb ->> 'runId' = ${snapshot.runId}
+        OR (${settings.value})::jsonb ->> 'status' IN ('done', 'failed')
+        OR (${settings.value})::jsonb ->> 'updatedAt' < ${staleBefore}
+      `,
+    })
+    .returning({ id: settings.id });
+  return rows.length > 0;
 }
 
 export async function loadSyncProgress(
@@ -263,6 +288,7 @@ export async function loadSyncProgress(
       updatedAt: new Date(),
       error: snapshot.error ?? "Sync appears stale (no progress heartbeat).",
     };
+    // Best-effort: if a fresher run beat us to the row, the upsert no-ops.
     await upsertProgress(db, projectId, failed);
     return failed;
   }
@@ -346,25 +372,77 @@ type ChunkResult = {
   upserted: number;
   inboundConversations: number;
   commentsReconciled: number;
+  failedItems: number;
+  failedComments: number;
+  warnings: string[];
 };
 
 type UpsertProgressSnapshot = {
   upserted: number;
   inboundConversations: number;
   commentsReconciled: number;
+  failedItems: number;
+  failedComments: number;
+  warnings: string[];
   chunks: number;
   itemsSeen: number;
   latestUpdatedAt: Date | null;
 };
 
 /**
+ * Run `task` over each item with at most `concurrency` in-flight, in input
+ * order. Result array is the same length as `items`; each slot is the
+ * resolved value from the corresponding task. Errors propagate (use the
+ * `Settled` variant when partial failure is expected).
+ */
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  task: (value: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  if (items.length === 0) return [];
+  const limit = Math.max(1, Math.min(concurrency, items.length));
+  const results: R[] = new Array(items.length);
+  let cursor = 0;
+  await Promise.all(
+    Array.from({ length: limit }, async () => {
+      while (true) {
+        const i = cursor++;
+        if (i >= items.length) return;
+        results[i] = await task(items[i] as T, i);
+      }
+    }),
+  );
+  return results;
+}
+
+/**
+ * Same as `mapWithConcurrency` but each task is wrapped so failures don't
+ * abort siblings — returns a `PromiseSettledResult`-shaped tuple per slot.
+ * Used for per-row writes inside one chunk where one bad row should not
+ * tank the rest of the batch.
+ */
+async function mapWithConcurrencySettled<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  task: (value: T, index: number) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> {
+  return mapWithConcurrency(items, concurrency, async (value, index) => {
+    try {
+      return { status: "fulfilled" as const, value: await task(value, index) };
+    } catch (reason) {
+      return { status: "rejected" as const, reason };
+    }
+  });
+}
+
+/**
  * Persist a chunk of bundled changes (item + optional comments): bulk-load
  * existing item rows, split into create/update sets, then write each set
- * in one DB call. Material diffs for already-cached items fan out into
- * `injectExternalChange` in parallel — new items have no prior conversation
- * context so they skip the inject step entirely. Once items are persisted
- * (and surrogate ids known), comment bundles where `comments !== null`
- * reconcile against the cache with a per-comment skip-rewrite.
+ * with bounded fan-out via `mapWithConcurrencySettled`. Per-row failures
+ * are counted and surfaced through `ChunkResult` rather than aborting the
+ * whole chunk; the next sync cycle will retry failed rows because their
+ * cached `updatedAt` won't have advanced.
  */
 async function processChunk(
   db: Db,
@@ -417,6 +495,9 @@ async function processChunk(
   }
 
   let upserted = 0;
+  let failedItems = 0;
+  const warnings: string[] = [];
+
   if (toCreate.length > 0) {
     // onConflictDoNothing guards against a concurrent insert sneaking in
     // between the select above and this insert.
@@ -430,37 +511,82 @@ async function processChunk(
     upserted += inserted.length;
   }
   if (toUpdate.length > 0) {
-    // Each item update is independent — a partial failure leaves the cache
-    // out of date for that row, which the next sync cycle reconciles.
-    // Promise.all hands them all to the pg pool and lets it pipeline.
-    // MAX_INFLIGHT_CHUNKS keeps overall fan-out bounded.
-    await Promise.all(
-      toUpdate.map(({ providerItemId, row }) =>
+    // Bounded fan-out + per-row settled results: one failed update no
+    // longer aborts the chunk. Failed rows surface through `failedItems`
+    // and the next cycle re-syncs them.
+    const settled = await mapWithConcurrencySettled(
+      toUpdate,
+      MAX_INTRA_CHUNK_CONCURRENCY,
+      ({ providerItemId, row }) =>
         db
           .update(items)
           .set({ ...row, archived: false })
           .where(and(eq(items.projectId, projectId), eq(items.providerItemId, providerItemId))),
-      ),
     );
-    upserted += toUpdate.length;
+    for (let i = 0; i < settled.length; i++) {
+      const r = settled[i];
+      if (!r) continue;
+      if (r.status === "fulfilled") {
+        upserted++;
+      } else {
+        failedItems++;
+        const offender = toUpdate[i];
+        if (offender) {
+          warnings.push(`item ${offender.providerItemId}: update failed`);
+          logger.warn(
+            {
+              syncId: ctx.syncId,
+              projectId,
+              chunkIndex: ctx.chunkIndex,
+              providerItemId: offender.providerItemId,
+              err: r.reason instanceof Error ? r.reason.message : String(r.reason),
+            },
+            "sync: item update failed (continuing)",
+          );
+        }
+      }
+    }
   }
 
   let inboundConversations = 0;
   if (changedExisting.length > 0) {
-    const results = await Promise.all(
-      changedExisting.map((c) =>
+    const settled = await mapWithConcurrencySettled(
+      changedExisting,
+      MAX_INTRA_CHUNK_CONCURRENCY,
+      (c) =>
         injectExternalChange(db, {
           projectId,
           itemId: c.itemId,
           providerItemId: c.providerItemId,
           changes: c.changes,
         }),
-      ),
     );
-    for (const r of results) inboundConversations += r.injectedInto;
+    for (let i = 0; i < settled.length; i++) {
+      const r = settled[i];
+      if (!r) continue;
+      if (r.status === "fulfilled") {
+        inboundConversations += r.value.injectedInto;
+      } else {
+        const offender = changedExisting[i];
+        if (offender) {
+          warnings.push(`item ${offender.providerItemId}: inbound-change inject failed`);
+          logger.warn(
+            {
+              syncId: ctx.syncId,
+              projectId,
+              chunkIndex: ctx.chunkIndex,
+              providerItemId: offender.providerItemId,
+              err: r.reason instanceof Error ? r.reason.message : String(r.reason),
+            },
+            "sync: inbound-change injection failed (continuing)",
+          );
+        }
+      }
+    }
   }
 
   let commentsReconciled = 0;
+  let failedComments = 0;
   const bundlesWithComments = bundles.filter((b) => b.comments !== null);
   if (bundlesWithComments.length > 0) {
     // Surrogates: existing rows already came back in `cachedMap` with their
@@ -484,26 +610,32 @@ async function processChunk(
       if (!surrogate) continue;
       reconcileBundles.push({ itemSurrogate: surrogate, comments: b.comments ?? [] });
     }
-    commentsReconciled += await reconcileComments(db, reconcileBundles);
+    const reconcileResult = await reconcileComments(db, reconcileBundles);
+    commentsReconciled += reconcileResult.touched;
+    failedComments += reconcileResult.failed;
+    if (reconcileResult.warnings.length > 0) warnings.push(...reconcileResult.warnings);
   }
 
   // Warm the avatar cache for assignees in this chunk so the first item-
   // list render after sync has bytes ready instead of flickering through
   // the lazy-fetch path. Best-effort + fire-and-forget — sync should never
   // fail because an avatar fetch did, and the loop itself bounds
-  // concurrency internally.
+  // concurrency internally. Failures are recorded as a snapshot warning so
+  // the operator can tell when the asset cache is stale.
   const assigneeLogins = collectAssignees(bundles);
   if (assigneeLogins.length > 0) {
     void warmAvatars(db, {
       providerKind: ctx.providerKind,
       identifiers: assigneeLogins,
     }).catch((err) => {
+      const reason = err instanceof Error ? err.message : String(err);
+      warnings.push(`avatar warm: ${reason}`);
       logger.warn(
         {
           syncId: ctx.syncId,
           projectId,
           chunkIndex: ctx.chunkIndex,
-          err: err instanceof Error ? err.message : String(err),
+          err: reason,
         },
         "sync: avatar warm failed",
       );
@@ -521,12 +653,21 @@ async function processChunk(
       materialChanges: changedExisting.length,
       inboundConversations,
       commentsReconciled,
+      failedItems,
+      failedComments,
       chunkMs: Date.now() - startedAt,
     },
     "sync: chunk persisted",
   );
 
-  return { upserted, inboundConversations, commentsReconciled };
+  return {
+    upserted,
+    inboundConversations,
+    commentsReconciled,
+    failedItems,
+    failedComments,
+    warnings,
+  };
 }
 
 function collectAssignees(bundles: readonly ChangedItem[]): string[] {
@@ -544,9 +685,10 @@ function collectAssignees(bundles: readonly ChangedItem[]): string[] {
 /**
  * Reconcile cached comments against provider snapshots, batched over
  * arbitrary many items. One select covers every item in the call, then
- * per-comment writes fan out in a single `Promise.all`. Skip-rewrite:
- * comments whose `providerUpdatedAt` matches the cached row (and whose body
- * matches) are left untouched. Returns the total number of writes.
+ * per-comment writes fan out under `MAX_INTRA_CHUNK_CONCURRENCY`. Skip-
+ * rewrite: comments whose `providerUpdatedAt` matches the cached row
+ * (and whose body matches) are left untouched. Returns counts of writes
+ * that touched the DB and writes that failed (with per-failure warnings).
  *
  * Deletions: not handled here. Providers don't reliably surface comment
  * deletions through their listing endpoints, and an over-eager delete would
@@ -558,14 +700,32 @@ export type CommentReconcileBundle = {
   comments: readonly CanonicalComment[];
 };
 
+export type ReconcileCommentsResult = {
+  touched: number;
+  failed: number;
+  warnings: string[];
+};
+
 type CommentInsertRow = typeof comments.$inferInsert;
+type CommentUpdate = {
+  itemSurrogate: ItemId;
+  providerCommentId: string;
+  fields: {
+    author: string;
+    body: string;
+    createdAt: Date;
+    providerUpdatedAt: Date | null;
+    edited: boolean;
+    reactions: CanonicalComment["reactions"] | null;
+  };
+};
 
 export async function reconcileComments(
   db: Db | DbTx,
   bundles: readonly CommentReconcileBundle[],
-): Promise<number> {
+): Promise<ReconcileCommentsResult> {
   const nonEmpty = bundles.filter((b) => b.comments.length > 0);
-  if (nonEmpty.length === 0) return 0;
+  if (nonEmpty.length === 0) return { touched: 0, failed: 0, warnings: [] };
   const itemIds = nonEmpty.map((b) => b.itemSurrogate);
   const allExisting = await db
     .select({
@@ -588,12 +748,8 @@ export async function reconcileComments(
       body: row.body,
     });
   }
-  // Split into "new rows" (one batched insert) and "changed rows" (per-row
-  // updates in parallel). Avoids N upserts on the typical first-sync case
-  // where every comment is new.
   const inserts: CommentInsertRow[] = [];
-  const updates: Promise<unknown>[] = [];
-  let touched = 0;
+  const updates: CommentUpdate[] = [];
   for (const { itemSurrogate, comments: incomingComments } of nonEmpty) {
     const existing = byItem.get(itemSurrogate);
     for (const c of incomingComments) {
@@ -604,20 +760,18 @@ export async function reconcileComments(
         const prevMs = prev.providerUpdatedAt?.getTime() ?? null;
         const incMs = incomingPu?.getTime() ?? null;
         if (prevMs === incMs && prev.body === c.body) continue;
-        updates.push(
-          db
-            .update(comments)
-            .set({
-              author: c.author,
-              body: c.body,
-              createdAt: c.createdAt,
-              providerUpdatedAt: incomingPu,
-              edited: c.edited ?? false,
-              reactions,
-            })
-            .where(and(eq(comments.itemId, itemSurrogate), eq(comments.providerCommentId, c.id))),
-        );
-        touched++;
+        updates.push({
+          itemSurrogate,
+          providerCommentId: c.id,
+          fields: {
+            author: c.author,
+            body: c.body,
+            createdAt: c.createdAt,
+            providerUpdatedAt: incomingPu,
+            edited: c.edited ?? false,
+            reactions,
+          },
+        });
       } else {
         inserts.push({
           itemId: itemSurrogate,
@@ -629,21 +783,77 @@ export async function reconcileComments(
           edited: c.edited ?? false,
           reactions,
         });
-        touched++;
       }
     }
   }
-  if (touched === 0) return 0;
-  await Promise.all([
-    inserts.length > 0
-      ? db
+  if (inserts.length === 0 && updates.length === 0) {
+    return { touched: 0, failed: 0, warnings: [] };
+  }
+
+  const warnings: string[] = [];
+  let touched = 0;
+  let failed = 0;
+
+  if (inserts.length > 0) {
+    try {
+      await db
+        .insert(comments)
+        .values(inserts)
+        .onConflictDoNothing({ target: [comments.itemId, comments.providerCommentId] });
+      touched += inserts.length;
+    } catch (err) {
+      // Batched insert failed atomically — we don't know which row was the
+      // offender. Re-run one row at a time so the rest still land.
+      const settled = await mapWithConcurrencySettled(inserts, MAX_INTRA_CHUNK_CONCURRENCY, (row) =>
+        db
           .insert(comments)
-          .values(inserts)
-          .onConflictDoNothing({ target: [comments.itemId, comments.providerCommentId] })
-      : Promise.resolve(),
-    ...updates,
-  ]);
-  return touched;
+          .values(row)
+          .onConflictDoNothing({ target: [comments.itemId, comments.providerCommentId] }),
+      );
+      for (let i = 0; i < settled.length; i++) {
+        const r = settled[i];
+        if (!r) continue;
+        if (r.status === "fulfilled") {
+          touched++;
+        } else {
+          failed++;
+          const offender = inserts[i];
+          warnings.push(`comment insert ${offender?.providerCommentId ?? "?"}: failed`);
+        }
+      }
+      logger.warn(
+        { err: err instanceof Error ? err.message : String(err), batchSize: inserts.length },
+        "sync: batched comment insert failed; fell back to per-row",
+      );
+    }
+  }
+
+  if (updates.length > 0) {
+    const settled = await mapWithConcurrencySettled(updates, MAX_INTRA_CHUNK_CONCURRENCY, (u) =>
+      db
+        .update(comments)
+        .set(u.fields)
+        .where(
+          and(
+            eq(comments.itemId, u.itemSurrogate),
+            eq(comments.providerCommentId, u.providerCommentId),
+          ),
+        ),
+    );
+    for (let i = 0; i < settled.length; i++) {
+      const r = settled[i];
+      if (!r) continue;
+      if (r.status === "fulfilled") {
+        touched++;
+      } else {
+        failed++;
+        const offender = updates[i];
+        warnings.push(`comment update ${offender?.providerCommentId ?? "?"}: failed`);
+      }
+    }
+  }
+
+  return { touched, failed, warnings };
 }
 
 async function upsertItems(
@@ -660,6 +870,9 @@ async function upsertItems(
   latestUpdatedAt: Date | null;
   inboundConversations: number;
   commentsReconciled: number;
+  failedItems: number;
+  failedComments: number;
+  warnings: string[];
   chunks: number;
   itemsSeen: number;
 }> {
@@ -667,6 +880,9 @@ async function upsertItems(
   let latestUpdatedAt: Date | null = null;
   let inboundConversations = 0;
   let commentsReconciled = 0;
+  let failedItems = 0;
+  let failedComments = 0;
+  const warnings: string[] = [];
   let chunks = 0;
   const seenIds = new Set<string>();
   let buffer: ChangedItem[] = [];
@@ -684,11 +900,17 @@ async function upsertItems(
       upserted += r.upserted;
       inboundConversations += r.inboundConversations;
       commentsReconciled += r.commentsReconciled;
+      failedItems += r.failedItems;
+      failedComments += r.failedComments;
+      if (r.warnings.length > 0) warnings.push(...r.warnings);
       if (onProgress) {
         await onProgress({
           upserted,
           inboundConversations,
           commentsReconciled,
+          failedItems,
+          failedComments,
+          warnings,
           chunks,
           itemsSeen: seenIds.size,
           latestUpdatedAt,
@@ -744,6 +966,9 @@ async function upsertItems(
     latestUpdatedAt,
     inboundConversations,
     commentsReconciled,
+    failedItems,
+    failedComments,
+    warnings,
     chunks,
     itemsSeen: seenIds.size,
   };
@@ -769,6 +994,17 @@ async function bumpCursor(
         ...(fullSyncAt ? { lastFullSyncAt: fullSyncAt } : {}),
       },
     });
+}
+
+/**
+ * Cap on warnings stored in the snapshot so a runaway error loop can't
+ * blow the row's encoded size. Older warnings are dropped first.
+ */
+const MAX_SNAPSHOT_WARNINGS = 50;
+
+function trimWarnings(list: string[]): string[] {
+  if (list.length <= MAX_SNAPSHOT_WARNINGS) return list;
+  return list.slice(list.length - MAX_SNAPSHOT_WARNINGS);
 }
 
 /**
@@ -816,17 +1052,29 @@ async function runSync(
     archived: 0,
     inboundConversations: 0,
     commentsReconciled: 0,
+    failedItems: 0,
+    failedComments: 0,
+    warnings: [],
     watermark: null,
     error: null,
   };
 
-  const persistProgress = async () => {
-    progress = { ...progress, updatedAt: new Date() };
-    await upsertProgress(db, projectId, progress);
+  // Returns whether this run still owns the lease. On the very first call,
+  // a `false` means another run already holds it — we abort cleanly.
+  const persistProgress = async (): Promise<boolean> => {
+    progress = {
+      ...progress,
+      updatedAt: new Date(),
+      warnings: trimWarnings(progress.warnings),
+    };
+    return upsertProgress(db, projectId, progress);
   };
 
   try {
-    await persistProgress();
+    const acquired = await persistProgress();
+    if (!acquired) {
+      throw new SyncLeaseConflictError(projectId, syncId);
+    }
 
     const provider = await buildProviderForUser(db, project, userId);
     const syncedAt = new Date();
@@ -857,6 +1105,9 @@ async function runSync(
       latestUpdatedAt,
       inboundConversations,
       commentsReconciled,
+      failedItems,
+      failedComments,
+      warnings: streamWarnings,
       chunks,
       itemsSeen,
     } = await upsertItems(
@@ -875,6 +1126,9 @@ async function runSync(
           upserted: chunkProgress.upserted,
           inboundConversations: chunkProgress.inboundConversations,
           commentsReconciled: chunkProgress.commentsReconciled,
+          failedItems: chunkProgress.failedItems,
+          failedComments: chunkProgress.failedComments,
+          warnings: chunkProgress.warnings,
           watermark:
             mode === "incremental"
               ? (chunkProgress.latestUpdatedAt ?? watermark)
@@ -899,6 +1153,9 @@ async function runSync(
         upserted,
         inboundConversations,
         commentsReconciled,
+        failedItems,
+        failedComments,
+        warnings: streamWarnings,
         watermark: newWatermark,
       };
       await persistProgress();
@@ -934,6 +1191,9 @@ async function runSync(
       upserted,
       inboundConversations,
       commentsReconciled,
+      failedItems,
+      failedComments,
+      warnings: streamWarnings,
       archived,
       watermark: newWatermark,
     };
@@ -961,6 +1221,9 @@ async function runSync(
         itemsSeen,
         inboundConversations,
         commentsReconciled,
+        failedItems,
+        failedComments,
+        warnings: streamWarnings.length,
         newWatermark: newWatermark?.toISOString() ?? null,
         durationMs: Date.now() - startedAt,
       },
@@ -971,8 +1234,23 @@ async function runSync(
       archived,
       watermark: newWatermark,
       inboundConversations,
+      failedItems,
+      failedComments,
+      warnings: streamWarnings,
     };
   } catch (err) {
+    if (err instanceof SyncLeaseConflictError) {
+      logger.info({ ...baseCtx }, "sync: skipped (another run holds the lease)");
+      return {
+        upserted: 0,
+        archived: 0,
+        watermark: null,
+        inboundConversations: 0,
+        failedItems: 0,
+        failedComments: 0,
+        warnings: [],
+      };
+    }
     progress = {
       ...progress,
       status: "failed",
