@@ -28,6 +28,7 @@ import {
   DEFAULT_SYSTEM_BASE,
 } from "@/agent/prompt";
 import type { ProposalKind } from "@/core/proposal-types";
+import { logger } from "@/server/logger";
 
 export const SETTING_SCOPES = ["user", "project", "global"] as const;
 export type SettingScope = (typeof SETTING_SCOPES)[number];
@@ -788,7 +789,15 @@ export function decodeSettingValue<K extends SettingKey>(
   try {
     const parsed = JSON.parse(raw);
     return def.schema.parse(parsed) as SettingValue<K>;
-  } catch {
+  } catch (err) {
+    logger.warn(
+      {
+        key,
+        scope: def.scope,
+        err: err instanceof Error ? err.message : String(err),
+      },
+      "settings: stored value failed to decode — falling back to catalog default",
+    );
     return def.default as SettingValue<K>;
   }
 }

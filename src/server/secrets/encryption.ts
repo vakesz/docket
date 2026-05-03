@@ -60,6 +60,10 @@ export function _resetEncryptionCacheForTests(): void {
 }
 
 export function encryptSecret(plaintext: string): string {
+  // Empty strings round-trip as plaintext: callers use `""` to express
+  // "secret cleared / not set" and we never want to encrypt the absence of
+  // a value (it would still produce a non-empty ciphertext, defeating the
+  // signal). Pair: `decryptSecret("")` returns `""` for the same reason.
   if (plaintext.length === 0) return plaintext;
   // Guard against accidental double-encryption when a write path wraps twice.
   if (plaintext.startsWith(PREFIX)) return plaintext;
@@ -78,26 +82,32 @@ export function encryptSecret(plaintext: string): string {
 export function decryptSecret(stored: string): string {
   if (stored.length === 0) return stored;
   if (!stored.startsWith(PREFIX)) {
+    // Distinct from the generic decode-failure message: a missing prefix means
+    // the row was never encrypted. Surfacing this loudly catches bootstrap
+    // bugs (writes that bypass `encryptSecret`) before they hide as generic
+    // crypto errors at read time.
     throw new Error("decryptSecret: stored value is not encrypted (missing enc:v1: prefix)");
   }
   const key = requireKey();
-  const rest = stored.slice(PREFIX.length);
-  const sep = rest.indexOf(":");
-  if (sep < 0) {
-    throw new Error("decryptSecret: malformed payload (missing iv separator)");
+  // All structural checks below collapse to one generic error so a probing
+  // attacker can't tell which byte they broke. The detailed reason still
+  // travels with the cause for the operator log; the outer message stays
+  // opaque.
+  try {
+    const rest = stored.slice(PREFIX.length);
+    const sep = rest.indexOf(":");
+    if (sep < 0) throw new Error("missing iv separator");
+    const iv = Buffer.from(rest.slice(0, sep), "base64");
+    if (iv.length !== IV_BYTES) throw new Error("iv length mismatch");
+    const blob = Buffer.from(rest.slice(sep + 1), "base64");
+    if (blob.length <= TAG_BYTES) throw new Error("ciphertext shorter than auth tag");
+    const ciphertext = blob.subarray(0, blob.length - TAG_BYTES);
+    const tag = blob.subarray(blob.length - TAG_BYTES);
+    const decipher = createDecipheriv(ALGO, key, iv);
+    decipher.setAuthTag(tag);
+    const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+    return plaintext.toString("utf8");
+  } catch (cause) {
+    throw new Error("decryptSecret: failed to decrypt stored value", { cause });
   }
-  const iv = Buffer.from(rest.slice(0, sep), "base64");
-  if (iv.length !== IV_BYTES) {
-    throw new Error(`decryptSecret: iv length mismatch (expected ${IV_BYTES}, got ${iv.length})`);
-  }
-  const blob = Buffer.from(rest.slice(sep + 1), "base64");
-  if (blob.length <= TAG_BYTES) {
-    throw new Error("decryptSecret: ciphertext shorter than auth tag");
-  }
-  const ciphertext = blob.subarray(0, blob.length - TAG_BYTES);
-  const tag = blob.subarray(blob.length - TAG_BYTES);
-  const decipher = createDecipheriv(ALGO, key, iv);
-  decipher.setAuthTag(tag);
-  const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-  return plaintext.toString("utf8");
 }

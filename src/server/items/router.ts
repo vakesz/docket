@@ -1,6 +1,6 @@
 import "server-only";
 import { TRPCError } from "@trpc/server";
-import { and, arrayContains, asc, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, arrayContains, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   BACKLOG_BUCKETS,
@@ -153,10 +153,7 @@ function buildItemListWhere(
   if (input.state) {
     conditions.push(eq(items.state, input.state));
   } else if (view.stateBucket !== "all") {
-    const states = STATE_BUCKET_MEMBERS[view.stateBucket];
-    conditions.push(
-      sql`${items.state} = ANY(${sql.raw(`ARRAY[${states.map((s) => `'${s.replace(/'/g, "''")}'`).join(",")}]`)})`,
-    );
+    conditions.push(inArray(items.state, [...STATE_BUCKET_MEMBERS[view.stateBucket]]));
   }
 
   if (view.assignees.length > 0) {
