@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { CreateItemForm } from "@/ui/items/create-item-form";
 import { Input } from "@/ui/primitives/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/primitives/popover";
+import { SegmentedButton, SegmentedGroup } from "@/ui/primitives/segmented";
 
 export const ASSIGNEE_UNASSIGNED = "__unassigned";
 
@@ -165,7 +166,7 @@ export function FilterBar({
       </div>
 
       <FilterRow label="State">
-        <SegmentedGroup>
+        <SegmentedGroup label="Filter by state">
           {buckets.map((b) => (
             <SegmentedButton
               key={b}
@@ -181,7 +182,7 @@ export function FilterBar({
 
       {visibleKinds.length > 2 && (
         <FilterRow label="Kind">
-          <SegmentedGroup>
+          <SegmentedGroup label="Filter by kind">
             {visibleKinds.map((k) => (
               <SegmentedButton key={k} selected={kind === k} onClick={() => handlers.setKind(k)}>
                 {k === "all" ? "All" : formatKind(k)}
@@ -201,6 +202,8 @@ export function FilterBar({
                 type="button"
                 key={t}
                 onClick={() => onToggleTag(t)}
+                aria-pressed={selected}
+                data-state={selected ? "on" : "off"}
                 className={cn(
                   "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[10px] lowercase tracking-wide transition-colors",
                   selected
@@ -264,40 +267,6 @@ export function FilterBar({
   );
 }
 
-function SegmentedGroup({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="inline-flex overflow-hidden rounded-md border border-border">{children}</div>
-  );
-}
-
-function SegmentedButton({
-  selected,
-  onClick,
-  title,
-  children,
-}: {
-  selected: boolean;
-  onClick: () => void;
-  title?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={title}
-      className={cn(
-        "not-first:border-border not-first:border-l px-2.5 py-1 font-mono text-[10px] lowercase tracking-wide transition-colors",
-        selected
-          ? "bg-primary text-primary-foreground"
-          : "bg-card text-muted-foreground hover:bg-muted",
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
 function AssigneeChips({
   assigneeCounts,
   activeAssignees,
@@ -341,6 +310,8 @@ function AssigneeChips({
             type="button"
             key={name}
             onClick={() => onToggle(name)}
+            aria-pressed={selected}
+            data-state={selected ? "on" : "off"}
             className={cn(
               "inline-flex items-center gap-1.5 rounded-full py-0.5 pr-2 font-mono text-[10px] lowercase tracking-wide transition-colors",
               showAvatars ? "pl-0.5" : "pl-2",
@@ -398,6 +369,8 @@ function ChipPill({
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={selected}
+      data-state={selected ? "on" : "off"}
       className={cn(
         "rounded-full px-2 py-0.5 font-mono text-[10px] lowercase tracking-wide transition-colors",
         selected

@@ -1,10 +1,11 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 import { ChatPane } from "@/ui/conversations/chat-pane";
 import { ChatPaneProvider, useChatPaneController } from "@/ui/conversations/chat-pane-context";
 import { BacklogPane } from "@/ui/items/backlog-pane";
+import { prewarmMarkdown } from "@/ui/markdown/markdown-lazy";
 import { ItemsShellLayout } from "@/ui/shell/items-shell-layout";
 
 type Props = {
@@ -34,6 +35,14 @@ function ItemsShellInner({ projectSlug, staleThresholdDays, children }: Props) {
   const pathname = usePathname();
   const itemNumber = extractItemNumber(pathname, projectSlug);
   const showChat = open && Boolean(itemNumber);
+
+  // Fetch the react-markdown bundle on idle while the user is reading the
+  // backlog/detail. The first chat bubble would otherwise trigger this
+  // download synchronously and the bubble paints empty for ~150ms while
+  // the chunk lands. Idempotent — webpack dedupes the dynamic import.
+  useEffect(() => {
+    prewarmMarkdown();
+  }, []);
 
   return (
     <ItemsShellLayout

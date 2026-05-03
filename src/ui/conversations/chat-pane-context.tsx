@@ -90,6 +90,11 @@ export function ChatPaneProvider({ children }: { children: React.ReactNode }) {
     setPendingSeedState(seed);
   };
 
+  // Two ChatPanes can be momentarily mounted during a route transition (the
+  // outgoing one not yet unmounted, the incoming one already mounted). If
+  // both read the seed from a state-based source they'd both consume it
+  // and one would render an empty composer. The ref-backed claim ensures
+  // exactly one consumer wins; the loser sees `null` and renders nothing.
   const claimSeed = (): string | null => {
     const claimed = seedRef.current;
     if (claimed === null) return null;

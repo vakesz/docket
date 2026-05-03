@@ -1,11 +1,10 @@
 import { TRPCError } from "@trpc/server";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import type { Session } from "next-auth";
 import { cache } from "react";
 import { db } from "@/db";
 import { resolveEffectiveStaleThreshold } from "@/lib/staleness";
-import { auth } from "@/server/auth";
+import { getSession } from "@/server/auth";
 import { loadProjectSetting, loadUserSetting } from "@/server/settings/effective";
 import { createCaller } from "@/server/trpc-caller";
 import { DetailPane } from "@/ui/items/detail-pane";
@@ -64,21 +63,21 @@ export default async function ItemDetailPage({
 }) {
   const { projectSlug, itemNumber } = await params;
 
-  // auth() doesn't depend on the item or project fetch, so include it in
-  // the same fan-out. The session result is awaited up-front but its
+  // getSession() doesn't depend on the item or project fetch, so include
+  // it in the same fan-out. The session result is awaited up-front but its
   // round-trip overlaps with the tRPC reads instead of running after.
-  // The cast is load-bearing: NextAuth's `auth` is a multi-overload export
-  // (server-action / route-handler / middleware) and the no-arg call resolves
-  // to the wrong arm in `Promise.all`. The same pattern works fine when
-  // awaited directly, so the cast is the minimum bridge here.
-  let item: Awaited<ReturnType<typeof loadItem>>;
-  let project: Awaited<ReturnType<typeof loadProject>>;
-  let session: Session | null;
+  // `getSession` is the typed no-arg view of NextAuth's multi-overload
+  // `auth` — the cast is owned by `@/server/auth` so call sites stay clean.
+  type LoadedItem = Awaited<ReturnType<typeof loadItem>>;
+  type LoadedProject = Awaited<ReturnType<typeof loadProject>>;
+  let item: LoadedItem;
+  let project: LoadedProject;
+  let session: Awaited<ReturnType<typeof getSession>>;
   try {
     [item, project, session] = await Promise.all([
       loadItem(projectSlug, itemNumber),
       loadProject(projectSlug),
-      auth(),
+      getSession(),
     ]);
   } catch (err) {
     if (err instanceof TRPCError && (err.code === "FORBIDDEN" || err.code === "NOT_FOUND")) {

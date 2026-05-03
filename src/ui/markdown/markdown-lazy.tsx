@@ -22,3 +22,24 @@ export const MarkdownLazy = dynamic(
     loading: () => null,
   },
 );
+
+/**
+ * Trigger the `react-markdown` chunk fetch on idle so the first chat
+ * bubble doesn't wait on the dynamic import to resolve. Safe to call
+ * repeatedly; the dynamic-import cache deduplicates. SSR-safe — bails
+ * when there's no `window`.
+ */
+export function prewarmMarkdown(): void {
+  if (typeof window === "undefined") return;
+  const load = () => {
+    void import("@/ui/markdown/markdown");
+  };
+  const ric = (
+    window as Window &
+      typeof globalThis & {
+        requestIdleCallback?: (cb: () => void, opts?: { timeout?: number }) => number;
+      }
+  ).requestIdleCallback;
+  if (typeof ric === "function") ric(load, { timeout: 2000 });
+  else window.setTimeout(load, 200);
+}

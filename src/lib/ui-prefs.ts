@@ -28,45 +28,81 @@ const RECENT_ENABLED_KEY = "docket.items.recentEnabled";
 const RECENT_ENABLED_DEFAULT = true;
 
 /**
+ * Union of every localStorage key the pref/recent-items subsystem owns.
+ * Subscribers pass the keys they actually depend on so a write to one
+ * pref only wakes the components that read it (the alternative is every
+ * `useLocalPref` mount re-running its selector on every keystroke that
+ * touches any pref). Add new keys here when promoting a write through
+ * `emitPrefChange`.
+ */
+export type PrefKey =
+  | typeof TOOL_DISPLAY_KEY
+  | typeof RECENT_LIMIT_KEY
+  | typeof RECENT_ENABLED_KEY
+  | "docket.recentItems";
+
+/**
+ * Notify same-tab subscribers that a pref/local-store key changed.
+ * Cross-tab `storage` events fire automatically when localStorage is
+ * written; this dispatch covers the originating tab (which `storage`
+ * intentionally skips) and components that share a key in the same tab.
+ */
+export function emitPrefChange(key: PrefKey): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent<PrefKey>(PREF_EVENT, { detail: key }));
+}
+
+/**
  * Subscribe a value derived from localStorage to the standard pref-change
  * channels: cross-tab `storage` events plus our same-tab `PREF_EVENT`.
+ * `watch` lists the keys this selector actually depends on; the listener
+ * filters by detail/key so unrelated pref writes don't wake every mount.
  *
  * `read` is allowed to change between renders — the latest version is held in
  * a ref so the listener always reads via the current closure. Pass a `rebindKey`
  * (e.g. the projectSlug a per-project read depends on) to force the value to
  * refresh when the closure's logical input changes; the listeners themselves
- * stay bound. `extraEvents` covers stores that fire their own custom event
- * (e.g. `docket:recent-items`). SSR sees `initial`, hydration sees the read.
+ * stay bound. SSR sees `initial`, hydration sees the read.
  */
 export function useLocalPref<T>(
   read: () => T,
   initial: T,
-  extraEvents: readonly string[] = [],
+  watch: readonly PrefKey[],
   rebindKey?: string,
 ): T {
   const readRef = useRef(read);
   readRef.current = read;
   const [value, setValue] = useState<T>(initial);
 
+  // Callers pass a module-scoped `watch` array (TOOL_DISPLAY_WATCH,
+  // RECENT_WATCH, etc.) so the reference itself is stable. The set
+  // captured by the effect closure is recreated only when `watch`
+  // changes identity.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: rebindKey + watch identity drive resubscription; `read` is held in a ref to avoid recapture on every render.
   useEffect(() => {
-    // `rebindKey` is referenced so the lint rule sees it; its purpose is
-    // to retrigger the effect when callers' read closures depend on
-    // changing inputs (e.g. projectSlug) — `read` itself is held in a ref.
-    void rebindKey;
     setValue(readRef.current());
-    const onChange = () => setValue(readRef.current());
-    window.addEventListener("storage", onChange);
-    window.addEventListener(PREF_EVENT, onChange);
-    for (const ev of extraEvents) window.addEventListener(ev, onChange);
-    return () => {
-      window.removeEventListener("storage", onChange);
-      window.removeEventListener(PREF_EVENT, onChange);
-      for (const ev of extraEvents) window.removeEventListener(ev, onChange);
+    const watched = new Set<string>(watch);
+    const onPref = (ev: Event) => {
+      const detail = (ev as CustomEvent<PrefKey>).detail;
+      if (!detail || watched.has(detail)) setValue(readRef.current());
     };
-  }, [rebindKey, extraEvents]);
+    const onStorage = (ev: StorageEvent) => {
+      if (ev.key === null || watched.has(ev.key)) setValue(readRef.current());
+    };
+    window.addEventListener(PREF_EVENT, onPref);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener(PREF_EVENT, onPref);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [rebindKey, watch]);
 
   return value;
 }
+
+const TOOL_DISPLAY_WATCH: readonly PrefKey[] = [TOOL_DISPLAY_KEY];
+const RECENT_LIMIT_WATCH: readonly PrefKey[] = [RECENT_LIMIT_KEY];
+const RECENT_ENABLED_WATCH: readonly PrefKey[] = [RECENT_ENABLED_KEY];
 
 export function readToolDisplayMode(): ToolDisplayMode {
   if (typeof window === "undefined") return "collapse";
@@ -77,11 +113,11 @@ export function readToolDisplayMode(): ToolDisplayMode {
 export function writeToolDisplayMode(value: ToolDisplayMode): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(TOOL_DISPLAY_KEY, value);
-  window.dispatchEvent(new CustomEvent(PREF_EVENT));
+  emitPrefChange(TOOL_DISPLAY_KEY);
 }
 
 export function useToolDisplayMode(): [ToolDisplayMode, (v: ToolDisplayMode) => void] {
-  const value = useLocalPref<ToolDisplayMode>(readToolDisplayMode, "collapse");
+  const value = useLocalPref<ToolDisplayMode>(readToolDisplayMode, "collapse", TOOL_DISPLAY_WATCH);
   return [
     value,
     (next: ToolDisplayMode) => {
@@ -108,11 +144,11 @@ export function writeRecentLimit(value: number): void {
   if (typeof window === "undefined") return;
   const clamped = Math.max(0, Math.min(Math.trunc(value), RECENT_LIMIT_MAX));
   window.localStorage.setItem(RECENT_LIMIT_KEY, String(clamped));
-  window.dispatchEvent(new CustomEvent(PREF_EVENT));
+  emitPrefChange(RECENT_LIMIT_KEY);
 }
 
 export function useRecentLimit(): [number, (v: number) => void] {
-  const value = useLocalPref<number>(readRecentLimit, RECENT_LIMIT_DEFAULT);
+  const value = useLocalPref<number>(readRecentLimit, RECENT_LIMIT_DEFAULT, RECENT_LIMIT_WATCH);
   return [
     value,
     (next: number) => {
@@ -136,11 +172,15 @@ export function readRecentEnabled(): boolean {
 export function writeRecentEnabled(value: boolean): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(RECENT_ENABLED_KEY, value ? "1" : "0");
-  window.dispatchEvent(new CustomEvent(PREF_EVENT));
+  emitPrefChange(RECENT_ENABLED_KEY);
 }
 
 export function useRecentEnabled(): [boolean, (v: boolean) => void] {
-  const value = useLocalPref<boolean>(readRecentEnabled, RECENT_ENABLED_DEFAULT);
+  const value = useLocalPref<boolean>(
+    readRecentEnabled,
+    RECENT_ENABLED_DEFAULT,
+    RECENT_ENABLED_WATCH,
+  );
   return [
     value,
     (next: boolean) => {

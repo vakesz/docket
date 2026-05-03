@@ -1,7 +1,7 @@
 import "server-only";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import { eq } from "drizzle-orm";
-import NextAuth, { type NextAuthConfig } from "next-auth";
+import NextAuth, { type NextAuthConfig, type Session } from "next-auth";
 import { cache } from "react";
 import { db } from "@/db";
 import { accounts, oauthProviderConfigs, sessions, users, verificationTokens } from "@/db/schema";
@@ -81,3 +81,15 @@ export const { handlers, signIn, signOut } = nextAuth;
 // the 2-3 calls per page (root layout + nested layouts + page) into one
 // session lookup. Outside React (route handlers, tRPC ctx), it's a no-op.
 export const auth: typeof nextAuth.auth = cache(nextAuth.auth) as typeof nextAuth.auth;
+
+/**
+ * No-arg, single-overload-typed view of `auth()` for the common case.
+ *
+ * NextAuth's `auth` is a multi-overload export (server-action /
+ * route-handler / middleware). The no-arg arm is one of several, and
+ * TypeScript inference picks the wrong arm inside structural contexts
+ * like `Promise.all([..., auth()])` — every call site otherwise has to
+ * write its own `as never` / `Session | null` cast. This wrapper
+ * isolates the cast to one file.
+ */
+export const getSession: () => Promise<Session | null> = auth as never;

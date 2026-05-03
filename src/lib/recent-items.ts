@@ -14,10 +14,16 @@
  */
 
 import { asPlainObject } from "@/lib/json";
-import { RECENT_LIMIT_MAX, readRecentEnabled, readRecentLimit, useLocalPref } from "@/lib/ui-prefs";
+import {
+  emitPrefChange,
+  type PrefKey,
+  RECENT_LIMIT_MAX,
+  readRecentEnabled,
+  readRecentLimit,
+  useLocalPref,
+} from "@/lib/ui-prefs";
 
-const STORAGE_KEY = "docket.recentItems";
-const RECENT_EVENT = "docket:recent-items";
+const STORAGE_KEY: PrefKey = "docket.recentItems";
 
 type Store = Record<string, string[]>;
 
@@ -42,7 +48,7 @@ function writeStore(store: Store): void {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
-    window.dispatchEvent(new CustomEvent(RECENT_EVENT));
+    emitPrefChange(STORAGE_KEY);
   } catch {
     // localStorage may be disabled (private mode, quota); silently degrade.
   }
@@ -61,7 +67,11 @@ export function recordRecentItem(projectSlug: string, itemNumber: string): void 
   writeStore(store);
 }
 
-const RECENT_EVENTS: readonly string[] = [RECENT_EVENT];
+const RECENT_WATCH: readonly PrefKey[] = [
+  STORAGE_KEY,
+  "docket.items.recentLimit",
+  "docket.items.recentEnabled",
+];
 
 export function useRecentItemNumbers(projectSlug: string): string[] {
   return useLocalPref<string[]>(
@@ -72,7 +82,7 @@ export function useRecentItemNumbers(projectSlug: string): string[] {
       return (readStore()[projectSlug] ?? []).slice(0, limit);
     },
     [],
-    RECENT_EVENTS,
+    RECENT_WATCH,
     projectSlug,
   );
 }

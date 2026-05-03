@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { type Dispatch, type SetStateAction, useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc-client";
 import {
   EMPTY_STREAM,
@@ -88,7 +88,24 @@ export function useChatStream(): UseChatStream {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
-    setStreaming({
+
+    // Every state write that runs after we hand off control to the
+    // network goes through these wrappers. After the controller aborts
+    // (resetStream / stopStream / unmount / new drainStream) the live
+    // run no longer owns the state — silently dropping its writes is
+    // the only safe response, otherwise we'd clobber a fresh
+    // EMPTY_STREAM or the next turn's pendingUserMessage. Centralizing
+    // the guard removes the per-branch "did I forget to check?" risk.
+    const setStreamingIfLive: Dispatch<SetStateAction<StreamingState>> = (next) => {
+      if (controller.signal.aborted) return;
+      setStreaming(next);
+    };
+    const setProposalIdsIfLive: Dispatch<SetStateAction<readonly string[]>> = (next) => {
+      if (controller.signal.aborted) return;
+      setProposalIds(next);
+    };
+
+    setStreamingIfLive({
       pendingUserMessage: content,
       settledRounds: [],
       text: "",
@@ -110,7 +127,7 @@ export function useChatStream(): UseChatStream {
       });
     } catch (err) {
       if (controller.signal.aborted) return;
-      setStreaming({
+      setStreamingIfLive({
         pendingUserMessage: null,
         settledRounds: [],
         text: "",
@@ -124,7 +141,7 @@ export function useChatStream(): UseChatStream {
     }
     if (!response.ok || !response.body) {
       const message = response.statusText || `HTTP ${response.status}`;
-      setStreaming({
+      setStreamingIfLive({
         pendingUserMessage: null,
         settledRounds: [],
         text: "",
@@ -163,7 +180,7 @@ export function useChatStream(): UseChatStream {
         // its own state cleanup — bail without overwriting it.
         return;
       }
-      setStreaming((prev) => ({
+      setStreamingIfLive((prev) => ({
         ...prev,
         error: err instanceof Error ? err.message : String(err),
       }));
@@ -178,14 +195,7 @@ export function useChatStream(): UseChatStream {
       utils.conversations.list.invalidate({ projectSlug, itemId }),
       utils.conversations.get.invalidate({ projectSlug, conversationId }),
     ]);
-    // If the controller was aborted while we awaited above, a newer
-    // call (resetStream, stopStream, or another drainStream) already
-    // owns `streaming` — never clobber that with this run's tail
-    // state. Without the guard, the pendingUserMessage of the next
-    // turn or the EMPTY_STREAM written by resetStream gets blown away
-    // with `done: true` and the UI looks stuck on the prior turn.
-    if (controller.signal.aborted) return;
-    setStreaming((prev) => ({
+    setStreamingIfLive((prev) => ({
       ...prev,
       pendingUserMessage: null,
       settledRounds: [],
@@ -196,9 +206,9 @@ export function useChatStream(): UseChatStream {
 
     function applyPayload(p: StreamPayload) {
       if (p.kind === "text_delta") {
-        setStreaming((prev) => ({ ...prev, text: prev.text + p.delta }));
+        setStreamingIfLive((prev) => ({ ...prev, text: prev.text + p.delta }));
       } else if (p.kind === "tool_call_started") {
-        setStreaming((prev) => ({
+        setStreamingIfLive((prev) => ({
           ...prev,
           toolCalls: [
             ...prev.toolCalls,
@@ -206,7 +216,7 @@ export function useChatStream(): UseChatStream {
           ],
         }));
       } else if (p.kind === "tool_call_completed") {
-        setStreaming((prev) => ({
+        setStreamingIfLive((prev) => ({
           ...prev,
           toolCalls: prev.toolCalls.map((tc) =>
             tc.callId === p.callId ? { ...tc, ok: p.ok } : tc,
@@ -218,7 +228,7 @@ export function useChatStream(): UseChatStream {
         // / progress block. The persisted rows for this round are
         // already in the DB; the next `invalidate` will replace
         // settledRounds with the official transcript.
-        setStreaming((prev) => {
+        setStreamingIfLive((prev) => {
           const hasContent = prev.text.length > 0 || prev.toolCalls.length > 0;
           if (!hasContent) return prev;
           return {
@@ -229,14 +239,16 @@ export function useChatStream(): UseChatStream {
           };
         });
       } else if (p.kind === "proposal_staged") {
-        setProposalIds((prev) => (prev.includes(p.proposalId) ? prev : [...prev, p.proposalId]));
+        setProposalIdsIfLive((prev) =>
+          prev.includes(p.proposalId) ? prev : [...prev, p.proposalId],
+        );
       } else if (p.kind === "ask_user_question") {
-        setStreaming((prev) => ({
+        setStreamingIfLive((prev) => ({
           ...prev,
           question: { question: p.question, options: p.options, multiSelect: p.multiSelect },
         }));
       } else if (p.kind === "guardrail_blocked" || p.kind === "guardrail_flagged") {
-        setStreaming((prev) => ({
+        setStreamingIfLive((prev) => ({
           ...prev,
           guardrailNotices: [
             ...prev.guardrailNotices,
@@ -249,7 +261,7 @@ export function useChatStream(): UseChatStream {
           ],
         }));
       } else if (p.kind === "error") {
-        setStreaming((prev) => ({ ...prev, error: p.message }));
+        setStreamingIfLive((prev) => ({ ...prev, error: p.message }));
       }
       // `done` is intentionally a no-op — the post-loop finalizer flips
       // streaming.done after invalidate so the persisted view is in

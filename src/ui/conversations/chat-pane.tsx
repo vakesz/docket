@@ -1,19 +1,20 @@
 "use client";
 
-import { useDeferredValue, useEffect, useRef, useState } from "react";
+import { useDeferredValue, useRef, useState } from "react";
 import { useSettingsMap } from "@/lib/settings-client";
 import { trpc } from "@/lib/trpc-client";
 import { type ToolDisplayMode, useToolDisplayMode } from "@/lib/ui-prefs";
 import { cn } from "@/lib/utils";
 import { Bubble } from "@/ui/conversations/bubble";
 import { ChatComposer } from "@/ui/conversations/chat-composer";
-import { useChatPaneController } from "@/ui/conversations/chat-pane-context";
 import type { SettledRound } from "@/ui/conversations/chat-stream";
 import { LlmSwitcher } from "@/ui/conversations/llm-switcher";
 import { QuestionCard } from "@/ui/conversations/question-card";
 import { ToolCallProgress, ToolCallRow } from "@/ui/conversations/tool-call-row";
-import { buildRenderUnits } from "@/ui/conversations/transcript";
+import { useAutoScroll } from "@/ui/conversations/use-auto-scroll";
 import { useChatStream } from "@/ui/conversations/use-chat-stream";
+import { useOptimisticTranscript } from "@/ui/conversations/use-optimistic-transcript";
+import { useSeedClaim } from "@/ui/conversations/use-seed-claim";
 import { extractSeedKind } from "@/ui/items/suggest-seeds";
 import { Alert, AlertDescription } from "@/ui/primitives/alert";
 import { ScrollArea } from "@/ui/primitives/scroll-area";
@@ -39,9 +40,6 @@ const MICRO_CAPS_BUTTON =
 export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; itemNumber: string }) {
   const utils = trpc.useUtils();
   const [activeId, setActiveId] = useState<string | null>(null);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const stickToBottomRef = useRef(true);
-  const autoscrollFrameRef = useRef<number | null>(null);
   const promptRef = useRef<HTMLTextAreaElement | null>(null);
   // Reentrancy guard for "New thread" — keeps the button visually enabled
   // (no disabled flicker on slow create) while still preventing a stray
@@ -51,7 +49,6 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
   const { streaming, proposalIds, dismissProposal, drainStream, resetStream, stopStream } =
     useChatStream();
   const [toolDisplayMode] = useToolDisplayMode();
-  const { pendingSeed, claimSeed } = useChatPaneController();
 
   // The conversations router keys threads by the cached `Item.id` (CUID),
   // but the URL only carries the provider-native item number — resolve it
@@ -85,7 +82,6 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
   const sendOnEnter = settings.bool("chat.send-on-enter", true);
 
   const messages = detail.data?.messages ?? [];
-  const renderUnits = buildRenderUnits(messages);
   const inFlight = !streaming.done;
   const conversation = detail.data ?? null;
   // Deferred text for the live assistant bubble: dense token deltas would
@@ -95,72 +91,22 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
   // responsive even while a long answer streams in.
   const deferredStreamingText = useDeferredValue(streaming.text);
 
-  // Suppress `pendingUserMessage` once its persisted twin has landed in
-  // `messages`. Without this we'd render the same user bubble twice for
-  // the window between the initial detail.useQuery refetch (which the
-  // server has already populated via `appendMessage(role: "user")`) and
-  // the post-stream invalidate that finally clears pendingUserMessage in
-  // state. Most visible on the "Suggest next action" path because that
-  // creates a fresh conversation and forces detail to refetch from
-  // scratch mid-stream.
-  const hasStreamingActivity =
-    streaming.pendingUserMessage !== null ||
-    streaming.text.length > 0 ||
-    streaming.toolCalls.length > 0 ||
-    streaming.settledRounds.length > 0;
-  const showPendingUserMessage = (() => {
-    const pending = streaming.pendingUserMessage;
-    if (pending === null) return false;
-    const target = pending.trim();
-    if (!target) return false;
-    return !messages.some((m) => m.role === "user" && m.content.trim() === target);
-  })();
+  const { renderUnits, showPendingUserMessage, hasStreamingActivity } = useOptimisticTranscript(
+    messages,
+    streaming,
+  );
 
-  // Stick-to-bottom scroll: flip the ref to false the moment the user
-  // scrolls up, and back to true once they're within 64px of the bottom.
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const onScroll = () => {
-      const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-      stickToBottomRef.current = distance < 64;
-    };
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
-  }, []);
-
-  // Coalesce auto-scrolls into a single rAF tick. SSE chunk arrival fires
-  // many state updates per second; a smooth scroll per chunk would cancel
-  // and restart against an ever-growing scrollHeight, reading as flicker.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: deps are the trigger; the body only reads scrollRef + stickToBottomRef.
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el || !stickToBottomRef.current) return;
-    if (autoscrollFrameRef.current !== null) return;
-    autoscrollFrameRef.current = requestAnimationFrame(() => {
-      autoscrollFrameRef.current = null;
-      const node = scrollRef.current;
-      if (!node || !stickToBottomRef.current) return;
-      node.scrollTo({
-        top: node.scrollHeight,
-        behavior: streaming.done ? "smooth" : "auto",
-      });
-    });
-    return () => {
-      if (autoscrollFrameRef.current !== null) {
-        cancelAnimationFrame(autoscrollFrameRef.current);
-        autoscrollFrameRef.current = null;
-      }
-    };
-  }, [
-    messages.length,
-    streaming.pendingUserMessage,
-    streaming.settledRounds.length,
-    streaming.text,
-    streaming.toolCalls.length,
-    streaming.question,
+  const { scrollRef } = useAutoScroll(
+    [
+      messages.length,
+      streaming.pendingUserMessage,
+      streaming.settledRounds.length,
+      streaming.text,
+      streaming.toolCalls.length,
+      streaming.question,
+    ],
     streaming.done,
-  ]);
+  );
 
   const sendMessage = async (raw: string) => {
     const body = raw.trim();
@@ -174,34 +120,20 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
     await drainStream({ projectSlug, itemId, conversationId: id, content: body });
   };
 
-  // Consume a queued "Suggest next action" seed: open a fresh thread and
-  // submit it as a normal user message. We start a *new* thread so the
-  // suggestion isn't appended to whatever the user was last asking about
-  // for this item — distinct entry point, distinct conversation.
-  //
-  // `claimSeed()` is ref-backed and atomic: when the layout has two
-  // ChatPane instances mounted simultaneously (desktop Group + mobile
-  // Dialog can race on viewport transitions), only the first effect to
-  // call it gets the string back. The loser bails without firing.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: pendingSeed is the trigger; the rest is captured.
-  useEffect(() => {
-    if (!pendingSeed) return;
-    if (inFlight) return;
-    if (itemId === null) return;
-    const seed = claimSeed();
-    if (seed === null) return;
-    void (async () => {
+  // Seed handoff: open a *new* thread for "Suggest next action" prompts so
+  // the suggestion isn't appended to whatever the user was last asking
+  // about for this item — distinct entry point, distinct conversation.
+  useSeedClaim({
+    itemId,
+    inFlight,
+    onSeed: async (seed) => {
+      if (itemId === null) return;
       const conv = await create.mutateAsync({ projectSlug, itemId });
       setActiveId(conv.id);
       resetStream();
-      await drainStream({
-        projectSlug,
-        itemId,
-        conversationId: conv.id,
-        content: seed,
-      });
-    })();
-  }, [pendingSeed, inFlight, itemId]);
+      await drainStream({ projectSlug, itemId, conversationId: conv.id, content: seed });
+    },
+  });
 
   const startNewThread = async () => {
     if (startingThreadRef.current) return;
@@ -321,17 +253,23 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
               // biome-ignore lint/suspicious/noArrayIndexKey: settledRounds is append-only during one stream; index is stable for the lifetime of the snapshot.
               <SettledRoundView key={`settled:${idx}`} round={round} mode={toolDisplayMode} />
             ))}
-            {inFlight && deferredStreamingText && (
-              <Bubble messageRole="assistant" text={deferredStreamingText} />
-            )}
-            {streaming.toolCalls.length > 0 && (
-              <ToolCallProgress
-                toolCalls={streaming.toolCalls}
-                mode={toolDisplayMode}
-                streaming={inFlight}
-              />
-            )}
-            {inFlight && !streaming.question && <ThinkingDots />}
+            {/* Live assistant content lives inside an aria-live region so
+             * screen readers announce streaming token deltas as they
+             * arrive. `polite` defers announcement until the user is
+             * idle — `assertive` would interrupt them mid-keystroke. */}
+            <div aria-live="polite" aria-busy={inFlight} aria-atomic="false">
+              {inFlight && deferredStreamingText && (
+                <Bubble messageRole="assistant" text={deferredStreamingText} />
+              )}
+              {streaming.toolCalls.length > 0 && (
+                <ToolCallProgress
+                  toolCalls={streaming.toolCalls}
+                  mode={toolDisplayMode}
+                  streaming={inFlight}
+                />
+              )}
+              {inFlight && !streaming.question && <ThinkingDots />}
+            </div>
             {streaming.guardrailNotices.length > 0 && (
               <div className="mt-1 flex flex-col gap-1">
                 {streaming.guardrailNotices.map((notice, idx) => (
@@ -404,14 +342,6 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
   );
 }
 
-/**
- * One settled inner round of a multi-round turn: the assistant's text
- * bubble plus the tool calls it dispatched, rendered the same way the
- * persisted view will render them once the post-stream `invalidate`
- * brings the official rows in. Keeping this layout matched to
- * `buildRenderUnits` is the whole point — the live → persisted swap is
- * visually a no-op.
- */
 function ThinkingDots() {
   return (
     <output className="mb-3 flex items-center gap-1 px-3 py-2" aria-label="Thinking">
@@ -431,6 +361,14 @@ function ThinkingDots() {
   );
 }
 
+/**
+ * One settled inner round of a multi-round turn: the assistant's text
+ * bubble plus the tool calls it dispatched, rendered the same way the
+ * persisted view will render them once the post-stream `invalidate`
+ * brings the official rows in. Keeping this layout matched to
+ * `buildRenderUnits` is the whole point — the live → persisted swap is
+ * visually a no-op.
+ */
 function SettledRoundView({ round, mode }: { round: SettledRound; mode: ToolDisplayMode }) {
   return (
     <>
