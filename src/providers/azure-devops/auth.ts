@@ -1,7 +1,10 @@
 // Microsoft deprecated the legacy `app.vssps.visualstudio.com/oauth2/*`
 // flow (the one NextAuth ships as `azure-devops`); the supported path is
-// Microsoft Entra ID with `.default` against AzDO resource id
-// `499b84ac-1321-427f-aa17-267ca6975798`.
+// Microsoft Entra ID with `<resource>/.default` against the AzDO API
+// resource id Microsoft publishes in their OAuth docs. We don't bake the
+// id into source — it rides in `OauthProviderConfig.metadata.resourceId`
+// (DB-authoritative, seeded from `DEV_AZURE_DEVOPS_RESOURCE_ID` on first
+// boot by `bin/bootstrap-providers.ts`).
 //
 // Provider id `azure_devops` must match `OauthProviderConfig.kind` and
 // `Project.providerKind` — the NextAuth `Account.provider` column has to
@@ -10,6 +13,7 @@
 
 import "server-only";
 import type { OIDCConfig } from "next-auth/providers";
+import type { ProviderAuthInput } from "@/core/provider";
 import type { UserId } from "@/core/types";
 import { db } from "@/db";
 import { avatarUrl } from "@/lib/avatar-url";
@@ -17,7 +21,20 @@ import { fetchAvatarFromProvider } from "@/server/avatars/fetchers";
 import { persistAvatar } from "@/server/avatars/service";
 import { logger } from "@/server/logger";
 
-const AZDO_RESOURCE_ID = "499b84ac-1321-427f-aa17-267ca6975798";
+function readStringMeta(metadata: Record<string, unknown>, key: string): string | undefined {
+  const v = metadata[key];
+  return typeof v === "string" && v.length > 0 ? v : undefined;
+}
+
+function requireAzdoResourceId(metadata: Record<string, unknown>): string {
+  const raw = readStringMeta(metadata, "resourceId")?.trim();
+  if (!raw) {
+    throw new Error(
+      "Azure DevOps OAuth row is missing metadata.resourceId. Seed it via DEV_AZURE_DEVOPS_RESOURCE_ID in env on first boot, or set it from the OAuth provider admin UI.",
+    );
+  }
+  return raw;
+}
 
 /**
  * Fetch the signed-in user's avatar via the shared fetcher, write the bytes
@@ -65,39 +82,28 @@ export interface AzureDevOpsEntraProfile {
   oid?: string;
 }
 
-export type AzureDevOpsAuthOptions = {
-  clientId: string;
-  clientSecret: string;
-  /**
-   * Entra tenant id, or "common" / "organizations" / "consumers" for the
-   * multi-tenant endpoints. When unset we default to "common", which lets
-   * any AAD or Microsoft account in.
-   */
-  tenant?: string;
-  /**
-   * Extra scopes to request alongside the AzDO `.default` scope.
-   * `offline_access` triggers refresh-token issuance; OIDC scopes
-   * (`openid profile email`) populate the userinfo response so the
-   * NextAuth user row has a name + email.
-   */
-  extraScope?: string;
-};
-
-export function azureDevOpsProvider(
-  opts: AzureDevOpsAuthOptions,
+/**
+ * Spec-side `buildAuthProvider` for Azure DevOps. The dispatcher hands
+ * `ProviderAuthInput` with metadata.tenant carrying the Entra tenant id and
+ * `scopes` carrying any extra scopes the operator added on top of the
+ * required AzDO `.default` baseline.
+ */
+export function buildAzureDevOpsAuthProvider(
+  input: ProviderAuthInput,
 ): OIDCConfig<AzureDevOpsEntraProfile> {
-  const trimmed = opts.tenant?.trim();
-  const tenant = trimmed ? trimmed : "common";
+  const tenantRaw = readStringMeta(input.metadata, "tenant");
+  const tenant = tenantRaw?.trim() ? tenantRaw.trim() : "common";
   const issuer = `https://login.microsoftonline.com/${tenant}/v2.0`;
-  const baseScope = `openid profile email offline_access ${AZDO_RESOURCE_ID}/.default`;
-  const scope = opts.extraScope ? `${baseScope} ${opts.extraScope}` : baseScope;
+  const resourceId = requireAzdoResourceId(input.metadata);
+  const baseScope = `openid profile email offline_access ${resourceId}/.default`;
+  const scope = input.scopes ? `${baseScope} ${input.scopes}` : baseScope;
   return {
     id: "azure_devops",
     name: "Azure DevOps",
     type: "oidc",
     issuer,
-    clientId: opts.clientId,
-    clientSecret: opts.clientSecret,
+    clientId: input.clientId,
+    clientSecret: input.clientSecret,
     authorization: { params: { scope } },
     // The Microsoft userinfo response uses `oid` for stable user id and
     // `preferred_username` for the email-shaped UPN; fall back to `sub`

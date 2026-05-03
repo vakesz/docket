@@ -359,6 +359,31 @@ export type ProviderOauthMetadata = {
 };
 
 /**
+ * Decrypted, normalized OAuth-config row handed to a provider's NextAuth
+ * factory. Decryption and the JSONB decode happen once in the dispatcher
+ * (`src/server/providers/auth-build.ts`) so each spec's factory works on a
+ * plain shape and stays focused on the provider-specific NextAuth wiring.
+ *
+ * `metadata` carries everything kind-specific: AzDO reads `tenant` and
+ * `resourceId` here. New per-row config keys go in metadata so the
+ * schema stays stable as providers come online.
+ */
+export type ProviderAuthInput = {
+  clientId: string;
+  clientSecret: string;
+  scopes: string | null;
+  metadata: Record<string, unknown>;
+};
+
+/**
+ * Builds a NextAuth provider value from a decrypted OAuth-config row. The
+ * return type is `unknown` here so `core/` stays free of `next-auth/*`
+ * imports — `auth-build.ts` narrows to `Provider` at the call site, where
+ * NextAuth typings already live.
+ */
+export type ProviderAuthFactory = (input: ProviderAuthInput) => unknown;
+
+/**
  * Reaction kinds aside, `Item.author` and `Item.assignee` carry a
  * provider-stamped identifier. Some providers expose a stable public
  * profile URL (GitHub: `https://github.com/<login>`); others don't (AzDO
@@ -528,6 +553,16 @@ export type ProviderSpec = {
    * of `core/`.
    */
   oauth: ProviderOauthMetadata | null;
+  /**
+   * Builds the NextAuth provider value from a decrypted OAuth-config row.
+   * Set when `oauth` is non-null and the provider package owns a sibling
+   * `auth.ts` wired to a `next-auth/providers/<name>` helper. The dispatch
+   * in `src/server/providers/auth-build.ts` looks up the spec by `kind` and
+   * calls this — adding a new OAuth provider is a sibling `auth.ts` plus
+   * one spec entry, no router edit. Must be `null` when `oauth` is `null`
+   * and non-null otherwise; the dispatcher asserts that pairing.
+   */
+  buildAuthProvider: ProviderAuthFactory | null;
   /** Profile URL for an `Item.author` identity, or null if not available. */
   profileUrl: ProviderProfileUrlBuilder | null;
   /**

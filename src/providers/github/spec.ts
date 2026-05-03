@@ -14,6 +14,7 @@
 
 import type { LabelTemplate, ProviderItemNumberCodec, ProviderSpec } from "@/core/provider";
 import type { ProviderItemId } from "@/core/types";
+import { buildGithubAuthProvider } from "@/providers/github/auth";
 import { githubAvatarFetcher } from "@/providers/github/avatar";
 import { GitHubLogo } from "@/providers/github/logo";
 import { githubProfileUrl } from "@/providers/github/profile";
@@ -114,6 +115,7 @@ export const githubSpec = {
     registrationLabel: "github.com/settings/developers",
     registrationUrl: "https://github.com/settings/developers",
   },
+  buildAuthProvider: buildGithubAuthProvider,
   profileUrl: githubProfileUrl,
   avatarFetcher: githubAvatarFetcher,
   logo: GitHubLogo,

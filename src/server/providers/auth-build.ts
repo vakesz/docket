@@ -4,21 +4,23 @@
  * Auth-side analogue of `./build.ts` — that file builds `WorkItemProvider`
  * instances at request time from a project's scope; this one builds NextAuth
  * provider configs at request time from the rows in `OauthProviderConfig`.
- * The dispatch is a pure switch — concrete `next-auth/providers/<x>`
- * imports live inside each provider package's `auth.ts`, so adding a new
- * OAuth kind doesn't touch this file beyond one new `case`.
+ * The dispatch goes through the registered spec's `buildAuthProvider`
+ * factory, so concrete `next-auth/providers/<x>` imports stay inside each
+ * provider package's `auth.ts` and adding a new OAuth kind is one new spec
+ * entry — no edit here.
  *
- * Throws `UnknownOauthKindError` when `row.kind` doesn't match a wired
- * adapter. The caller in `src/server/auth.ts` catches and logs so the
- * sign-in page still renders the remaining buttons.
+ * Throws `UnknownOauthKindError` when `row.kind` doesn't match a registered
+ * spec or when the matching spec has no auth factory wired. The caller in
+ * `src/server/auth.ts` catches and logs so the sign-in page still renders
+ * the remaining buttons.
  */
 
 import "server-only";
 import type { Provider } from "next-auth/providers";
+import type { ProviderAuthInput } from "@/core/provider";
 import type { OauthProviderConfig } from "@/db/schema/types";
 import { asPlainObject } from "@/lib/json";
-import { azureDevOpsProvider } from "@/providers/azure-devops/auth";
-import { githubAuthProvider } from "@/providers/github/auth";
+import { getProviderSpec } from "@/server/provider-registry";
 import { decryptSecret } from "@/server/secrets/encryption";
 
 export class UnknownOauthKindError extends Error {
@@ -28,33 +30,19 @@ export class UnknownOauthKindError extends Error {
   }
 }
 
-function readStringMeta(metadata: unknown, key: string): string | undefined {
-  const obj = asPlainObject(metadata);
-  const v = obj[key];
-  return typeof v === "string" && v.length > 0 ? v : undefined;
-}
-
 export function buildAuthProvider(row: OauthProviderConfig): Provider {
-  const clientSecret = decryptSecret(row.clientSecret);
-  switch (row.kind) {
-    case "github":
-      return githubAuthProvider({
-        clientId: row.clientId,
-        clientSecret,
-        scopes: row.scopes,
-      });
-    case "azure_devops": {
-      // Entra tenant id lives under `metadata.tenant`. Empty → multi-tenant
-      // `common` endpoint.
-      const tenant = readStringMeta(row.metadata, "tenant");
-      return azureDevOpsProvider({
-        clientId: row.clientId,
-        clientSecret,
-        ...(tenant ? { tenant } : {}),
-        ...(row.scopes ? { extraScope: row.scopes } : {}),
-      });
-    }
-    default:
-      throw new UnknownOauthKindError(row.kind);
+  const spec = getProviderSpec(row.kind);
+  if (!spec?.buildAuthProvider) {
+    throw new UnknownOauthKindError(row.kind);
   }
+  const input: ProviderAuthInput = {
+    clientId: row.clientId,
+    clientSecret: decryptSecret(row.clientSecret),
+    scopes: row.scopes ? row.scopes : null,
+    metadata: asPlainObject(row.metadata),
+  };
+  // The spec field is typed `unknown` so `core/` stays free of NextAuth.
+  // The provider's `auth.ts` is type-checked against NextAuth's `Provider`
+  // / `OIDCConfig` shapes at definition time, so this cast is safe here.
+  return spec.buildAuthProvider(input) as Provider;
 }

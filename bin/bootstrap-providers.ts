@@ -193,19 +193,23 @@ async function seedAzureDevOpsOAuth(db: BootstrapDb): Promise<void> {
   }
 
   const tenant = process.env["DEV_AZURE_DEVOPS_TENANT_ID"]?.trim() ?? "";
+  const resourceId = process.env["DEV_AZURE_DEVOPS_RESOURCE_ID"]?.trim() ?? "";
   const existing = await db.query.oauthProviderConfigs.findFirst({
     where: (t, { eq }) => eq(t.kind, "azure_devops"),
   });
   const writeSecret = encryptSecret(clientSecret);
 
   if (!existing) {
+    const metadata: Record<string, string> = {};
+    if (tenant) metadata["tenant"] = tenant;
+    if (resourceId) metadata["resourceId"] = resourceId;
     await db.insert(oauthProviderConfigs).values({
       kind: "azure_devops",
       label: "Azure DevOps",
       clientId,
       clientSecret: writeSecret,
       scopes: "",
-      metadata: tenant ? { tenant } : {},
+      metadata,
       enabled: true,
     });
     console.log("[bootstrap] Created OauthProviderConfig(kind=azure_devops) (encrypted).");
@@ -213,15 +217,24 @@ async function seedAzureDevOpsOAuth(db: BootstrapDb): Promise<void> {
   }
 
   // Same approach as GitHub: compare by clientId, rewrap the secret each
-  // time (fresh IV → ciphertexts can't be byte-compared). Tenant change
-  // also forces a refresh so `.env` edits propagate without a manual UI poke.
+  // time (fresh IV → ciphertexts can't be byte-compared). Tenant /
+  // resourceId changes also force a refresh so `.env` edits propagate
+  // without a manual UI poke. resourceId only fills when the row hasn't
+  // got one yet — admin UI edits stay sticky after the first run.
   const idChanged = existing.clientId !== clientId;
-  const meta = existing.metadata ?? {};
-  const currentTenant = typeof meta.tenant === "string" ? meta.tenant : "";
+  const meta = (existing.metadata ?? {}) as Record<string, unknown>;
+  const currentTenant = typeof meta["tenant"] === "string" ? (meta["tenant"] as string) : "";
+  const currentResourceId =
+    typeof meta["resourceId"] === "string" ? (meta["resourceId"] as string) : "";
   const tenantChanged = currentTenant !== tenant;
-  if (idChanged || tenantChanged) {
-    const { tenant: _drop, ...rest } = meta;
-    const nextMeta = tenant ? { ...rest, tenant } : rest;
+  const resourceIdMissing = !currentResourceId && resourceId.length > 0;
+  if (idChanged || tenantChanged || resourceIdMissing) {
+    const { tenant: _dropTenant, resourceId: _dropResource, ...rest } = meta;
+    const nextMeta: Record<string, unknown> = { ...rest };
+    if (tenant) nextMeta["tenant"] = tenant;
+    // Once a resourceId lives in the row it sticks; we only fill blanks.
+    const nextResourceId = currentResourceId || resourceId;
+    if (nextResourceId) nextMeta["resourceId"] = nextResourceId;
     await db
       .update(oauthProviderConfigs)
       .set({

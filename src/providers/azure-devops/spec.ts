@@ -11,6 +11,7 @@ import type {
 } from "@/core/provider";
 import type { Item, ProviderItemId } from "@/core/types";
 import { asPlainObject } from "@/lib/json";
+import { buildAzureDevOpsAuthProvider } from "@/providers/azure-devops/auth";
 import { azureDevOpsAvatarFetcher } from "@/providers/azure-devops/avatar";
 import { AzureDevOpsLogo } from "@/providers/azure-devops/logo";
 import { AzureDevOpsProvider } from "@/providers/azure-devops/provider";
@@ -136,7 +137,10 @@ export const azureDevOpsSpec = {
   availableIntents: availableIntentsForState,
   oauth: {
     defaultLabel: "Azure DevOps",
-    defaultScopes: "499b84ac-1321-427f-aa17-267ca6975798/.default offline_access",
+    // The base scope (`<resource>/.default openid profile email offline_access`)
+    // is assembled at sign-in time in `auth.ts` from `AZURE_DEVOPS_RESOURCE_ID`;
+    // anything an operator wants on top goes here.
+    defaultScopes: "",
     nextAuthProviderId: "azure_devops",
     auxLabel: "Directory (tenant) ID",
     auxRequired: true,
@@ -148,6 +152,7 @@ export const azureDevOpsSpec = {
     registrationLabel: "entra.microsoft.com",
     registrationUrl: "https://entra.microsoft.com",
   },
+  buildAuthProvider: buildAzureDevOpsAuthProvider,
   profileUrl: null,
   avatarFetcher: azureDevOpsAvatarFetcher,
   logo: AzureDevOpsLogo,

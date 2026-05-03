@@ -16,22 +16,13 @@
 import "server-only";
 import type { Provider } from "next-auth/providers";
 import GitHub from "next-auth/providers/github";
+import type { ProviderAuthInput } from "@/core/provider";
 import type { UserId } from "@/core/types";
 import { db } from "@/db";
 import { avatarUrl } from "@/lib/avatar-url";
 import { fetchAvatarFromProvider } from "@/server/avatars/fetchers";
 import { persistAvatar } from "@/server/avatars/service";
 import { logger } from "@/server/logger";
-
-export type GitHubAuthOptions = {
-  clientId: string;
-  clientSecret: string;
-  /**
-   * Override scopes. When omitted, GitHub's NextAuth provider derives them
-   * from the default authorization URL.
-   */
-  scopes?: string | null;
-};
 
 type GitHubProfile = {
   id: number | string;
@@ -41,11 +32,16 @@ type GitHubProfile = {
   avatar_url?: string | null;
 };
 
-export function githubAuthProvider(opts: GitHubAuthOptions): Provider {
+/**
+ * Spec-side `buildAuthProvider` for GitHub. Receives the dispatcher's
+ * normalized `ProviderAuthInput`; baseUrl / metadata are unused on
+ * github.com but flow through unchanged for GitHub Enterprise wiring later.
+ */
+export function buildGithubAuthProvider(input: ProviderAuthInput): Provider {
   return GitHub({
-    clientId: opts.clientId,
-    clientSecret: opts.clientSecret,
-    ...(opts.scopes ? { authorization: { params: { scope: opts.scopes } } } : {}),
+    clientId: input.clientId,
+    clientSecret: input.clientSecret,
+    ...(input.scopes ? { authorization: { params: { scope: input.scopes } } } : {}),
     async profile(profile: GitHubProfile) {
       const login = profile.login;
       const image = login ? await captureAvatarBytes(login) : null;
