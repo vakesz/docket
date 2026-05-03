@@ -34,6 +34,11 @@ import type {
 } from "@/core/types";
 import { asPlainObject } from "@/lib/json";
 import {
+  AZDO_PR_STATUS,
+  DEFAULT_WORKITEM_FIELDS,
+  MAX_BATCH_IDS,
+} from "@/providers/azure-devops/constants";
+import {
   changeTypeToStatus,
   parseAzdoPullRequestId,
   parseVstfsPRRef,
@@ -55,27 +60,6 @@ type Config = {
   project: string;
   accessToken: string;
 };
-
-const DEFAULT_FIELDS = [
-  "System.Id",
-  "System.WorkItemType",
-  "System.Title",
-  "System.Description",
-  "System.State",
-  "System.AssignedTo",
-  "System.Parent",
-  "System.Tags",
-  "System.ChangedDate",
-  "System.CreatedDate",
-  "System.CommentCount",
-  "System.AreaPath",
-  "System.IterationPath",
-  "System.TeamProject",
-  "System.NodeName",
-  "Microsoft.VSTS.Common.ClosedDate",
-] as const;
-
-const MAX_BATCH_IDS = 200;
 
 function readConfig(raw: Record<string, unknown>): Config {
   const orgUrl = typeof raw["orgUrl"] === "string" ? raw["orgUrl"].trim() : "";
@@ -365,7 +349,7 @@ export class AzureDevOpsProvider implements WorkItemProvider {
     try {
       const raw = await wit.getWorkItem(
         Number.parseInt(id, 10),
-        [...DEFAULT_FIELDS],
+        [...DEFAULT_WORKITEM_FIELDS],
         undefined,
         WorkItemExpand.All,
       );
@@ -412,7 +396,7 @@ export class AzureDevOpsProvider implements WorkItemProvider {
     try {
       batch = await wit.getWorkItems(
         relatedIds,
-        [...DEFAULT_FIELDS],
+        [...DEFAULT_WORKITEM_FIELDS],
         undefined,
         undefined,
         WorkItemErrorPolicy.Omit,
@@ -636,7 +620,7 @@ export class AzureDevOpsProvider implements WorkItemProvider {
       baseRef: stripRefPrefix(pr.targetRefName),
       headSha: pr.lastMergeSourceCommit?.commitId ?? "",
       draft: pr.isDraft ?? false,
-      merged: status === 3,
+      merged: status === AZDO_PR_STATUS.Completed,
       mergeable: null,
       labels: (pr.labels ?? []).map((l) => l.name ?? "").filter((n): n is string => Boolean(n)),
       requestedReviewers: (pr.reviewers ?? [])

@@ -2,10 +2,11 @@
  * Pure helpers for AzDO pull-request linking — vstfs URL parsing, PR-id
  * parsing, and `PullRequestStatus` / `IdentityRefWithVote.vote` mapping.
  *
- * Kept separate from `provider.ts` so the parsers stay testable without the
- * SDK shim, and so per-instance constants (the AzDO `PullRequestStatus`
- * enum values) live in one place.
+ * Kept separate from `provider.ts` so the parsers stay testable without
+ * the SDK shim. The numeric enum mirrors live in `./constants.ts`.
  */
+
+import { AZDO_PR_STATUS, AZDO_REVIEWER_VOTE } from "@/providers/azure-devops/constants";
 
 export type VstfsPRRef = {
   projectId: string;
@@ -64,27 +65,28 @@ export function parseAzdoPullRequestId(input: string): number | null {
  * Map AzDO's numeric `PullRequestStatus` enum to the canonical PR state
  * strings the rest of the app uses (`"open" | "closed" | "merged"`).
  *
- * Values: 1 = Active, 2 = Abandoned, 3 = Completed (merged). 0/NotSet and 4/All
- * are not real PR states; they fall through to "open" so we don't surface a
- * blank state field — callers can re-fetch if they need certainty.
+ * `0/NotSet` and `4/All` are not real PR states; they fall through to
+ * `"open"` so we don't surface a blank state field — callers can re-fetch
+ * if they need certainty.
  */
 export function pullRequestStatusToCanonical(status: number | undefined | null): string {
-  if (status === 3) return "merged";
-  if (status === 2) return "closed";
+  if (status === AZDO_PR_STATUS.Completed) return "merged";
+  if (status === AZDO_PR_STATUS.Abandoned) return "closed";
   return "open";
 }
 
 /**
- * Map AzDO's reviewer `vote` values onto canonical review states.
- *
- * AzDO uses: 10 = Approved, 5 = Approved with suggestions, 0 = No response,
- * -5 = Waiting for author, -10 = Rejected. Collapse to APPROVED /
- * CHANGES_REQUESTED / COMMENTED so the canonical type stays consistent
- * with the GitHub provider.
+ * Map AzDO's reviewer `vote` values onto canonical review states. Collapse
+ * to APPROVED / CHANGES_REQUESTED / COMMENTED so the canonical type stays
+ * consistent with the GitHub provider.
  */
 export function voteToReviewState(vote: number | undefined | null): string {
-  if (vote === 10 || vote === 5) return "APPROVED";
-  if (vote === -10 || vote === -5) return "CHANGES_REQUESTED";
+  if (vote === AZDO_REVIEWER_VOTE.Approved || vote === AZDO_REVIEWER_VOTE.ApprovedWithSuggestions) {
+    return "APPROVED";
+  }
+  if (vote === AZDO_REVIEWER_VOTE.Rejected || vote === AZDO_REVIEWER_VOTE.WaitingForAuthor) {
+    return "CHANGES_REQUESTED";
+  }
   return "COMMENTED";
 }
 

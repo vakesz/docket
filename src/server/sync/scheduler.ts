@@ -22,7 +22,11 @@ import { logger } from "@/server/logger";
 import { loadGlobalSetting, loadProjectSetting } from "@/server/settings/effective";
 import { runIncrementalSync } from "@/server/sync";
 
-const SUPERVISOR_INTERVAL_MS = 30_000;
+// Fallback used only on the very first tick — once running, the supervisor
+// re-reads `sync.supervisor-interval-seconds` from the catalog after every
+// tick and adjusts `setTimeout`. The catalog default is the source of truth;
+// this constant just covers the gap before the first DB read returns.
+const SUPERVISOR_FALLBACK_INTERVAL_MS = 30_000;
 
 type SchedulerState = {
   started: boolean;
@@ -53,17 +57,33 @@ function getState(): SchedulerState {
  * Idempotent — safe to call from `createContext` on every request. The
  * supervisor only spins up on the first call. After that, the boolean
  * flip on the globalThis stash short-circuits.
+ *
+ * The interval is re-read from `sync.supervisor-interval-seconds` after
+ * each tick so an operator who bumps the catalog value sees it apply
+ * within one cycle, without restarting the process.
  */
 export function ensureSchedulerRunning(): void {
   const state = getState();
   if (state.started) return;
   state.started = true;
+  const scheduleNext = (delayMs: number): void => {
+    state.supervisor = setTimeout(() => {
+      void runTickThenReschedule();
+    }, delayMs);
+  };
+  const runTickThenReschedule = async (): Promise<void> => {
+    try {
+      await supervisorTick();
+    } finally {
+      const seconds = await loadGlobalSetting(db, "sync.supervisor-interval-seconds").catch(
+        () => SUPERVISOR_FALLBACK_INTERVAL_MS / 1000,
+      );
+      scheduleNext(seconds * 1000);
+    }
+  };
   // Fire one tick immediately so the first sync doesn't have to wait for
   // the full supervisor interval after a cold boot.
-  void supervisorTick();
-  state.supervisor = setInterval(() => {
-    void supervisorTick();
-  }, SUPERVISOR_INTERVAL_MS);
+  void runTickThenReschedule();
 }
 
 type SchedulerProject = Pick<
@@ -121,6 +141,6 @@ export async function tickProject(project: SchedulerProject): Promise<void> {
 /** Test-only: clear the globalThis stash and stop the supervisor. */
 export function __resetSchedulerForTests(): void {
   const state = globalThis.__docketSyncScheduler;
-  if (state?.supervisor) clearInterval(state.supervisor);
+  if (state?.supervisor) clearTimeout(state.supervisor);
   globalThis.__docketSyncScheduler = undefined;
 }

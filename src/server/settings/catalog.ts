@@ -99,6 +99,22 @@ const SyncMaxIntraChunkConcurrencySchema = z.number().int().min(1).max(32);
 // shorter risks a healthy run getting stolen during a long provider
 // call); 24 hours is generous for catastrophically large initial syncs.
 const SyncStaleProgressMinutesSchema = z.number().int().min(1).max(1440);
+// How often the in-process scheduler tick runs to fire eligible syncs.
+// 5s floor protects DB load; 5 min ceiling is well past where ticks
+// stop being responsive enough to honour a small project interval.
+const SyncSupervisorIntervalSecondsSchema = z.number().int().min(5).max(300);
+// Per-run cap on collected non-fatal warnings (provider quirks, partial
+// failures) attached to the sync progress snapshot. The list grows
+// linearly with chunk count; capping it keeps the JSONB payload small
+// regardless of how chatty a sync is. 10 is the floor (still useful
+// signal); 500 is the ceiling.
+const SyncMaxSnapshotWarningsSchema = z.number().int().min(10).max(500);
+// Soft cap for memory entry body size before the builder attaches an
+// advisory. Memory rides in every agent turn's prefix, so the floor
+// (1 KB) discourages anything tighter that would block legitimate
+// short notes; the ceiling (64 KB) is well past the point where
+// splitting the entry is the right answer.
+const MemoryBodyAdvisoryBytesSchema = z.number().int().min(1_024).max(65_536);
 // Web-fetch tool tunables that pair with the existing host allowlist /
 // size cap. Both are project-scoped so the same project can ratchet down
 // for high-trust internal docs vs. a wide-open research project.
@@ -689,6 +705,33 @@ export const SETTINGS_CATALOG = {
     label: "Sync — stale-progress lease takeover (minutes)",
     description:
       "How long a sync run may sit without progress updates before another replica may steal its lease and start fresh. Raise for very large initial syncs; lower if you frequently see crashed runs blocking new syncs. Range 1 minute–24 hours.",
+  },
+  "sync.supervisor-interval-seconds": {
+    key: "sync.supervisor-interval-seconds",
+    scope: "global",
+    schema: SyncSupervisorIntervalSecondsSchema,
+    default: 30,
+    label: "Sync — supervisor tick interval (seconds)",
+    description:
+      "How often the in-process scheduler scans for projects whose sync interval has elapsed. Lower values respond faster to short per-project intervals at the cost of one extra scan per tick; higher values save scan overhead. Range 5–300 seconds.",
+  },
+  "sync.max-snapshot-warnings": {
+    key: "sync.max-snapshot-warnings",
+    scope: "global",
+    schema: SyncMaxSnapshotWarningsSchema,
+    default: 50,
+    label: "Sync — max warnings per progress snapshot",
+    description:
+      "Upper bound on non-fatal warnings stored alongside each sync run's progress JSON. Older warnings drop off when this is exceeded so the JSONB payload stays bounded regardless of how chatty a sync is. Range 10–500.",
+  },
+  "proposals.memory-body-advisory-bytes": {
+    key: "proposals.memory-body-advisory-bytes",
+    scope: "project",
+    schema: MemoryBodyAdvisoryBytesSchema,
+    default: 4096,
+    label: "Memory entry body size — advisory threshold (bytes)",
+    description:
+      "Memory rides in every agent turn's prompt prefix; entries above this size attach a soft 'consider splitting' advisory on the confirm dialog (the entry is not blocked). Range 1 KB–64 KB.",
   },
   "web-fetch.timeout-seconds": {
     key: "web-fetch.timeout-seconds",

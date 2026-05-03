@@ -126,20 +126,30 @@ type SyncTunables = {
   maxIntraChunkConcurrency: number;
   /** Lease takeover threshold for stuck syncs, in milliseconds. */
   staleProgressMs: number;
+  /** Cap on warnings stored in the progress snapshot (older drop first). */
+  maxSnapshotWarnings: number;
 };
 
 async function loadSyncTunables(db: Db): Promise<SyncTunables> {
-  const [chunkSize, maxInflightChunks, maxIntraChunkConcurrency, staleMinutes] = await Promise.all([
+  const [
+    chunkSize,
+    maxInflightChunks,
+    maxIntraChunkConcurrency,
+    staleMinutes,
+    maxSnapshotWarnings,
+  ] = await Promise.all([
     loadGlobalSetting(db, "sync.chunk-size"),
     loadGlobalSetting(db, "sync.max-inflight-chunks"),
     loadGlobalSetting(db, "sync.max-intra-chunk-concurrency"),
     loadGlobalSetting(db, "sync.stale-progress-minutes"),
+    loadGlobalSetting(db, "sync.max-snapshot-warnings"),
   ]);
   return {
     chunkSize,
     maxInflightChunks,
     maxIntraChunkConcurrency,
     staleProgressMs: staleMinutes * 60_000,
+    maxSnapshotWarnings,
   };
 }
 
@@ -1043,15 +1053,9 @@ async function bumpCursor(
     });
 }
 
-/**
- * Cap on warnings stored in the snapshot so a runaway error loop can't
- * blow the row's encoded size. Older warnings are dropped first.
- */
-const MAX_SNAPSHOT_WARNINGS = 50;
-
-function trimWarnings(list: string[]): string[] {
-  if (list.length <= MAX_SNAPSHOT_WARNINGS) return list;
-  return list.slice(list.length - MAX_SNAPSHOT_WARNINGS);
+function trimWarnings(list: string[], cap: number): string[] {
+  if (list.length <= cap) return list;
+  return list.slice(list.length - cap);
 }
 
 /**
@@ -1114,7 +1118,7 @@ async function runSync(
     progress = {
       ...progress,
       updatedAt: new Date(),
-      warnings: trimWarnings(progress.warnings),
+      warnings: trimWarnings(progress.warnings, tunables.maxSnapshotWarnings),
     };
     return upsertProgress(db, projectId, progress, tunables.staleProgressMs);
   };

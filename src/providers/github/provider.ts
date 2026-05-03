@@ -26,6 +26,7 @@ import type {
   Reactions,
   TransitionIntent,
 } from "@/core/types";
+import { PAGE_SIZE, SEARCH_PAGE_SIZE } from "@/providers/github/constants";
 import {
   bodyHasClosingKeyword,
   branchMatchesIssue,
@@ -290,7 +291,7 @@ export class GitHubProvider implements WorkItemProvider {
       owner: this.config.owner,
       repo: this.config.repo,
       state: "all",
-      per_page: 100,
+      per_page: PAGE_SIZE,
       sort: "updated",
       direction: "desc",
     };
@@ -335,7 +336,7 @@ export class GitHubProvider implements WorkItemProvider {
       owner,
       repo,
       issue_number: number,
-      per_page: 100,
+      per_page: PAGE_SIZE,
     });
     return all.map((c): Comment => {
       const created = new Date(c.created_at);
@@ -511,7 +512,7 @@ export class GitHubProvider implements WorkItemProvider {
           owner,
           repo,
           issue_number: number,
-          per_page: 100,
+          per_page: PAGE_SIZE,
           content,
         });
         const mine = reactions.find((r) => r.user?.login === myLogin);
@@ -535,7 +536,7 @@ export class GitHubProvider implements WorkItemProvider {
         owner: this.config.owner,
         repo: this.config.repo,
         comment_id: commentNumber,
-        per_page: 100,
+        per_page: PAGE_SIZE,
         content,
       });
       const mine = reactions.find((r) => r.user?.login === myLogin);
@@ -668,7 +669,7 @@ export class GitHubProvider implements WorkItemProvider {
       owner,
       repo,
       issue_number: number,
-      per_page: 100,
+      per_page: PAGE_SIZE,
     });
     const out: PRMatch[] = [];
     for (const event of events as readonly TimelineEvent[]) {
@@ -704,7 +705,7 @@ export class GitHubProvider implements WorkItemProvider {
     number: number,
   ): Promise<PRMatch[]> {
     const q = `repo:${owner}/${repo} type:pr ${number} in:title,body`;
-    const res = await this.octokit.search.issuesAndPullRequests({ q, per_page: 50 });
+    const res = await this.octokit.search.issuesAndPullRequests({ q, per_page: SEARCH_PAGE_SIZE });
     const out: PRMatch[] = [];
     for (const item of res.data.items) {
       if (!item.pull_request) continue;
@@ -732,7 +733,7 @@ export class GitHubProvider implements WorkItemProvider {
       owner,
       repo,
       state: "all",
-      per_page: 100,
+      per_page: PAGE_SIZE,
       sort: "updated",
       direction: "desc",
     });
@@ -757,8 +758,8 @@ export class GitHubProvider implements WorkItemProvider {
     try {
       const [pr, files, reviews] = await Promise.all([
         this.octokit.pulls.get({ owner, repo, pull_number: number }),
-        this.octokit.pulls.listFiles({ owner, repo, pull_number: number, per_page: 100 }),
-        this.octokit.pulls.listReviews({ owner, repo, pull_number: number, per_page: 100 }),
+        this.octokit.pulls.listFiles({ owner, repo, pull_number: number, per_page: PAGE_SIZE }),
+        this.octokit.pulls.listReviews({ owner, repo, pull_number: number, per_page: PAGE_SIZE }),
       ]);
       const data = pr.data;
       return {
@@ -810,7 +811,7 @@ export class GitHubProvider implements WorkItemProvider {
         owner,
         repo,
         pull_number: number,
-        per_page: 100,
+        per_page: PAGE_SIZE,
       });
       return {
         id: prId,
@@ -841,7 +842,7 @@ export class GitHubProvider implements WorkItemProvider {
     try {
       const res = await this.octokit.search.issuesAndPullRequests({
         q,
-        per_page: Math.min(Math.max(opts.limit, 1), 50),
+        per_page: Math.min(Math.max(opts.limit, 1), SEARCH_PAGE_SIZE),
       });
       const out: PRMatch[] = [];
       for (const item of res.data.items) {
@@ -872,7 +873,7 @@ export class GitHubProvider implements WorkItemProvider {
     try {
       const res = await this.octokit.search.code({
         q: scoped,
-        per_page: Math.min(Math.max(limit, 1), 50),
+        per_page: Math.min(Math.max(limit, 1), SEARCH_PAGE_SIZE),
       });
       return {
         query,
@@ -925,7 +926,7 @@ export class GitHubProvider implements WorkItemProvider {
         owner: this.config.owner,
         repo: this.config.repo,
         ref,
-        per_page: 100,
+        per_page: PAGE_SIZE,
       });
       const runs = res.data.check_runs.map((r) => ({
         id: String(r.id),
