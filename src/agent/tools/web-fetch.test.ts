@@ -152,7 +152,7 @@ describe("web_fetch tool", () => {
 
   it("falls back to raw with cleanError when cleaned output is empty", async () => {
     // Page with only a <script> in the body — after stripping, cleanHtml
-    // throws EmptyCleanedOutputError and the tool falls back to raw.
+    // throws and the tool falls back to raw.
     const html = `<!doctype html><html><head></head><body><script>boot()</script></body></html>`;
     mockFetchOnce(html, "text/html");
     const data = await callTool({ url: "https://example.com/spa" });

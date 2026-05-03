@@ -8,13 +8,6 @@ import TurndownService from "turndown";
 
 const NOISE_TAGS = ["head", "script", "style", "noscript", "template", "iframe", "svg"] as const;
 
-export class EmptyCleanedOutputError extends Error {
-  constructor() {
-    super("cleaned output was empty (likely a client-rendered page)");
-    this.name = "EmptyCleanedOutputError";
-  }
-}
-
 export type CleanedHtml = {
   markdown: string;
   bytes: number;
@@ -62,7 +55,7 @@ export function cleanHtml(html: string, baseUrl: string): CleanedHtml {
   const markdown = turndown.turndown(innerHtml).trim();
 
   if (markdown.length === 0) {
-    throw new EmptyCleanedOutputError();
+    throw new Error("cleaned output was empty (likely a client-rendered page)");
   }
 
   return {

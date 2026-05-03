@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanHtml, EmptyCleanedOutputError, shouldCleanHtml } from "./web-fetch-clean";
+import { cleanHtml, shouldCleanHtml } from "./web-fetch-clean";
 
 const BASE = "https://example.com/article";
 
@@ -55,9 +55,9 @@ describe("cleanHtml", () => {
     expect(markdown).toContain("[x](https://other.example/path)");
   });
 
-  it("throws EmptyCleanedOutputError when nothing readable remains", () => {
+  it("throws when nothing readable remains", () => {
     const html = `<!doctype html><html><head></head><body><script>app()</script></body></html>`;
-    expect(() => cleanHtml(html, BASE)).toThrow(EmptyCleanedOutputError);
+    expect(() => cleanHtml(html, BASE)).toThrow(/cleaned output was empty/);
   });
 
   it("recovers from malformed HTML (missing close tags) without throwing", () => {
