@@ -1,7 +1,7 @@
 import { relations, sql } from "drizzle-orm";
-import { boolean, index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, index, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import type { ProjectId, UserId } from "@/core/types";
-import { fkUuid, pkUuid } from "@/db/columns";
+import { fkUuid, optionalFkUuid, pkUuid } from "@/db/columns";
 import { users } from "@/db/schema/auth";
 import { projects } from "@/db/schema/projects";
 
@@ -16,9 +16,7 @@ export const webFetchEvents = pgTable(
     projectId: fkUuid<ProjectId>(() => projects.id, "cascade"),
     // `set null` on user delete so the trail outlives the user. Same shape as
     // `audits.userId`.
-    userId: uuid()
-      .$type<UserId>()
-      .references(() => users.id, { onDelete: "set null" }),
+    userId: optionalFkUuid<UserId>(() => users.id, "set null"),
     url: text().notNull(),
     // 'ok' | 'error' | 'denied_disabled' | 'denied_url' |
     // 'denied_host_allowlist' | 'denied_host_metadata' |

@@ -3,7 +3,7 @@
 // project-scoped) with an optional `projectId` filter/discriminator.
 
 import "server-only";
-import { and, desc, eq, exists, isNull, or } from "drizzle-orm";
+import { and, desc, eq, exists, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { ProjectId, UserId } from "@/core/types";
 import type { Db } from "@/db";
@@ -110,25 +110,20 @@ export const suggestionsRouter = router({
     const projectId = input.projectSlug
       ? ((await resolveSlug(ctx.db, input.projectSlug, userId)) ?? null)
       : null;
-    const existing = await ctx.db.query.commandUsage.findFirst({
-      where: and(
-        eq(commandUsage.userId, userId),
-        projectId === null ? isNull(commandUsage.projectId) : eq(commandUsage.projectId, projectId),
-        eq(commandUsage.commandId, input.commandId),
-      ),
-      columns: { id: true, usageCount: true },
-    });
-    if (existing) {
-      const [row] = await ctx.db
-        .update(commandUsage)
-        .set({ usageCount: existing.usageCount + 1, lastUsedAt: new Date() })
-        .where(eq(commandUsage.id, existing.id))
-        .returning();
-      return row;
-    }
+    // Atomic upsert — the `nullsNotDistinct` unique on
+    // (userId, projectId, commandId) makes ON CONFLICT match even when
+    // projectId is NULL (global commands), so concurrent bumps can't
+    // race into duplicate rows.
     const [row] = await ctx.db
       .insert(commandUsage)
       .values({ userId, projectId, commandId: input.commandId })
+      .onConflictDoUpdate({
+        target: [commandUsage.userId, commandUsage.projectId, commandUsage.commandId],
+        set: {
+          usageCount: sql`${commandUsage.usageCount} + 1`,
+          lastUsedAt: new Date(),
+        },
+      })
       .returning();
     return row;
   }),

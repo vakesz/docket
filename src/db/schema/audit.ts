@@ -1,7 +1,7 @@
 import { relations, sql } from "drizzle-orm";
 import { index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import type { ProjectId, ProposalId, UserId } from "@/core/types";
-import { emptyJsonbObject, fkUuid, pkUuid } from "@/db/columns";
+import { emptyJsonbObject, fkUuid, optionalFkUuid, pkUuid } from "@/db/columns";
 import { users } from "@/db/schema/auth";
 import { projects } from "@/db/schema/projects";
 
@@ -16,9 +16,7 @@ export const audits = pgTable(
   {
     id: pkUuid(),
     projectId: fkUuid<ProjectId>(() => projects.id, "cascade"),
-    userId: uuid()
-      .$type<UserId>()
-      .references(() => users.id, { onDelete: "set null" }),
+    userId: optionalFkUuid<UserId>(() => users.id, "set null"),
     // 'proposal.confirm' | 'proposal.confirm.failed' | 'proposal.reject'.
     // Open-extensibility — free-text so future actions can be added without a
     // schema change.

@@ -213,7 +213,7 @@ export const SETTINGS_CATALOG = {
     default: true,
     label: "Backlog — show assignee avatars",
     description:
-      "When on, assignee chips render with the user's profile picture pulled from the provider (currently GitHub only — a deterministic CDN URL, no extra API calls). Other providers fall back to a colored initial circle. Turn off to show only the username.",
+      "When on, assignee chips render with the user's profile picture when the provider supports avatars; providers without avatar support fall back to a colored initial circle. Turn off to show only the username.",
   },
   "items.show-archived-bucket": {
     key: "items.show-archived-bucket",

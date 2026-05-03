@@ -1,11 +1,10 @@
-import { eq } from "drizzle-orm";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import type { ReactNode } from "react";
-import { asProjectId, asUserId } from "@/core/types";
+import { asUserId } from "@/core/types";
 import { db } from "@/db";
-import { projects } from "@/db/schema";
 import { resolveEffectiveStaleThreshold } from "@/lib/staleness";
 import { auth } from "@/server/auth";
+import { projectForUser } from "@/server/projects/access";
 import { loadProjectSetting, loadUserSetting } from "@/server/settings/effective";
 import { ItemsShell } from "@/ui/shell/items-shell";
 
@@ -15,6 +14,11 @@ import { ItemsShell } from "@/ui/shell/items-shell";
  * clicks the chat toggle inside the item detail header — so the backlog
  * + detail always have the full middle width when the user isn't
  * actively chatting.
+ *
+ * `projectForUser` is `cache()`-wrapped, so the parent ProjectLayout's
+ * `trpc.projects.get` (which goes through the same helper inside the
+ * project-scoped middleware) and this lookup share one DB roundtrip
+ * per request.
  */
 export default async function ItemsLayout({
   children,
@@ -24,24 +28,16 @@ export default async function ItemsLayout({
   params: Promise<{ projectSlug: string }>;
 }) {
   const { projectSlug } = await params;
-  // Session and project lookup are independent — fan them out so the
-  // first await batches both round-trips. Settings reads then run as a
-  // second wave once we know the project id and user id.
-  const [session, project] = await Promise.all([
-    auth(),
-    db.query.projects.findFirst({
-      where: eq(projects.slug, projectSlug),
-      columns: { id: true },
-    }),
-  ]);
+  const session = await auth();
+  if (!session?.user?.id) redirect("/");
+  const userId = asUserId(session.user.id);
+
+  const project = await projectForUser(db, projectSlug, userId);
   if (!project) notFound();
-  const userId = session?.user?.id ?? null;
 
   const [projectStale, userStale] = await Promise.all([
-    loadProjectSetting(db, asProjectId(project.id), "items.stale-after-days"),
-    userId
-      ? loadUserSetting(db, asUserId(userId), "items.stale-after-days.user")
-      : Promise.resolve<number>(-1),
+    loadProjectSetting(db, project.id, "items.stale-after-days"),
+    loadUserSetting(db, userId, "items.stale-after-days.user"),
   ]);
   const staleThresholdDays = resolveEffectiveStaleThreshold(userStale, projectStale);
 

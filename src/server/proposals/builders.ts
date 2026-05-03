@@ -32,13 +32,13 @@ import type {
   StateChangeProposal,
   TagsChangeProposal,
 } from "@/core/proposal-types";
-import type {
-  CreateFields,
-  ItemKind,
-  ProjectId,
-  ProviderItemId,
-  TransitionIntent,
-  UserId,
+import {
+  asProviderItemId,
+  type CreateFields,
+  type ItemKind,
+  type ProjectId,
+  type TransitionIntent,
+  type UserId,
 } from "@/core/types";
 import type { Db } from "@/db";
 import { items, memoryEntries, proposals } from "@/db/schema";
@@ -106,7 +106,7 @@ async function loadCachedItem(ctx: ProposalContext, providerItemId: string) {
     await ctx.db.query.items.findFirst({
       where: and(
         eq(items.projectId, ctx.projectId),
-        eq(items.providerItemId, providerItemId as ProviderItemId),
+        eq(items.providerItemId, asProviderItemId(providerItemId)),
       ),
     }),
     `Item '${providerItemId}' not found in cache; sync the project first.`,

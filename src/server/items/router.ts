@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   assertItemKind,
   assertItemState,
+  asProviderItemId,
   BACKLOG_BUCKETS,
   type BacklogBucket,
   type Item,
@@ -54,7 +55,7 @@ function resolveProviderItemId(
       message: `invalid item identifier "${itemNumber}" for this project`,
     });
   }
-  return providerItemId as ProviderItemId;
+  return asProviderItemId(providerItemId);
 }
 
 const BacklogBucketEnum = z.enum(BACKLOG_BUCKETS);
