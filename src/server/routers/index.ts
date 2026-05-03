@@ -7,17 +7,18 @@ import { memoryRouter } from "@/server/memory/router";
 import { oauthProvidersRouter } from "@/server/oauth/router";
 import { projectsRouter } from "@/server/projects/router";
 import { proposalsRouter } from "@/server/proposals/router";
-import { healthRouter } from "@/server/routers/health";
 import { settingsRouter } from "@/server/settings/router";
 import { setupRouter } from "@/server/setup/router";
 import { sourcesRouter } from "@/server/sources/router";
 import { suggestionsRouter } from "@/server/suggestions/router";
-import { router } from "@/server/trpc";
+import { publicProcedure, router } from "@/server/trpc";
 import { viewsRouter } from "@/server/views/router";
 import { watchlistRouter } from "@/server/watchlist/router";
 
 export const appRouter = router({
-  health: healthRouter,
+  health: router({
+    ping: publicProcedure.query(() => "ok" as const),
+  }),
   projects: projectsRouter,
   llmProviders: llmProvidersRouter,
   oauthProviders: oauthProvidersRouter,
