@@ -455,50 +455,35 @@ type UpsertProgressSnapshot = {
 };
 
 /**
- * Run `task` over each item with at most `concurrency` in-flight, in input
- * order. Result array is the same length as `items`; each slot is the
- * resolved value from the corresponding task. Errors propagate (use the
- * `Settled` variant when partial failure is expected).
- */
-async function mapWithConcurrency<T, R>(
-  items: readonly T[],
-  concurrency: number,
-  task: (value: T, index: number) => Promise<R>,
-): Promise<R[]> {
-  if (items.length === 0) return [];
-  const limit = Math.max(1, Math.min(concurrency, items.length));
-  const results: R[] = new Array(items.length);
-  let cursor = 0;
-  await Promise.all(
-    Array.from({ length: limit }, async () => {
-      while (true) {
-        const i = cursor++;
-        if (i >= items.length) return;
-        results[i] = await task(items[i] as T, i);
-      }
-    }),
-  );
-  return results;
-}
-
-/**
- * Same as `mapWithConcurrency` but each task is wrapped so failures don't
- * abort siblings — returns a `PromiseSettledResult`-shaped tuple per slot.
- * Used for per-row writes inside one chunk where one bad row should not
- * tank the rest of the batch.
+ * Run `task` over `items` with bounded fan-out. Each task is wrapped so a
+ * single failure doesn't abort siblings — returns a
+ * `PromiseSettledResult`-shaped tuple per slot. Used for per-row writes
+ * inside one chunk where one bad row should not tank the rest of the
+ * batch.
  */
 async function mapWithConcurrencySettled<T, R>(
   items: readonly T[],
   concurrency: number,
   task: (value: T, index: number) => Promise<R>,
 ): Promise<PromiseSettledResult<R>[]> {
-  return mapWithConcurrency(items, concurrency, async (value, index) => {
-    try {
-      return { status: "fulfilled" as const, value: await task(value, index) };
-    } catch (reason) {
-      return { status: "rejected" as const, reason };
-    }
-  });
+  if (items.length === 0) return [];
+  const limit = Math.max(1, Math.min(concurrency, items.length));
+  const results: PromiseSettledResult<R>[] = new Array(items.length);
+  let cursor = 0;
+  await Promise.all(
+    Array.from({ length: limit }, async () => {
+      while (true) {
+        const i = cursor++;
+        if (i >= items.length) return;
+        try {
+          results[i] = { status: "fulfilled", value: await task(items[i] as T, i) };
+        } catch (reason) {
+          results[i] = { status: "rejected", reason };
+        }
+      }
+    }),
+  );
+  return results;
 }
 
 /**
