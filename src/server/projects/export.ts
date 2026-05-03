@@ -68,7 +68,6 @@ export type ProjectExportPage = {
     id: string;
     itemId: string | null;
     startedAt: string;
-    archivedAt: string | null;
     tokensIn: number;
     tokensOut: number;
     costCents: number;
@@ -186,7 +185,6 @@ export async function buildProjectExport(
       id: c.id,
       itemId: c.itemId,
       startedAt: c.startedAt.toISOString(),
-      archivedAt: c.archivedAt ? c.archivedAt.toISOString() : null,
       tokensIn: c.tokensIn,
       tokensOut: c.tokensOut,
       costCents: c.costCents,

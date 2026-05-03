@@ -952,6 +952,8 @@ async function loadItemContext(db: Database, conv: Conversation): Promise<ItemCo
       title: items.title,
       state: items.state,
       assignees: items.assignees,
+      createdAt: items.createdAt,
+      updatedAt: items.updatedAt,
     })
     .from(items)
     .where(eq(items.id, conv.itemId))
@@ -959,16 +961,29 @@ async function loadItemContext(db: Database, conv: Conversation): Promise<ItemCo
     .then((rows) => rows[0]);
   if (!item) return { summary: null, kind: null, providerItemId: null };
   const assignee = item.assignees[0] ?? null;
+  // Dates are ISO YYYY-MM-DD: stable for the day so the prefix doesn't
+  // churn between turns when nothing material changed, but still gives the
+  // model a staleness signal it can compute against. Skipping the time
+  // component is deliberate — minute-level updates on a sync would
+  // invalidate the prompt cache for no semantic gain.
+  const createdDate = item.createdAt ? toIsoDate(item.createdAt) : null;
+  const updatedDate = toIsoDate(item.updatedAt);
   const lines = [
     `id: ${item.providerItemId}`,
     `kind: ${item.kind}`,
     `title: ${item.title}`,
     `state: ${item.state}`,
     assignee ? `assignee: ${assignee}` : "assignee: (unassigned)",
+    createdDate ? `created: ${createdDate}` : "created: (unknown)",
+    `updated: ${updatedDate}`,
   ];
   return {
     summary: lines.join("\n"),
     kind: item.kind,
     providerItemId: item.providerItemId,
   };
+}
+
+function toIsoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
 }

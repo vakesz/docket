@@ -23,7 +23,6 @@ import type { ConversationId, ItemId, ProjectId, UserId } from "@/core/types";
 import type { Db } from "@/db";
 import { conversations, llmProviders, messages } from "@/db/schema";
 import {
-  archiveConversation,
   createConversation,
   listConversations,
   ownsConversation,
@@ -51,7 +50,6 @@ const ListInput = projectSlugSchema.extend({
     .default(null)
     .transform((v) => (v === null ? null : (v as ItemId))),
   limit: z.number().int().min(1).max(100).default(50),
-  archived: z.boolean().default(false),
 });
 
 const CreateInput = projectSlugSchema.extend({
@@ -87,7 +85,6 @@ export const conversationsRouter = router({
       userId: ctx.userId,
       itemId: input.itemId,
       limit: input.limit,
-      archived: input.archived,
     });
   }),
 
@@ -150,13 +147,6 @@ export const conversationsRouter = router({
     );
     return conv;
   }),
-
-  archive: projectScopedMutationProcedure
-    .input(ConversationRef)
-    .mutation(async ({ ctx, input }) => {
-      await ensureOwn(ctx, input.conversationId, ctx.projectId);
-      return archiveConversation(ctx.db, input.conversationId);
-    }),
 
   /**
    * Set or clear the per-conversation LLM override. `null` falls back to the

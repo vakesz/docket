@@ -219,7 +219,6 @@ export type Conversation = {
   id: string;
   itemId: string;
   startedAt: Date;
-  archivedAt: Date | null;
   tokensIn: number;
   tokensOut: number;
   costCents: number;

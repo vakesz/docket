@@ -20,7 +20,6 @@ export const conversations = pgTable(
     // Per-conversation LLM override; null falls back to project default.
     llmProviderIdOverride: optionalFkUuid(() => llmProviders.id, "set null"),
     startedAt: timestamp({ withTimezone: true, mode: "date" }).notNull().defaultNow(),
-    archivedAt: timestamp({ withTimezone: true, mode: "date" }),
     tokensIn: cents(),
     tokensOut: cents(),
     costCents: cents(),
@@ -31,10 +30,10 @@ export const conversations = pgTable(
     guardrailCostCents: cents(),
   },
   (t) => [
-    index("conversations_project_archived_idx").on(t.projectId, t.archivedAt),
-    index("conversations_user_archived_idx").on(t.userId, t.archivedAt),
+    index("conversations_project_idx").on(t.projectId),
+    index("conversations_user_idx").on(t.userId),
     // Hot path for sync's `activeConversationsForItem`.
-    index("conversations_item_archived_idx").on(t.itemId, t.archivedAt),
+    index("conversations_item_idx").on(t.itemId),
     // Budget rollup + analytics aggregate filter by `startedAt` across every
     // project (`startedAt: { gte: since }`).
     index("conversations_started_at_idx").on(t.startedAt),

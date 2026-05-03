@@ -130,6 +130,32 @@ describe("buildSystemPrefix", () => {
     });
   });
 
+  describe("redesign invariants", () => {
+    it("system base names the read → ground → recommend phase model", () => {
+      expect(DEFAULT_SYSTEM_BASE).toContain("Read → ground → recommend");
+      expect(DEFAULT_SYSTEM_BASE).toContain("1. READ");
+      expect(DEFAULT_SYSTEM_BASE).toContain("2. GROUND");
+      expect(DEFAULT_SYSTEM_BASE).toContain("3. RECOMMEND");
+    });
+
+    it("system base carries the silent-exit gate before recommendation modes", () => {
+      const silentIdx = DEFAULT_SYSTEM_BASE.indexOf("# Before any mode");
+      const modesIdx = DEFAULT_SYSTEM_BASE.indexOf("# Recommendation modes");
+      expect(silentIdx).toBeGreaterThan(-1);
+      expect(modesIdx).toBeGreaterThan(silentIdx);
+    });
+
+    it("system base forbids fabricated tool-argument values", () => {
+      expect(DEFAULT_SYSTEM_BASE).toContain("Never invent values for tool arguments");
+    });
+
+    it("each kind prompt names its grounding target", () => {
+      for (const kind of ["epic", "feature", "story", "task", "bug"] as const) {
+        expect(DEFAULT_KIND_PROMPTS[kind]).toMatch(/Grounding target/);
+      }
+    });
+  });
+
   describe("tool-call budget", () => {
     it("omits the budget block when maxToolRounds is undefined", () => {
       const out = buildSystemPrefix({ itemKind: null, itemSummary: null });

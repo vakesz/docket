@@ -7,7 +7,7 @@
  */
 
 import "server-only";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import type { ConversationId, ItemId, ProjectId, UserId } from "@/core/types";
 import type { Db } from "@/db";
 import { conversations, messages } from "@/db/schema";
@@ -18,7 +18,6 @@ type ListArgs = {
   userId: UserId;
   itemId: ItemId | null;
   limit: number;
-  archived: boolean;
 };
 
 export async function listConversations(db: Db, args: ListArgs): Promise<Conversation[]> {
@@ -27,7 +26,6 @@ export async function listConversations(db: Db, args: ListArgs): Promise<Convers
       eq(conversations.projectId, args.projectId),
       eq(conversations.userId, args.userId),
       ...(args.itemId !== null ? [eq(conversations.itemId, args.itemId)] : []),
-      ...(args.archived ? [] : [isNull(conversations.archivedAt)]),
     ),
     orderBy: [desc(conversations.startedAt)],
     limit: args.limit,
@@ -156,26 +154,13 @@ export async function appendMessage(db: Db, args: AppendArgs): Promise<Message> 
   return row;
 }
 
-export async function archiveConversation(
-  db: Db,
-  conversationId: ConversationId,
-): Promise<Conversation> {
-  const [row] = await db
-    .update(conversations)
-    .set({ archivedAt: new Date() })
-    .where(eq(conversations.id, conversationId))
-    .returning();
-  if (!row) throw new Error("archiveConversation: row not found");
-  return row;
-}
-
 /**
- * Find every active (non-archived) conversation for a given item — the
- * inbound-changes module fans out to all of them when an external write
- * lands. Capped to bound the per-sync fan-out: a chatty item with hundreds
- * of open conversations would otherwise stamp a system message into every
- * one of them on each external write. The newest are returned first, so
- * the cap drops the long-stale conversations rather than the active ones.
+ * Find every conversation for a given item — the inbound-changes module
+ * fans out to all of them when an external write lands. Capped to bound
+ * the per-sync fan-out: a chatty item with hundreds of conversations would
+ * otherwise stamp a system message into every one of them on each external
+ * write. The newest are returned first, so the cap drops the long-stale
+ * conversations rather than the active ones.
  */
 const ACTIVE_CONVERSATIONS_PER_ITEM_CAP = 50;
 
@@ -185,11 +170,7 @@ export async function activeConversationsForItem(
   itemId: ItemId,
 ): Promise<Conversation[]> {
   return db.query.conversations.findMany({
-    where: and(
-      eq(conversations.projectId, projectId),
-      eq(conversations.itemId, itemId),
-      isNull(conversations.archivedAt),
-    ),
+    where: and(eq(conversations.projectId, projectId), eq(conversations.itemId, itemId)),
     orderBy: [desc(conversations.startedAt)],
     limit: ACTIVE_CONVERSATIONS_PER_ITEM_CAP,
   });

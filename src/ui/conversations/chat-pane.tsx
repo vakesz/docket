@@ -1,12 +1,13 @@
 "use client";
 
+import { X } from "lucide-react";
 import { useDeferredValue, useRef, useState } from "react";
 import { useSettingsMap } from "@/lib/settings-client";
 import { trpc } from "@/lib/trpc-client";
 import { type ToolDisplayMode, useToolDisplayMode } from "@/lib/ui-prefs";
-import { cn } from "@/lib/utils";
 import { Bubble } from "@/ui/conversations/bubble";
 import { ChatComposer } from "@/ui/conversations/chat-composer";
+import { useChatPaneController } from "@/ui/conversations/chat-pane-context";
 import type { SettledRound } from "@/ui/conversations/chat-stream";
 import { LlmSwitcher } from "@/ui/conversations/llm-switcher";
 import { QuestionCard } from "@/ui/conversations/question-card";
@@ -46,6 +47,7 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
   // double-click from creating two threads.
   const startingThreadRef = useRef(false);
 
+  const { setOpen } = useChatPaneController();
   const { streaming, proposalIds, dismissProposal, drainStream, resetStream, stopStream } =
     useChatStream();
   const [toolDisplayMode] = useToolDisplayMode();
@@ -57,7 +59,7 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
   const itemId = itemQuery.data?.id ?? null;
 
   const list = trpc.conversations.list.useQuery(
-    { projectSlug, itemId: itemId ?? "", limit: 20, archived: false },
+    { projectSlug, itemId: itemId ?? "", limit: 20 },
     { enabled: itemId !== null, staleTime: 5_000 },
   );
   const fallbackId = list.data?.[0]?.id ?? null;
@@ -69,15 +71,6 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
   );
 
   const create = trpc.conversations.create.useMutation();
-  const archive = trpc.conversations.archive.useMutation({
-    onSuccess: async () => {
-      if (itemId !== null) {
-        await utils.conversations.list.invalidate({ projectSlug, itemId });
-      }
-      setActiveId(null);
-      resetStream();
-    },
-  });
   const settings = useSettingsMap();
   const sendOnEnter = settings.bool("chat.send-on-enter", true);
 
@@ -197,17 +190,15 @@ export function ChatPane({ projectSlug, itemNumber }: { projectSlug: string; ite
           >
             New thread
           </button>
-          {conversationId && (
-            <button
-              type="button"
-              onClick={() => archive.mutate({ projectSlug, conversationId })}
-              disabled={archive.isPending || inFlight}
-              className={cn(MICRO_CAPS_BUTTON, "disabled:opacity-50")}
-              title="Archive this conversation"
-            >
-              Archive
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className={MICRO_CAPS_BUTTON}
+            title="Close chat"
+            aria-label="Close chat"
+          >
+            <X aria-hidden="true" className="size-3" />
+          </button>
         </div>
       </header>
 
