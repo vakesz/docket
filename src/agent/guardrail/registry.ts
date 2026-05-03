@@ -13,6 +13,7 @@ import { NoopGuardrail } from "@/agent/guardrail/noop";
 import { PatternGuardrail } from "@/agent/guardrail/pattern";
 import type { Guardrail, GuardrailKind } from "@/agent/guardrail/types";
 import { AnthropicJudgeClient } from "@/agent/llm/anthropic";
+import { decimalToNumber } from "@/agent/llm/decimal";
 import { OpenAiJudgeClient } from "@/agent/llm/openai";
 import { isLlmKind, type LlmKind } from "@/agent/llm/types";
 import type { Db } from "@/db";
@@ -142,10 +143,4 @@ function buildJudgeClient(row: LlmProvider): JudgeClient | null {
       return null;
     }
   }
-}
-
-function decimalToNumber(value: LlmProvider["inputPriceCentsPerMtok"]): number | null {
-  if (value === null || value === undefined) return null;
-  const n = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(n) ? n : null;
 }

@@ -4,6 +4,7 @@
 
 import "server-only";
 import { AnthropicAdapter } from "@/agent/llm/anthropic";
+import { decimalToNumber } from "@/agent/llm/decimal";
 import { OpenAiAdapter } from "@/agent/llm/openai";
 import type { LlmAdapter } from "@/agent/llm/types";
 import type { Db } from "@/db";
@@ -44,21 +45,7 @@ export async function selectAdapterFor(db: Db, ctx: AdapterContext): Promise<Llm
   return buildAdapter(row, { defaultTemperature: ctx.project.defaultTemperature ?? null });
 }
 
-/**
- * Kinds for which an adapter is wired today. Keep in sync with the `switch`
- * below — `llm-kinds-have-adapters.test.ts` enforces this at the LLM_KINDS
- * level; this constant just lets the error path report what the registry
- * actually supports without grepping the file.
- */
-const SUPPORTED_KINDS = ["openai", "anthropic"] as const;
-
-function decimalToNumber(value: string | null): number | null {
-  if (value === null) return null;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
-}
-
-export function buildAdapter(
+function buildAdapter(
   row: LlmProvider,
   opts: { defaultTemperature?: number | null } = {},
 ): LlmAdapter {
@@ -92,7 +79,7 @@ export function buildAdapter(
       });
     default:
       throw new LlmConfigError(
-        `Unsupported LLM kind '${row.kind}'. Wired kinds: ${SUPPORTED_KINDS.join(", ")}. Add a sibling adapter under src/agent/llm/ for new vendors.`,
+        `Unsupported LLM kind '${row.kind}'. Add a sibling adapter under src/agent/llm/ for new vendors.`,
       );
   }
 }
