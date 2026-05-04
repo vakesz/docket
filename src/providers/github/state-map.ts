@@ -4,6 +4,7 @@
 // unrelated labels survive a transition.
 
 import { ProviderError } from "@/core/provider";
+import { mergeStringSet } from "@/core/tag-merge";
 import { canonicalIntentsFor, type ItemState, type TransitionIntent } from "@/core/types";
 
 export type GithubIssueState = "open" | "closed";
@@ -134,17 +135,7 @@ export function planForIntent(intent: TransitionIntent): GithubTransitionPlan {
  * them. Result is sorted for deterministic API payloads.
  */
 export function mergeLabels(current: readonly string[], plan: GithubTransitionPlan): string[] {
-  const removeSet = new Set(plan.labelsToRemove.map((l) => l.toLowerCase()));
-  const out = new Set<string>();
-  for (const tag of current) {
-    if (!tag) continue;
-    if (removeSet.has(tag.toLowerCase())) continue;
-    out.add(tag);
-  }
-  for (const tag of plan.labelsToAdd) {
-    out.add(tag);
-  }
-  return Array.from(out).sort();
+  return mergeStringSet(current, plan.labelsToRemove, plan.labelsToAdd);
 }
 
 /**

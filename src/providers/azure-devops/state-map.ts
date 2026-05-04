@@ -4,6 +4,7 @@
 // doesn't fail on a process template we haven't catalogued.
 
 import { ProviderError } from "@/core/provider";
+import { mergeStringSet } from "@/core/tag-merge";
 import {
   canonicalIntentsFor,
   type ItemKind,
@@ -119,17 +120,7 @@ export function planForIntent(intent: TransitionIntent): TransitionPlan {
 }
 
 export function mergeTags(current: readonly string[], plan: TransitionPlan): string[] {
-  const removeSet = new Set(plan.tagsToRemove.map((t) => t.toLowerCase()));
-  const out = new Set<string>();
-  for (const tag of current) {
-    if (!tag) continue;
-    if (removeSet.has(tag.toLowerCase())) continue;
-    out.add(tag);
-  }
-  for (const tag of plan.tagsToAdd) {
-    out.add(tag);
-  }
-  return Array.from(out).sort();
+  return mergeStringSet(current, plan.tagsToRemove, plan.tagsToAdd);
 }
 
 /**
