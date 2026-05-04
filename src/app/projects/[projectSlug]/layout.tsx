@@ -8,9 +8,9 @@ import { requireSetupComplete } from "@/server/setup/guard";
 import { createCaller } from "@/server/trpc-caller";
 import { CommandPalette } from "@/ui/shell/command-palette";
 import { ShortcutHelp } from "@/ui/shell/shortcut-help";
+import { SidebarDrawerProvider } from "@/ui/shell/sidebar-drawer-context";
 import { StatusFooter } from "@/ui/shell/status-footer";
 import { TopBar } from "@/ui/shell/top-bar";
-import { WorkspaceProviders } from "@/ui/shell/workspace-providers";
 
 export default async function ProjectLayout({
   children,
@@ -63,7 +63,7 @@ export default async function ProjectLayout({
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
-      <WorkspaceProviders>
+      <SidebarDrawerProvider>
         <TopBar
           projects={projectOptions}
           currentProjectSlug={project.slug}
@@ -79,7 +79,7 @@ export default async function ProjectLayout({
         />
         <CommandPalette projectSlug={project.slug} projects={projectOptions} />
         <ShortcutHelp />
-      </WorkspaceProviders>
+      </SidebarDrawerProvider>
     </div>
   );
 }

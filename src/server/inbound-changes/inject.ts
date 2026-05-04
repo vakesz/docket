@@ -178,7 +178,6 @@ async function dropAlreadyInjected(
         gte(messages.createdAt, since),
       ),
     );
-  if (recent.length === 0) return [...conversationIds];
   const skip = new Set(recent.map((r) => r.conversationId));
   return conversationIds.filter((id) => !skip.has(id));
 }

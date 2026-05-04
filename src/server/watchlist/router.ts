@@ -73,13 +73,11 @@ export const watchlistRouter = router({
     return pins.flatMap((pin) => {
       const item = byProviderId.get(pin.providerItemId);
       if (!item) return [];
-      return [
-        {
-          pinId: pin.id,
-          pinnedAt: pin.pinnedAt,
-          item: { ...item, itemNumber: formatItemNumber(item.providerItemId) },
-        },
-      ];
+      return {
+        pinId: pin.id,
+        pinnedAt: pin.pinnedAt,
+        item: { ...item, itemNumber: formatItemNumber(item.providerItemId) },
+      };
     });
   }),
 

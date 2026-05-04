@@ -9,9 +9,9 @@ import { requireSetupComplete } from "@/server/setup/guard";
 import { createCaller } from "@/server/trpc-caller";
 import { CommandPalette } from "@/ui/shell/command-palette";
 import { ShortcutHelp } from "@/ui/shell/shortcut-help";
+import { SidebarDrawerProvider } from "@/ui/shell/sidebar-drawer-context";
 import { StatusFooter } from "@/ui/shell/status-footer";
 import { TopBar } from "@/ui/shell/top-bar";
-import { WorkspaceProviders } from "@/ui/shell/workspace-providers";
 
 /**
  * Settings shares the workspace chrome — same TopBar (with project
@@ -80,7 +80,7 @@ export default async function SettingsLayout({
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
-      <WorkspaceProviders>
+      <SidebarDrawerProvider>
         <TopBar
           projects={projectOptions}
           currentProjectSlug={currentProjectSlug}
@@ -98,7 +98,7 @@ export default async function SettingsLayout({
           <CommandPalette projectSlug={currentProjectSlug} projects={projectOptions} />
         ) : null}
         <ShortcutHelp />
-      </WorkspaceProviders>
+      </SidebarDrawerProvider>
     </div>
   );
 }

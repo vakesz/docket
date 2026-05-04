@@ -13,7 +13,6 @@ type ProjectRow = {
   name: string;
   description: string;
   providerKind: string;
-  providerScope: unknown;
   scopeLabel: string;
   ownerUserId: string;
 };
