@@ -9,9 +9,15 @@ import { mcpTools } from "@/agent/mcp/tools";
 import { discoveryTools } from "@/agent/tools/discovery";
 import { findRelatedPullRequestsTool } from "@/agent/tools/links";
 import { memoryReadonlyTools } from "@/agent/tools/memory";
-import { memoryMutatingTools } from "@/agent/tools/memory-mutating";
-import { mutatingTools } from "@/agent/tools/mutating";
-import { questionTools } from "@/agent/tools/question";
+import { proposeMemoryDeleteTool, proposeMemoryWriteTool } from "@/agent/tools/memory-mutating";
+import {
+  proposeCommentTool,
+  proposeDescriptionPatchTool,
+  proposeItemTagsTool,
+  proposeNewItemTool,
+  proposeTransitionTool,
+} from "@/agent/tools/mutating";
+import { askUserQuestionTool } from "@/agent/tools/question";
 import { readonlyTools } from "@/agent/tools/readonly";
 import { sourceReadonlyTools } from "@/agent/tools/source";
 import type { AgentTool, ToolContext } from "@/agent/tools/types";
@@ -98,14 +104,20 @@ export async function buildToolRegistry(
   }
   // (6) — mutating provider tools
   if (!opts.readOnly) {
-    tools.push(...mutatingTools(ctx));
+    tools.push(
+      proposeTransitionTool(ctx),
+      proposeDescriptionPatchTool(ctx),
+      proposeCommentTool(ctx),
+      proposeNewItemTool(ctx),
+      proposeItemTagsTool(ctx),
+    );
   }
   // (7) — memory mutations
   if (!opts.readOnly) {
-    tools.push(...memoryMutatingTools(ctx));
+    tools.push(proposeMemoryWriteTool(ctx), proposeMemoryDeleteTool(ctx));
   }
   // ask_user_question stays available in both modes; it never writes.
-  tools.push(...questionTools(ctx));
+  tools.push(askUserQuestionTool(ctx));
   // (8) web_fetch — appears in both modes. Stripped when the project has
   // turned it off so the prompt prefix stays stable for projects that
   // never use it. The handler still re-checks the flag on every call,

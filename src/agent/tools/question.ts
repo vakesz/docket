@@ -60,7 +60,3 @@ export const askUserQuestionTool: ToolFactory = (_ctx) =>
       });
     },
   });
-
-export function questionTools(ctx: Parameters<ToolFactory>[0]) {
-  return [askUserQuestionTool(ctx)] as const;
-}

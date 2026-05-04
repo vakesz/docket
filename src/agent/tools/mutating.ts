@@ -163,13 +163,3 @@ export const proposeItemTagsTool: ToolFactory = (ctx) =>
       });
     },
   });
-
-export function mutatingTools(ctx: Parameters<ToolFactory>[0]) {
-  return [
-    proposeTransitionTool(ctx),
-    proposeDescriptionPatchTool(ctx),
-    proposeCommentTool(ctx),
-    proposeNewItemTool(ctx),
-    proposeItemTagsTool(ctx),
-  ] as const;
-}

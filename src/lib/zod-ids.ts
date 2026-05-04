@@ -12,22 +12,13 @@
 import { z } from "zod";
 import type { ProjectId, ProposalId, ProviderItemId, UserId } from "@/core/types";
 
-export const providerItemIdSchema = z
-  .string()
-  .min(1)
-  .transform((v) => v as ProviderItemId);
+const brandedIdSchema = <B extends string>() =>
+  z
+    .string()
+    .min(1)
+    .transform((v) => v as B);
 
-export const proposalIdSchema = z
-  .string()
-  .min(1)
-  .transform((v) => v as ProposalId);
-
-export const projectIdSchema = z
-  .string()
-  .min(1)
-  .transform((v) => v as ProjectId);
-
-export const userIdSchema = z
-  .string()
-  .min(1)
-  .transform((v) => v as UserId);
+export const providerItemIdSchema = brandedIdSchema<ProviderItemId>();
+export const proposalIdSchema = brandedIdSchema<ProposalId>();
+export const projectIdSchema = brandedIdSchema<ProjectId>();
+export const userIdSchema = brandedIdSchema<UserId>();

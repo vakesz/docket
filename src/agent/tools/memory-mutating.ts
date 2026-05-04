@@ -64,7 +64,3 @@ export const proposeMemoryDeleteTool: ToolFactory = (ctx) =>
       });
     },
   });
-
-export function memoryMutatingTools(ctx: Parameters<ToolFactory>[0]) {
-  return [proposeMemoryWriteTool(ctx), proposeMemoryDeleteTool(ctx)] as const;
-}
