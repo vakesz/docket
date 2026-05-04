@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { OauthAuxSlot } from "@/core/provider";
 import type { OauthProviderConfigMetadata } from "@/db/schema";
 import { oauthProviderConfigs } from "@/db/schema";
+import { assertFound } from "@/server/errors";
 import { logger } from "@/server/logger";
 import { getProviderSpec, listProviderSpecs } from "@/server/provider-registry";
 import { encryptSecret } from "@/server/secrets/encryption";
@@ -150,13 +151,13 @@ export const oauthProvidersRouter = router({
 
   update: mutationProcedure.input(UpdateOauthProviderInput).mutation(async ({ ctx, input }) => {
     const { id, clientSecret, baseUrl: aux, ...rest } = input;
-    const existing = await ctx.db.query.oauthProviderConfigs.findFirst({
-      where: eq(oauthProviderConfigs.id, id),
-      columns: { kind: true, metadata: true },
-    });
-    if (!existing) {
-      throw new Error("oauth provider not found");
-    }
+    const existing = assertFound(
+      await ctx.db.query.oauthProviderConfigs.findFirst({
+        where: eq(oauthProviderConfigs.id, id),
+        columns: { kind: true, metadata: true },
+      }),
+      "oauth provider not found",
+    );
     const metadata = writeAux(existing.kind, aux, existing.metadata);
     const trimmedSecret = clientSecret?.trim();
     await ctx.db

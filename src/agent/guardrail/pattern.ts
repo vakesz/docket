@@ -119,11 +119,10 @@ export class PatternGuardrail implements Guardrail {
     return { action: "flag", reason: `pattern: ${hit.id}`, categories: [hit.id] };
   }
 
-  async checkOutput(text: string): Promise<GuardrailDecision> {
+  async checkOutput(_text: string): Promise<GuardrailDecision> {
     // Output pattern checks are deliberately a no-op. Pattern matches on
     // assistant prose produce too many false positives (the agent quotes
     // user input back, etc.). Use the moderation adapter for output.
-    void text;
     return { action: "allow" };
   }
 }

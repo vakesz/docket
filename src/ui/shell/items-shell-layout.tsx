@@ -38,12 +38,10 @@ export function ItemsShellLayout({
   left,
   middle,
   right,
-  groupId = "docket.shell",
 }: {
   left: React.ReactNode;
   middle: React.ReactNode;
   right: React.ReactNode | null;
-  groupId?: string;
 }) {
   useRegisterSidebarMount();
   const showRight = right !== null;
@@ -73,13 +71,7 @@ export function ItemsShellLayout({
   return (
     <>
       <div className="hidden flex-1 overflow-hidden lg:flex">
-        <ItemsShellDesktop
-          left={left}
-          middle={middle}
-          right={right}
-          groupId={groupId}
-          showRight={showRight}
-        />
+        <ItemsShellDesktop left={left} middle={middle} right={right} showRight={showRight} />
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:hidden">
